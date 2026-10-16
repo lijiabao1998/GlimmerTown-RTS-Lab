@@ -97,25 +97,7 @@ function purityViolations(source) {
   log(assets.length === 0 && urls.length === 0, '零外部素材', [...assets, ...urls].join(' ') || '乾淨');
 }
 
-// ---- 3. 決定性 ----
-{
-  const ta = Date.now(), a = hashWorld(runScript()), ms = Date.now() - ta, b = hashWorld(runScript());
-  log(a === b, `同種子同指令跑 ${SCRIPT_TICKS} tick 兩次，雜湊相同`, `${a} / ${b}；一次 ${ms} ms（只記錄，不設門檻）`);
-  const c = hashWorld(runScript(SCRIPT_TICKS, SCRIPT_SEED + 1));
-  log(c !== a, '換種子雜湊不同', `${SCRIPT_SEED + 1} → ${c}`);
-  // 重播：指令紀錄經過 JSON 來回（瀏覽器存下來的樣子）再跑一次，結果要相同
-  const replay = hashWorld(runLog(createWorld(SCRIPT_SEED), JSON.parse(JSON.stringify(SCRIPT)), SCRIPT_TICKS));
-  log(replay === a, '指令紀錄經 JSON 來回後重播，雜湊相同', replay);
-  // 中途存檔：600 tick 時把世界深拷貝，接著跑到底，要跟沒中斷的一樣（狀態都在 World 裡，沒有藏在模組變數）
-  const w1 = runLog(createWorld(SCRIPT_SEED), SCRIPT, 600), w2 = structuredClone(w1);
-  runLog(w1, SCRIPT, SCRIPT_TICKS); runLog(w2, SCRIPT, SCRIPT_TICKS);
-  log(hashWorld(w1) === a && hashWorld(w2) === a, '600 tick 深拷貝後各自跑完，雜湊都等於直接跑', `${hashWorld(w1)} / ${hashWorld(w2)}`);
-  // 黃金雜湊：改到模擬就會變，卡面要寫新舊值與原因
-  const golden = JSON.parse(read('tools/golden.json'));
-  log(golden.seed === SCRIPT_SEED && golden.ticks === SCRIPT_TICKS && golden.hash === a, '腳本戰鬥雜湊等於 tools/golden.json', `golden ${golden.hash}，現在 ${a}`);
-}
-
-// ---- 4. 模擬行為 ----
+// ---- 3. 模擬行為 ----
 // 空場地：地形全草地、沒有建築、沒有單位
 function blank() {
   const w = createWorld(7);
@@ -195,11 +177,31 @@ const run = (w, n) => { for (let i = 0; i < n; i++) step(w, []); return w; };
 { // 地圖：兩方出生角落沒有建築、每個單位都站在空地上、一開始彼此都走得到
   const w = createWorld(SCRIPT_SEED);
   const onBld = w.units.filter(u => w.occ[idx(Math.floor(u.x / SUB), Math.floor(u.z / SUB))]);
+  const inCorner = w.blds.filter(b => { for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) if ((x >= 22 && z >= 22) || (x <= 9 && z <= 9)) return true; return false; });
   const a = w.units[0], b = w.units.find(u => u.side === 1);
   const p = findPath(w, Math.floor(a.x / SUB), Math.floor(a.z / SUB), Math.floor(b.x / SUB), Math.floor(b.z / SUB));
   const end = p[p.length - 1];
-  log(w.blds.length >= 12 && onBld.length === 0 && end === idx(Math.floor(b.x / SUB), Math.floor(b.z / SUB)), '村莊地圖：建築 ≥12、單位不站在建築上、兩方互相走得到', `${w.blds.length} 棟`);
+  log(w.blds.length >= 12 && onBld.length === 0 && inCorner.length === 0 && end === idx(Math.floor(b.x / SUB), Math.floor(b.z / SUB)), '村莊地圖：建築 ≥12、出生角落沒有建築、單位不站在建築上、兩方互相走得到', `${w.blds.length} 棟；角落裡 ${inCorner.length} 棟`);
 }
+
+// ---- 4. 決定性與黃金雜湊（放在行為守衛之後：行為壞了，第一個紅燈落在那條行為守衛上）----
+{
+  const ta = Date.now(), a = hashWorld(runScript()), ms = Date.now() - ta, b = hashWorld(runScript());
+  log(a === b, `同種子同指令跑 ${SCRIPT_TICKS} tick 兩次，雜湊相同`, `${a} / ${b}；一次 ${ms} ms（只記錄，不設門檻）`);
+  const c = hashWorld(runScript(SCRIPT_TICKS, SCRIPT_SEED + 1));
+  log(c !== a, '換種子雜湊不同', `${SCRIPT_SEED + 1} → ${c}`);
+  // 重播：指令紀錄經過 JSON 來回（瀏覽器存下來的樣子）再跑一次，結果要相同
+  const replay = hashWorld(runLog(createWorld(SCRIPT_SEED), JSON.parse(JSON.stringify(SCRIPT)), SCRIPT_TICKS));
+  log(replay === a, '指令紀錄經 JSON 來回後重播，雜湊相同', replay);
+  // 中途存檔：600 tick 時把世界深拷貝，接著跑到底，要跟沒中斷的一樣（狀態都在 World 裡，沒有藏在模組變數）
+  const w1 = runLog(createWorld(SCRIPT_SEED), SCRIPT, 600), w2 = structuredClone(w1);
+  runLog(w1, SCRIPT, SCRIPT_TICKS); runLog(w2, SCRIPT, SCRIPT_TICKS);
+  log(hashWorld(w1) === a && hashWorld(w2) === a, '600 tick 深拷貝後各自跑完，雜湊都等於直接跑', `${hashWorld(w1)} / ${hashWorld(w2)}`);
+  // 黃金雜湊：改到模擬就會變，卡面要寫新舊值與原因
+  const golden = JSON.parse(read('tools/golden.json'));
+  log(golden.seed === SCRIPT_SEED && golden.ticks === SCRIPT_TICKS && golden.hash === a, '腳本戰鬥雜湊等於 tools/golden.json', `golden ${golden.hash}，現在 ${a}`);
+}
+
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
 if (fails.length) { console.log(`\nNG 紅燈（${sec}s）：${fails.join('、')}`); process.exit(1); }

@@ -6,7 +6,8 @@ import { execFileSync } from 'node:child_process';
 const BASE = process.env.BASE || 'origin/main';
 const HEAD = process.env.HEAD_REF || 'HEAD';
 const BRANCH = process.env.BRANCH || '';
-const git = (...a) => execFileSync('git', a, { encoding: 'utf8', maxBuffer: 64 << 20 });
+// core.quotepath=off：中文檔名（docs/GPT-方向.md、中文卡名）才不會被 git 轉成跳脫字串
+const git = (...a) => execFileSync('git', ['-c', 'core.quotepath=off', ...a], { encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'pipe'] });
 const show = (ref, file) => { try { return git('show', `${ref}:${file}`); } catch { return null; } };
 const problems = [], notes = [];
 const no = msg => problems.push(msg);
