@@ -1,0 +1,252 @@
+// 世界狀態：純資料，只用整數。模擬不 import three、不碰 DOM、不用現實時間（AGENTS.md 規則 2、3）。
+import { Fnv, nextU32, randInt, type RngState } from './rng.ts';
+
+export const N = 32;            // 地圖邊長（格）
+export const SUB = 256;         // 1 格＝256 個位置單位
+export const HALF = SUB >> 1;
+export const TICK_HZ = 20;      // 每秒 20 步
+
+// 地形碼
+export const TER_GRASS = 0;
+export const TER_ROAD = 1;
+export const TER_FIELD = 2;     // 農田（比草地慢）
+
+// 雙方
+export const SIDE_PLAYER = 0;
+export const SIDE_ENEMY = 1;
+
+// 建築種類（本線自己的編號，跟 GlimmerTown 系列的建築種類表無關）
+export const BK_HOUSE = 0;
+export const BK_COTTAGE = 1;
+export const BK_BARN = 2;
+export const BK_CHURCH = 3;
+export const BK_SHOP = 4;
+
+// 單位種類
+export const UK_TANK = 0;
+export const UK_HOWITZER = 1;
+
+export interface UnitKind {
+  name: string;
+  hp: number;
+  speed: number;        // 每 tick 走幾個位置單位（在路上；其他地形再乘地形倍率）
+  range: number;        // 最大射程（位置單位）
+  minRange: number;     // 最小射程（位置單位；直射是 0）
+  reload: number;       // 裝填 tick 數
+  indirect: boolean;    // 間接射擊（拋物線，不需要直線射界）
+  dmgUnit: number;      // 命中單位的傷害
+  dmgBld: number;       // 命中建築的傷害
+  splash: number;       // 爆炸半徑（位置單位；0＝只打中一個東西）
+  sight: number;        // 視野半徑（位置單位；算「有沒有友軍看得到」用）
+  armor: number;        // 承受傷害的百分比（100＝全吃）
+}
+
+// 數字都是暫定，玩家看得到的數字由業主定（AGENTS.md 規則 6）。
+export const UNIT_KINDS: UnitKind[] = [
+  { name: 'tank', hp: 100, speed: 20, range: 9 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 34, dmgBld: 25, splash: 0, sight: 10 * SUB, armor: 100 },
+  { name: 'howitzer', hp: 60, speed: 10, range: 28 * SUB, minRange: 6 * SUB, reload: 140, indirect: true, dmgUnit: 70, dmgBld: 60, splash: 384, sight: 6 * SUB, armor: 100 },
+];
+
+export const ORD_IDLE = 0;
+export const ORD_MOVE = 1;
+export const ORD_ATTACK = 2;    // 攻擊一個單位
+export const ORD_FIRE_AT = 3;   // 射擊一格（建築或地面）
+
+export interface Building {
+  id: number;           // 從 1 起；跟 occ 裡的值相同
+  kind: number;
+  x: number; z: number; // 左上角格
+  w: number; d: number; // 佔地（格）
+  floors: number;
+  hp: number;
+  maxHp: number;
+}
+
+export interface Unit {
+  id: number;           // 從 1 起，永不重用
+  side: number;
+  kind: number;
+  x: number; z: number; // 位置（位置單位）
+  hp: number;
+  alive: boolean;
+  order: number;
+  target: number;       // ORD_ATTACK 的單位 id；沒有是 0
+  tx: number; tz: number; // ORD_MOVE／ORD_FIRE_AT 的目標格
+  path: number[];       // 路徑（格索引），從下一格到終點
+  pathIdx: number;
+  cooldown: number;
+  aimX: number; aimZ: number; // 最後一次開火的方向（位置單位的向量；渲染轉砲塔用）
+}
+
+export const SHELL_AP = 0;      // 穿甲彈（直射）
+export const SHELL_HE = 1;      // 高爆彈（榴彈砲）
+
+export interface Shell {
+  id: number;
+  side: number;
+  kind: number;
+  shooter: number;
+  sx: number; sz: number;   // 起點
+  ex: number; ez: number;   // 落點
+  t: number; T: number;     // 已飛 tick／總飛行 tick
+  target: number;           // 穿甲彈瞄準的單位 id（0＝沒有）
+  hitBld: number;           // 穿甲彈會打中的建築 id（0＝沒有）
+}
+
+// 給渲染看的事件：每一步開頭清空，不進雜湊
+export type SimEvent =
+  | { e: 'fire'; unit: number; x: number; z: number }
+  | { e: 'impact'; kind: number; x: number; z: number; bld: number }
+  | { e: 'kill'; unit: number }
+  | { e: 'stage'; bld: number; stage: number };
+
+export interface World extends RngState {
+  seed: number;
+  tick: number;
+  n: number;
+  ter: Uint8Array;
+  occ: Int32Array;        // 每格的建築 id（0＝空）
+  crater: Uint8Array;     // 每格的彈坑深度 0–3
+  blds: Building[];
+  units: Unit[];
+  shells: Shell[];
+  nextShell: number;
+  winner: number;         // -1＝還在打；0／1＝勝方；2＝同歸於盡
+  events: SimEvent[];
+}
+
+export const idx = (x: number, z: number) => z * N + x;
+export const inMap = (x: number, z: number) => x >= 0 && z >= 0 && x < N && z < N;
+export const cellOf = (p: number) => Math.floor(p / SUB);
+export const center = (c: number) => c * SUB + HALF;
+
+// 損壞三段：門檻沿用 3D-lab 三百年示範（src/render/scene.ts:216-217：dmg≥0.3 沒屋頂、dmg≥1 瓦礫），改成整數比較
+export const STAGE_INTACT = 0;
+export const STAGE_ROOFLESS = 1;
+export const STAGE_RUBBLE = 2;
+export function stageOf(b: Building): number {
+  if (b.hp <= 0) return STAGE_RUBBLE;
+  if (b.hp * 10 <= b.maxHp * 7) return STAGE_ROOFLESS;
+  return STAGE_INTACT;
+}
+
+export function bldAt(w: World, x: number, z: number): Building | null {
+  if (!inMap(x, z)) return null;
+  const id = w.occ[idx(x, z)];
+  return id ? w.blds[id - 1] : null;
+}
+
+// 擋路、擋射線：還沒倒成瓦礫的建築
+export function blocks(w: World, x: number, z: number): boolean {
+  const b = bldAt(w, x, z);
+  return !!b && b.hp > 0;
+}
+
+// 地形速度倍率（百分比）：路最快，瓦礫、彈坑最慢
+export function speedPct(w: World, x: number, z: number): number {
+  const i = idx(x, z);
+  let p = w.ter[i] === TER_ROAD ? 100 : w.ter[i] === TER_FIELD ? 70 : 85;
+  if (w.occ[i]) p = 45;                      // 走得進來的建築格一定是瓦礫
+  if (w.crater[i]) p = Math.min(p, 75 - w.crater[i] * 10);
+  return p;
+}
+
+function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
+  const base = kind === BK_CHURCH ? 120 : kind === BK_BARN ? 30 : 50;
+  return base + 40 * floors * w * d;
+}
+
+// ---- 地圖：程序生成的二戰村莊街區 ----
+// 十字路口在中間，一條小路往東北；房子沿路排、教堂靠路口；兩方出生角落留空。
+export function createWorld(seed: number): World {
+  const w: World = {
+    seed: seed >>> 0, tick: 0, rng: seed >>> 0, n: N,
+    ter: new Uint8Array(N * N), occ: new Int32Array(N * N), crater: new Uint8Array(N * N),
+    blds: [], units: [], shells: [], nextShell: 1, winner: -1, events: [],
+  };
+  nextU32(w);   // 讓種子 0 也有像樣的開頭
+
+  // 道路：東西向大路（z=15,16）、南北向大路（x=15,16）、斜向小路
+  const roadZ = 14 + randInt(w, 3), roadX = 14 + randInt(w, 3);
+  for (let i = 0; i < N; i++) {
+    w.ter[idx(i, roadZ)] = TER_ROAD; w.ter[idx(i, roadZ + 1)] = TER_ROAD;
+    w.ter[idx(roadX, i)] = TER_ROAD; w.ter[idx(roadX + 1, i)] = TER_ROAD;
+  }
+  for (let x = roadX + 2, z = roadZ - 1; x < N && z >= 0; x += 1, z -= 1) {   // 小路：往右上斜出去
+    w.ter[idx(x, z)] = TER_ROAD;
+    if (x + 1 < N) w.ter[idx(x + 1, z)] = TER_ROAD;
+  }
+  // 農田：左下、右上兩塊
+  for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+    const i = idx(x, z);
+    if (w.ter[i] !== TER_GRASS) continue;
+    if ((x < 9 && z > 19 && z < 26) || (x > 22 && z > 8 && z < 13)) w.ter[i] = TER_FIELD;
+  }
+
+  const reserved = (x: number, z: number) => (x >= 22 && z >= 22) || (x <= 9 && z <= 9);   // 出生角落
+  const free = (x: number, z: number, bw: number, bd: number) => {
+    for (let dz = -1; dz <= bd; dz++) for (let dx = -1; dx <= bw; dx++) {
+      const cx = x + dx, cz = z + dz, inner = dx >= 0 && dz >= 0 && dx < bw && dz < bd;
+      if (!inMap(cx, cz)) { if (inner) return false; continue; }
+      if (inner && (w.ter[idx(cx, cz)] === TER_ROAD || reserved(cx, cz))) return false;
+      if (w.occ[idx(cx, cz)]) return false;     // 建築之間至少隔一格（巷子）
+    }
+    return true;
+  };
+  const place = (kind: number, x: number, z: number, bw: number, bd: number, floors: number) => {
+    const id = w.blds.length + 1, maxHp = bldMaxHp(kind, bw, bd, floors);
+    w.blds.push({ id, kind, x, z, w: bw, d: bd, floors, hp: maxHp, maxHp });
+    for (let dz = 0; dz < bd; dz++) for (let dx = 0; dx < bw; dx++) w.occ[idx(x + dx, z + dz)] = id;
+  };
+
+  // 教堂：路口西北角
+  if (free(roadX - 4, roadZ - 4, 3, 3)) place(BK_CHURCH, roadX - 4, roadZ - 4, 3, 3, 2);
+  // 沿路的房子：從路邊往外一格開始試
+  const tries: [number, number][] = [];
+  for (let i = 1; i < N - 1; i++) {
+    tries.push([i, roadZ - 2], [i, roadZ + 2], [roadX - 2, i], [roadX + 2, i]);
+  }
+  for (const [x, z] of tries) {
+    if (randInt(w, 100) < 35) continue;
+    const r = randInt(w, 10);
+    const kind = r < 4 ? BK_HOUSE : r < 7 ? BK_COTTAGE : r < 9 ? BK_SHOP : BK_BARN;
+    const bw = kind === BK_BARN ? 2 : 1 + randInt(w, 2), bd = kind === BK_BARN ? 2 : 1 + randInt(w, 2);
+    const ox = x < roadX ? x - bw + 1 : x, oz = z < roadZ ? z - bd + 1 : z;    // 往遠離路的方向長
+    const floors = kind === BK_COTTAGE || kind === BK_BARN ? 1 : 1 + randInt(w, 2);
+    if (free(ox, oz, bw, bd)) place(kind, ox, oz, bw, bd, floors);
+  }
+  // 零散農舍
+  for (let k = 0; k < 6; k++) {
+    const x = 2 + randInt(w, N - 4), z = 2 + randInt(w, N - 4);
+    if (free(x, z, 2, 2)) place(k % 2 ? BK_BARN : BK_COTTAGE, x, z, 2, 2, 1);
+  }
+
+  // 兵力：玩家在右下角（靠鏡頭），敵人在左上角
+  const spawn = (side: number, kind: number, cx: number, cz: number) => {
+    const k = UNIT_KINDS[kind];
+    w.units.push({ id: w.units.length + 1, side, kind, x: center(cx), z: center(cz), hp: k.hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB });
+  };
+  spawn(SIDE_PLAYER, UK_TANK, 24, 26); spawn(SIDE_PLAYER, UK_TANK, 26, 24); spawn(SIDE_PLAYER, UK_TANK, 26, 27);
+  spawn(SIDE_PLAYER, UK_HOWITZER, 29, 29);
+  spawn(SIDE_ENEMY, UK_TANK, 7, 5); spawn(SIDE_ENEMY, UK_TANK, 5, 7); spawn(SIDE_ENEMY, UK_TANK, 5, 4);
+  spawn(SIDE_ENEMY, UK_HOWITZER, 2, 2);
+  return w;
+}
+
+// 世界雜湊：所有跨 tick 的狀態都要折進來（events 只給渲染看，不算）
+export function hashWorld(w: World): string {
+  const f = new Fnv();
+  f.int(w.seed).int(w.tick).int(w.rng).int(w.nextShell).int(w.winner);
+  for (let i = 0; i < w.ter.length; i++) f.int(w.ter[i] | (w.crater[i] << 8)).int(w.occ[i]);
+  f.int(w.blds.length);
+  for (const b of w.blds) f.int(b.id).int(b.kind).int(b.x).int(b.z).int(b.w).int(b.d).int(b.floors).int(b.hp).int(b.maxHp);
+  f.int(w.units.length);
+  for (const u of w.units) {
+    f.int(u.id).int(u.side).int(u.kind).int(u.x).int(u.z).int(u.hp).int(u.alive ? 1 : 0).int(u.order).int(u.target)
+      .int(u.tx).int(u.tz).int(u.pathIdx).int(u.cooldown).int(u.aimX).int(u.aimZ).int(u.path.length);
+    for (const c of u.path) f.int(c);
+  }
+  f.int(w.shells.length);
+  for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld);
+  return f.hex();
+}

@@ -1,0 +1,61 @@
+// HUD：DOM 疊在畫面上（中文字不在 3D 裡畫）。只讀狀態、只呼叫傳進來的動作，不直接改世界。
+
+export interface HudState {
+  tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;
+  mine: number; theirs: number; tanks: number; guns: number;
+}
+export interface HudActions {
+  state: () => HudState;
+  togglePause: () => void;
+  cycleSpeed: () => void;
+  toggleFire: () => void;
+  selectAll: () => void;
+  restart: () => void;
+}
+export interface Hud { update: () => void; frame: () => void }
+
+export function initHud(a: HudActions): Hud {
+  const root = document.createElement('div');
+  root.id = 'hud';
+  root.innerHTML = `
+    <div class="bar top">
+      <span class="title">微光小鎮·二戰 RTS <small>R001</small></span>
+      <span id="clock">0:00</span>
+      <span id="count"></span>
+    </div>
+    <div class="bar btns">
+      <button id="b-pause" title="暫停／繼續（空白鍵）">⏸</button>
+      <button id="b-speed" title="速度">1×</button>
+      <button id="b-fire" title="砲擊模式：點地面＝對那一格開火">砲擊</button>
+      <button id="b-all" title="選取全部我方單位">全選</button>
+      <button id="b-restart" title="重新開始">↺</button>
+    </div>
+    <div class="bar bottom" id="hint"></div>
+    <div id="banner" hidden></div>`;
+  document.body.appendChild(root);
+  const $ = (id: string) => root.querySelector('#' + id) as HTMLElement;
+  const act = (id: string, f: () => void) => $(id).addEventListener('click', e => { e.stopPropagation(); f(); update(); });
+  act('b-pause', a.togglePause); act('b-speed', a.cycleSpeed); act('b-fire', a.toggleFire); act('b-all', a.selectAll); act('b-restart', a.restart);
+
+  let lastSec = -1;
+  function update() {
+    const s = a.state();
+    $('b-pause').textContent = s.paused ? '▶' : '⏸';
+    $('b-speed').textContent = `${s.speed}×`;
+    $('b-fire').classList.toggle('on', s.fireMode);
+    $('count').textContent = `我方 ${s.mine}　敵方 ${s.theirs}`;
+    const sel = s.tanks + s.guns;
+    $('hint').textContent = sel
+      ? `已選：${s.tanks ? `坦克 ${s.tanks}` : ''}${s.tanks && s.guns ? '、' : ''}${s.guns ? `榴彈砲 ${s.guns}` : ''}。點地面＝移動，點敵人＝攻擊，點房子＝轟它${s.fireMode ? '；砲擊模式：點地面＝對那一格開火' : ''}`
+      : '點我方單位（藍圈）選取；拖曳平移，雙指或滾輪縮放';
+    const ban = $('banner');
+    ban.hidden = s.winner < 0;
+    ban.textContent = s.winner === 0 ? '勝利' : s.winner === 1 ? '戰敗' : s.winner === 2 ? '同歸於盡' : '';
+  }
+  function frame() {
+    const s = a.state(), sec = Math.floor(s.tick / 20);
+    if (sec !== lastSec) { lastSec = sec; $('clock').textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; update(); }
+  }
+  update();
+  return { update, frame };
+}

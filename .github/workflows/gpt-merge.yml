@@ -1,0 +1,41 @@
+# GPT 車道的合併員：ci 在 gpt/* 的 PR 上跑綠之後，用 main 上的 tools/gpt-merge.mjs 判斷能不能合（AGENTS.md 第 4 節）。
+# workflow_run 永遠用預設分支（main）上的這份設定，PR 改不到；這一趟不執行 PR 裡的任何程式。
+name: gpt-merge
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: gpt-merge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      startsWith(github.event.workflow_run.head_branch, 'gpt/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: 判斷並合併
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          DAILY_CAP: '8'
+        run: node tools/gpt-merge.mjs

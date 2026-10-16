@@ -1,0 +1,86 @@
+# 每次推送與 PR：型別檢查 → Node 端守衛 → 建置單檔 → 無頭 Chrome 煙霧測試（WebGL 走 SwiftShader）→ 樣張當附件。
+# gpt/* 分支另跑 GPT 車道守衛（用 main 上的那一份）。main 綠燈之後把 dist/index.html 發到 GitHub Pages。
+name: ci
+
+on:
+  push:
+    branches: [main, 'claude/**', 'ccr-**']
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: 中文字型（樣張上的 HUD 才看得懂）
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-wqy-zenhei
+      - run: npm run typecheck
+      - name: Node 端守衛（純度、決定性、黃金雜湊、模擬行為）
+        run: npm run unit
+      - run: npm run build
+      - name: 煙霧測試（預算、Node＝Chrome 雜湊、觸控、逃生閥）
+        run: node tools/smoke.mjs 2>&1 | tee smoke-run.txt; exit ${PIPESTATUS[0]}
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ github.sha }}
+          path: |
+            smoke-run.txt
+            shots/*.png
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          path: dist
+
+  gpt-lane:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'gpt/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: GPT 車道守衛（main 上的那一份）
+        env:
+          BRANCH: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin main
+          git show origin/main:tools/gpt-lane.mjs > "$RUNNER_TEMP/gpt-lane.mjs"
+          BASE=origin/main HEAD_REF="$HEAD_SHA" node "$RUNNER_TEMP/gpt-lane.mjs"
+
+  pages:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
