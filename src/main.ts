@@ -1,11 +1,13 @@
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UNIT_KINDS, bldAt, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, N, SUB, TICK_HZ, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UNIT_KINDS, BK_COTTAGE, bldAt, cellOf, type World } from './sim/world.ts';
+import { BUILD_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
 import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
+import { initBuildBar, type BuildBar } from './ui/build.ts';
 
 const q = new URLSearchParams(location.search);
 const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
@@ -20,17 +22,80 @@ document.body.appendChild(renderer.domElement);
 const canvas = renderer.domElement;
 
 let w: World, view: BattleView, log: LoggedCommand[], pending: Command[];
-let hud: Hud | undefined;
+let hud: Hud | undefined, buildBar: BuildBar | undefined;
 let acc = 0, paused = false, speed = 1, fireMode = false, lastT = performance.now();
 const selected = new Set<number>();
 const SPEEDS = [1, 2, 4];
 
-function reset(s = seed) {
+// ---- R006 布陣：開頁先停在第 0 步，玩家在我方半場蓋房子，按「開戰」才開打。逃生閥 ?noR006=1＝直接開打（R102 的流程）----
+const r006 = q.get('noR006') !== '1';
+let phase: 'build' | 'battle' = 'battle';
+let plan: BuildCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
+const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉' };
+const BUILD_WHY: Record<string, string> = {
+  tick: '已經開戰，不能再蓋', map: '超出地圖', foreign: '那是敵方半場（紅色）；只能蓋在我方半場（藍色）',
+  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', road: '不能蓋在路上', occupied: '那裡已經有房子',
+  unit: '有單位站在那裡', blocked: '會堵死通路', gap: '太靠近別的房子（要隔一格）',
+};
+const BUILD_TIP = '布陣：點藍色地面蓋房子當掩體、擋視線；點蓋好的房子拿掉；蓋好按「開戰」';
+
+// 預覽＝真的世界的複本套上這次的布陣（同一支 applyBuild，規則只有一份）
+function previewWorld(): World {
+  const pv = structuredClone(w);
+  for (const c of plan) applyBuild(pv, c);
+  pv.events = [];
+  return pv;
+}
+function refreshPreview() { if (phase === 'build') view.setWorld(previewWorld(), SIDE_PLAYER); }
+const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.kind)?.cost ?? 0), 0);
+
+function reset(s = seed, build = r006) {
   w = createWorld(s);
   view?.dispose();
   view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1');
   log = []; pending = []; acc = 0; selected.clear();
-  hud?.update();
+  plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
+  if (build) { paused = true; refreshPreview(); }
+  ui();
+}
+function ui() { hud?.update(); buildBar?.update(); }
+
+// 開戰：我方布陣＋敵方布陣都寫進指令紀錄（第 0 步），馬上走第一步讓房子落地（中間不畫任何一幀，不會閃）
+function startBattle() {
+  if (phase !== 'build') return;
+  const pv = previewWorld(), enemy = enemyPlan(pv);
+  for (const c of plan) issue(c);
+  for (const c of enemy) issue(c);
+  phase = 'battle'; plan = []; buildHint = '';
+  view.setWorld(w, -1);
+  tick();
+  paused = false;
+  ui();
+}
+
+function placeAt(cx: number, cy: number) {
+  // 點到已經放好的房子＝拿掉它（只認這次布陣的，地圖上原本的房子不算）
+  const hitB = view.buildingAt(cx, cy, innerWidth, innerHeight);
+  if (hitB) {
+    const k = plan.findIndex(c => { const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return hitB[0] >= c.x && hitB[1] >= c.z && hitB[0] < c.x + fw && hitB[1] < c.z + fd; });
+    if (k >= 0) { plan.splice(k, 1); buildHint = '拿掉了一棟'; refreshPreview(); ui(); return; }
+  }
+  const p = view.groundAt(cx, cy, innerWidth, innerHeight);
+  if (!p) return;
+  const gx = Math.floor(p.x), gz = Math.floor(p.z);
+  if (gx < 0 || gz < 0 || gx >= N || gz >= N) return;
+  const kd = buildKind(pickKind)!, rot = kd.w !== kd.d ? pickRot : 0;
+  const cmd: BuildCmd = { t: 'build', side: SIDE_PLAYER, kind: pickKind, x: gx, z: gz, ...(rot ? { rot } : {}) };
+  const err = buildError(previewWorld(), cmd);
+  if (err) {
+    buildHint = err === 'points' ? `建材不夠（剩 ${pointsLeft()}，${BUILD_LABEL[pickKind]}要 ${kd.cost}）` : BUILD_WHY[err] ?? '這裡不能蓋';
+    view.setMarker(gx + 0.5, gz + 0.5, simT(), true);
+  } else {
+    plan.push(cmd); buildHint = `${BUILD_LABEL[pickKind]}蓋好了，剩建材 ${pointsLeft()}`;
+    view.setMarker(gx + 0.5, gz + 0.5, simT(), false);
+    refreshPreview();
+  }
+  ui();
 }
 
 function issue(cmd: Command) {
@@ -63,6 +128,7 @@ function pickUnit(cx: number, cy: number): number {
 }
 
 function order(cx: number, cy: number) {
+  if (phase === 'build') { placeAt(cx, cy); return; }
   const ids = [...selected].filter(id => w.units[id - 1].alive);
   if (!ids.length) return;
   const hit = pickUnit(cx, cy), t = hit ? w.units[hit - 1] : null;
@@ -105,6 +171,7 @@ function tap(cx: number, cy: number, additive: boolean) {
     hud?.update();
     return;
   }
+  if (phase === 'build') { placeAt(cx, cy); return; }
   order(cx, cy);
 }
 
@@ -140,7 +207,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => { e.preventDefault(); view.zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12); }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { selected.clear(); hud?.update(); }
-  if (e.key === ' ') { e.preventDefault(); if (!e.repeat) { paused = !paused; hud?.update(); } }   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
+  if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
 });
 
 reset();
@@ -152,22 +219,33 @@ hud = initHud({
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
     return {
       tick: w.tick, paused, speed, fireMode, winner: w.winner,
+      build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : undefined,
       mine: mine.length, theirs: theirs.length,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => u.kind === UK_TANK).length, guns: sel.filter(u => u.kind === UK_HOWITZER).length,
     };
   },
-  togglePause: () => { paused = !paused; },
+  togglePause: () => { if (phase === 'battle') paused = !paused; },
   cycleSpeed: () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; },
   toggleFire: () => { fireMode = !fireMode; },
   selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); },
   restart: () => reset(),
+});
+buildBar = initBuildBar(BUILD_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost })), {
+  state: () => {
+    const kd = buildKind(pickKind)!;
+    return { visible: phase === 'build', kind: pickKind, rot: pickRot, rotatable: kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };
+  },
+  pick: kind => { pickKind = kind; buildHint = `${BUILD_LABEL[kind]}（建材 ${buildKind(kind)!.cost}）：點藍色地面放下`; hud?.update(); },
+  rotate: () => { pickRot = 1 - pickRot; hud?.update(); },
+  undo: () => { if (plan.pop()) { buildHint = '拿掉了最後一棟'; refreshPreview(); hud?.update(); } },
+  start: () => startBattle(),
 });
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
   const t = performance.now(), dt = Math.min(0.25, (t - lastT) / 1000);
   lastT = t;
-  if (!paused) acc += dt * speed;
+  if (!paused && phase === 'battle') acc += dt * speed;
   let steps = 0;
   while (acc >= 1 / TICK_HZ && steps < 8) { acc -= 1 / TICK_HZ; tick(); steps++; }
   if (steps === 8) acc = 0;   // 機器太慢：丟掉積欠的時間，不追
@@ -192,7 +270,7 @@ const rts = {
   selected: () => [...selected],
   // 用跟 Node 一樣的路徑重跑腳本戰鬥，回傳雜湊；畫面換成腳本跑完的世界
   runScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED);
+    reset(SCRIPT_SEED, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
     view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1');
@@ -205,5 +283,8 @@ const rts = {
   focus: (x: number, z: number, zoom = 1) => { view.target.set(x, 0, z); view.zoom = zoom; },
   info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, fx: fxOn, px: style.pixelCss }),
   cellOf: (p: number) => cellOf(p),
+  phase: () => phase,
+  plan: () => JSON.parse(JSON.stringify(plan)) as BuildCmd[],
+  startBattle: () => startBattle(),
 };
 (window as unknown as { __rts: typeof rts }).__rts = rts;

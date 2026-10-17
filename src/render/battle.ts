@@ -6,6 +6,7 @@ import {
   SIDE_PLAYER, type Unit, type World, type SimEvent,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
+import { territory } from '../sim/build.ts';
 import { buildTown, smokeSources } from './buildings.ts';
 import { tankHull, tankTurret, howitzer, observer } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
@@ -59,6 +60,7 @@ export class BattleView {
   private marker: { x: number; z: number; until: number; col: THREE.Color } | null = null;
   private tmp = new THREE.Object3D();
   private observerHeights = new Map<number, { x: number; z: number; height: number }>();
+  private territory = -1;           // R006 布陣：≥0 時地面貼圖把那一方可蓋的半場染色（不加繪製呼叫）
 
   constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true) {
     this.w = w; this.fxOn = fxOn; this.fogOn = fogOn;
@@ -129,6 +131,15 @@ export class BattleView {
     return height;
   }
 
+  get world(): World { return this.w; }
+  // R006：換一個世界來畫（布陣預覽世界 ↔ 真的世界）；重畫地面貼圖與房子，單位網格不動
+  setWorld(w: World, territorySide = -1) {
+    this.w = w; this.territory = territorySide; this.observerHeights.clear();
+    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
+    this.groundTex.needsUpdate = true;
+    this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry();
+  }
+
   visibleAt(x: number, z: number): boolean {
     return !this.fogOn || spotted(this.w, SIDE_PLAYER, x, z);
   }
@@ -156,6 +167,15 @@ export class BattleView {
         r = 92 + n * 16 + tuft; g = 122 + n * 18 + tuft; bl = 64 + n * 10;
       }
       if (b) { r = 112 + n * 16; g = 102 + n * 14; bl = 86 + n * 12; if (rubble) { r += 18; g += 16; bl += 14; } }
+      else if (this.territory >= 0 && ter !== TER_ROAD) {
+        // 布陣：我方可蓋的半場偏藍、對方半場偏紅，交界畫一條亮線；無人帶與路保持原色
+        const mine = territory(this.territory, x, z), theirs = territory(1 - this.territory, x, z);
+        if (mine) { r = r * 0.62 + 26; g = g * 0.72 + 44; bl = bl * 0.55 + 104; }
+        else if (theirs) { r = r * 0.8 + 38; g = g * 0.8 + 6; bl = bl * 0.8 + 4; }
+        const edge = mine && (!territory(this.territory, x - 1, z) && px === 0 || !territory(this.territory, x, z - 1) && py === 0
+          || !territory(this.territory, x + 1, z) && px === PX - 1 || !territory(this.territory, x, z + 1) && py === PX - 1);
+        if (edge) { r = 196; g = 226; bl = 255; }
+      }
       if (dep) {
         const cx = px - 3.5, cz = py - 3.5, d = Math.hypot(cx, cz), rad = 1.6 + dep * 0.9;
         if (d < rad - 0.8) { r = 58 + n * 10; g = 48 + n * 8; bl = 38 + n * 6; }
@@ -180,6 +200,10 @@ export class BattleView {
         for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z);
         groundDirty = true;
         if (this.fxOn) this.burst(b.x + b.w / 2, 0.3, b.z + b.d / 2, 1.2, simT, 6, true);
+      } else if (e.e === 'build') {
+        townDirty = true;
+        const b = this.w.blds[e.bld - 1];
+        if (b) { for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z); groundDirty = true; }
       } else if (e.e === 'impact') {
         const x = e.x / SUB, z = e.z / SUB;
         if (e.kind === SHELL_HE) {

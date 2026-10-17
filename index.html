@@ -22,6 +22,21 @@
     #hud button.on { background: #9a4a2e; border-color: #d0835f; }
     #banner { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 14px 28px;
       font-size: 32px; font-weight: 800; background: rgba(20, 22, 18, 0.82); border: 2px solid #c9a650; border-radius: 8px; }
+    /* R006 布陣列：貼在提示列上方（bottom 由 src/ui/build.ts 依提示列高度設定） */
+    #hud.build #b-pause, #hud.build #b-speed, #hud.build #b-fire { display: none; }
+    #buildbar { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: 52px;
+      flex-direction: column; align-items: stretch; gap: 6px; background: rgba(24, 34, 48, 0.86); border: 1px solid #4f6f96; }
+    #buildbar[hidden] { display: none; }
+    #buildbar .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    #buildbar button { min-height: 44px; min-width: 52px; padding: 0 10px; }
+    #buildbar button b { margin-left: 4px; color: #ffd36a; font-weight: 800; }
+    #buildbar button.sel { background: #2f5f9a; border-color: #9cc6ff; box-shadow: inset 0 0 0 1px #9cc6ff; }
+    #buildbar button.dim { opacity: 0.45; }
+    #buildbar #bb-start { margin-left: auto; min-width: 96px; background: #9a4a2e; border-color: #e0a07a; font-weight: 800; letter-spacing: 0.1em; }
+    #buildbar #bb-left { font-weight: 700; }
+    #buildbar .pips { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+    #buildbar .pips i { width: 9px; height: 12px; border-radius: 2px; background: #3a4352; display: inline-block; }
+    #buildbar .pips i.on { background: #ffd36a; }
     @media (max-width: 640px) { #hud .top { gap: 8px; font-size: 12px; } #hud .title small { display: none; }
       #hud .top { top: calc(max(8px, env(safe-area-inset-top)) + 46px); } }
   </style>
