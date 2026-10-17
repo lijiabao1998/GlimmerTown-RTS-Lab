@@ -77,5 +77,8 @@ export class Pipeline {
   }
 
   get size() { return [this.rt.width, this.rt.height]; }
-  dispose() { this.rt.dispose(); this.rt.depthTexture?.dispose(); this.mat.dispose(); }
+  dispose() {
+    this.rt.dispose(); this.rt.depthTexture?.dispose(); this.mat.dispose();
+    this.quadScene.traverse(o => (o as THREE.Mesh).geometry?.dispose());
+  }
 }

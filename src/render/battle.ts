@@ -195,6 +195,7 @@ export class BattleView {
   // ---- 每一幀 ----
   update(alpha: number, simT: number, selected: Set<number>) {
     const w = this.w, m = this.tmp;
+    if (w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
     let nh = 0, ng = 0, nd = 0, nr = 0;
     for (const u of w.units) {
       const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * alpha) / SUB;
@@ -282,8 +283,25 @@ export class BattleView {
   }
   zoomBy(f: number) { this.zoom = Math.max(0.55, Math.min(3, this.zoom * f)); }
 
+  // 螢幕點 → 點到的建築格（先打建築的網格：點屋頂、牆面都算那棟；瓦礫不算）
+  buildingAt(cssX: number, cssY: number, cssW: number, cssH: number): [number, number] | null {
+    this.layout(cssW, cssH);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2((cssX / cssW) * 2 - 1, -(cssY / cssH) * 2 + 1), this.cam);
+    for (const hit of ray.intersectObject(this.town, false)) {
+      // 沿著視線往內推一點再取格，避免剛好落在牆面外緣的格線上
+      const p = hit.point.clone().addScaledVector(ray.ray.direction, 0.02);
+      const x = Math.floor(p.x), z = Math.floor(p.z);
+      if (x < 0 || z < 0 || x >= N || z >= N) continue;
+      const id = this.w.occ[idx(x, z)];
+      if (id && this.w.blds[id - 1].hp > 0) return [x, z];
+    }
+    return null;
+  }
+
   // 螢幕點 → 地面座標（格）
   groundAt(cssX: number, cssY: number, cssW: number, cssH: number): THREE.Vector3 | null {
+    this.layout(cssW, cssH);   // 鏡頭只在 render() 裡排，焦點或世界剛換過時先排一次
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2((cssX / cssW) * 2 - 1, -(cssY / cssH) * 2 + 1), this.cam);
     const p = new THREE.Vector3();
@@ -291,6 +309,7 @@ export class BattleView {
   }
   // 世界座標（格）→ 螢幕 CSS 像素
   screenOf(x: number, y: number, z: number, cssW: number, cssH: number): [number, number] {
+    this.layout(cssW, cssH);
     const v = new THREE.Vector3(x, y, z).project(this.cam);
     return [(v.x + 1) / 2 * cssW, (1 - v.y) / 2 * cssH];
   }
@@ -303,6 +322,8 @@ export class BattleView {
   // 換世界（重開、跑腳本）時釋放 GPU 資源
   dispose() {
     this.scene.traverse(o => {
+      // 燈要 dispose 才會放掉 2048² 的陰影貼圖；實例化網格要 dispose 才會放掉實例緩衝
+      if ((o as THREE.Light).isLight || (o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.Light | THREE.InstancedMesh).dispose();
       const m = o as THREE.Mesh;
       if (m.geometry) m.geometry.dispose();
       const mat = m.material as THREE.Material | THREE.Material[] | undefined;

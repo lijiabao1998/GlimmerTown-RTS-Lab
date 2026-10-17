@@ -1,6 +1,6 @@
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, bldAt, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, N, SUB, TICK_HZ, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UNIT_KINDS, bldAt, cellOf, type World } from './sim/world.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
@@ -71,13 +71,22 @@ function order(cx: number, cy: number) {
     view.setMarker(t.x / SUB, t.z / SUB, simT(), true);
     return;
   }
+  // 先看點到哪棟建築（屋頂、牆面都算）；沒點到建築才看地面
+  const hitB = view.buildingAt(cx, cy, innerWidth, innerHeight);
+  if (hitB) {
+    issue({ t: 'fireAt', side: SIDE_PLAYER, ids, x: hitB[0], z: hitB[1] });
+    view.setMarker(hitB[0] + 0.5, hitB[1] + 0.5, simT(), true);
+    return;
+  }
   const p = view.groundAt(cx, cy, innerWidth, innerHeight);
   if (!p) return;
   const gx = Math.floor(p.x), gz = Math.floor(p.z);
   if (gx < 0 || gz < 0 || gx >= N || gz >= N) return;
   const b = bldAt(w, gx, gz);
-  if (fireMode || (b && b.hp > 0)) {
-    issue({ t: 'fireAt', side: SIDE_PLAYER, ids, x: gx, z: gz });
+  // 砲擊模式點地面：只有榴彈砲接（坦克打空地沒有用）；選取裡沒有榴彈砲就照常移動
+  const guns = ids.filter(id => UNIT_KINDS[w.units[id - 1].kind].indirect);
+  if ((b && b.hp > 0) || (fireMode && guns.length)) {
+    issue({ t: 'fireAt', side: SIDE_PLAYER, ids: b && b.hp > 0 ? ids : guns, x: gx, z: gz });
     view.setMarker(gx + 0.5, gz + 0.5, simT(), true);
   } else {
     issue({ t: 'move', side: SIDE_PLAYER, ids, x: gx, z: gz });
@@ -128,7 +137,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => { e.preventDefault(); view.zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12); }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { selected.clear(); hud?.update(); }
-  if (e.key === ' ') { paused = !paused; hud?.update(); }
+  if (e.key === ' ') { e.preventDefault(); if (!e.repeat) { paused = !paused; hud?.update(); } }   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
 });
 
 reset();
@@ -188,6 +197,8 @@ const rts = {
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, 0.15, u.z / SUB, innerWidth, innerHeight); },
   screenOfCell: (x: number, z: number) => view.screenOf(x + 0.5, 0, z + 0.5, innerWidth, innerHeight),
+  screenOfPoint: (x: number, y: number, z: number) => view.screenOf(x, y, z, innerWidth, innerHeight),
+  blds: () => w.blds.map(b => ({ ...b })),
   focus: (x: number, z: number, zoom = 1) => { view.target.set(x, 0, z); view.zoom = zoom; },
   info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, fx: fxOn, px: style.pixelCss }),
   cellOf: (p: number) => cellOf(p),

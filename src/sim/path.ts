@@ -13,7 +13,8 @@ function heur(x: number, z: number, gx: number, gz: number): number {
   return 10 * (dx + dz) - 6 * Math.min(dx, dz);
 }
 
-// 最小堆：鍵＝f*2048+格索引（N*N ≤ 2048），同 f 時小索引先出
+// 最小堆：鍵＝f*K+格索引（K＝N*N），同 f 時小索引先出
+const K = N * N;
 class Heap {
   a: number[] = [];
   push(v: number) {
@@ -49,10 +50,10 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
   const g = new Int32Array(N * N).fill(-1), came = new Int32Array(N * N).fill(-1), done = new Uint8Array(N * N);
   const open = new Heap();
   g[start] = 0;
-  open.push(heur(sx, sz, gx, gz) * 2048 + start);
+  open.push(heur(sx, sz, gx, gz) * K + start);
   let best = start, bestH = heur(sx, sz, gx, gz);
   while (open.size) {
-    const cur = open.pop() % 2048;
+    const cur = open.pop() % K;
     if (done[cur]) continue;
     done[cur] = 1;
     const cx = cur % N, cz = (cur - cx) / N;
@@ -67,7 +68,7 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
       const ni = idx(nx, nz), ng = g[cur] + stepCost(w, nx, nz, diag);
       if (done[ni] || (g[ni] >= 0 && g[ni] <= ng)) continue;
       g[ni] = ng; came[ni] = cur;
-      open.push((ng + heur(nx, nz, gx, gz)) * 2048 + ni);
+      open.push((ng + heur(nx, nz, gx, gz)) * K + ni);
     }
   }
   const end = done[goal] ? goal : best;

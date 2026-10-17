@@ -1,29 +1,33 @@
-# GPT 車道的合併員：ci 在 gpt/* 的 PR 上跑綠之後，用 main 上的 tools/gpt-merge.mjs 判斷能不能合（AGENTS.md 第 4 節）。
-# workflow_run 永遠用預設分支（main）上的這份設定，PR 改不到；這一趟不執行 PR 裡的任何程式。
+# GPT 車道的合併員：ci 在 gpt/* 的 PR 上跑綠之後（或每小時掃一次），用 main 上的 tools/gpt-merge.mjs 判斷能不能合（AGENTS.md 第 4 節）。
+# workflow_run 與 schedule 永遠用預設分支（main）上的這份設定，PR 改不到；這一趟不執行 PR 裡的任何程式。
 name: gpt-merge
 
 on:
   workflow_run:
     workflows: [ci]
     types: [completed]
+  schedule:
+    - cron: '17 * * * *'   # 每小時掃一次：被每日上限擋下、業主拿掉「等業主」標籤的 PR，靠這個接著合
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
   actions: write
 
-concurrency:
-  group: gpt-merge
-  cancel-in-progress: false
-
 jobs:
   merge:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request' &&
-      startsWith(github.event.workflow_run.head_branch, 'gpt/')
+      github.event_name != 'workflow_run' || (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'pull_request' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        startsWith(github.event.workflow_run.head_branch, 'gpt/'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    concurrency:
+      group: gpt-merge
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:

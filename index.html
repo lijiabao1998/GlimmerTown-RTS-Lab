@@ -11,17 +11,18 @@
     #hud { position: fixed; inset: 0; pointer-events: none; }
     #hud .bar { position: absolute; display: flex; gap: 6px; align-items: center; padding: 6px 8px;
       background: rgba(28, 32, 26, 0.72); border-radius: 6px; pointer-events: auto; }
-    #hud .top { top: max(8px, env(safe-area-inset-top)); left: 8px; gap: 12px; }
+    #hud .top { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); gap: 12px; }
+    #hud .top, #hud .bottom { pointer-events: none; }   /* 只有字的條不擋地圖上的點擊 */
     #hud .title { font-weight: 700; letter-spacing: 0.02em; }
     #hud .title small { opacity: 0.6; font-weight: 400; }
-    #hud .btns { top: max(8px, env(safe-area-inset-top)); right: 8px; }
-    #hud .bottom { left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); font-size: 13px; }
+    #hud .btns { top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); }
+    #hud .bottom { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); font-size: 13px; }
     #hud button { min-width: 44px; height: 36px; border: 1px solid #6c745f; border-radius: 5px; background: #3c4535;
       color: #f3eedf; font: inherit; cursor: pointer; }
     #hud button.on { background: #9a4a2e; border-color: #d0835f; }
     #banner { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 14px 28px;
       font-size: 32px; font-weight: 800; background: rgba(20, 22, 18, 0.82); border: 2px solid #c9a650; border-radius: 8px; }
-    @media (max-width: 520px) { #hud .top { gap: 8px; font-size: 12px; } #hud .title small { display: none; }
+    @media (max-width: 640px) { #hud .top { gap: 8px; font-size: 12px; } #hud .title small { display: none; }
       #hud .top { top: calc(max(8px, env(safe-area-inset-top)) + 46px); } }
   </style>
 </head>

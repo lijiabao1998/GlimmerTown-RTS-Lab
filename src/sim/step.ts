@@ -50,11 +50,12 @@ export function applyCommand(w: World, cmd: Command): void {
       u.path = inRange(u, t.x, t.z) ? [] : findPath(w, ux, uz, cellOf(t.x), cellOf(t.z)); u.pathIdx = 0;
       return;
     }
-    // fireAt
-    const gx = cx(cmd.x), gz = cx(cmd.z);
+    // fireAt：對還站著的建築＝打到變瓦礫；對空地或瓦礫＝打 FIRE_AT_ROUNDS 發（只有間接射擊的砲接，坦克打空地沒有用）
+    const gx = cx(cmd.x), gz = cx(cmd.z), standing = blocks(w, gx, gz);
+    if (!standing && !UNIT_KINDS[u.kind].indirect) return;
     if (tooClose(u, center(gx), center(gz))) return;                // 榴彈砲：最小射程內不接
     u.order = ORD_FIRE_AT; u.tx = gx; u.tz = gz;
-    u.target = bldAt(w, gx, gz) ? 0 : FIRE_AT_ROUNDS;
+    u.target = standing ? 0 : FIRE_AT_ROUNDS;
     u.path = inRange(u, center(gx), center(gz)) ? [] : findPath(w, ux, uz, gx, gz); u.pathIdx = 0;
   });
 }
@@ -68,18 +69,27 @@ function inRange(u: Unit, x: number, z: number): boolean {
   return d <= k.range && d >= k.minRange;
 }
 
-// 從 (ax,az) 到 (bx,bz) 的直線（格），回傳第一個擋住的建築格（不含起點格）；沒有擋就回傳 -1
-export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number): number {
-  let x = cellOf(ax), z = cellOf(az);
-  const x1 = cellOf(bx), z1 = cellOf(bz);
-  const dx = Math.abs(x1 - x), dz = -Math.abs(z1 - z), sx = x < x1 ? 1 : -1, sz = z < z1 ? 1 : -1;
-  let err = dx + dz;
+// 兩格之間的直線（Bresenham）。一律從格索引小的那一端畫，需要時再反轉：A→B 與 B→A 經過同一組格，視線才對稱
+export function lineCells(x0: number, z0: number, x1: number, z1: number): number[] {
+  const flip = idx(x0, z0) > idx(x1, z1);
+  if (flip) { const tx = x0, tz = z0; x0 = x1; z0 = z1; x1 = tx; z1 = tz; }
+  const dx = Math.abs(x1 - x0), dz = -Math.abs(z1 - z0), sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1;
+  const out = [idx(x0, z0)];
+  let x = x0, z = z0, err = dx + dz;
   while (x !== x1 || z !== z1) {
     const e2 = 2 * err;
     if (e2 >= dz) { err += dz; x += sx; }
     if (e2 <= dx) { err += dx; z += sz; }
-    if (blocks(w, x, z)) return idx(x, z);
+    out.push(idx(x, z));
   }
+  if (flip) out.reverse();
+  return out;
+}
+
+// 從 (ax,az) 到 (bx,bz)（位置單位），回傳第一個擋住的建築格（不含起點格）；沒有擋就回傳 -1
+export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number): number {
+  const cells = lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz));
+  for (let i = 1; i < cells.length; i++) { const c = cells[i]; if (w.occ[c] && w.blds[w.occ[c] - 1].hp > 0) return c; }
   return -1;
 }
 
@@ -92,7 +102,7 @@ export function spotted(w: World, side: number, x: number, z: number): boolean {
 function moveUnit(w: World, u: Unit): void {
   if (u.order === ORD_ATTACK) {
     const t = unitById(w, u.target);
-    if (!t || !t.alive) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
+    if (!t || !t.alive || tooClose(u, t.x, t.z)) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }   // 目標死了或鑽進最小射程：放棄，回到自己找目標
     if (inRange(u, t.x, t.z)) { u.path = []; u.pathIdx = 0; return; }
     if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(t.x), cellOf(t.z)); u.pathIdx = 0; }
   }
@@ -119,9 +129,9 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
     return t && t.alive ? { x: t.x, z: t.z, unit: t, bld: null } : null;
   }
   if (u.order === ORD_FIRE_AT) {
+    if (u.target > 0) return { x: center(u.tx), z: center(u.tz), unit: null, bld: null };   // 對地面：還有發數
     const b = bldAt(w, u.tx, u.tz);
-    if (b && b.hp <= 0) { u.order = ORD_IDLE; return null; }          // 已經是瓦礫：停火
-    if (!b && u.target <= 0) { u.order = ORD_IDLE; return null; }     // 對空地打完了
+    if (!b || b.hp <= 0) { u.order = ORD_IDLE; return null; }         // 建築已經是瓦礫，或對地面打完了：停火
     return { x: center(u.tx), z: center(u.tz), unit: null, bld: b };
   }
   let best: Unit | null = null, bestD = 0;
@@ -215,7 +225,7 @@ function updateShells(w: World): void {
 }
 
 function checkWinner(w: World): void {
-  if (w.winner >= 0) return;
+  if (w.winner >= 0 || w.shells.length) return;      // 還有砲彈在飛就先不判（可能同歸於盡）
   let a = false, b = false;
   for (const u of w.units) if (u.alive) { if (u.side === SIDE_PLAYER) a = true; else if (u.side === SIDE_ENEMY) b = true; }
   if (!a && !b) w.winner = 2; else if (!b) w.winner = SIDE_PLAYER; else if (!a) w.winner = SIDE_ENEMY;

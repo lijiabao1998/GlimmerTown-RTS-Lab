@@ -6,7 +6,8 @@ on:
   push:
     branches: [main, 'claude/**', 'ccr-**']
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]   # 只有要進 main 的 PR 才跑；PR 改目標分支（edited）會重跑
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   workflow_dispatch:
 
 concurrency:
@@ -41,7 +42,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shots-${{ github.sha }}
+          name: shots-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             smoke-run.txt
             shots/*.png

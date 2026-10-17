@@ -1,9 +1,12 @@
 // 煙霧測試：無頭 Chrome（SwiftShader）開 dist/index.html，量預算、比對 Node 與瀏覽器的雜湊、用真的觸控下指令、拍樣張。
 // 用法：npm run build && node tools/smoke.mjs　退出碼 0＝綠、1＝紅；樣張存在 shots/（不進倉庫，CI 當附件）。
+import fs from 'node:fs';
 import path from 'node:path';
 import { withBrowser, touchTap, shot, sleep, ROOT } from './cdp.mjs';
 import { hashWorld, createWorld, bldAt, N } from '../src/sim/world.ts';
+import { runLog } from '../src/sim/step.ts';
 import { runScript, SCRIPT_TICKS } from '../src/sim/script.ts';
+import { FLOOR_H } from '../src/render/buildings.ts';
 
 const t0 = Date.now(), fails = [];
 function log(ok, name, detail = '') {
@@ -14,6 +17,8 @@ const SHOTS = path.join(ROOT, 'shots');
 const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含陰影那一趟）
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
+// 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -26,8 +31,14 @@ function freeCellNear(cx, cz) {
   return [cx, cz];
 }
 
+// ---- 產物只有一個檔 ----
+{
+  const files = fs.readdirSync(path.join(ROOT, 'dist'), { recursive: true });
+  log(files.length === 1 && files[0] === 'index.html', '建置產物只有 dist/index.html', files.join(' '));
+}
+
 // ---- 桌機 1280×800 ----
-await withBrowser({ width: 1280, height: 800 }, async ({ open, page }) => {
+await withBrowser({ width: 1280, height: 800, port: PORTS.desktop }, async ({ open, page }) => {
   console.log(`Chrome 可連線：${page.chrome.ms} ms（第 ${page.chrome.tries} 次）`);
   await open('');
   const info = await page.evaluate('__rts.info()');
@@ -48,7 +59,7 @@ await withBrowser({ width: 1280, height: 800 }, async ({ open, page }) => {
 });
 
 // ---- 手機 412×860：預算、觸控 ----
-await withBrowser({ width: 412, height: 860, mobile: true }, async ({ open, page }) => {
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.mobile }, async ({ open, page }) => {
   await open('');
   await page.evaluate('__rts.pause(true)');
   await sleep(400);
@@ -66,6 +77,27 @@ await withBrowser({ width: 412, height: 860, mobile: true }, async ({ open, page
   const lg = await page.evaluate('__rts.log()');
   const mv = lg.find(c => c.cmd.t === 'move');
   log(!!mv && JSON.stringify(mv.cmd.ids) === '[1]', '觸控點地面會下移動指令', mv ? JSON.stringify(mv.cmd) : `紀錄 ${JSON.stringify(lg)}`);
+  // 觸控點小房子的屋頂：要對那棟房子開火，不是移動到屋頂後面的地面
+  // 挑屋頂真的落在畫布上（不在畫面外、不在 HUD 按鈕底下）的 1×1 小房子
+  const blds = await page.evaluate('__rts.blds()');
+  let house = null, rx = 0, ry = 0;
+  for (const b of blds.filter(b => b.w === 1 && b.d === 1 && b.hp > 0)) {
+    const [x, y] = await page.evaluate(`__rts.screenOfPoint(${b.x + 0.5}, ${b.floors * FLOOR_H + 0.1 + 0.2}, ${b.z + 0.5})`);
+    if (x < 20 || y < 20 || x > 392 || y > 840) continue;
+    if (await page.evaluate(`document.elementFromPoint(${x}, ${y})?.tagName`) !== 'CANVAS') continue;
+    house = b; rx = x; ry = y; break;
+  }
+  if (house) await touchTap(page, rx, ry);
+  const fire = (await page.evaluate('__rts.log()')).find(c => c.cmd.t === 'fireAt');
+  log(!!house && !!fire && fire.cmd.x === house.x && fire.cmd.z === house.z, '觸控點小房子的屋頂＝對那棟房子開火',
+    !house ? '畫面上找不到 1×1 小房子' : fire ? `${JSON.stringify(fire.cmd)}，房子 #${house.id} 在 ${house.x},${house.z}，點 (${rx.toFixed(0)},${ry.toFixed(0)})` : `沒有開火指令（點 ${rx.toFixed(0)},${ry.toFixed(0)}）`);
+  // 即時迴圈下的指令紀錄，拿到 Node 重播要得到同一個雜湊（含會抽亂數的榴彈砲射擊）
+  await page.evaluate("__rts.issue({ t: 'fireAt', side: 0, ids: [4], x: 10, z: 10 })");
+  const t1 = await page.evaluate('__rts.stepN(60)'), h1 = await page.evaluate('__rts.hash()');
+  const t2 = await page.evaluate('__rts.stepN(140)'), h2 = await page.evaluate('__rts.hash()');
+  const liveLog = await page.evaluate('__rts.log()');
+  const n1 = hashWorld(runLog(createWorld(1944), liveLog, t1)), n2 = hashWorld(runLog(createWorld(1944), liveLog, t2));
+  log(h1 === n1 && h2 === n2, '即時遊玩的指令紀錄在 Node 重播，雜湊相同（兩個時間點）', `tick ${t1}: ${h1}/${n1}；tick ${t2}: ${h2}/${n2}；指令 ${liveLog.length} 條`);
   await page.evaluate('__rts.runScript(600)'); await page.evaluate('__rts.pause(true)'); await sleep(500);
   await shot(page, path.join(SHOTS, 'mobile-30s.png'));
   const mid = await page.evaluate('__rts.info()');
@@ -75,7 +107,7 @@ await withBrowser({ width: 412, height: 860, mobile: true }, async ({ open, page
 });
 
 // ---- 逃生閥 ?fx=off：效果關掉，模擬結果不變 ----
-await withBrowser({ width: 800, height: 600 }, async ({ open, page }) => {
+await withBrowser({ width: 800, height: 600, port: PORTS.valve }, async ({ open, page }) => {
   await open('fx=off');
   const info = await page.evaluate('__rts.info()');
   const h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
