@@ -4,7 +4,7 @@ import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
-  UNIT_KINDS, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
+  UNIT_KINDS, UK_OBSERVER, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building,
 } from './world.ts';
 
@@ -36,13 +36,14 @@ export function applyCommand(w: World, cmd: Command): void {
     if (cmd.t === 'stop') { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
     if (cmd.t === 'move') {
       let gx = cx(cmd.x), gz = cx(cmd.z);
-      const [ox, oz] = FORMATION[k % FORMATION.length];
+      const [ox, oz] = u.kind === UK_OBSERVER ? [0, 0] : FORMATION[k % FORMATION.length];
       if (inMap(gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz)) { gx += ox; gz += oz; }
       u.order = ORD_MOVE; u.tx = gx; u.tz = gz; u.target = 0;
-      u.path = findPath(w, ux, uz, gx, gz); u.pathIdx = 0;
+      u.path = findPath(w, ux, uz, gx, gz, u.kind === UK_OBSERVER ? (bldAt(w, gx, gz)?.id ?? 0) : 0, u.kind === UK_OBSERVER ? (bldAt(w, ux, uz)?.id ?? 0) : 0); u.pathIdx = 0;
       if (!u.path.length) u.order = ORD_IDLE;
       return;
     }
+    if (u.kind === UK_OBSERVER) return; // unarmed; old command format stays intact
     if (cmd.t === 'attack') {
       const t = unitById(w, cmd.target | 0);
       if (!t || !t.alive || t.side === u.side || tooClose(u, t.x, t.z)) return;
@@ -87,9 +88,9 @@ export function lineCells(x0: number, z0: number, x1: number, z1: number): numbe
 }
 
 // 從 (ax,az) 到 (bx,bz)（位置單位），回傳第一個擋住的建築格（不含起點格）；沒有擋就回傳 -1
-export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number): number {
+export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number, ignoreBuilding = 0): number {
   const cells = lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz));
-  for (let i = 1; i < cells.length; i++) { const c = cells[i]; if (w.occ[c] && w.blds[w.occ[c] - 1].hp > 0) return c; }
+  for (let i = 1; i < cells.length; i++) { const c = cells[i]; if (w.occ[c] && w.occ[c] !== ignoreBuilding && w.blds[w.occ[c] - 1].hp > 0) return c; }
   return -1;
 }
 
@@ -98,7 +99,8 @@ export function spotted(w: World, side: number, x: number, z: number): boolean {
   if (!inMap(cellOf(x), cellOf(z))) return false;
   for (const u of w.units) {
     if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight) continue;
-    const block = firstBlock(w, u.x, u.z, x, z);
+    const home = u.kind === UK_OBSERVER ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
+    const block = firstBlock(w, u.x, u.z, x, z, home?.id ?? 0);
     if (block < 0 || block === idx(cellOf(x), cellOf(z))) return true;
   }
   return false;
@@ -153,6 +155,7 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
 }
 
 function fireUnit(w: World, u: Unit): void {
+  if (u.kind === UK_OBSERVER) return;
   if (u.cooldown > 0) u.cooldown--;
   const k = UNIT_KINDS[u.kind];
   if (k.indirect && u.pathIdx < u.path.length) return;     // 榴彈砲移動中不能打
@@ -182,7 +185,8 @@ function fireUnit(w: World, u: Unit): void {
 
 function damageUnit(w: World, u: Unit, dmg: number): void {
   if (!u.alive || dmg <= 0) return;
-  u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor) / 100);
+  const cover = u.kind === UK_OBSERVER && blocks(w, cellOf(u.x), cellOf(u.z)) ? 50 : 100;
+  u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor * cover) / 10000);
   if (u.hp <= 0) { u.hp = 0; u.alive = false; u.path = []; u.pathIdx = 0; u.order = ORD_IDLE; w.events.push({ e: 'kill', unit: u.id }); }
 }
 
@@ -192,6 +196,9 @@ function damageBld(w: World, b: Building, dmg: number): void {
   b.hp = Math.max(0, b.hp - dmg);
   const after = stageOf(b);
   if (after !== before) w.events.push({ e: 'stage', bld: b.id, stage: after });
+  if (b.hp === 0) for (const u of w.units) {
+    if (u.alive && u.kind === UK_OBSERVER && bldAt(w, cellOf(u.x), cellOf(u.z))?.id === b.id) damageUnit(w, u, 20);
+  }
 }
 
 function land(w: World, s: { kind: number; shooter: number; ex: number; ez: number; target: number; hitBld: number }): void {
