@@ -5,7 +5,7 @@ import { randSym } from './rng.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
   UNIT_KINDS, UK_OBSERVER, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
-  type World, type Unit, type Building,
+  type World, type Unit, type Building, type Shell,
 } from './world.ts';
 
 export type Command =
@@ -154,12 +154,27 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
   return best ? { x: best.x, z: best.z, unit: best, bld: null } : null;
 }
 
+// The solution is invalidated every tick, including during reload or movement.
+function syncRanging(w: World, u: Unit, aim: { x: number; z: number; unit: Unit | null } | null): void {
+  const r = u.ranging;
+  const target = aim?.unit?.id ?? 0;
+  const movedTarget = r?.target ? unitById(w, r.target) : null;
+  if (r && (r.x !== u.x || r.z !== u.z || (movedTarget && (!movedTarget.alive || movedTarget.x !== r.ax || movedTarget.z !== r.az)))) {
+    if (r) { r.seen = 0; r.epoch++; r.x = u.x; r.z = u.z; r.ax = -1; r.az = -1; r.target = 0; }
+  }
+  if (!aim) return;
+  if (!r || r.x !== u.x || r.z !== u.z || r.ax !== aim.x || r.az !== aim.z || r.target !== target) {
+    u.ranging = { x: u.x, z: u.z, ax: aim.x, az: aim.z, target, epoch: (r?.epoch ?? 0) + 1, seen: 0 };
+  }
+}
+
 function fireUnit(w: World, u: Unit): void {
   if (u.kind === UK_OBSERVER) return;
   if (u.cooldown > 0) u.cooldown--;
   const k = UNIT_KINDS[u.kind];
-  if (k.indirect && u.pathIdx < u.path.length) return;     // 榴彈砲移動中不能打
   const aim = pickAim(w, u);
+  if (k.indirect) syncRanging(w, u, aim);
+  if (k.indirect && u.pathIdx < u.path.length) return;     // 榴彈砲移動中不能打
   if (!aim) return;
   const dx = aim.x - u.x, dz = aim.z - u.z, d = isqrt(dx * dx + dz * dz);
   if (d > k.range || d < k.minRange) return;
@@ -168,13 +183,15 @@ function fireUnit(w: World, u: Unit): void {
   u.cooldown = k.reload;
   if (u.order === ORD_FIRE_AT && !aim.bld) u.target--;
   w.events.push({ e: 'fire', unit: u.id, x: u.x, z: u.z });
-  const sh = { id: w.nextShell++, side: u.side, kind: k.indirect ? SHELL_HE : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
+  const sh: Shell = { id: w.nextShell++, side: u.side, kind: k.indirect ? SHELL_HE : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
   if (!k.indirect) {
     const blockCell = firstBlock(w, u.x, u.z, aim.x, aim.z);
     if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % N); sh.ez = center((blockCell - (blockCell % N)) / N); sh.target = 0; }
     sh.T = Math.max(2, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / SUB));
   } else {
     let r = Math.floor(d / 12);
+    for (let i = 0; i < (u.ranging?.seen ?? 0); i++) r = Math.max(1, Math.floor(r / 2));
+    sh.rangingEpoch = u.ranging?.epoch;
     if (!spotted(w, u.side, aim.x, aim.z)) r *= 2;               // 沒有友軍看得到：盲射，散布加倍
     sh.ex = Math.max(0, Math.min(N * SUB - 1, aim.x + randSym(w, r)));
     sh.ez = Math.max(0, Math.min(N * SUB - 1, aim.z + randSym(w, r)));
@@ -201,7 +218,7 @@ function damageBld(w: World, b: Building, dmg: number): void {
   }
 }
 
-function land(w: World, s: { kind: number; shooter: number; ex: number; ez: number; target: number; hitBld: number }): void {
+function land(w: World, s: Shell): void {
   const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
   if (s.kind === SHELL_AP) {
     if (s.hitBld) damageBld(w, w.blds[s.hitBld - 1], k.dmgBld);
@@ -211,6 +228,11 @@ function land(w: World, s: { kind: number; shooter: number; ex: number; ez: numb
     }
     w.events.push({ e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld });
     return;
+  }
+  const gun = unitById(w, s.shooter), r = gun?.ranging;
+  if (gun?.alive && r && s.rangingEpoch === r.epoch && gun.x === r.x && gun.z === r.z && spotted(w, s.side, s.ex, s.ez)) {
+    const target = r.target ? unitById(w, r.target) : null;
+    if (!r.target || (target?.alive && target.x === r.ax && target.z === r.az)) r.seen = Math.min(16, r.seen + 1);
   }
   const R = k.splash;
   for (const t of w.units) {
