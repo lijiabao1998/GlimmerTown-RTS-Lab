@@ -64,6 +64,10 @@ export interface Building {
   maxHp: number;
 }
 
+export interface Ranging {
+  x: number; z: number; ax: number; az: number; target: number; epoch: number; seen: number;
+}
+
 export interface Unit {
   id: number;           // 從 1 起，永不重用
   side: number;
@@ -77,6 +81,7 @@ export interface Unit {
   path: number[];       // 路徑（格索引），從下一格到終點
   pathIdx: number;
   cooldown: number;
+  ranging?: Ranging; // optional so earlier saved worlds can still advance
   aimX: number; aimZ: number; // 最後一次開火的方向（位置單位的向量；渲染轉砲塔用）
 }
 
@@ -92,6 +97,7 @@ export interface Shell {
   ex: number; ez: number;   // 落點
   t: number; T: number;     // 已飛 tick／總飛行 tick
   target: number;           // 穿甲彈瞄準的單位 id（0＝沒有）
+  rangingEpoch?: number; // identifies the exact stationary firing solution
   hitBld: number;           // 穿甲彈會打中的建築 id（0＝沒有）
 }
 
@@ -250,8 +256,11 @@ export function hashWorld(w: World): string {
     f.int(u.id).int(u.side).int(u.kind).int(u.x).int(u.z).int(u.hp).int(u.alive ? 1 : 0).int(u.order).int(u.target)
       .int(u.tx).int(u.tz).int(u.pathIdx).int(u.cooldown).int(u.aimX).int(u.aimZ).int(u.path.length);
     for (const c of u.path) f.int(c);
+    const r = u.ranging;
+    f.int(r ? 1 : 0);
+    if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
   }
   f.int(w.shells.length);
-  for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld);
+  for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
   return f.hex();
 }
