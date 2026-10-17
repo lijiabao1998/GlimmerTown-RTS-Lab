@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R004 | 2026-10-18 | Claude | 破壞的重量：效果池 fx.ts（煙塵、光、碎片、震波、貼地光暈，零配置）＋倒塌殘影；高爆彈三拍、屋頂炸飛起火、倒塌沉地揚塵、砲塔飛起、殘骸燒、曳光、震動（≤0.08 格）；霧裡不畫射擊線索；?noR004=1 舊效果 | 本機 typecheck、unit 34、build、smoke 37 全綠；fx.mjs 6 條各弄壞一次；特寫重跑摘要相同；手機開局 12/6008、特寫 17 calls；黃金不變 | claude/r004-destruction-fx | 震動與霧裡的建築煙火等業主看；殘影只在看著倒時有；碎片穿牆；Android 實機未測 |
 | R007 | 2026-10-18 | Claude | 業主授權同步：AGENTS.md、CLAUDE.md 改成 Claude 在 CI 綠燈後自己合、可直推 main（平常仍走 PR，直推只留給緊急撤回）；所有人不准 --force、不改寫 main 歷史；DECISIONS.md 逐字記業主原話。GPT 車道不變 | 只改文件；CI | claude/r007-authority | 卡面沒有先推（規則同步，卡與改動同提交）；分支規則若開要把 Claude 列入 |
 | R006 | 2026-10-18 | Claude | 自己建城：新指令 build（只在第 0 步、我方半場、不上路、隔一格、不堵死通路、建材 8）；敵方布陣純函式；開頁先布陣（藍色半場、布陣列、開戰），?noR006=1 回舊流程；builtBy 只在有值時折進雜湊，黃金不變 | 本機 typecheck、unit 33、build、smoke 24 全綠；build.mjs 6 條各弄壞一次；布陣後 Node/Chrome 57973374；手機 12/6008 | claude/r006-build-phase | 開頁流程改了（等業主看）；敵方布陣單純；預覽不標示自己蓋的；Android 實機未測 |
 | R003 | 2026-10-17 | Claude | Claude 線技術標準：DECISIONS.md 記業主原話，新增目標、架構分層、品質門檻、驚艷門檻、手感門檻（每條有數字或可檢查的條件）；GPT 車道不受約束 | 只改文件；本機 typecheck、unit、build、smoke 全綠；黃金雜湊不變 | claude/r003-standards | 門檻沒有自動守衛；數字未經業主看圖確認 |

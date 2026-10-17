@@ -96,14 +96,22 @@ function rubble(g: Geo, b: Building) {
   if (b.kind === BK_CHURCH) g.box(b.x + 0.1, 0, b.z + 0.1, b.x + 0.9, 0.55, b.z + 0.9, PAL[b.kind].wall);   // 塔基還站著
 }
 
-export function buildTown(w: World): Geo {
-  const g = new Geo();
-  for (const b of w.blds) {
-    const s = stageOf(b);
-    if (s === STAGE_INTACT) intact(g, b); else if (s === STAGE_ROOFLESS) roofless(g, b); else rubble(g, b);
-  }
+// 一棟建築在指定損壞階段的模型（R004 倒塌殘影要畫「倒之前」那一段）
+export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
+  if (stage === STAGE_INTACT) intact(g, b); else if (stage === STAGE_ROOFLESS) roofless(g, b); else rubble(g, b);
   return g;
 }
+
+export function buildTown(w: World): Geo {
+  const g = new Geo();
+  for (const b of w.blds) buildingGeo(g, b, stageOf(b));
+  return g;
+}
+
+// 效果用的顏色：碎片取自那棟房子的牆、屋頂與瓦礫（R004）
+export function bldColors(kind: number): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return PAL[kind] ?? PAL[BK_HOUSE]; }
+export const RUBBLE_COLORS = RUBBLE;
+export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22 };
 
 // 冒煙點：沒屋頂的房子從屋裡冒煙（渲染端的效果用）
 export function smokeSources(w: World): [number, number, number][] {
