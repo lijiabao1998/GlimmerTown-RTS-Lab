@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R005 | 2026-10-17 | Claude | 單位碰撞：車輛半徑、每步整數推擠（先加總再套用、交會時同側讓開、架好的砲不被推、每步最多推半個車速、不推進建築）、被推離中心的車沿牆滑；unit 把 tests/*.mjs 排到黃金雜湊之前。黃金 fe1c5774→98dc0f18 | 本機 typecheck、unit 31 項、build、smoke 18 項全綠；collision 9 條各弄壞一次；Node/Chrome 98dc0f18；手機 12/6008 | claude/r005-unit-collision | 窄巷對開會短暫重疊擠過去；殘骸不擋路；A* 不知道其他單位；Android 實機未測 |
 | R102 | 2026-10-17 | GPT | 待辦3試射修正：看見落點才減半散布，移動/換目標重置，舊彈不污染，齊射後保留校準 | typecheck/unit/build；9組行為+6負控制；CI smoke/gpt-lane；Node/Chrome fe1c5774；手機12/6008；四圖已看 | #5 | 本機Chrome受限；Android實機未測 |
 | R101 | 2026-10-17 | GPT | 待辦2前進觀測員：雙方各1、遠視野、無武裝、進出建築、減傷與倒塌傷害；追加id9/10保留舊指令 | 本機typecheck/unit/build、CI smoke/gpt-lane綠；6類負控制；Node/Chrome 6a152c13；手機12calls/6008tris；四樣張已看 | #4 | 本機smoke受限；Android實機未測 |
 | R100 | 2026-10-17 | GPT | 建築擋視野，隱藏敵軍與射擊線索，攻擊保留最後已知位置；逃生閥 ?noR100=1 | 本機 typecheck、unit、build 綠；新守衛破壞測試確認；CI smoke/gpt-lane 綠；手機 10 calls/5838 triangles；四張樣張已看 | #3 | 本機 Chrome socket 限制；Android 實機未測 |

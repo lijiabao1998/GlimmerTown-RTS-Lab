@@ -87,6 +87,16 @@ const TANK_SPD = Math.floor(UNIT_KINDS[UK_TANK].speed * 85 / 100);   // 草地�
   }
   check(!bad, '推擠不推進建築、不推出地圖（200 種子 × 300 步）', bad || `${steps} 步全部乾淨`);
 }
+{ // 2b. 被推離格子中心的車：走向下一個路點的直線會擦過建築角時，沿牆滑，不進牆
+  // 路沿著 z=10 往右；車被推到下一排（5,11）的右下角附近；(6,11) 是建築。直線走向 (6,10) 的中心會先切過 (6,11)。
+  const w = blank(); addBld(w, 6, 11, 3, 1);
+  const t = addUnit(w, 0, UK_TANK, 5, 11);
+  t.x = 5 * SUB + 220; t.z = 11 * SUB + 200;
+  t.order = 1; t.tx = 12; t.tz = 10; t.path = []; for (let x = 6; x <= 12; x++) t.path.push(idx(x, 10));
+  let inWall = '', n = 0;
+  while (t.order !== ORD_IDLE && n < 400) { step(w, []); n++; if (blocks(w, cellOf(t.x), cellOf(t.z)) && !inWall) inWall = `tick ${n} 在 ${cellOf(t.x)},${cellOf(t.z)}`; }
+  check(!inWall && cellOf(t.x) === 12 && cellOf(t.z) === 10, '被推離中心的車沿牆滑：直線會擦過牆角時不進牆、照樣到達', inWall || `${n} 步到達`);
+}
 { // 3. 窄巷對向：兩棟長建築夾出一格寬的巷子，兩輛坦克從兩頭對開
   const solo = () => { const w = blank(); addBld(w, 6, 9, 12, 1); addBld(w, 6, 11, 12, 1); const a = addUnit(w, 0, UK_TANK, 3, 10); step(w, [move(a, 20, 10)]); let n = 1; while (a.order !== ORD_IDLE && n < 5000) { step(w, []); n++; } return n; };
   const alone = solo();
