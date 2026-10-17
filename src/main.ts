@@ -16,6 +16,8 @@ const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.ge
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
 // R004 破壞的重量：倒塌、碎片、火與曳光。逃生閥 ?noR004=1＝舊效果（模擬雜湊不變）
 const r004 = q.get('noR004') !== '1';
+// R008 車輛有重量：車轍、揚塵、後座、砲塔轉向、受擊閃光。逃生閥 ?noR008=1
+const r008 = q.get('noR008') !== '1';
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
 renderer.shadowMap.enabled = true;
@@ -54,7 +56,7 @@ const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.k
 function reset(s = seed, build = r006) {
   w = createWorld(s);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008);
   log = []; pending = []; acc = 0; selected.clear();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   if (build) { paused = true; refreshPreview(); }
@@ -275,7 +277,7 @@ const rts = {
     reset(SCRIPT_SEED, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008);
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -285,6 +287,16 @@ const rts = {
   focus: (x: number, z: number, zoom = 1) => { view.target.set(x, 0, z); view.zoom = zoom; },
   info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, fx: fxOn, px: style.pixelCss, r004: fxOn && r004, pools: view.pools }),
   fxDigest: () => view.fxDigest(),
+  // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
+  playScript: (ticks = SCRIPT_TICKS) => {
+    reset(SCRIPT_SEED, false);
+    let i = 0;
+    while (w.tick < ticks) {
+      while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) issue(SCRIPT[i].cmd); i++; }
+      tick();
+    }
+    return hashWorld(w);
+  },
   cellOf: (p: number) => cellOf(p),
   phase: () => phase,
   plan: () => JSON.parse(JSON.stringify(plan)) as BuildCmd[],

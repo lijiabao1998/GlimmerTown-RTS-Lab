@@ -15,6 +15,7 @@ import { Pipeline, type Style } from './post.ts';
 
 const PX = 8;                       // 地面貼圖：每格 8×8 像素
 const MAX_UNITS = 64, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
+export const TURRET_RATE = 3;        // R008 砲塔最大轉速（弧度／秒）
 const ELEV = Math.PI / 6;           // 鏡頭仰角 30°，水平 45°（與 2D 線、3D-lab 相同的 2:1 斜視）
 const BASE_HALF_H = 9;              // zoom=1 時畫面上下各看幾格
 
@@ -27,7 +28,7 @@ const E_FIRE = 0, E_SMOKE = 1, E_WRECKFIRE = 2, E_WRECKSMOKE = 3, E_DUST = 4;
 const E_LIFE = [1.5, 3.6, 1.5, 3.4, 2.2];            // 這種發射器的粒子最多活幾秒（跳過太舊的發射時間用）
 type Emitter = { kind: number; id: number; x: number; z: number; w: number; d: number; h: number; t0: number; until: number; every: number; next: number; fog: boolean };
 type Toss = { t0: number; vx: number; vz: number; spin: number; yaw: number; tilt: number };
-const C_HE_SHELL = new THREE.Color(0x2d2d2d), C_AP_SHELL = new THREE.Color(0xffd27a), C_SEL = new THREE.Color(0xffe066);
+const C_WHITE = new THREE.Color(1, 1, 1), C_HE_SHELL = new THREE.Color(0x2d2d2d), C_AP_SHELL = new THREE.Color(0xffd27a), C_SEL = new THREE.Color(0xffe066);
 const DIRT = [0x5a4636, 0x6b5440, 0x3e3226], STEEL = [0x3a3c3e, 0x55575a, 0x2c2a26];
 
 type Fx = { x: number; y: number; z: number; t0: number; life: number; s0: number; s1: number; vy: number; c0: THREE.Color; c1: THREE.Color };
@@ -91,8 +92,23 @@ export class BattleView {
   private mA = new THREE.Matrix4();
   private mB = new THREE.Matrix4();
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true) {
-    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn;
+  // ---- R008 車輛有重量（?noR008=1 時全部不做）----
+  private r8 = false;
+  private tracks = new Uint8Array(N * PX * N * PX);       // 每個地面像素被車輪壓過幾次（0–6）
+  private trackLast = new Int32Array((MAX_UNITS + 1) * 2).fill(-1);   // 每台車左右兩條車轍上一次壓到的像素
+  private dirtyStamp = new Int32Array(N * N);
+  private dirtyList = new Int32Array(N * N);
+  private dirtyN = 0;
+  private stepNo = 0;
+  private recoilT0 = new Float64Array(MAX_UNITS + 1).fill(-99);
+  private flashT0 = new Float64Array(MAX_UNITS + 1).fill(-99);
+  private lastHp = new Int32Array(MAX_UNITS + 1);
+  private turretYaw = new Float64Array(MAX_UNITS + 1);
+  private turretT = -1;
+  private cFlash = new THREE.Color();
+
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true) {
+    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
     this.scene.add(new THREE.HemisphereLight(0xe4ecff, 0x5b5444, 1.35));
@@ -143,7 +159,7 @@ export class BattleView {
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
     this.shells = inst(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshBasicMaterial(), MAX_SHELLS, false);
     this.fxMesh = inst(new THREE.IcosahedronGeometry(1, 1), toon(), MAX_FX, false);
-    for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); }
+    for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); this.turretYaw[u.id] = this.yaw[u.id]; this.lastHp[u.id] = u.hp; }
     if (fxOn && r004) {
       this.r4 = true;
       const add = () => new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false });
@@ -210,6 +226,8 @@ export class BattleView {
         const tuft = n > 0.86 ? 14 : n < 0.1 ? -12 : 0;
         r = 92 + n * 16 + tuft; g = 122 + n * 18 + tuft; bl = 64 + n * 10;
       }
+      const tr = this.tracks[gz * W + gx];
+      if (tr) { const k = 1 - tr * (ter === TER_ROAD ? 0.035 : 0.075); r = r * k - tr * 2; g = g * k - tr * 3; bl = bl * k - tr; }   // R008 車轍：路上淡、草地農田深；彈坑與建築畫在上面
       if (b) { r = 112 + n * 16; g = 102 + n * 14; bl = 86 + n * 12; if (rubble) { r += 18; g += 16; bl += 14; } }
       else if (this.territory >= 0 && ter !== TER_ROAD) {
         // 布陣：我方可蓋的半場偏藍、對方半場偏紅，交界畫一條亮線；無人帶與路保持原色
@@ -236,6 +254,7 @@ export class BattleView {
   snapshot() { for (const u of this.w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; } }
 
   onEvents(events: SimEvent[], simT: number) {
+    if (this.r8) this.vehicles8(events, simT);
     if (this.r4) { this.frameNo++; for (const e of events) this.fx4(e, simT); }   // 世界剛走一步：可見度快取作廢
     let townDirty = false, groundDirty = false;
     for (const e of events) {
@@ -291,6 +310,7 @@ export class BattleView {
   // ---- 每一幀 ----
   update(alpha: number, simT: number, selected: Set<number>) {
     const w = this.w, m = this.tmp;
+    if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
     if (w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
@@ -301,17 +321,20 @@ export class BattleView {
       const z = (this.prevZ[u.id] + (u.z - this.prevZ[u.id]) * alpha) / SUB;
       const mdx = u.x - this.prevX[u.id], mdz = u.z - this.prevZ[u.id];
       if (u.alive && (mdx || mdz)) this.yaw[u.id] = Math.atan2(-mdz, mdx);
-      const aim = Math.atan2(-u.aimZ, u.aimX);
-      const col = u.alive ? SIDE_COL[u.side] : WRECK;
+      const aim = this.r8 && u.alive ? this.turretYaw[u.id] : Math.atan2(-u.aimZ, u.aimX);
+      const col = !u.alive ? WRECK : this.r8 && simT - this.flashT0[u.id] < 0.15 ? this.cFlash.copy(SIDE_COL[u.side]).lerp(C_WHITE, 0.85 * (1 - (simT - this.flashT0[u.id]) / 0.15)) : SIDE_COL[u.side];
+      // R008 後座：開火後 0.3 秒內沿瞄準反方向退一下再回位（前 0.04 秒猛退，之後慢慢回）
+      const rk = (simT - this.recoilT0[u.id]) / 0.3, back = this.r8 && u.alive && rk >= 0 && rk < 1 ? (rk < 0.13 ? rk / 0.13 : (1 - rk) / 0.87) ** 2 : 0;
+      const bx = -Math.cos(aim) * back, bz = Math.sin(aim) * back;
       if (u.kind === UK_TANK) {
-        m.position.set(x, 0, z); m.rotation.set(0, this.yaw[u.id], u.alive ? 0 : 0.06); m.scale.setScalar(1); m.updateMatrix();
+        m.position.set(x + bx * 0.03, 0, z + bz * 0.03); m.rotation.set(0, this.yaw[u.id], u.alive ? back * 0.05 : 0.06); m.scale.setScalar(1); m.updateMatrix();
         this.hull.setMatrixAt(nh, m.matrix); this.hull.setColorAt(nh, col);
-        m.rotation.set(0, u.alive ? aim : aim + 0.5, u.alive ? 0 : 0.12); m.position.set(x, u.alive ? 0 : -0.02, z); m.updateMatrix();
+        m.rotation.set(0, u.alive ? aim : aim + 0.5, u.alive ? 0 : 0.12); m.position.set(x + bx * 0.09, u.alive ? 0 : -0.02, z + bz * 0.09); m.updateMatrix();
         const tossed = !u.alive && this.r4 ? this.toss.get(u.id) : undefined;
         this.turret.setMatrixAt(nh, tossed ? this.tossMatrix(tossed, x, z, simT) : m.matrix); this.turret.setColorAt(nh, col);
         nh++;
       } else if (u.kind === UK_HOWITZER) {
-        m.position.set(x, 0, z); m.rotation.set(0, u.pathIdx < u.path.length ? this.yaw[u.id] + Math.PI : aim, u.alive ? 0 : 0.2); m.scale.setScalar(1); m.updateMatrix();
+        m.position.set(x + bx * 0.1, back * 0.035, z + bz * 0.1); m.rotation.set(0, u.pathIdx < u.path.length ? this.yaw[u.id] + Math.PI : aim, u.alive ? -back * 0.12 : 0.2); m.scale.setScalar(1); m.updateMatrix();
         this.gun.setMatrixAt(ng, m.matrix); this.gun.setColorAt(ng, col);
         ng++;
       }
@@ -594,6 +617,67 @@ export class BattleView {
     let h = 0x811c9dc5;
     h = this.puff!.digest(h); h = this.glow!.digest(h); h = this.debris!.digest(h); h = this.ring!.digest(h); h = this.ghosts!.digest(h);
     return h.toString(16).padStart(8, '0');
+  }
+
+
+  // ======== R008 車輛有重量 ========
+  // 每一步之後：車轍蓋進地面貼圖、行進揚塵、開火記後座、扣血記閃光（全部從世界的變化看出來，不加模擬事件）
+  private vehicles8(events: SimEvent[], t: number) {
+    this.stepNo++;
+    for (const e of events) if (e.e === 'fire') this.recoilT0[e.unit] = t;
+    const W = N * PX;
+    for (const u of this.w.units) {
+      if (u.hp < this.lastHp[u.id]) this.flashT0[u.id] = t;
+      this.lastHp[u.id] = u.hp;
+      if (!u.alive || u.kind === UK_OBSERVER) continue;
+      const dx = u.x - this.prevX[u.id], dz = u.z - this.prevZ[u.id];
+      if (!dx && !dz) continue;
+      const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = u.kind === UK_TANK ? 0.13 : 0.11;
+      // 兩條車轍：沿這一步走過的線段，每 1/8 格蓋一個像素；同一條車轍連續壓到同一個像素只算一次
+      const steps = Math.max(1, Math.ceil((len / SUB) * PX));
+      for (let side = 0; side < 2; side++) {
+        const sg = side ? 1 : -1;
+        for (let k = 1; k <= steps; k++) {
+          const fx = (this.prevX[u.id] + (dx * k) / steps) / SUB + sg * px * off, fz = (this.prevZ[u.id] + (dz * k) / steps) / SUB + sg * pz * off;
+          const gx = Math.floor(fx * PX), gz = Math.floor(fz * PX);
+          if (gx < 0 || gz < 0 || gx >= W || gz >= W) continue;
+          const pi = gz * W + gx, slot = u.id * 2 + side;
+          if (this.trackLast[slot] === pi) continue;
+          this.trackLast[slot] = pi;
+          if (this.tracks[pi] < 6) this.tracks[pi]++;
+          const ci = Math.floor(gz / PX) * N + Math.floor(gx / PX);
+          if (this.dirtyStamp[ci] !== this.stepNo) { this.dirtyStamp[ci] = this.stepNo; this.dirtyList[this.dirtyN++] = ci; }
+        }
+      }
+      // 行進揚塵：車尾，草地農田每步、路上每三步一朵（R004 的煙塵池；?fx=off 時沒有池＝不揚塵）
+      if (this.puff) {
+        const cx = Math.floor(u.x / SUB), cz = Math.floor(u.z / SUB), road = this.w.ter[idx(cx, cz)] === TER_ROAD;
+        if (!road || (this.stepNo + u.id) % 3 === 0) {
+          const h = hash2(u.id, this.stepNo, 41), bx = u.x / SUB - (dx / len) * 0.3, bz = u.z / SUB - (dz / len) * 0.3;
+          this.puff.spawn({ x: bx + (h - 0.5) * 0.2, y: 0.05, z: bz + (hash2(u.id, this.stepNo, 42) - 0.5) * 0.2, vx: -(dx / len) * 0.3, vz: -(dz / len) * 0.3, drag: 2, vy: 0.18,
+            t0: t, life: 1.1 + 0.6 * h, s0: 0.05, s1: road ? 0.18 : 0.26, c0: road ? 0x9a8d78 : 0x8a7a5e, c1: 0xa69e8e, fog: u.side !== SIDE_PLAYER });
+        }
+      }
+    }
+    if (this.dirtyN) {
+      for (let i = 0; i < this.dirtyN; i++) { const c = this.dirtyList[i]; this.paintCell(c % N, (c - (c % N)) / N); }
+      this.dirtyN = 0;
+      this.groundTex.needsUpdate = true;   // 一步最多上傳一次
+    }
+  }
+
+  // 砲塔平滑轉向：每秒最多轉 TURRET_RATE 弧度；時間倒退或跳太多（換世界、重跑腳本）就直接對準
+  private turn8(t: number) {
+    const dt = t - this.turretT;
+    this.turretT = t;
+    for (const u of this.w.units) {
+      const want = Math.atan2(-u.aimZ, u.aimX);
+      if (dt < 0 || dt > 1) { this.turretYaw[u.id] = want; continue; }
+      let d = want - this.turretYaw[u.id];
+      d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
+      const max = TURRET_RATE * dt;
+      this.turretYaw[u.id] += Math.max(-max, Math.min(max, d));
+    }
   }
 
   // ---- 鏡頭 ----
