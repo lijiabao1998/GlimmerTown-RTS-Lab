@@ -20,7 +20,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -223,6 +223,24 @@ await withBrowser({ width: 800, height: 600, port: PORTS.noR004 }, async ({ open
     log(h === nodeHash && sum(a.pools) === 0 && sum(b.pools) === 0 && !a.r004, `?${q}：新效果池全程 0 個實例，模擬雜湊不變`, `${h}；倒塌 ${JSON.stringify(a.pools)}；彈著 ${JSON.stringify(b.pools)}`);
   }
   log(page.errors.length === 0, '?noR004=1／?fx=off 零頁面錯誤', page.errors.join(' | '));
+});
+
+
+// ---- R008 車轍特寫：從第 0 步照腳本一步一步跑（每一步都餵畫面，跟真的玩一樣），鏡頭對準我方坦克走過的路 ----
+await withBrowser({ width: 1280, height: 800, port: PORTS.tracks }, async ({ open, page }) => {
+  await open('');
+  const h = await page.evaluate('__rts.pause(true); __rts.playScript(600)');
+  log(h === nodeHalf, '一步一步餵畫面跑腳本 600 步：瀏覽器雜湊等於 Node', `${h} / ${nodeHalf}`);
+  await page.evaluate('__rts.focus(21.5, 21.5, 1.7)'); await sleep(400);
+  const info = await page.evaluate('__rts.info()');
+  log(info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles, '車轍特寫：繪製呼叫 ≤ 22、三角形 ≤ 80,000', JSON.stringify(info));
+  await shot(page, path.join(SHOTS, 'desktop-tracks.png'));
+  log(page.errors.length === 0, '車轍特寫零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 800, height: 600, port: PORTS.noR008 }, async ({ open, page }) => {
+  await open('noR008=1');
+  const h = await page.evaluate(`__rts.pause(true); __rts.playScript(${SCRIPT_TICKS})`);
+  log(h === nodeHash && page.errors.length === 0, '?noR008=1：一步一步跑完腳本，雜湊不變、零頁面錯誤', `${h} / ${nodeHash} ${page.errors.join(' | ')}`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
