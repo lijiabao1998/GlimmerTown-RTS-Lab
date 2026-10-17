@@ -7,6 +7,7 @@ import { hashWorld, createWorld, bldAt, N } from '../src/sim/world.ts';
 import { runLog } from '../src/sim/step.ts';
 import { runScript, SCRIPT_TICKS } from '../src/sim/script.ts';
 import { FLOOR_H } from '../src/render/buildings.ts';
+import { buildError, BUILD_KINDS } from '../src/sim/build.ts';
 
 const t0 = Date.now(), fails = [];
 function log(ok, name, detail = '') {
@@ -18,7 +19,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -58,14 +59,51 @@ await withBrowser({ width: 1280, height: 800, port: PORTS.desktop }, async ({ op
   log(external(page.requests).length === 0, '桌機零外部請求', external(page.requests).join(' '));
 });
 
-// ---- 手機 412×860：預算、觸控 ----
-await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.mobile }, async ({ open, page }) => {
+// ---- 手機 412×860：R006 布陣（預設網址開頁就是布陣）——預算、真觸控放房子、按「開戰」、Node 重播 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.build }, async ({ open, page }) => {
   await open('');
-  await page.evaluate('__rts.pause(true)');
-  await sleep(400);
+  const t0b = await page.evaluate('__rts.tick()'); await sleep(600); const t1b = await page.evaluate('__rts.tick()');
+  const ph = await page.evaluate('__rts.phase()');
+  log(ph === 'build' && t0b === 0 && t1b === 0, '開頁在布陣、停在第 0 步', `phase ${ph}，tick ${t0b} → ${t1b}`);
   const info = await page.evaluate('__rts.info()');
   log(info.calls <= BUDGET.calls && info.triangles <= BUDGET.triangles, `手機開局預算：繪製呼叫 ≤ ${BUDGET.calls}、三角形 ≤ ${BUDGET.triangles}`, JSON.stringify(info));
   await shot(page, path.join(SHOTS, 'mobile-start.png'));
+  // 挑一格合法的農舍位置（Node 用同一支 buildError 判），而且畫面上點得到（在畫布上、不在布陣列底下）
+  const w0 = createWorld(1944), cottage = BUILD_KINDS.find(k => k.w === 1 && k.d === 1);
+  let cell = null, tx = 0, ty = 0;
+  for (let z = 17; z < N && !cell; z++) for (let x = 17; x < N && !cell; x++) {
+    if (buildError(w0, { t: 'build', side: 0, kind: cottage.kind, x, z })) continue;
+    const [sx, sy] = await page.evaluate(`__rts.screenOfCell(${x}, ${z})`);
+    if (sx < 30 || sy < 130 || sx > 382 || sy > 620) continue;
+    if (await page.evaluate(`document.elementFromPoint(${sx}, ${sy})?.tagName`) !== 'CANVAS') continue;
+    cell = [x, z]; tx = sx; ty = sy;
+  }
+  if (cell) await touchTap(page, tx, ty);
+  const plan = await page.evaluate('__rts.plan()');
+  log(!!cell && plan.length === 1 && plan[0].x === cell[0] && plan[0].z === cell[1] && plan[0].kind === cottage.kind, '觸控點我方半場的一格＝布陣多一棟農舍',
+    cell ? `點 (${tx.toFixed(0)},${ty.toFixed(0)}) → ${JSON.stringify(plan)}` : '畫面上找不到合法的格');
+  await sleep(300);
+  await shot(page, path.join(SHOTS, 'mobile-build.png'));
+  const r = await page.evaluate("(() => { const b = document.getElementById('bb-start').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2, b.width, b.height]; })()");
+  await touchTap(page, r[0], r[1]);
+  await page.evaluate('__rts.pause(true)');
+  const lg = await page.evaluate('__rts.log()'), ph2 = await page.evaluate('__rts.phase()');
+  const b0 = lg.filter(c => c.cmd.t === 'build' && c.tick === 0 && c.cmd.side === 0).length, b1 = lg.filter(c => c.cmd.t === 'build' && c.tick === 0 && c.cmd.side === 1).length;
+  log(ph2 === 'battle' && b0 === 1 && b1 >= 1 && r[2] >= 44 && r[3] >= 44, '觸控按「開戰」：紀錄裡有第 0 步的我方與敵方布陣，開打', `phase ${ph2}，我方 ${b0} 條、敵方 ${b1} 條；按鈕 ${r[2].toFixed(0)}×${r[3].toFixed(0)}`);
+  const t = await page.evaluate('__rts.stepN(Math.max(0, 100 - __rts.tick()))'), h = await page.evaluate('__rts.hash()');
+  const nodeH = hashWorld(runLog(createWorld(1944), lg, t));
+  log(h === nodeH, '布陣後跑 100 步：瀏覽器雜湊等於 Node 重播', `tick ${t}：${h} / ${nodeH}`);
+  log(page.errors.length === 0, '布陣零頁面錯誤', page.errors.join(' | '));
+  log(external(page.requests).length === 0, '布陣零外部請求', external(page.requests).join(' '));
+});
+
+// ---- 手機 412×860：?noR006=1（沒有布陣，R102 的流程）——觸控、即時重播、戰鬥中預算 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.mobile }, async ({ open, page }) => {
+  await open('noR006=1');
+  const phv = await page.evaluate('__rts.phase()'), tv = await page.evaluate('__rts.tick()');
+  log(phv === 'battle' && tv > 0, '?noR006=1：開頁直接開打（不停在第 0 步）', `phase ${phv}，tick ${tv}`);
+  await page.evaluate('__rts.pause(true)');
+  await sleep(400);
   // 觸控：點我方 1 號坦克 → 選到；點附近空地 → 紀錄裡多一條移動指令
   const [ux, uy] = await page.evaluate('__rts.screenOf(1)');
   await touchTap(page, ux, uy);

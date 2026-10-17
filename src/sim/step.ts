@@ -2,6 +2,7 @@
 import { isqrt, dist } from './math.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
+import { applyBuild, type BuildCmd } from './build.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
   UNIT_KINDS, UK_OBSERVER, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
@@ -12,7 +13,8 @@ export type Command =
   | { t: 'move'; side: number; ids: number[]; x: number; z: number }
   | { t: 'attack'; side: number; ids: number[]; target: number }
   | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number }
-  | { t: 'stop'; side: number; ids: number[] };
+  | { t: 'stop'; side: number; ids: number[] }
+  | BuildCmd;   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
 
 export interface LoggedCommand { tick: number; cmd: Command }
 
@@ -24,6 +26,7 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 
 // 指令只認：屬於下指令那一方、還活著的單位；座標夾進地圖；攻擊目標要是活著的敵人
 export function applyCommand(w: World, cmd: Command): void {
+  if (cmd.t === 'build') return;   // 布陣指令只在 step() 開頭套
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
     const u = unitById(w, id | 0);
@@ -330,7 +333,8 @@ function checkWinner(w: World): void {
 
 export function step(w: World, cmds: Command[]): void {
   w.events = [];
-  for (const c of cmds) applyCommand(w, c);
+  for (const c of cmds) if (c.t === 'build') applyBuild(w, c);   // R006：先蓋房子，同一步的移動才不會穿過剛蓋的房子
+  for (const c of cmds) if (c.t !== 'build') applyCommand(w, c);
   for (const u of w.units) if (u.alive) moveUnit(w, u);
   separate(w);
   for (const u of w.units) if (u.alive) fireUnit(w, u);
