@@ -28,7 +28,7 @@ const SPEEDS = [1, 2, 4];
 function reset(s = seed) {
   w = createWorld(s);
   view?.dispose();
-  view = new BattleView(w, fxOn);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1');
   log = []; pending = []; acc = 0; selected.clear();
   hud?.update();
 }
@@ -54,7 +54,7 @@ let dragged = false, pinchD = 0;
 function pickUnit(cx: number, cy: number): number {
   let best = 0, bestD = 26 * 26;
   for (const u of w.units) {
-    if (!u.alive) continue;
+    if (!u.alive || !view.visibleUnit(u)) continue;
     const [sx, sy] = view.screenOf(u.x / SUB, 0.15, u.z / SUB, innerWidth, innerHeight);
     const d = (sx - cx) ** 2 + (sy - cy) ** 2;
     if (d < bestD) { bestD = d; best = u.id; }
@@ -145,7 +145,7 @@ reset();
 // ---- HUD ----
 hud = initHud({
   state: () => {
-    const mine = w.units.filter(u => u.side === SIDE_PLAYER && u.alive), theirs = w.units.filter(u => u.side === SIDE_ENEMY && u.alive);
+    const mine = w.units.filter(u => u.side === SIDE_PLAYER && u.alive), theirs = w.units.filter(u => u.side === SIDE_ENEMY && u.alive && view.visibleUnit(u));
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
     return {
       tick: w.tick, paused, speed, fireMode, winner: w.winner,
@@ -192,7 +192,7 @@ const rts = {
     reset(SCRIPT_SEED);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1');
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, 0.15, u.z / SUB, innerWidth, innerHeight); },

@@ -46,7 +46,7 @@ export function applyCommand(w: World, cmd: Command): void {
     if (cmd.t === 'attack') {
       const t = unitById(w, cmd.target | 0);
       if (!t || !t.alive || t.side === u.side || tooClose(u, t.x, t.z)) return;
-      u.order = ORD_ATTACK; u.target = t.id;
+      u.order = ORD_ATTACK; u.target = t.id; u.tx = t.x; u.tz = t.z;
       u.path = inRange(u, t.x, t.z) ? [] : findPath(w, ux, uz, cellOf(t.x), cellOf(t.z)); u.pathIdx = 0;
       return;
     }
@@ -93,9 +93,14 @@ export function firstBlock(w: World, ax: number, az: number, bx: number, bz: num
   return -1;
 }
 
-// 某一方有沒有活著的單位看得到 (x,z)（只算距離；擋視線的戰爭迷霧留給後面的卡）
+// 每 tick 查當前世界，不保留快取。阻擋建築本身可見，後方不可見；瓦礫不擋。
 export function spotted(w: World, side: number, x: number, z: number): boolean {
-  for (const u of w.units) if (u.alive && u.side === side && dist(u.x, u.z, x, z) <= UNIT_KINDS[u.kind].sight) return true;
+  if (!inMap(cellOf(x), cellOf(z))) return false;
+  for (const u of w.units) {
+    if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight) continue;
+    const block = firstBlock(w, u.x, u.z, x, z);
+    if (block < 0 || block === idx(cellOf(x), cellOf(z))) return true;
+  }
   return false;
 }
 
@@ -103,8 +108,10 @@ function moveUnit(w: World, u: Unit): void {
   if (u.order === ORD_ATTACK) {
     const t = unitById(w, u.target);
     if (!t || !t.alive || tooClose(u, t.x, t.z)) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }   // 目標死了或鑽進最小射程：放棄，回到自己找目標
-    if (inRange(u, t.x, t.z)) { u.path = []; u.pathIdx = 0; return; }
-    if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(t.x), cellOf(t.z)); u.pathIdx = 0; }
+    // 舊指令可盲射最後座標；失去視野後不追蹤敵人的新位置。
+    if (spotted(w, u.side, t.x, t.z)) { u.tx = t.x; u.tz = t.z; }
+    if (inRange(u, u.tx, u.tz)) { u.path = []; u.pathIdx = 0; return; }
+    if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(u.tx), cellOf(u.tz)); u.pathIdx = 0; }
   }
   if (u.order === ORD_FIRE_AT && inRange(u, center(u.tx), center(u.tz))) { u.path = []; u.pathIdx = 0; }
   if (u.pathIdx >= u.path.length) {
@@ -126,7 +133,7 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
   const k = UNIT_KINDS[u.kind];
   if (u.order === ORD_ATTACK) {
     const t = unitById(w, u.target);
-    return t && t.alive ? { x: t.x, z: t.z, unit: t, bld: null } : null;
+    return t && t.alive ? { x: u.tx, z: u.tz, unit: t, bld: null } : null;
   }
   if (u.order === ORD_FIRE_AT) {
     if (u.target > 0) return { x: center(u.tx), z: center(u.tz), unit: null, bld: null };   // 對地面：還有發數
@@ -139,7 +146,7 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
     if (!t.alive || t.side === u.side) continue;
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
-    if (k.indirect ? !spotted(w, u.side, t.x, t.z) : firstBlock(w, u.x, u.z, t.x, t.z) >= 0) continue;
+    if (!spotted(w, u.side, t.x, t.z) || (!k.indirect && firstBlock(w, u.x, u.z, t.x, t.z) >= 0)) continue;
     if (!best || d < bestD || (d === bestD && t.id < best.id)) { best = t; bestD = d; }
   }
   return best ? { x: best.x, z: best.z, unit: best, bld: null } : null;
