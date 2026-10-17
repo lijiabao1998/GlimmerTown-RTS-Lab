@@ -227,7 +227,7 @@ export class BattleView {
         r = 92 + n * 16 + tuft; g = 122 + n * 18 + tuft; bl = 64 + n * 10;
       }
       const tr = this.tracks[gz * W + gx];
-      if (tr) { const k = 1 - tr * (ter === TER_ROAD ? 0.035 : 0.075); r = r * k - tr * 2; g = g * k - tr * 3; bl = bl * k - tr; }   // R008 車轍：路上淡、草地農田深；彈坑與建築畫在上面
+      if (tr) { const k = ter === TER_ROAD ? 0.95 - 0.03 * tr : 0.8 - 0.05 * tr; r = r * k + 4; g = g * k - 2; bl = bl * k - 2; }   // R008 車轍：第一次壓就看得出來，越壓越深（最多 6 次）；路上淡、草地農田深；彈坑與建築畫在上面
       if (b) { r = 112 + n * 16; g = 102 + n * 14; bl = 86 + n * 12; if (rubble) { r += 18; g += 16; bl += 14; } }
       else if (this.territory >= 0 && ter !== TER_ROAD) {
         // 布陣：我方可蓋的半場偏藍、對方半場偏紅，交界畫一條亮線；無人帶與路保持原色
