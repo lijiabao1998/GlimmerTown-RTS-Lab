@@ -62,6 +62,7 @@ export interface Building {
   floors: number;
   hp: number;
   maxHp: number;
+  builtBy?: number;     // R006：玩家／敵方在第 0 步蓋的才有（0／1）；地圖生成的沒有這個欄位
 }
 
 export interface Ranging {
@@ -106,7 +107,8 @@ export type SimEvent =
   | { e: 'fire'; unit: number; x: number; z: number }
   | { e: 'impact'; kind: number; x: number; z: number; bld: number }
   | { e: 'kill'; unit: number }
-  | { e: 'stage'; bld: number; stage: number };
+  | { e: 'stage'; bld: number; stage: number }
+  | { e: 'build'; bld: number };
 
 export interface World extends RngState {
   seed: number;
@@ -159,7 +161,7 @@ export function speedPct(w: World, x: number, z: number): number {
   return p;
 }
 
-function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
+export function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
   const base = kind === BK_CHURCH ? 120 : kind === BK_BARN ? 30 : 50;
   return base + 40 * floors * w * d;
 }
@@ -250,7 +252,10 @@ export function hashWorld(w: World): string {
   f.int(w.seed).int(w.tick).int(w.rng).int(w.nextShell).int(w.winner);
   for (let i = 0; i < w.ter.length; i++) f.int(w.ter[i] | (w.crater[i] << 8)).int(w.occ[i]);
   f.int(w.blds.length);
-  for (const b of w.blds) f.int(b.id).int(b.kind).int(b.x).int(b.z).int(b.w).int(b.d).int(b.floors).int(b.hp).int(b.maxHp);
+  for (const b of w.blds) {
+    f.int(b.id).int(b.kind).int(b.x).int(b.z).int(b.w).int(b.d).int(b.floors).int(b.hp).int(b.maxHp);
+    if (b.builtBy !== undefined) f.int(b.builtBy);   // R006：只有布陣蓋的才折，沒布陣的世界雜湊不變
+  }
   f.int(w.units.length);
   for (const u of w.units) {
     f.int(u.id).int(u.side).int(u.kind).int(u.x).int(u.z).int(u.hp).int(u.alive ? 1 : 0).int(u.order).int(u.target)
