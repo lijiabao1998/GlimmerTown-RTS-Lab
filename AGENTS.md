@@ -1,6 +1,6 @@
 # 微光小鎮·二戰 RTS 實驗線 — 給所有 AI 寫入者的規則
 
-> **English summary.** This is `lijiabao1998/GlimmerTown-RTS-Lab`, a WWII tactical RTS (TypeScript + three.js, single-file HTML on GitHub Pages). Read this file, `docs/迭代不改壞標準.md` and `docs/DECISIONS.md` before any change. Never push to `main`, never force-push. GPT (OpenAI dots + Codex) works on `gpt/<topic>` branches under section 4; it opens PRs as drafts and, once every merge condition in section 4 holds (CI incl. `smoke` and `gpt-lane` green on the latest commit, not a draft, no hold label/title, branch contains latest `main`, daily cap), may merge them itself with `gh pr merge --squash --match-head-commit <sha>` (owner 2026-10-17); the `gpt-merge` workflow (after each CI run and hourly) checks the exact same conditions and stays as the fallback merger. GPT may only touch an allow-list of paths (`src/` except `src/render/post.ts`, `index.html`, its own cards, the to-do part of `docs/GPT-方向.md`, `tests/*.mjs`, `tools/golden.json`, `LOG.md`, `README.md`). The switch in `docs/GPT-方向.md` on `main` stops everything: anything other than exactly **運行** on the first line under `## 開關` blocks GPT merges. Never generate hate symbols (swastika, SS runes) or real Nazi leaders; insignia are procedural and generic.
+> **English summary.** This is `lijiabao1998/GlimmerTown-RTS-Lab`, a WWII tactical RTS (TypeScript + three.js, single-file HTML on GitHub Pages). Read this file, `docs/迭代不改壞標準.md` and `docs/DECISIONS.md` before any change. Never force-push and never rewrite `main`'s history. Only Claude may merge its own PRs once CI is green, and may push to `main` (owner 2026-10-17 23:43); everyone else never pushes to `main`. GPT (OpenAI dots + Codex) works on `gpt/<topic>` branches under section 4; it opens PRs as drafts and, once every merge condition in section 4 holds (CI incl. `smoke` and `gpt-lane` green on the latest commit, not a draft, no hold label/title, branch contains latest `main`, daily cap), may merge them itself with `gh pr merge --squash --match-head-commit <sha>` (owner 2026-10-17); the `gpt-merge` workflow (after each CI run and hourly) checks the exact same conditions and stays as the fallback merger. GPT may only touch an allow-list of paths (`src/` except `src/render/post.ts`, `index.html`, its own cards, the to-do part of `docs/GPT-方向.md`, `tests/*.mjs`, `tools/golden.json`, `LOG.md`, `README.md`). The switch in `docs/GPT-方向.md` on `main` stops everything: anything other than exactly **運行** on the first line under `## 開關` blocks GPT merges. Never generate hate symbols (swastika, SS runes) or real Nazi leaders; insignia are procedural and generic.
 
 業主 2026-10-16 開線。Claude 讀 `CLAUDE.md`（內容一致，另加 Claude 的職責）；GPT、Codex、Grok 等其他工具讀這份。
 
@@ -15,11 +15,11 @@
 
 | 寫入者 | 分支 | 怎麼進 `main` |
 |---|---|---|
-| Claude | 雲端 session 指定的分支，或 `claude/<主題>` | 業主點頭後合併 |
+| Claude | 雲端 session 指定的分支，或 `claude/<主題>` | CI 綠燈後 Claude 自己合（squash、`--match-head-commit`）；也可以直推 `main`（業主 2026-10-17 23:43） |
 | GPT（dots＋Codex） | `gpt/<主題>` | 第 4 節的合併條件全部成立時，GPT 自己合（squash、`--match-head-commit`）；`gpt-merge` 工作流照同樣的條件自動合，當後備（業主 2026-10-17） |
 | 其他（Grok 等） | `<名字>/<主題>` | 開 PR，業主點頭才合 |
 
-所有人：不准直推 `main`、不准 `--force`、不改寫別人分支的歷史；推分支用明確 refspec（`git push origin HEAD:refs/heads/gpt/x`）。
+所有人：不准 `--force`、不改寫 `main` 的既有歷史、不改寫別人分支的歷史；Claude 以外的人不准直推 `main`；推分支用明確 refspec（`git push origin HEAD:refs/heads/gpt/x`）。
 
 ## 2. 技術鐵律
 
