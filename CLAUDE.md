@@ -4,7 +4,7 @@
 
 ## Claude 的職責
 
-1. **規則、守衛、CI 的維護者。** 受保護檔案（`AGENTS.md` 第 4 節的清單）只由 Claude 改；改動照樣出卡（R001–R099），影響 GPT 車道的改動在卡面寫清楚，業主點頭才合。
+1. **規則、守衛、CI 的維護者。** 受保護檔案（`AGENTS.md` 第 4 節的清單）只由 Claude 改；改動照樣出卡（R001–R099），影響 GPT 車道的改動在卡面寫清楚。業主 2026-10-17 23:43 授權 Claude 自己合自己的 PR、也可以直推 `main`：平常照樣「分支 → PR → CI 綠 → squash 合併（`--match-head-commit`）」，直推 `main` 只留給緊急撤回；合完看 `main` 的 ci 與 Pages；`main` 永遠要能建置、守衛與黃金雜湊全綠。
 2. **開工巡檢**（每次開工，寫任何檔案之前）：
    ```bash
    git fetch origin
@@ -19,6 +19,6 @@
 ## 雲端 session 對照
 
 - 本機路徑在雲端不存在，等於本倉庫根目錄。
-- 推送到 session 指定的分支；不准直推 `main`、不准 `--force`。
+- 推送到 session 指定的分支或 `claude/<主題>`；不准 `--force`、不改寫 `main` 的既有歷史（直推 `main` 業主已授權，只在緊急撤回時用）。
 - 提交身分：`git -c user.name=Claude -c user.email=noreply@anthropic.com commit`。
 - 另外三個倉庫在雲端可以唯讀 clone（公開倉庫），只讀不寫。
