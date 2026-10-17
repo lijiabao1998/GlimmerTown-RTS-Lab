@@ -175,6 +175,13 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
     step(w2, [{ t: 'attack', side: 0, ids: [g2.id], target: foe.id }]);
     const shots = firesOf(w2, 300, g2.id);
     log(g2.order === ORD_IDLE && shots === 0, '榴彈砲不接、也不自己打最小射程內的敵人', `order ${g2.order}，300 tick 開火 ${shots} 次`);
+    // 一個敵人在最小射程內、另一個在射程內：自己找目標要挑打得到的那個，不能被近的卡住
+    const w4 = blank(), g4 = addUnit(w4, 0, UK_HOWITZER, 2, 2), near = addUnit(w4, 1, UK_TANK, 2 + INSIDE, 2), far = addUnit(w4, 1, UK_TANK, 2, 2 + MINR + 3);
+    g4.hp = 1e6; near.hp = 1e6; far.hp = 1e6;
+    addUnit(w4, 0, UK_TANK, 2, 2 + MINR + 1).hp = 1e6;   // 友軍觀測：讓遠的那個被看得到
+    run(w4, 3);
+    const aimed = w4.shells.filter(s => s.shooter === g4.id).map(s => s.target);
+    log(aimed.length > 0 && aimed.every(t => t === far.id), '榴彈砲自己找目標：跳過最小射程內的，打射程內的', `瞄準 ${JSON.stringify(aimed)}（近 ${near.id}、遠 ${far.id}）`);
     const w3 = blank(), g3 = addUnit(w3, 0, UK_HOWITZER, 2, 2), f3 = addUnit(w3, 1, UK_TANK, 2 + MINR + 4, 2);
     g3.hp = 1e6; f3.hp = 1e6;
     step(w3, [{ t: 'attack', side: 0, ids: [g3.id], target: f3.id }]);
@@ -250,6 +257,13 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   a.hp = UNIT_KINDS[UK_TANK].dmgUnit; b.hp = UNIT_KINDS[UK_TANK].dmgUnit;
   runUntil(w2, () => w2.winner >= 0);
   log(!a.alive && !b.alive && w2.winner === 2, '同一刻互相打死判同歸於盡', `winner ${w2.winner}`);
+  // 榴彈砲先被打死，但它的砲彈還在飛、落地打死敵人：等砲彈落地才判，結果是同歸於盡（不是敵勝）
+  const w3 = blank(), gun = addUnit(w3, 0, UK_HOWITZER, 2, 2), tank = addUnit(w3, 1, UK_TANK, 2 + MINR + 2, 2);
+  gun.hp = UNIT_KINDS[UK_TANK].dmgUnit; tank.hp = 1;
+  step(w3, [{ t: 'attack', side: 0, ids: [gun.id], target: tank.id }]);
+  const gunDiedFirst = runUntil(w3, () => !gun.alive, 200) < 200 && tank.alive;
+  runUntil(w3, () => w3.winner >= 0);
+  log(gunDiedFirst && w3.winner === 2, '砲彈還在飛時不判勝負（榴彈砲先死、砲彈落地打死敵人＝同歸於盡）', `榴彈砲先死 ${gunDiedFirst}，winner ${w3.winner}`);
 }
 { // 整數平方根
   let ok = true;
