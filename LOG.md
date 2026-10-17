@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R007 | 2026-10-18 | Claude | 業主授權同步：AGENTS.md、CLAUDE.md 改成 Claude 在 CI 綠燈後自己合、可直推 main（平常仍走 PR，直推只留給緊急撤回）；所有人不准 --force、不改寫 main 歷史；DECISIONS.md 逐字記業主原話。GPT 車道不變 | 只改文件；CI | claude/r007-authority | 卡面沒有先推（規則同步，卡與改動同提交）；分支規則若開要把 Claude 列入 |
 | R006 | 2026-10-18 | Claude | 自己建城：新指令 build（只在第 0 步、我方半場、不上路、隔一格、不堵死通路、建材 8）；敵方布陣純函式；開頁先布陣（藍色半場、布陣列、開戰），?noR006=1 回舊流程；builtBy 只在有值時折進雜湊，黃金不變 | 本機 typecheck、unit 33、build、smoke 24 全綠；build.mjs 6 條各弄壞一次；布陣後 Node/Chrome 57973374；手機 12/6008 | claude/r006-build-phase | 開頁流程改了（等業主看）；敵方布陣單純；預覽不標示自己蓋的；Android 實機未測 |
 | R003 | 2026-10-17 | Claude | Claude 線技術標準：DECISIONS.md 記業主原話，新增目標、架構分層、品質門檻、驚艷門檻、手感門檻（每條有數字或可檢查的條件）；GPT 車道不受約束 | 只改文件；本機 typecheck、unit、build、smoke 全綠；黃金雜湊不變 | claude/r003-standards | 門檻沒有自動守衛；數字未經業主看圖確認 |
 | R005 | 2026-10-17 | Claude | 單位碰撞：車輛半徑、每步整數推擠（先加總再套用、交會時同側讓開、架好的砲不被推、每步最多推半個車速、不推進建築）、被推離中心的車沿牆滑；unit 把 tests/*.mjs 排到黃金雜湊之前。黃金 fe1c5774→98dc0f18 | 本機 typecheck、unit 31 項、build、smoke 18 項全綠；collision 9 條各弄壞一次；Node/Chrome 98dc0f18；手機 12/6008 | claude/r005-unit-collision | 窄巷對開會短暫重疊擠過去；殘骸不擋路；A* 不知道其他單位；Android 實機未測 |
