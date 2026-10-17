@@ -1,6 +1,6 @@
 # 微光小鎮·二戰 RTS 實驗線 — 給所有 AI 寫入者的規則
 
-> **English summary.** This is `lijiabao1998/GlimmerTown-RTS-Lab`, a WWII tactical RTS (TypeScript + three.js, single-file HTML on GitHub Pages). Read this file, `docs/迭代不改壞標準.md` and `docs/DECISIONS.md` before any change. Never push to `main`, never force-push. GPT (OpenAI dots + Codex) works on `gpt/<topic>` branches under section 4; it opens PRs as drafts and never merges by itself — the `gpt-merge` workflow (after each CI run and hourly) merges only when CI and the GPT-lane guard (`tools/gpt-lane.mjs`, run from `main`) are green. GPT may only touch an allow-list of paths (`src/` except `src/render/post.ts`, `index.html`, its own cards, the to-do part of `docs/GPT-方向.md`, `tests/*.mjs`, `tools/golden.json`, `LOG.md`, `README.md`). The switch in `docs/GPT-方向.md` on `main` stops everything: anything other than exactly **運行** on the first line under `## 開關` blocks GPT merges. Never generate hate symbols (swastika, SS runes) or real Nazi leaders; insignia are procedural and generic.
+> **English summary.** This is `lijiabao1998/GlimmerTown-RTS-Lab`, a WWII tactical RTS (TypeScript + three.js, single-file HTML on GitHub Pages). Read this file, `docs/迭代不改壞標準.md` and `docs/DECISIONS.md` before any change. Never push to `main`, never force-push. GPT (OpenAI dots + Codex) works on `gpt/<topic>` branches under section 4; it opens PRs as drafts and, once every merge condition in section 4 holds (CI incl. `smoke` and `gpt-lane` green on the latest commit, not a draft, no hold label/title, branch contains latest `main`, daily cap), may merge them itself with `gh pr merge --squash --match-head-commit <sha>` (owner 2026-10-17); the `gpt-merge` workflow (after each CI run and hourly) checks the exact same conditions and stays as the fallback merger. GPT may only touch an allow-list of paths (`src/` except `src/render/post.ts`, `index.html`, its own cards, the to-do part of `docs/GPT-方向.md`, `tests/*.mjs`, `tools/golden.json`, `LOG.md`, `README.md`). The switch in `docs/GPT-方向.md` on `main` stops everything: anything other than exactly **運行** on the first line under `## 開關` blocks GPT merges. Never generate hate symbols (swastika, SS runes) or real Nazi leaders; insignia are procedural and generic.
 
 業主 2026-10-16 開線。Claude 讀 `CLAUDE.md`（內容一致，另加 Claude 的職責）；GPT、Codex、Grok 等其他工具讀這份。
 
@@ -16,7 +16,7 @@
 | 寫入者 | 分支 | 怎麼進 `main` |
 |---|---|---|
 | Claude | 雲端 session 指定的分支，或 `claude/<主題>` | 業主點頭後合併 |
-| GPT（dots＋Codex） | `gpt/<主題>` | 只經 `gpt-merge` 工作流自動合併（第 4 節）；GPT 自己不按合併 |
+| GPT（dots＋Codex） | `gpt/<主題>` | 第 4 節的合併條件全部成立時，GPT 自己合（squash、`--match-head-commit`）；`gpt-merge` 工作流照同樣的條件自動合，當後備（業主 2026-10-17） |
 | 其他（Grok 等） | `<名字>/<主題>` | 開 PR，業主點頭才合 |
 
 所有人：不准直推 `main`、不准 `--force`、不改寫別人分支的歷史；推分支用明確 refspec（`git push origin HEAD:refs/heads/gpt/x`）。
@@ -60,13 +60,21 @@
 3. **開分支**：`git switch --no-track -c gpt/<主題> origin/main`（分支名一定要 `gpt/` 開頭）。第一個提交只放卡，之後的提交才施工；可以全部做完再一次推。PR **一律先開草稿**，標題 `R<號>［待辦 N］主題`，內文第一行寫「GPT 編輯」。
 4. **施工**：推送；做完把 PR 轉成 ready。只有卡面、還沒施工的 PR，守衛不放行。
 5. **看 CI**：ci 工作流的 `smoke` 與 `gpt-lane` 兩個工作都要綠。紅了就修。同一項連 3 次在同一步紅、沒有進展 → PR 標題前加［卡住］、加標籤「卡住」、方向檔卡住表記一列，換下一項。
-6. **合併**：GPT 不按合併。條件全部成立時，`gpt-merge` 工作流自動 squash 合併，接著在 `main` 重跑 ci、發布 Pages。它在每次 ci 跑完時判斷一次，另外每小時掃一次所有開著的 gpt PR：
+6. **合併**：業主 2026-10-17「為什麼不能讓GPT自行合併 Claude 我感覺沒問題的」。下面的條件**全部成立**時，GPT 可以自己合；少一條就不合。`gpt-merge` 工作流照同一組條件自動 squash 合併，當後備（每次 ci 跑完判斷一次，另外每小時掃一次所有開著的 gpt PR），誰先合都一樣。條件：
    - PR 來自本倉庫（不是 fork）、要合進 `main`；
    - ci 在 PR 最新提交上全綠；PR 不是草稿；沒有「等業主」「卡住」「needs-human」「hold」標籤，標題不以［等業主］［卡住］開頭；
    - 分支接在最新的 `main` 上（落後就把 `main` 合進分支，不 rebase、不 force）；
    - GPT 車道守衛（`tools/gpt-lane.mjs`，用 `main` 上那一份）通過；
-   - 今天（UTC）合併的 GPT PR 還不到 8 個（被上限擋下的，隔天的每小時掃描會接著合）。
-7. **合完**：看 `main` 的 ci 與 Pages 綠，回到第 0 步。
+   - PR 標題是「R<號>［待辦 N］主題」（只改方向檔的狀態更新 PR 除外）；
+   - 今天（UTC）合併的 GPT PR 還不到 8 個（只改方向檔的狀態更新不算；被上限擋下的，隔天的每小時掃描會接著合）。
+
+   **GPT 自己合的做法**（跟 `tools/gpt-merge.mjs` 一樣）：
+   - 先 `git fetch origin`，確認 `origin/main` 是 PR 最新提交 `<sha>` 的祖先（`git merge-base --is-ancestor origin/main <sha>`）；
+   - 在本機用 `origin/main` 上那一份守衛再驗一次：`git show origin/main:tools/gpt-lane.mjs > /tmp/gpt-lane.mjs && BASE=origin/main HEAD_REF=<sha> BRANCH=gpt/<主題> node /tmp/gpt-lane.mjs`，退出碼 0 才合；
+   - `gh pr view <號> --json headRefOid,isDraft,labels,title,baseRefName,isCrossRepository` 與 `gh pr checks <號>` 逐條核對上面的條件（`smoke`、`gpt-lane` 都要 pass，不能是 pending／skipped）；
+   - 合併只用 `gh pr merge <號> --squash --match-head-commit <sha> --delete-branch`（提交在核對之後變了就合不進去）；不用 `--admin`、不用 `--auto`，不跳過任何檢查；
+   - 合完：這一次推進 `main` 是 GPT 自己的身分，ci 會自動在 `main` 上跑；沒有跑起來就 `gh workflow run ci.yml --ref main`。
+7. **合完**（不管是 GPT 自己合，還是 `gpt-merge` 合）：看 `main` 的 ci 與 Pages 綠，回到第 0 步。紅了照第 6 節。
 
 **GPT 車道守衛會擋**（`tools/gpt-lane.mjs`）：
 - `main` 的開關不是運行（只改方向檔的狀態更新除外）；方向檔「## 待辦」以上除了開關那一行有任何改動；把開關改成運行。
@@ -75,7 +83,7 @@
 
 **狀態更新 PR**（只改 `docs/GPT-方向.md`，例如把開關改成停止、記卡住表）：不用卡、不用 R 號標題，分支 `gpt/status-<日期>`、標題「方向檔：<做了什麼>」，不算每日上限。
 
-## 5. 仍要等業主（PR 標「等業主」，不會被自動合；等的時候 GPT 可以先做下一項）
+## 5. 仍要等業主（PR 標「等業主」，GPT 不自己合、也不會被自動合；等的時候 GPT 可以先做下一項）
 
 「等業主」標籤 GPT 可以加，**不能自己拿掉**。業主同意＝業主拿掉標籤（之後每小時的掃描會合），或業主自己合。要動受保護檔案的事，GPT 不開 PR，寫進方向檔卡住表交 Claude。
 

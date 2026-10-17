@@ -19,8 +19,8 @@ Codex 雲端環境（真正寫程式的地方）
 GitHub Actions（唯一的裁判）
   │ ci：型別、守衛、決定性、建置、無頭 Chrome、GPT 車道守衛
   ▼
-gpt-merge 工作流（唯一的合併者；ci 跑完判一次，另外每小時掃一次）
-  │ 條件全對才 squash 合併，接著發布 Pages
+GPT 自己合，或 gpt-merge 工作流當後備（ci 跑完判一次，另外每小時掃一次）
+  │ 兩邊同一組條件，全對才 squash 合併，接著發布 Pages
   ▼
 https://lijiabao1998.github.io/GlimmerTown-RTS-Lab/
 ```
@@ -28,7 +28,7 @@ https://lijiabao1998.github.io/GlimmerTown-RTS-Lab/
 為什麼不能只靠「貼一段話」：
 - **dot 是協調者，不是寫程式的人。** 官方：dot 寫程式時會在「你設定好的 Codex 雲端環境」建任務，你的電腦關著也行。dot 自己的雲端電腦沒有公開規格；第三方回報說 sudo 不能用。所以建置與測試都放在 Codex 雲端和 GitHub Actions。
 - **「完成」不等於成功。** 官方原話：dot 的任務跑完，「本身不代表要求的結果已經達成」。所以合不合由 CI 決定，不由 dot 決定。
-- **dot 能不能合併 PR、用什麼身分提交，官方沒寫（未查證）。** 所以合併交給本倉庫的 `gpt-merge` 工作流。dot 和 Codex 只開 PR，不按合併。
+- **dot 能不能合併 PR、用什麼身分提交，官方沒寫（未查證）。** 業主 2026-10-17 同意 GPT 自己合：條件全對時 dot／Codex 可以自己 `gh pr merge --squash --match-head-commit`；合不了（沒有權限、沒有 `gh`）也沒關係，本倉庫的 `gpt-merge` 工作流照同一組條件當後備。
 - **按「暫停」停不了排程。** 官方：Pause 只停 dot 目前的主任務，不停已派出去的任務，也不取消之後的排程。所以真正的開關放在倉庫裡（方向檔），CI 認它。
 
 ## 二、一次性設定（業主做，約 15 分鐘）
@@ -42,6 +42,7 @@ https://lijiabao1998.github.io/GlimmerTown-RTS-Lab/
    - Block force pushes；Restrict deletions；
    - Bypass list 留空（Codex 可能用你的權限動作，留了 bypass 它也可能繞過）。
    官方 Codex 文件說程式碼審查規則「不取代測試、分支保護或必要的核准」。沒有這條規則時，誰都還是能直推 `main`，只能靠守規矩。
+   **GPT 自己合（R002）之後這條更重要**：開了它，誰按合併（GPT、Codex、`gpt-merge`、你）都進不了 `smoke` 或 `gpt-lane` 是紅的 PR。
    開了之後，連你也不能在網頁上直接改 `main`，要走 PR（CI 約兩分鐘）；緊急停手用第五節「10 秒」那一層，不用推任何東西。
 
 ### ChatGPT
@@ -63,10 +64,10 @@ https://lijiabao1998.github.io/GlimmerTown-RTS-Lab/
 1. 讀 origin/main 的 AGENTS.md、docs/GPT-方向.md、docs/迭代不改壞標準.md。開關（「## 開關」底下第一行）不是 **運行** 就什麼都不做。
 2. 你有開著的 gpt/ PR（標了「等業主」「卡住」的不算）：CI 紅就派 Codex 修；同一步連紅 3 次就標「卡住」、在方向檔卡住表記一列，換下一項。CI 綠但沒合：轉 ready、落後 main 就把 main 合進分支（不 rebase、不 force）。一次只做一個 PR。
 3. 沒有：做方向檔待辦最上面那一項（空了就自己想 3–5 項寫進去），用 docs/DOTS.md 第四節的模板派給 Codex。
-4. 不要自己合併。CI 綠了，gpt-merge 工作流會自動合、自動發布。
+4. 合併條件全對才合（AGENTS.md 第 4 節第 6 步，一條都不能少）：PR 來自本倉庫、要合進 main；PR 最新提交上 ci 的 smoke 和 gpt-lane 都綠；不是草稿；沒有「等業主」「卡住」「needs-human」「hold」標籤，標題不以［等業主］［卡住］開頭；分支接在最新的 main 上；用 main 上那一份 tools/gpt-lane.mjs 再驗一次通過；標題是「R<號>［待辦 N］主題」；今天（UTC）合的 GPT PR 不到 8 個。全對就用 gh pr merge <號> --squash --match-head-commit <最新提交> --delete-branch 自己合（不用 --admin、不跳過檢查）；少一條就不合。你沒合，gpt-merge 工作流會照同樣的條件自動合。合完看 main 的 ci 和 Pages 綠。
 5. 每天第一次醒來，用三行告訴我：合了什麼（附 Pages 網址）、卡住什麼、下一步做什麼。其他時候有事才講。
 
-【不准】推送或合併到 main、--force、刪不是你建的分支；改白名單以外的檔案（白名單見 AGENTS.md 第 4 節，.github/、tools/、規則檔、package*.json、vite.config.*、src/render/post.ts 都不行）；改 docs/GPT-方向.md「## 待辦」以上除了開關那一行的任何字、把開關改成運行；拿掉「等業主」標籤；碰其他倉庫；改 GitHub 設定、安裝或移除 App；畫卐字、SS 符文或真實納粹領導人。
+【不准】直推 main、合併條件沒全對就合、--force、刪不是你建的分支；改白名單以外的檔案（白名單見 AGENTS.md 第 4 節，.github/、tools/、規則檔、package*.json、vite.config.*、src/render/post.ts 都不行）；改 docs/GPT-方向.md「## 待辦」以上除了開關那一行的任何字、把開關改成運行；拿掉「等業主」標籤；碰其他倉庫；改 GitHub 設定、安裝或移除 App；畫卐字、SS 符文或真實納粹領導人。
 
 【要等我】畫風、後製、鏡頭、光、離開二戰、刪既有單位或機制、調高手機預算、加 npm 套件：PR 標「等業主」，你先做下一項。要動受保護檔案的事不要開 PR，寫進卡住表交給 Claude。
 
@@ -89,7 +90,8 @@ https://lijiabao1998.github.io/GlimmerTown-RTS-Lab/
    改到 src/sim：npm run unit 會印出「現在 <雜湊>」，把 tools/golden.json 的 hash 改成它，卡頭 golden= 寫「舊→新」。
    新機制要守衛：寫 tests/{主題}.mjs（獨立 Node 腳本，綠燈退出碼 0）。距離、時間用 UNIT_KINDS 推，不要寫死。
 4. 更新卡面（驗收結果、自檢清單、沒做成的事）、docs/GPT-方向.md 的待辦／已完成表、LOG.md 一列。
-5. 推送，開草稿 PR：標題「R{號}［待辦 {序}］{主題}」，內文第一行「GPT 編輯」。做完把 PR 轉成 ready。不要合併；不要改白名單以外的檔案。
+5. 推送，開草稿 PR：標題「R{號}［待辦 {序}］{主題}」，內文第一行「GPT 編輯」。做完把 PR 轉成 ready。不要改白名單以外的檔案。
+6. 合併：等 PR 最新提交上 ci 的 smoke 和 gpt-lane 都綠，再照 AGENTS.md 第 4 節第 6 步逐條核對（不是草稿、沒有等業主／卡住標籤或標題、接在最新 main 上、main 上那一份 gpt-lane.mjs 本機再驗通過、今天 UTC 合的 GPT PR 不到 8 個）。條件全對才 gh pr merge {PR 號} --squash --match-head-commit {最新提交} --delete-branch；少一條就不合，交給 gpt-merge 工作流或下一輪。
 ```
 
 ## 五、怎麼停
