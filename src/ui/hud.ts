@@ -43,7 +43,7 @@ export function initHud(a: HudActions): Hud {
     $('b-pause').textContent = s.paused ? '▶' : '⏸';
     $('b-speed').textContent = `${s.speed}×`;
     $('b-fire').classList.toggle('on', s.fireMode);
-    $('count').textContent = `我方 ${s.mine}　敵方 ${s.theirs}`;
+    $('count').textContent = `我方 ${s.mine}　可見敵 ${s.theirs}`;
     const sel = s.tanks + s.guns;
     $('hint').textContent = sel
       ? `已選：${s.tanks ? `坦克 ${s.tanks}` : ''}${s.tanks && s.guns ? '、' : ''}${s.guns ? `榴彈砲 ${s.guns}` : ''}。點地面＝移動，點敵人＝攻擊，點房子＝轟它${s.fireMode ? '；砲擊模式：點地面＝對那一格開火' : ''}`
