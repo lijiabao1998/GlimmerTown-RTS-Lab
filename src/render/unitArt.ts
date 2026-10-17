@@ -38,3 +38,19 @@ export function howitzer(): THREE.BufferGeometry {
   g.merge(barrel, new THREE.Matrix4().makeTranslation(0.0, 0.14, 0).multiply(new THREE.Matrix4().makeRotationZ(0.42)));
   return g.geometry();
 }
+
+// A radio operator with pack, helmet and binoculars; no external insignia.
+export function observer(detail = true): THREE.BufferGeometry {
+  const g = new Geo();
+  g.box(-0.07, 0.02, -0.09, 0.07, 0.18, -0.02, DARK);
+  g.box(-0.07, 0.02, 0.02, 0.07, 0.18, 0.09, DARK);
+  g.box(-0.08, 0.18, -0.1, 0.08, 0.38, 0.1, W);
+  g.box(-0.07, 0.38, -0.07, 0.07, 0.49, 0.07, MID);
+  if (detail) {
+    g.box(-0.1, 0.47, -0.1, 0.1, 0.52, 0.1, W);
+    g.box(-0.14, 0.2, -0.08, -0.08, 0.38, 0.08, DARK);
+    g.box(-0.12, 0.38, -0.04, -0.11, 0.68, -0.03, STEEL);
+    g.box(0.07, 0.38, -0.07, 0.17, 0.42, 0.07, DARK);
+  }
+  return g.geometry();
+}

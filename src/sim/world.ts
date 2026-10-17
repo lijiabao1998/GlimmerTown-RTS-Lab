@@ -25,6 +25,7 @@ export const BK_SHOP = 4;
 // 單位種類
 export const UK_TANK = 0;
 export const UK_HOWITZER = 1;
+export const UK_OBSERVER = 2;
 
 export interface UnitKind {
   name: string;
@@ -45,6 +46,7 @@ export interface UnitKind {
 export const UNIT_KINDS: UnitKind[] = [
   { name: 'tank', hp: 100, speed: 20, range: 9 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 34, dmgBld: 25, splash: 0, sight: 10 * SUB, armor: 100 },
   { name: 'howitzer', hp: 60, speed: 10, range: 28 * SUB, minRange: 6 * SUB, reload: 140, indirect: true, dmgUnit: 70, dmgBld: 60, splash: 384, sight: 6 * SUB, armor: 100 },
+  { name: 'observer', hp: 30, speed: 16, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 14 * SUB, armor: 100 },
 ];
 
 export const ORD_IDLE = 0;
@@ -230,6 +232,9 @@ export function createWorld(seed: number): World {
   spawn(SIDE_PLAYER, UK_HOWITZER, 29, 29);
   spawn(SIDE_ENEMY, UK_TANK, 7, 5); spawn(SIDE_ENEMY, UK_TANK, 5, 7); spawn(SIDE_ENEMY, UK_TANK, 5, 4);
   spawn(SIDE_ENEMY, UK_HOWITZER, 2, 2);
+  // Append only: original command IDs 1–8 remain stable.
+  spawn(SIDE_PLAYER, UK_OBSERVER, 24, 24);
+  spawn(SIDE_ENEMY, UK_OBSERVER, 7, 7);
   return w;
 }
 

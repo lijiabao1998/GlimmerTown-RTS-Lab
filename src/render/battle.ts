@@ -2,12 +2,12 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, SHELL_HE, stageOf, STAGE_RUBBLE, idx,
+  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, SHELL_HE, stageOf, STAGE_RUBBLE, idx,
   SIDE_PLAYER, type Unit, type World, type SimEvent,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
 import { buildTown, smokeSources } from './buildings.ts';
-import { tankHull, tankTurret, howitzer } from './unitArt.ts';
+import { tankHull, tankTurret, howitzer, observer } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
 
 const PX = 8;                       // 地面貼圖：每格 8×8 像素
@@ -44,6 +44,7 @@ export class BattleView {
   private hull: THREE.InstancedMesh;
   private turret: THREE.InstancedMesh;
   private gun: THREE.InstancedMesh;
+  private observerMesh: THREE.InstancedMesh;
   private discs: THREE.InstancedMesh;
   private rings: THREE.InstancedMesh;
   private shells: THREE.InstancedMesh;
@@ -57,8 +58,9 @@ export class BattleView {
   private nextSmoke = 0;
   private marker: { x: number; z: number; until: number; col: THREE.Color } | null = null;
   private tmp = new THREE.Object3D();
+  private observerHeights = new Map<number, { x: number; z: number; height: number }>();
 
-  constructor(w: World, fxOn: boolean, fogOn = true) {
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true) {
     this.w = w; this.fxOn = fxOn; this.fogOn = fogOn;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
@@ -105,11 +107,26 @@ export class BattleView {
     this.hull = inst(tankHull(), toon({ vertexColors: true }), MAX_UNITS, true);
     this.turret = inst(tankTurret(), toon({ vertexColors: true }), MAX_UNITS, true);
     this.gun = inst(howitzer(), toon({ vertexColors: true }), MAX_UNITS, true);
+    this.observerMesh = inst(observer(observerDetails), toon({ vertexColors: true }), MAX_UNITS, true);
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
     this.shells = inst(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshBasicMaterial(), MAX_SHELLS, false);
     this.fxMesh = inst(new THREE.IcosahedronGeometry(1, 1), toon(), MAX_FX, false);
     for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); }
+  }
+
+  unitHeight(u: Unit): number {
+    if (u.kind !== UK_OBSERVER) return 0;
+    const id = this.w.occ[idx(Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
+    const b = id ? this.w.blds[id - 1] : null;
+    if (!b || b.hp <= 0) return 0;
+    const cached = this.observerHeights.get(u.id);
+    if (cached && cached.x === u.x && cached.z === u.z) return cached.height;
+    // Anchor the garrison indicator to the real roof/floor surface, including damage.
+    const ray = new THREE.Raycaster(new THREE.Vector3(u.x / SUB, 20, u.z / SUB), new THREE.Vector3(0, -1, 0));
+    const height = ray.intersectObject(this.town, false)[0]?.point.y ?? 0;
+    this.observerHeights.set(u.id, { x: u.x, z: u.z, height });
+    return height;
   }
 
   visibleAt(x: number, z: number): boolean {
@@ -179,7 +196,7 @@ export class BattleView {
         if (this.fxOn) this.burst(u.x / SUB, 0.2, u.z / SUB, 0.45, simT, 4, false);
       }
     }
-    if (townDirty) { this.town.geometry.dispose(); this.town.geometry = buildTown(this.w).geometry(); }
+    if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w).geometry(); }
     if (groundDirty) this.groundTex.needsUpdate = true;
   }
 
@@ -206,7 +223,7 @@ export class BattleView {
   update(alpha: number, simT: number, selected: Set<number>) {
     const w = this.w, m = this.tmp;
     if (w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
-    let nh = 0, ng = 0, nd = 0, nr = 0;
+    let nh = 0, ng = 0, no = 0, nd = 0, nr = 0;
     for (const u of w.units) {
       if (!this.visibleUnit(u)) continue;
       const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * alpha) / SUB;
@@ -226,11 +243,16 @@ export class BattleView {
         this.gun.setMatrixAt(ng, m.matrix); this.gun.setColorAt(ng, col);
         ng++;
       }
+      if (u.kind === UK_OBSERVER) {
+        const y = this.unitHeight(u);
+        m.position.set(x, y, z); m.rotation.set(0, this.yaw[u.id], u.alive ? 0 : Math.PI / 2); m.scale.setScalar(1); m.updateMatrix();
+        this.observerMesh.setMatrixAt(no, m.matrix); this.observerMesh.setColorAt(no, col); no++;
+      }
       if (u.alive) {
-        m.position.set(x, 0.012, z); m.rotation.set(0, 0, 0); m.scale.setScalar(1); m.updateMatrix();
+        m.position.set(x, this.unitHeight(u) + 0.012, z); m.rotation.set(0, 0, 0); m.scale.setScalar(1); m.updateMatrix();
         this.discs.setMatrixAt(nd, m.matrix); this.discs.setColorAt(nd, TEAM_COL[u.side]); nd++;
         if (selected.has(u.id) && nr < MAX_RINGS) {
-          m.position.y = 0.02; m.updateMatrix();
+          m.position.y = this.unitHeight(u) + 0.02; m.updateMatrix();
           this.rings.setMatrixAt(nr, m.matrix); this.rings.setColorAt(nr, new THREE.Color(0xffe066)); nr++;
         }
       }
@@ -273,7 +295,7 @@ export class BattleView {
       mesh.count = n; mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     };
-    fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
+    fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
   }
 
   // ---- 鏡頭 ----

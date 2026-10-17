@@ -1,6 +1,6 @@
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UNIT_KINDS, bldAt, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, N, SUB, TICK_HZ, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UNIT_KINDS, bldAt, cellOf, type World } from './sim/world.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
@@ -28,7 +28,7 @@ const SPEEDS = [1, 2, 4];
 function reset(s = seed) {
   w = createWorld(s);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1');
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1');
   log = []; pending = []; acc = 0; selected.clear();
   hud?.update();
 }
@@ -55,7 +55,7 @@ function pickUnit(cx: number, cy: number): number {
   let best = 0, bestD = 26 * 26;
   for (const u of w.units) {
     if (!u.alive || !view.visibleUnit(u)) continue;
-    const [sx, sy] = view.screenOf(u.x / SUB, 0.15, u.z / SUB, innerWidth, innerHeight);
+    const [sx, sy] = view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight);
     const d = (sx - cx) ** 2 + (sy - cy) ** 2;
     if (d < bestD) { bestD = d; best = u.id; }
   }
@@ -74,7 +74,10 @@ function order(cx: number, cy: number) {
   // 先看點到哪棟建築（屋頂、牆面都算）；沒點到建築才看地面
   const hitB = view.buildingAt(cx, cy, innerWidth, innerHeight);
   if (hitB) {
-    issue({ t: 'fireAt', side: SIDE_PLAYER, ids, x: hitB[0], z: hitB[1] });
+    const observers = ids.filter(id => w.units[id - 1].kind === UK_OBSERVER);
+    const armed = ids.filter(id => w.units[id - 1].kind !== UK_OBSERVER);
+    if (observers.length) issue({ t: 'move', side: SIDE_PLAYER, ids: observers, x: hitB[0], z: hitB[1] });
+    if (armed.length) issue({ t: 'fireAt', side: SIDE_PLAYER, ids: armed, x: hitB[0], z: hitB[1] });
     view.setMarker(hitB[0] + 0.5, hitB[1] + 0.5, simT(), true);
     return;
   }
@@ -150,7 +153,7 @@ hud = initHud({
     return {
       tick: w.tick, paused, speed, fireMode, winner: w.winner,
       mine: mine.length, theirs: theirs.length,
-      tanks: sel.filter(u => u.kind === UK_TANK).length, guns: sel.filter(u => u.kind === UK_HOWITZER).length,
+      observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => u.kind === UK_TANK).length, guns: sel.filter(u => u.kind === UK_HOWITZER).length,
     };
   },
   togglePause: () => { paused = !paused; },
@@ -192,10 +195,10 @@ const rts = {
     reset(SCRIPT_SEED);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1');
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1');
     return hashWorld(w);
   },
-  screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, 0.15, u.z / SUB, innerWidth, innerHeight); },
+  screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
   screenOfCell: (x: number, z: number) => view.screenOf(x + 0.5, 0, z + 0.5, innerWidth, innerHeight),
   screenOfPoint: (x: number, y: number, z: number) => view.screenOf(x, y, z, innerWidth, innerHeight),
   blds: () => w.blds.map(b => ({ ...b })),
