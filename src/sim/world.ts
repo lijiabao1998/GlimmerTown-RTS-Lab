@@ -40,13 +40,14 @@ export interface UnitKind {
   splash: number;       // 爆炸半徑（位置單位；0＝只打中一個東西）
   sight: number;        // 視野半徑（位置單位；算「有沒有友軍看得到」用）
   armor: number;        // 承受傷害的百分比（100＝全吃）
+  radius: number;       // 碰撞半徑（位置單位；0＝不參與碰撞，例如步兵）（R005）
 }
 
 // 數字都是暫定，玩家看得到的數字由業主定（AGENTS.md 規則 6）。
 export const UNIT_KINDS: UnitKind[] = [
-  { name: 'tank', hp: 100, speed: 20, range: 9 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 34, dmgBld: 25, splash: 0, sight: 10 * SUB, armor: 100 },
-  { name: 'howitzer', hp: 60, speed: 10, range: 28 * SUB, minRange: 6 * SUB, reload: 140, indirect: true, dmgUnit: 70, dmgBld: 60, splash: 384, sight: 6 * SUB, armor: 100 },
-  { name: 'observer', hp: 30, speed: 16, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 14 * SUB, armor: 100 },
+  { name: 'tank', hp: 100, speed: 20, range: 9 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 34, dmgBld: 25, splash: 0, sight: 10 * SUB, armor: 100, radius: 80 },
+  { name: 'howitzer', hp: 60, speed: 10, range: 28 * SUB, minRange: 6 * SUB, reload: 140, indirect: true, dmgUnit: 70, dmgBld: 60, splash: 384, sight: 6 * SUB, armor: 100, radius: 72 },
+  { name: 'observer', hp: 30, speed: 16, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 14 * SUB, armor: 100, radius: 0 },
 ];
 
 export const ORD_IDLE = 0;

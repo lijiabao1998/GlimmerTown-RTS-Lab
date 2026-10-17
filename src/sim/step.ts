@@ -1,4 +1,4 @@
-// 一步＝1/20 秒。順序固定：套指令 → 全部單位移動 → 全部單位開火 → 砲彈飛行與落地 → 判勝負。
+// 一步＝1/20 秒。順序固定：套指令 → 全部單位移動 → 車輛推擠（R005）→ 全部單位開火 → 砲彈飛行與落地 → 判勝負。
 import { isqrt, dist } from './math.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
@@ -129,8 +129,69 @@ function moveUnit(w: World, u: Unit): void {
   const spd = Math.max(1, Math.floor((k.speed * speedPct(w, cellOf(u.x), cellOf(u.z))) / 100));
   const dx = gx - u.x, dz = gz - u.z, d = isqrt(dx * dx + dz * dz);
   if (d <= spd) { u.x = gx; u.z = gz; u.pathIdx++; }
+  else if (k.radius > 0) stepVehicle(w, u, u.x + Math.trunc((dx * spd) / d), u.z + Math.trunc((dz * spd) / d), spd);
   else { u.x += Math.trunc((dx * spd) / d); u.z += Math.trunc((dz * spd) / d); }
   if (u.pathIdx >= u.path.length && u.order === ORD_MOVE) u.order = ORD_IDLE;
+}
+
+const freeAt = (w: World, x: number, z: number) => !blocks(w, cellOf(x), cellOf(z));
+
+// 車輛走一步（R005）：被推離格子中心之後，直線走向下一個路點可能擦進牆角。
+// 會撞進還站著的建築就沿牆滑（只走 x 或只走 z）；兩軸都撞就先回到自己這一格的中心；已經在中心還過不去就重找路。
+// 沒被推過的車永遠走在格子中心的連線上，不會走到這些分支。
+function stepVehicle(w: World, u: Unit, nx: number, nz: number, spd: number): void {
+  if (freeAt(w, nx, nz)) { u.x = nx; u.z = nz; return; }
+  if (nx !== u.x && freeAt(w, nx, u.z)) { u.x = nx; return; }
+  if (nz !== u.z && freeAt(w, u.x, nz)) { u.z = nz; return; }
+  const cx = center(cellOf(u.x)), cz = center(cellOf(u.z));
+  if (u.x !== cx || u.z !== cz) {
+    u.x += Math.max(-spd, Math.min(spd, cx - u.x)); u.z += Math.max(-spd, Math.min(spd, cz - u.z));
+    return;
+  }
+  const end = u.path[u.path.length - 1];
+  u.path = findPath(w, cellOf(u.x), cellOf(u.z), end % N, (end - (end % N)) / N); u.pathIdx = 0;
+}
+
+// 車輛碰撞（R005）：全部單位移動之後，中心距離小於兩者半徑和的車輛沿連線推開。
+// - 先算完所有推擠量再一起套用：結果跟處理順序無關；距離為 0 時用兩者 id 決定方向。
+// - 有一方在走：連線轉 26.6°，交會的車各自往同一側讓開（繞過去，不是對頂）。
+// - 架好的榴彈砲（間接射擊、沒有在走的路）不被會動的車推，推擠全部算在另一方：R102 的試射校準才不會被推掉。兩門都架好就照常互推。
+// - 每個單位每一步最多被推「這一步車速的一半」：正在走的車永遠比推擠快，窄巷對向也擠得過去，不會卡死。
+// - 不推進還站著的建築、不推出地圖；某一軸會撞就只推另一軸。半徑 0（步兵）與殘骸不參與。
+const SPLIT: [number, number][] = [[256, 0], [181, 181], [0, 256], [-181, 181], [-256, 0], [-181, -181], [0, -256], [181, -181]];
+const moving = (u: Unit) => u.pathIdx < u.path.length;
+const anchored = (u: Unit) => UNIT_KINDS[u.kind].indirect && !moving(u);
+
+function separate(w: World): void {
+  const vs = w.units.filter(u => u.alive && UNIT_KINDS[u.kind].radius > 0);
+  if (vs.length < 2) return;
+  const px: number[] = vs.map(() => 0), pz: number[] = vs.map(() => 0);
+  for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) {
+    const a = vs[i], b = vs[j], minD = UNIT_KINDS[a.kind].radius + UNIT_KINDS[b.kind].radius;
+    let dx = b.x - a.x, dz = b.z - a.z;
+    if (dx >= minD || dx <= -minD || dz >= minD || dz <= -minD) continue;
+    const d = isqrt(dx * dx + dz * dz);
+    if (d >= minD) continue;
+    if (d === 0) [dx, dz] = SPLIT[(a.id * 3 + b.id) % SPLIT.length];
+    else if (moving(a) || moving(b)) { const rx = 2 * dx - dz, rz = 2 * dz + dx; dx = rx; dz = rz; }
+    const len = isqrt(dx * dx + dz * dz), over = minD - d;
+    const fa = anchored(a) && !anchored(b), fb = anchored(b) && !anchored(a);
+    const sa = fa ? 0 : fb ? over : over >> 1, sb = over - sa;
+    px[i] -= Math.trunc((dx * sa) / len); pz[i] -= Math.trunc((dz * sa) / len);
+    px[j] += Math.trunc((dx * sb) / len); pz[j] += Math.trunc((dz * sb) / len);
+  }
+  const lim = (v: number) => Math.max(0, Math.min(N * SUB - 1, v));
+  vs.forEach((u, i) => {
+    let qx = px[i], qz = pz[i];
+    if (!qx && !qz) return;
+    const spd = Math.max(1, Math.floor((UNIT_KINDS[u.kind].speed * speedPct(w, cellOf(u.x), cellOf(u.z))) / 100)), cap = Math.max(1, spd >> 1);
+    const q = isqrt(qx * qx + qz * qz);
+    if (q > cap) { qx = Math.trunc((qx * cap) / q); qz = Math.trunc((qz * cap) / q); }
+    const nx = lim(u.x + qx), nz = lim(u.z + qz);
+    if (freeAt(w, nx, nz)) { u.x = nx; u.z = nz; }
+    else if (freeAt(w, nx, u.z)) u.x = nx;
+    else if (freeAt(w, u.x, nz)) u.z = nz;
+  });
 }
 
 // 找目標：攻擊指令 → 那個單位；射擊指令 → 那一格；其他時候自己找最近、射得到的敵人
@@ -275,6 +336,7 @@ export function step(w: World, cmds: Command[]): void {
   for (const c of cmds) if (c.t === 'build') applyBuild(w, c);   // R006：先蓋房子，同一步的移動才不會穿過剛蓋的房子
   for (const c of cmds) if (c.t !== 'build') applyCommand(w, c);
   for (const u of w.units) if (u.alive) moveUnit(w, u);
+  separate(w);
   for (const u of w.units) if (u.alive) fireUnit(w, u);
   updateShells(w);
   checkWinner(w);

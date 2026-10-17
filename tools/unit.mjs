@@ -285,7 +285,19 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   log(badSeeds.length === 0, '村莊地圖（種子 0–199）：建築 ≥12、出生角落沒有建築、單位不站在建築上、兩方互相走得到', `建築 ${minB}–${maxB} 棟；不合格的種子：${badSeeds.join(',') || '無'}`);
 }
 
-// ---- 4. 決定性與黃金雜湊（放在行為守衛之後：行為壞了，第一個紅燈落在那條行為守衛上）----
+// ---- 4. 寫入者自己加的守衛：tests/*.mjs，各自在子行程裡跑，退出碼 0＝綠（AGENTS.md 第 3 節）----
+// 排在黃金雜湊之前（R005）：弄壞某個機制時，第一個紅燈落在那個機制的守衛上，不是黃金雜湊。
+{
+  const dir = path.join(ROOT, 'tests');
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.mjs')).sort() : [];
+  for (const f of files) {
+    const r = spawnSync(process.execPath, [path.join(dir, f)], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
+    log(r.status === 0, `tests/${f}`, r.status === 0 ? '' : `退出碼 ${r.status}：${(r.stdout + r.stderr).trim().split('\n').slice(-3).join(' ｜ ')}`);
+  }
+  if (!files.length) console.log('・tests/ 還沒有守衛');
+}
+
+// ---- 5. 決定性與黃金雜湊（放在所有行為守衛之後：行為壞了，第一個紅燈落在那條行為守衛上）----
 {
   const ta = Date.now(), a = hashWorld(runScript()), ms = Date.now() - ta, b = hashWorld(runScript());
   log(a === b, `同種子同指令跑 ${SCRIPT_TICKS} tick 兩次，雜湊相同`, `${a} / ${b}；一次 ${ms} ms（只記錄，不設門檻）`);
@@ -301,17 +313,6 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   // 黃金雜湊：改到模擬就會變，卡面要寫新舊值與原因
   const golden = JSON.parse(read('tools/golden.json'));
   log(golden.seed === SCRIPT_SEED && golden.ticks === SCRIPT_TICKS && golden.hash === a, '腳本戰鬥雜湊等於 tools/golden.json', `golden ${golden.hash}，現在 ${a}`);
-}
-
-// ---- 5. GPT 可以自己加的守衛：tests/*.mjs，各自在子行程裡跑，退出碼 0＝綠（AGENTS.md 第 3 節）----
-{
-  const dir = path.join(ROOT, 'tests');
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.mjs')).sort() : [];
-  for (const f of files) {
-    const r = spawnSync(process.execPath, [path.join(dir, f)], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
-    log(r.status === 0, `tests/${f}`, r.status === 0 ? '' : `退出碼 ${r.status}：${(r.stdout + r.stderr).trim().split('\n').slice(-3).join(' ｜ ')}`);
-  }
-  if (!files.length) console.log('・tests/ 還沒有守衛');
 }
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
