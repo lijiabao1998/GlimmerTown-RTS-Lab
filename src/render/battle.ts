@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
   N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, SHELL_HE, stageOf, STAGE_RUBBLE, idx,
-  type World, type SimEvent,
+  SIDE_PLAYER, type Unit, type World, type SimEvent,
 } from '../sim/world.ts';
+import { spotted } from '../sim/step.ts';
 import { buildTown, smokeSources } from './buildings.ts';
 import { tankHull, tankTurret, howitzer } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
@@ -35,6 +36,7 @@ export class BattleView {
   fxOn: boolean;
 
   private w: World;
+  private fogOn: boolean;
   private ramp = toonRamp();
   private groundTex: THREE.DataTexture;
   private groundPx: Uint8Array;
@@ -56,8 +58,8 @@ export class BattleView {
   private marker: { x: number; z: number; until: number; col: THREE.Color } | null = null;
   private tmp = new THREE.Object3D();
 
-  constructor(w: World, fxOn: boolean) {
-    this.w = w; this.fxOn = fxOn;
+  constructor(w: World, fxOn: boolean, fogOn = true) {
+    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
     this.scene.add(new THREE.HemisphereLight(0xe4ecff, 0x5b5444, 1.35));
@@ -110,6 +112,14 @@ export class BattleView {
     for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); }
   }
 
+  visibleAt(x: number, z: number): boolean {
+    return !this.fogOn || spotted(this.w, SIDE_PLAYER, x, z);
+  }
+
+  visibleUnit(u: Unit): boolean {
+    return u.side === SIDE_PLAYER || this.visibleAt(u.x, u.z);
+  }
+
   // ---- 地面貼圖 ----
   private paintCell(x: number, z: number) {
     const w = this.w, i = idx(x, z), ter = w.ter[i], dep = w.crater[i];
@@ -160,10 +170,10 @@ export class BattleView {
           if (cx >= 0 && cz >= 0 && cx < N && cz < N) { this.paintCell(cx, cz); groundDirty = true; }
           if (this.fxOn) this.burst(x, 0.1, z, 0.55, simT, 5, false);
         } else if (this.fxOn) this.burst(x, e.bld ? 0.35 : 0.12, z, 0.22, simT, 2, !!e.bld);
-      } else if (e.e === 'fire' && this.fxOn) {
+      } else if (e.e === 'fire' && this.fxOn && this.visibleUnit(this.w.units[e.unit - 1])) {
         const u = this.w.units[e.unit - 1], a = Math.atan2(u.aimZ, u.aimX), L = u.kind === UK_TANK ? 0.44 : 0.4;
         this.spawn({ x: e.x / SUB + Math.cos(a) * L, y: u.kind === UK_TANK ? 0.2 : 0.3, z: e.z / SUB + Math.sin(a) * L, t0: simT, life: 0.12, s0: 0.07, s1: 0.12, vy: 0, c0: new THREE.Color(0xfff3b0), c1: new THREE.Color(0xffb040) });
-      } else if (e.e === 'kill') {
+      } else if (e.e === 'kill' && this.visibleUnit(this.w.units[e.unit - 1])) {
         this.wrecks.push({ id: e.unit, until: simT + 10 });
         const u = this.w.units[e.unit - 1];
         if (this.fxOn) this.burst(u.x / SUB, 0.2, u.z / SUB, 0.45, simT, 4, false);
@@ -198,6 +208,7 @@ export class BattleView {
     if (w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
     let nh = 0, ng = 0, nd = 0, nr = 0;
     for (const u of w.units) {
+      if (!this.visibleUnit(u)) continue;
       const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * alpha) / SUB;
       const z = (this.prevZ[u.id] + (u.z - this.prevZ[u.id]) * alpha) / SUB;
       const mdx = u.x - this.prevX[u.id], mdz = u.z - this.prevZ[u.id];
@@ -235,6 +246,7 @@ export class BattleView {
       if (ns >= MAX_SHELLS) break;
       const p = Math.min(1, (s.t + alpha) / s.T);
       const x = (s.sx + (s.ex - s.sx) * p) / SUB, z = (s.sz + (s.ez - s.sz) * p) / SUB;
+      if (s.side !== SIDE_PLAYER && !this.visibleAt(x * SUB, z * SUB)) continue;
       const d = Math.hypot(s.ex - s.sx, s.ez - s.sz) / SUB;
       const y = s.kind === SHELL_HE ? 0.3 + 4 * (d * 0.22) * p * (1 - p) : 0.2;
       m.position.set(x, y, z); m.rotation.set(0, 0, 0); m.scale.setScalar(s.kind === SHELL_HE ? 1.2 : 0.8); m.updateMatrix();
@@ -252,7 +264,7 @@ export class BattleView {
     let nf = 0;
     const c = new THREE.Color();
     for (const f of this.fx) {
-      if (simT < f.t0) continue;
+      if (simT < f.t0 || !this.visibleAt(Math.floor(f.x * SUB), Math.floor(f.z * SUB))) continue;
       const k = (simT - f.t0) / f.life, s = f.s0 + (f.s1 - f.s0) * Math.sqrt(k), shrink = k > 0.75 ? 1 - (k - 0.75) * 4 : 1;
       m.position.set(f.x, f.y + f.vy * (simT - f.t0), f.z); m.rotation.set(0, 0, 0); m.scale.setScalar(Math.max(0.001, s * shrink)); m.updateMatrix();
       this.fxMesh.setMatrixAt(nf, m.matrix); this.fxMesh.setColorAt(nf, c.copy(f.c0).lerp(f.c1, k)); nf++;
