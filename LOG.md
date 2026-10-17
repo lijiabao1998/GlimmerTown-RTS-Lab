@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R003 | 2026-10-17 | Claude | Claude 線技術標準：DECISIONS.md 記業主原話，新增目標、架構分層、品質門檻、驚艷門檻、手感門檻（每條有數字或可檢查的條件）；GPT 車道不受約束 | 只改文件；本機 typecheck、unit、build、smoke 全綠；黃金雜湊不變 | claude/r003-standards | 門檻沒有自動守衛；數字未經業主看圖確認 |
 | R102 | 2026-10-17 | GPT | 待辦3試射修正：看見落點才減半散布，移動/換目標重置，舊彈不污染，齊射後保留校準 | typecheck/unit/build；9組行為+6負控制；CI smoke/gpt-lane；Node/Chrome fe1c5774；手機12/6008；四圖已看 | #5 | 本機Chrome受限；Android實機未測 |
 | R101 | 2026-10-17 | GPT | 待辦2前進觀測員：雙方各1、遠視野、無武裝、進出建築、減傷與倒塌傷害；追加id9/10保留舊指令 | 本機typecheck/unit/build、CI smoke/gpt-lane綠；6類負控制；Node/Chrome 6a152c13；手機12calls/6008tris；四樣張已看 | #4 | 本機smoke受限；Android實機未測 |
 | R100 | 2026-10-17 | GPT | 建築擋視野，隱藏敵軍與射擊線索，攻擊保留最後已知位置；逃生閥 ?noR100=1 | 本機 typecheck、unit、build 綠；新守衛破壞測試確認；CI smoke/gpt-lane 綠；手機 10 calls/5838 triangles；四張樣張已看 | #3 | 本機 Chrome socket 限制；Android 實機未測 |
