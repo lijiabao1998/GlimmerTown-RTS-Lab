@@ -4,10 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { withBrowser, touchTap, shot, sleep, ROOT } from './cdp.mjs';
 import { hashWorld, createWorld, bldAt, N } from '../src/sim/world.ts';
-import { runLog } from '../src/sim/step.ts';
-import { runScript, SCRIPT_TICKS } from '../src/sim/script.ts';
+import { runLog, step } from '../src/sim/step.ts';
+import { runScript, SCRIPT, SCRIPT_TICKS } from '../src/sim/script.ts';
 import { FLOOR_H } from '../src/render/buildings.ts';
 import { buildError, BUILD_KINDS } from '../src/sim/build.ts';
+import { spotted } from '../src/sim/step.ts';
 
 const t0 = Date.now(), fails = [];
 function log(ok, name, detail = '') {
@@ -19,7 +20,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -151,6 +152,77 @@ await withBrowser({ width: 800, height: 600, port: PORTS.valve }, async ({ open,
   const h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(info.fx === false && h === nodeHash, '?fx=off 關掉效果，模擬雜湊不變', `fx=${info.fx}，${h}`);
   log(page.errors.length === 0, '?fx=off 零頁面錯誤', page.errors.join(' | '));
+});
+
+
+// ---- R004 特寫：效果正在發生的那一刻（固定 tick、固定鏡頭；暫停＝模擬時間凍結，畫面可重現）----
+// 腳本戰鬥裡沒有房子倒成瓦礫，所以倒塌特寫用腳本第 600 步加一條射擊指令（Node 先算出倒塌的那一步）。
+const FX = (() => {
+  const base = runScript(600), live = base.units.filter(u => u.alive && u.side === 0 && u.kind !== 2).map(u => u.id);
+  let best = null;   // 最快倒的那一棟
+  for (const b of base.blds.filter(b => b.hp > 0)) {
+    const w = structuredClone(base), cmd = { t: 'fireAt', side: 0, ids: live, x: b.x, z: b.z };
+    for (let k = 0; k < (best ? best.ticks : 600); k++) {
+      step(w, k === 0 ? [cmd] : []);
+      if (w.events.some(e => e.e === 'stage' && e.bld === b.id && e.stage === 2)) { best = { cmd, b, ticks: w.tick - 600 }; break; }
+    }
+  }
+  return best;
+})();
+const HE = (() => {   // 第一發我方看得到的高爆彈落點
+  const w = createWorld(1944);
+  let i = 0;
+  while (w.tick < SCRIPT_TICKS) {
+    const now = []; while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) now.push(SCRIPT[i].cmd); i++; }
+    step(w, now);
+    const e = w.events.find(e => e.e === 'impact' && e.kind === 1);
+    if (e && spotted(w, 0, e.x, e.z)) return { tick: w.tick, x: e.x / 256, z: e.z / 256 };
+  }
+  return null;
+})();
+const collapseJs = FX ? `__rts.pause(true); __rts.runScript(600); __rts.issue(${JSON.stringify(FX.cmd)}); __rts.stepN(${FX.ticks + 6}); __rts.focus(${FX.b.x + FX.b.w / 2}, ${FX.b.z + FX.b.d / 2}, 2.4); 0` : '0';
+const impactJs = HE ? `__rts.pause(true); __rts.runScript(${HE.tick - 1}); __rts.stepN(3); __rts.focus(${HE.x}, ${HE.z}, 2.4); 0` : '0';
+const sum = p => p.puff + p.glow + p.debris + p.ring + p.ghost;
+await withBrowser({ width: 1280, height: 800, port: PORTS.fx }, async ({ open, page }) => {
+  await open('');
+  log(!!FX && !!HE, 'R004 特寫的時刻（Node 算）', `倒塌：#${FX?.b.id} 在 ${FX?.b.x},${FX?.b.z}，第 600 步下令後 ${FX?.ticks} 步倒；高爆彈：第 ${HE?.tick} 步落在 ${HE?.x.toFixed(1)},${HE?.z.toFixed(1)}`);
+  await page.evaluate(collapseJs); await sleep(400);
+  const c1 = await page.evaluate('__rts.info()'), d1 = await page.evaluate('__rts.fxDigest()');
+  await shot(page, path.join(SHOTS, 'desktop-collapse.png'));
+  log(c1.calls <= BUDGET.calls + 2 && c1.triangles <= BUDGET.triangles, '倒塌特寫：繪製呼叫 ≤ 22、三角形 ≤ 80,000', JSON.stringify(c1));
+  log(c1.pools.ghost > 0 && c1.pools.debris > 0 && c1.pools.puff > 0, '倒塌特寫：倒塌殘影、碎片、揚塵都在畫', JSON.stringify(c1.pools));
+  await page.evaluate(collapseJs); await sleep(400);
+  const d2 = await page.evaluate('__rts.fxDigest()');
+  log(d1 === d2 && d1 !== 'off', '倒塌特寫重跑一次：效果池狀態完全相同（只用 hash2 與模擬時間）', `${d1} / ${d2}`);
+  await page.evaluate(impactJs); await sleep(400);
+  const i1 = await page.evaluate('__rts.info()'), e1 = await page.evaluate('__rts.fxDigest()');
+  await shot(page, path.join(SHOTS, 'desktop-impact.png'));
+  log(i1.calls <= BUDGET.calls + 2 && i1.triangles <= BUDGET.triangles && i1.pools.glow > 0 && i1.pools.ring > 0, '彈著特寫：光與震波環在畫；繪製呼叫 ≤ 22、三角形 ≤ 80,000', JSON.stringify(i1));
+  await page.evaluate(impactJs); await sleep(400);
+  const e2 = await page.evaluate('__rts.fxDigest()');
+  log(e1 === e2, '彈著特寫重跑一次：效果池狀態完全相同', `${e1} / ${e2}`);
+  log(page.errors.length === 0, '特寫零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.fxMobile }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate(collapseJs); await sleep(400);
+  const m1 = await page.evaluate('__rts.info()');
+  await shot(page, path.join(SHOTS, 'mobile-collapse.png'));
+  log(m1.calls <= BUDGET.calls + 2 && m1.triangles <= BUDGET.triangles && m1.pools.ghost > 0, '手機倒塌特寫：繪製呼叫 ≤ 22、三角形 ≤ 80,000、殘影在畫', JSON.stringify(m1));
+  log(page.errors.length === 0, '手機特寫零頁面錯誤', page.errors.join(' | '));
+});
+// 逃生閥：?noR004=1＝舊效果（新池全程 0 個實例）；?fx=off＝所有效果 0 個實例。雜湊都不變。
+await withBrowser({ width: 800, height: 600, port: PORTS.noR004 }, async ({ open, page }) => {
+  for (const q of ['noR004=1', 'fx=off']) {
+    await open(q);
+    const h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+    await page.evaluate(collapseJs); await sleep(300);
+    const a = await page.evaluate('__rts.info()');
+    await page.evaluate(impactJs); await sleep(300);
+    const b = await page.evaluate('__rts.info()');
+    log(h === nodeHash && sum(a.pools) === 0 && sum(b.pools) === 0 && !a.r004, `?${q}：新效果池全程 0 個實例，模擬雜湊不變`, `${h}；倒塌 ${JSON.stringify(a.pools)}；彈著 ${JSON.stringify(b.pools)}`);
+  }
+  log(page.errors.length === 0, '?noR004=1／?fx=off 零頁面錯誤', page.errors.join(' | '));
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
