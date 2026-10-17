@@ -1,0 +1,253 @@
+// 一步＝1/20 秒。順序固定：套指令 → 全部單位移動 → 全部單位開火 → 砲彈飛行與落地 → 判勝負。
+import { isqrt, dist } from './math.ts';
+import { findPath } from './path.ts';
+import { randSym } from './rng.ts';
+import {
+  N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
+  UNIT_KINDS, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
+  type World, type Unit, type Building,
+} from './world.ts';
+
+export type Command =
+  | { t: 'move'; side: number; ids: number[]; x: number; z: number }
+  | { t: 'attack'; side: number; ids: number[]; target: number }
+  | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number }
+  | { t: 'stop'; side: number; ids: number[] };
+
+export interface LoggedCommand { tick: number; cmd: Command }
+
+export const FIRE_AT_ROUNDS = 4;      // 對空地射擊打幾發就停（對建築：打到變瓦礫為止）
+const AP_HIT_RADIUS = 180;            // 穿甲彈落點離目標多近算命中（位置單位）
+const FORMATION: [number, number][] = [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [0, -1], [-1, -1], [2, 0], [0, 2]];
+
+const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.units.length ? w.units[id - 1] : null);
+
+// 指令只認：屬於下指令那一方、還活著的單位；座標夾進地圖；攻擊目標要是活著的敵人
+export function applyCommand(w: World, cmd: Command): void {
+  const seen = new Set<number>(), us: Unit[] = [];
+  for (const id of cmd.ids) {
+    const u = unitById(w, id | 0);
+    if (u && u.alive && u.side === cmd.side && !seen.has(u.id)) { seen.add(u.id); us.push(u); }
+  }
+  us.sort((a, b) => a.id - b.id);
+  const cx = (v: number) => Math.max(0, Math.min(N - 1, v | 0));
+  us.forEach((u, k) => {
+    const ux = cellOf(u.x), uz = cellOf(u.z);
+    if (cmd.t === 'stop') { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
+    if (cmd.t === 'move') {
+      let gx = cx(cmd.x), gz = cx(cmd.z);
+      const [ox, oz] = FORMATION[k % FORMATION.length];
+      if (inMap(gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz)) { gx += ox; gz += oz; }
+      u.order = ORD_MOVE; u.tx = gx; u.tz = gz; u.target = 0;
+      u.path = findPath(w, ux, uz, gx, gz); u.pathIdx = 0;
+      if (!u.path.length) u.order = ORD_IDLE;
+      return;
+    }
+    if (cmd.t === 'attack') {
+      const t = unitById(w, cmd.target | 0);
+      if (!t || !t.alive || t.side === u.side || tooClose(u, t.x, t.z)) return;
+      u.order = ORD_ATTACK; u.target = t.id;
+      u.path = inRange(u, t.x, t.z) ? [] : findPath(w, ux, uz, cellOf(t.x), cellOf(t.z)); u.pathIdx = 0;
+      return;
+    }
+    // fireAt：對還站著的建築＝打到變瓦礫；對空地或瓦礫＝打 FIRE_AT_ROUNDS 發（只有間接射擊的砲接，坦克打空地沒有用）
+    const gx = cx(cmd.x), gz = cx(cmd.z), standing = blocks(w, gx, gz);
+    if (!standing && !UNIT_KINDS[u.kind].indirect) return;
+    if (tooClose(u, center(gx), center(gz))) return;                // 榴彈砲：最小射程內不接
+    u.order = ORD_FIRE_AT; u.tx = gx; u.tz = gz;
+    u.target = standing ? 0 : FIRE_AT_ROUNDS;
+    u.path = inRange(u, center(gx), center(gz)) ? [] : findPath(w, ux, uz, gx, gz); u.pathIdx = 0;
+  });
+}
+
+function tooClose(u: Unit, x: number, z: number): boolean {
+  return dist(u.x, u.z, x, z) < UNIT_KINDS[u.kind].minRange;
+}
+
+function inRange(u: Unit, x: number, z: number): boolean {
+  const k = UNIT_KINDS[u.kind], d = dist(u.x, u.z, x, z);
+  return d <= k.range && d >= k.minRange;
+}
+
+// 兩格之間的直線（Bresenham）。一律從格索引小的那一端畫，需要時再反轉：A→B 與 B→A 經過同一組格，視線才對稱
+export function lineCells(x0: number, z0: number, x1: number, z1: number): number[] {
+  const flip = idx(x0, z0) > idx(x1, z1);
+  if (flip) { const tx = x0, tz = z0; x0 = x1; z0 = z1; x1 = tx; z1 = tz; }
+  const dx = Math.abs(x1 - x0), dz = -Math.abs(z1 - z0), sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1;
+  const out = [idx(x0, z0)];
+  let x = x0, z = z0, err = dx + dz;
+  while (x !== x1 || z !== z1) {
+    const e2 = 2 * err;
+    if (e2 >= dz) { err += dz; x += sx; }
+    if (e2 <= dx) { err += dx; z += sz; }
+    out.push(idx(x, z));
+  }
+  if (flip) out.reverse();
+  return out;
+}
+
+// 從 (ax,az) 到 (bx,bz)（位置單位），回傳第一個擋住的建築格（不含起點格）；沒有擋就回傳 -1
+export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number): number {
+  const cells = lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz));
+  for (let i = 1; i < cells.length; i++) { const c = cells[i]; if (w.occ[c] && w.blds[w.occ[c] - 1].hp > 0) return c; }
+  return -1;
+}
+
+// 某一方有沒有活著的單位看得到 (x,z)（只算距離；擋視線的戰爭迷霧留給後面的卡）
+export function spotted(w: World, side: number, x: number, z: number): boolean {
+  for (const u of w.units) if (u.alive && u.side === side && dist(u.x, u.z, x, z) <= UNIT_KINDS[u.kind].sight) return true;
+  return false;
+}
+
+function moveUnit(w: World, u: Unit): void {
+  if (u.order === ORD_ATTACK) {
+    const t = unitById(w, u.target);
+    if (!t || !t.alive || tooClose(u, t.x, t.z)) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }   // 目標死了或鑽進最小射程：放棄，回到自己找目標
+    if (inRange(u, t.x, t.z)) { u.path = []; u.pathIdx = 0; return; }
+    if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(t.x), cellOf(t.z)); u.pathIdx = 0; }
+  }
+  if (u.order === ORD_FIRE_AT && inRange(u, center(u.tx), center(u.tz))) { u.path = []; u.pathIdx = 0; }
+  if (u.pathIdx >= u.path.length) {
+    if (u.order === ORD_MOVE) u.order = ORD_IDLE;
+    else if (u.order === ORD_FIRE_AT && !inRange(u, center(u.tx), center(u.tz))) u.order = ORD_IDLE;   // 走到底還打不到：放棄
+    return;
+  }
+  const c = u.path[u.pathIdx], gx = center(c % N), gz = center((c - (c % N)) / N);
+  const k = UNIT_KINDS[u.kind];
+  const spd = Math.max(1, Math.floor((k.speed * speedPct(w, cellOf(u.x), cellOf(u.z))) / 100));
+  const dx = gx - u.x, dz = gz - u.z, d = isqrt(dx * dx + dz * dz);
+  if (d <= spd) { u.x = gx; u.z = gz; u.pathIdx++; }
+  else { u.x += Math.trunc((dx * spd) / d); u.z += Math.trunc((dz * spd) / d); }
+  if (u.pathIdx >= u.path.length && u.order === ORD_MOVE) u.order = ORD_IDLE;
+}
+
+// 找目標：攻擊指令 → 那個單位；射擊指令 → 那一格；其他時候自己找最近、射得到的敵人
+function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; bld: Building | null } | null {
+  const k = UNIT_KINDS[u.kind];
+  if (u.order === ORD_ATTACK) {
+    const t = unitById(w, u.target);
+    return t && t.alive ? { x: t.x, z: t.z, unit: t, bld: null } : null;
+  }
+  if (u.order === ORD_FIRE_AT) {
+    if (u.target > 0) return { x: center(u.tx), z: center(u.tz), unit: null, bld: null };   // 對地面：還有發數
+    const b = bldAt(w, u.tx, u.tz);
+    if (!b || b.hp <= 0) { u.order = ORD_IDLE; return null; }         // 建築已經是瓦礫，或對地面打完了：停火
+    return { x: center(u.tx), z: center(u.tz), unit: null, bld: b };
+  }
+  let best: Unit | null = null, bestD = 0;
+  for (const t of w.units) {
+    if (!t.alive || t.side === u.side) continue;
+    const d = dist(u.x, u.z, t.x, t.z);
+    if (d > k.range || d < k.minRange) continue;
+    if (k.indirect ? !spotted(w, u.side, t.x, t.z) : firstBlock(w, u.x, u.z, t.x, t.z) >= 0) continue;
+    if (!best || d < bestD || (d === bestD && t.id < best.id)) { best = t; bestD = d; }
+  }
+  return best ? { x: best.x, z: best.z, unit: best, bld: null } : null;
+}
+
+function fireUnit(w: World, u: Unit): void {
+  if (u.cooldown > 0) u.cooldown--;
+  const k = UNIT_KINDS[u.kind];
+  if (k.indirect && u.pathIdx < u.path.length) return;     // 榴彈砲移動中不能打
+  const aim = pickAim(w, u);
+  if (!aim) return;
+  const dx = aim.x - u.x, dz = aim.z - u.z, d = isqrt(dx * dx + dz * dz);
+  if (d > k.range || d < k.minRange) return;
+  if (dx || dz) { u.aimX = dx; u.aimZ = dz; }
+  if (u.cooldown > 0) return;
+  u.cooldown = k.reload;
+  if (u.order === ORD_FIRE_AT && !aim.bld) u.target--;
+  w.events.push({ e: 'fire', unit: u.id, x: u.x, z: u.z });
+  const sh = { id: w.nextShell++, side: u.side, kind: k.indirect ? SHELL_HE : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
+  if (!k.indirect) {
+    const blockCell = firstBlock(w, u.x, u.z, aim.x, aim.z);
+    if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % N); sh.ez = center((blockCell - (blockCell % N)) / N); sh.target = 0; }
+    sh.T = Math.max(2, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / SUB));
+  } else {
+    let r = Math.floor(d / 12);
+    if (!spotted(w, u.side, aim.x, aim.z)) r *= 2;               // 沒有友軍看得到：盲射，散布加倍
+    sh.ex = Math.max(0, Math.min(N * SUB - 1, aim.x + randSym(w, r)));
+    sh.ez = Math.max(0, Math.min(N * SUB - 1, aim.z + randSym(w, r)));
+    sh.T = 20 + 2 * Math.floor(d / SUB);
+  }
+  w.shells.push(sh);
+}
+
+function damageUnit(w: World, u: Unit, dmg: number): void {
+  if (!u.alive || dmg <= 0) return;
+  u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor) / 100);
+  if (u.hp <= 0) { u.hp = 0; u.alive = false; u.path = []; u.pathIdx = 0; u.order = ORD_IDLE; w.events.push({ e: 'kill', unit: u.id }); }
+}
+
+function damageBld(w: World, b: Building, dmg: number): void {
+  if (b.hp <= 0 || dmg <= 0) return;
+  const before = stageOf(b);
+  b.hp = Math.max(0, b.hp - dmg);
+  const after = stageOf(b);
+  if (after !== before) w.events.push({ e: 'stage', bld: b.id, stage: after });
+}
+
+function land(w: World, s: { kind: number; shooter: number; ex: number; ez: number; target: number; hitBld: number }): void {
+  const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
+  if (s.kind === SHELL_AP) {
+    if (s.hitBld) damageBld(w, w.blds[s.hitBld - 1], k.dmgBld);
+    else {
+      const t = unitById(w, s.target);
+      if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, k.dmgUnit);
+    }
+    w.events.push({ e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld });
+    return;
+  }
+  const R = k.splash;
+  for (const t of w.units) {
+    if (!t.alive) continue;
+    const d = dist(t.x, t.z, s.ex, s.ez);
+    if (d < R) damageUnit(w, t, Math.floor((k.dmgUnit * (R - d)) / R));
+  }
+  const cx = cellOf(s.ex), cz = cellOf(s.ez), rc = Math.floor(R / SUB) + 1, hit = new Set<number>();
+  for (let z = cz - rc; z <= cz + rc; z++) for (let x = cx - rc; x <= cx + rc; x++) {
+    const b = bldAt(w, x, z);
+    if (!b || hit.has(b.id) || dist(center(x), center(z), s.ex, s.ez) > R + HALF) continue;
+    hit.add(b.id);
+    damageBld(w, b, k.dmgBld);
+  }
+  if (inMap(cx, cz) && !blocks(w, cx, cz)) { const i = idx(cx, cz); if (w.crater[i] < 3) w.crater[i]++; }
+  w.events.push({ e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0 });
+}
+
+function updateShells(w: World): void {
+  const keep = [];
+  for (const s of w.shells) {
+    s.t++;
+    if (s.t >= s.T) land(w, s); else keep.push(s);
+  }
+  w.shells = keep;
+}
+
+function checkWinner(w: World): void {
+  if (w.winner >= 0 || w.shells.length) return;      // 還有砲彈在飛就先不判（可能同歸於盡）
+  let a = false, b = false;
+  for (const u of w.units) if (u.alive) { if (u.side === SIDE_PLAYER) a = true; else if (u.side === SIDE_ENEMY) b = true; }
+  if (!a && !b) w.winner = 2; else if (!b) w.winner = SIDE_PLAYER; else if (!a) w.winner = SIDE_ENEMY;
+}
+
+export function step(w: World, cmds: Command[]): void {
+  w.events = [];
+  for (const c of cmds) applyCommand(w, c);
+  for (const u of w.units) if (u.alive) moveUnit(w, u);
+  for (const u of w.units) if (u.alive) fireUnit(w, u);
+  updateShells(w);
+  checkWinner(w);
+  w.tick++;
+}
+
+// 從指令紀錄跑到第 ticks 步（重播與守衛用）。紀錄要照 tick 排好。
+export function runLog(w: World, log: LoggedCommand[], ticks: number): World {
+  let i = 0;
+  while (w.tick < ticks) {
+    const now: Command[] = [];
+    while (i < log.length && log[i].tick <= w.tick) { if (log[i].tick === w.tick) now.push(log[i].cmd); i++; }
+    step(w, now);
+  }
+  return w;
+}
