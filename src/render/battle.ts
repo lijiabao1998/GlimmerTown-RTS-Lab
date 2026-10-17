@@ -2,12 +2,14 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, SHELL_HE, stageOf, STAGE_RUBBLE, idx,
-  SIDE_PLAYER, type Unit, type World, type SimEvent,
+  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
+  SIDE_PLAYER, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
-import { buildTown, smokeSources } from './buildings.ts';
+import { buildTown, smokeSources, buildingGeo, bldColors, wallHeight, RUBBLE_COLORS, ROOF_RISE } from './buildings.ts';
+import { Geo } from './geo.ts';
+import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING } from './fx.ts';
 import { tankHull, tankTurret, howitzer, observer } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
 
@@ -19,6 +21,14 @@ const BASE_HALF_H = 9;              // zoom=1 時畫面上下各看幾格
 const SIDE_COL = [new THREE.Color(0x5d6b3a), new THREE.Color(0x77756c)];      // 我方橄欖綠、敵方野戰灰
 const TEAM_COL = [new THREE.Color(0x3b7fd6), new THREE.Color(0xc9452f)];      // 腳下圈：藍＝我方、紅＝敵方
 const WRECK = new THREE.Color(0x24211e);
+
+// R004 效果的發射器：建築起火、冒煙、殘骸燃燒、倒塌後的揚塵。發射時間對齊在 t0＋n×every（跟畫面幀率無關）
+const E_FIRE = 0, E_SMOKE = 1, E_WRECKFIRE = 2, E_WRECKSMOKE = 3, E_DUST = 4;
+const E_LIFE = [1.5, 3.6, 1.5, 3.4, 2.2];            // 這種發射器的粒子最多活幾秒（跳過太舊的發射時間用）
+type Emitter = { kind: number; id: number; x: number; z: number; w: number; d: number; h: number; t0: number; until: number; every: number; next: number; fog: boolean };
+type Toss = { t0: number; vx: number; vz: number; spin: number; yaw: number; tilt: number };
+const C_HE_SHELL = new THREE.Color(0x2d2d2d), C_AP_SHELL = new THREE.Color(0xffd27a), C_SEL = new THREE.Color(0xffe066);
+const DIRT = [0x5a4636, 0x6b5440, 0x3e3226], STEEL = [0x3a3c3e, 0x55575a, 0x2c2a26];
 
 type Fx = { x: number; y: number; z: number; t0: number; life: number; s0: number; s1: number; vy: number; c0: THREE.Color; c1: THREE.Color };
 
@@ -62,7 +72,26 @@ export class BattleView {
   private observerHeights = new Map<number, { x: number; z: number; height: number }>();
   private territory = -1;           // R006 布陣：≥0 時地面貼圖把那一方可蓋的半場染色（不加繪製呼叫）
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true) {
+  // ---- R004 破壞的重量（?noR004=1 時全部不建，舊效果照舊）----
+  private r4 = false;
+  private puff: Pool | null = null;
+  private glow: Pool | null = null;
+  private debris: Pool | null = null;
+  private ring: Pool | null = null;
+  private ghosts: Ghosts | null = null;
+  private lastStage = new Int8Array(0);
+  private emitters: Emitter[] = [];
+  private toss = new Map<number, Toss>();
+  private shakeT0 = -99;
+  private shakeAmp = 0;
+  private lastT = 0;
+  private frameNo = 0;
+  private visStamp = new Int32Array(N * N);
+  private visVal = new Uint8Array(N * N);
+  private mA = new THREE.Matrix4();
+  private mB = new THREE.Matrix4();
+
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true) {
     this.w = w; this.fxOn = fxOn; this.fogOn = fogOn;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
@@ -115,6 +144,21 @@ export class BattleView {
     this.shells = inst(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshBasicMaterial(), MAX_SHELLS, false);
     this.fxMesh = inst(new THREE.IcosahedronGeometry(1, 1), toon(), MAX_FX, false);
     for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); }
+    if (fxOn && r004) {
+      this.r4 = true;
+      const add = () => new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false });
+      this.puff = new Pool(M_PUFF, new THREE.IcosahedronGeometry(1, 1), toon(), 360, this.scene);
+      this.debris = new Pool(M_DEBRIS, new THREE.BoxGeometry(1, 1, 1), toon(), 300, this.scene);
+      this.ring = new Pool(M_RING, new THREE.RingGeometry(0.8, 1, 28).rotateX(-Math.PI / 2), add(), 32, this.scene);
+      this.glow = new Pool(M_GLOW, new THREE.IcosahedronGeometry(1, 1), add(), 300, this.scene);
+      this.ghosts = new Ghosts(toon({ vertexColors: true }), 12000, this.scene);
+      this.lastStage = new Int8Array(w.blds.length + 64);
+      const t = w.tick / 20;
+      for (const b of w.blds) {
+        this.lastStage[b.id] = stageOf(b);
+        if (stageOf(b) === STAGE_ROOFLESS) this.addEmitter(E_SMOKE, b.id, b.x, b.z, b.w, b.d, wallHeight(b), t, Infinity, false);
+      }
+    }
   }
 
   unitHeight(u: Unit): number {
@@ -192,6 +236,7 @@ export class BattleView {
   snapshot() { for (const u of this.w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; } }
 
   onEvents(events: SimEvent[], simT: number) {
+    if (this.r4) { this.frameNo++; for (const e of events) this.fx4(e, simT); }   // 世界剛走一步：可見度快取作廢
     let townDirty = false, groundDirty = false;
     for (const e of events) {
       if (e.e === 'stage') {
@@ -199,7 +244,7 @@ export class BattleView {
         const b = this.w.blds[e.bld - 1];
         for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z);
         groundDirty = true;
-        if (this.fxOn) this.burst(b.x + b.w / 2, 0.3, b.z + b.d / 2, 1.2, simT, 6, true);
+        if (this.fxOn && !this.r4) this.burst(b.x + b.w / 2, 0.3, b.z + b.d / 2, 1.2, simT, 6, true);
       } else if (e.e === 'build') {
         townDirty = true;
         const b = this.w.blds[e.bld - 1];
@@ -209,15 +254,15 @@ export class BattleView {
         if (e.kind === SHELL_HE) {
           const cx = Math.floor(x), cz = Math.floor(z);
           if (cx >= 0 && cz >= 0 && cx < N && cz < N) { this.paintCell(cx, cz); groundDirty = true; }
-          if (this.fxOn) this.burst(x, 0.1, z, 0.55, simT, 5, false);
-        } else if (this.fxOn) this.burst(x, e.bld ? 0.35 : 0.12, z, 0.22, simT, 2, !!e.bld);
-      } else if (e.e === 'fire' && this.fxOn && this.visibleUnit(this.w.units[e.unit - 1])) {
+          if (this.fxOn && !this.r4) this.burst(x, 0.1, z, 0.55, simT, 5, false);
+        } else if (this.fxOn && !this.r4) this.burst(x, e.bld ? 0.35 : 0.12, z, 0.22, simT, 2, !!e.bld);
+      } else if (e.e === 'fire' && this.fxOn && !this.r4 && this.visibleUnit(this.w.units[e.unit - 1])) {
         const u = this.w.units[e.unit - 1], a = Math.atan2(u.aimZ, u.aimX), L = u.kind === UK_TANK ? 0.44 : 0.4;
         this.spawn({ x: e.x / SUB + Math.cos(a) * L, y: u.kind === UK_TANK ? 0.2 : 0.3, z: e.z / SUB + Math.sin(a) * L, t0: simT, life: 0.12, s0: 0.07, s1: 0.12, vy: 0, c0: new THREE.Color(0xfff3b0), c1: new THREE.Color(0xffb040) });
       } else if (e.e === 'kill' && this.visibleUnit(this.w.units[e.unit - 1])) {
         this.wrecks.push({ id: e.unit, until: simT + 10 });
         const u = this.w.units[e.unit - 1];
-        if (this.fxOn) this.burst(u.x / SUB, 0.2, u.z / SUB, 0.45, simT, 4, false);
+        if (this.fxOn && !this.r4) this.burst(u.x / SUB, 0.2, u.z / SUB, 0.45, simT, 4, false);
       }
     }
     if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w).geometry(); }
@@ -246,6 +291,8 @@ export class BattleView {
   // ---- 每一幀 ----
   update(alpha: number, simT: number, selected: Set<number>) {
     const w = this.w, m = this.tmp;
+    this.lastT = simT; this.frameNo++;
+    if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
     if (w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
     let nh = 0, ng = 0, no = 0, nd = 0, nr = 0;
     for (const u of w.units) {
@@ -260,7 +307,8 @@ export class BattleView {
         m.position.set(x, 0, z); m.rotation.set(0, this.yaw[u.id], u.alive ? 0 : 0.06); m.scale.setScalar(1); m.updateMatrix();
         this.hull.setMatrixAt(nh, m.matrix); this.hull.setColorAt(nh, col);
         m.rotation.set(0, u.alive ? aim : aim + 0.5, u.alive ? 0 : 0.12); m.position.set(x, u.alive ? 0 : -0.02, z); m.updateMatrix();
-        this.turret.setMatrixAt(nh, m.matrix); this.turret.setColorAt(nh, col);
+        const tossed = !u.alive && this.r4 ? this.toss.get(u.id) : undefined;
+        this.turret.setMatrixAt(nh, tossed ? this.tossMatrix(tossed, x, z, simT) : m.matrix); this.turret.setColorAt(nh, col);
         nh++;
       } else if (u.kind === UK_HOWITZER) {
         m.position.set(x, 0, z); m.rotation.set(0, u.pathIdx < u.path.length ? this.yaw[u.id] + Math.PI : aim, u.alive ? 0 : 0.2); m.scale.setScalar(1); m.updateMatrix();
@@ -277,7 +325,7 @@ export class BattleView {
         this.discs.setMatrixAt(nd, m.matrix); this.discs.setColorAt(nd, TEAM_COL[u.side]); nd++;
         if (selected.has(u.id) && nr < MAX_RINGS) {
           m.position.y = this.unitHeight(u) + 0.02; m.updateMatrix();
-          this.rings.setMatrixAt(nr, m.matrix); this.rings.setColorAt(nr, new THREE.Color(0xffe066)); nr++;
+          this.rings.setMatrixAt(nr, m.matrix); this.rings.setColorAt(nr, C_SEL); nr++;
         }
       }
     }
@@ -294,12 +342,18 @@ export class BattleView {
       const x = (s.sx + (s.ex - s.sx) * p) / SUB, z = (s.sz + (s.ez - s.sz) * p) / SUB;
       if (s.side !== SIDE_PLAYER && !this.visibleAt(x * SUB, z * SUB)) continue;
       const d = Math.hypot(s.ex - s.sx, s.ez - s.sz) / SUB;
+      if (this.r4 && s.kind === SHELL_AP) {   // 曳光：沿彈道拉長的亮條（加色），比一顆小方塊看得出誰打誰
+        const yaw = Math.atan2(-(s.ez - s.sz), s.ex - s.sx);
+        this.glow!.put(x, 0.2, z, 0.34, 0.03, 0.03, yaw, 0xfff0b8);
+        this.glow!.put(x - Math.cos(yaw) * 0.22, 0.2, z + Math.sin(yaw) * 0.22, 0.2, 0.022, 0.022, yaw, 0xff8a30, 0.7);
+        continue;
+      }
       const y = s.kind === SHELL_HE ? 0.3 + 4 * (d * 0.22) * p * (1 - p) : 0.2;
       m.position.set(x, y, z); m.rotation.set(0, 0, 0); m.scale.setScalar(s.kind === SHELL_HE ? 1.2 : 0.8); m.updateMatrix();
-      this.shells.setMatrixAt(ns, m.matrix); this.shells.setColorAt(ns, s.kind === SHELL_HE ? new THREE.Color(0x2d2d2d) : new THREE.Color(0xffd27a)); ns++;
+      this.shells.setMatrixAt(ns, m.matrix); this.shells.setColorAt(ns, s.kind === SHELL_HE ? C_HE_SHELL : C_AP_SHELL); ns++;
     }
     // 冒煙：沒屋頂的房子、剛被擊毀的車
-    if (this.fxOn && simT >= this.nextSmoke) {
+    if (this.fxOn && !this.r4 && simT >= this.nextSmoke) {
       this.nextSmoke = simT + 0.7;
       const k = this.fxSeq++;
       smokeSources(w).forEach(([x, y, z], j) => this.spawn({ x: x + (hash2(k, j, 5) - 0.5) * 0.4, y, z: z + (hash2(k, j, 6) - 0.5) * 0.4, t0: simT, life: 3.2, s0: 0.12, s1: 0.5, vy: 0.45, c0: new THREE.Color(0x3d3a37), c1: new THREE.Color(0x8a8784) }));
@@ -319,7 +373,227 @@ export class BattleView {
       mesh.count = n; mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     };
+    if (this.r4) this.updateFx(simT);
     fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
+  }
+
+  // ======== R004 破壞的重量 ========
+  // 射擊線索（開火、彈著、擊毀）照 R100：看不到的地方不畫；建築的損壞本來就看得到，它的煙火照畫。
+  private vis = (x: number, z: number): boolean => {
+    if (!this.fogOn) return true;
+    const cx = Math.floor(x), cz = Math.floor(z);
+    if (cx < 0 || cz < 0 || cx >= N || cz >= N) return false;
+    const i = cz * N + cx;
+    if (this.visStamp[i] !== this.frameNo) { this.visStamp[i] = this.frameNo; this.visVal[i] = spotted(this.w, SIDE_PLAYER, (cx + 0.5) * SUB, (cz + 0.5) * SUB) ? 1 : 0; }
+    return this.visVal[i] === 1;
+  };
+
+  private addEmitter(kind: number, id: number, x: number, z: number, w: number, d: number, h: number, t0: number, until: number, fog: boolean) {
+    const every = kind === E_FIRE ? 0.06 : kind === E_SMOKE ? 0.55 : kind === E_WRECKFIRE ? 0.07 : kind === E_WRECKSMOKE ? 0.45 : 0.25;
+    this.emitters.push({ kind, id, x, z, w, d, h, t0, until, every, next: t0, fog });
+  }
+
+  private shake(amount: number, x: number, z: number, t: number) {
+    const d = Math.hypot(x - this.target.x, z - this.target.z);
+    if (d > 12) return;
+    const a = Math.min(0.08, amount * (1 - d / 12)), left = (this.lastT - this.shakeT0) / 0.4;
+    const now = left >= 0 && left < 1 ? this.shakeAmp * (1 - left) * (1 - left) : 0;
+    if (a > now) { this.shakeT0 = t; this.shakeAmp = a; }
+  }
+
+  // 一次爆炸：閃光 → 火球 → 貼地光暈 → 震波環 → 碎片 → 火星 → 地面揚塵 → 煙柱（S＝大小，fog＝射擊線索）
+  private blast(x: number, z: number, t: number, S: number, fog: boolean, clods: number[], nClods: number) {
+    const s = this.fxSeq++, H = (k: number, salt: number) => hash2(s, k, salt), g = this.glow!, p = this.puff!;
+    g.spawn({ x, y: 0.25 * S, z, t0: t, life: 0.07, s0: 0.2 * S, s1: 0.6 * S, c0: 0xfffbe0, c1: 0xffd27a, fog });
+    for (let k = 0; k < 6; k++) {
+      const a = H(k, 1) * Math.PI * 2, r = 0.18 * S * H(k, 2), hot = k < 2;
+      g.spawn({ x: x + Math.cos(a) * r, y: (0.12 + 0.1 * H(k, 3)) * S, z: z + Math.sin(a) * r, vx: Math.cos(a) * 0.5 * S, vz: Math.sin(a) * 0.5 * S, vy: (0.7 + 0.8 * H(k, 4)) * S, drag: 2.5,
+        t0: t + 0.015 * k, life: 0.3 + 0.25 * H(k, 5), s0: 0.1 * S, s1: (0.24 + 0.16 * H(k, 6)) * S, c0: hot ? 0xfff0a0 : 0xffa830, c1: hot ? 0xff6a18 : 0x9a2808, fog });
+    }
+    g.spawn({ x, y: 0.03, z, t0: t, life: 0.35, s0: 0.6 * S, s1: 1.1 * S, c0: 0xb86a2c, c1: 0x301000, fog, flat: true });
+    this.ring!.spawn({ x, y: 0.04, z, t0: t, life: 0.34, s0: 0.15 * S, s1: 1.75 * S, c0: 0xfff0c8, c1: 0x6a4a20, fog });
+    for (let k = 0; k < nClods; k++) {
+      const a = H(k, 5) * Math.PI * 2, v = (0.8 + 1.4 * H(k, 6)) * S;
+      this.debris!.spawn({ x, y: 0.1, z, vx: Math.cos(a) * v, vz: Math.sin(a) * v, vy: (3 + 2.5 * H(k, 7)) * S, g: 11, t0: t, life: 2.6 + 1.2 * H(k, 8), s0: (0.05 + 0.04 * H(k, 9)) * S, s1: (0.035 + 0.03 * H(k, 10)) * S, c0: clods[k % clods.length], spin: 8 + 10 * H(k, 11), seed: H(k, 12), fog });
+    }
+    for (let k = 0; k < 6; k++) {
+      const a = H(k, 13) * Math.PI * 2, v = 1.5 + 1.6 * H(k, 14);
+      g.spawn({ x, y: 0.15, z, vx: Math.cos(a) * v, vz: Math.sin(a) * v, vy: 2 + 2 * H(k, 15), g: 9, t0: t, life: 0.35 + 0.3 * H(k, 16), s0: 0.04, s1: 0.022, c0: 0xffe9a0, c1: 0xff5a10, fog });
+    }
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + H(k, 17) * 0.5, v = (1.1 + 0.7 * H(k, 18)) * S;
+      p.spawn({ x: x + Math.cos(a) * 0.25 * S, y: 0.06, z: z + Math.sin(a) * 0.25 * S, vx: Math.cos(a) * v, vz: Math.sin(a) * v, drag: 2.4, vy: 0.12, t0: t, life: 1.6 + 0.8 * H(k, 19), s0: 0.14 * S, s1: 0.45 * S, c0: 0x8a7a62, c1: 0x9c9384, fog });
+    }
+    for (let k = 0; k < 4; k++) p.spawn({ x: x + (H(k, 20) - 0.5) * 0.2, y: 0.2 + 0.12 * k, z: z + (H(k, 21) - 0.5) * 0.2, vy: 0.55 + 0.25 * H(k, 22), t0: t + 0.06 * k, life: 3 + 1.2 * H(k, 23), s0: 0.16 * S, s1: (0.62 + 0.2 * H(k, 24)) * S, c0: 0x3c3834, c1: 0x7a7672, fog });
+  }
+
+  private fx4(e: SimEvent, t: number) {
+    const s = this.fxSeq++, H = (k: number, salt: number) => hash2(s, k, salt);
+    if (e.e === 'fire') {
+      const u = this.w.units[e.unit - 1];
+      if (!u || !this.visibleUnit(u)) return;
+      const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER, L = gun ? 0.42 : 0.44, y = gun ? 0.32 : 0.2;
+      const mx = e.x / SUB + Math.cos(a) * L, mz = e.z / SUB + Math.sin(a) * L, fog = u.side !== SIDE_PLAYER;
+      this.glow!.spawn({ x: mx, y, z: mz, t0: t, life: 0.08, s0: 0.1, s1: gun ? 0.34 : 0.22, c0: 0xfff6c8, c1: 0xffa040, fog });
+      this.glow!.spawn({ x: mx, y, z: mz, vx: Math.cos(a) * 2.2, vz: Math.sin(a) * 2.2, drag: 9, t0: t, life: 0.11, s0: 0.07, s1: gun ? 0.2 : 0.13, c0: 0xffe090, c1: 0xff6020, fog });
+      for (let k = 0; k < (gun ? 5 : 3); k++) {
+        const v = 0.7 + 0.7 * H(k, 1), side = (H(k, 2) - 0.5) * 0.8;
+        this.puff!.spawn({ x: mx, y, z: mz, vx: Math.cos(a + side) * v, vz: Math.sin(a + side) * v, drag: 3, vy: 0.22, t0: t + 0.02 * k, life: 1 + 0.6 * H(k, 3), s0: 0.05, s1: gun ? 0.3 : 0.22, c0: 0xc8c2b6, c1: 0x8f8b85, fog });
+      }
+      if (gun) {
+        for (let k = 0; k < 4; k++) { const b = (k / 4) * Math.PI * 2; this.puff!.spawn({ x: e.x / SUB, y: 0.04, z: e.z / SUB, vx: Math.cos(b) * 1.1, vz: Math.sin(b) * 1.1, drag: 3, vy: 0.05, t0: t, life: 1.1, s0: 0.08, s1: 0.26, c0: 0x9a8b74, c1: 0xa59c8c, fog }); }
+        this.shake(0.02, e.x / SUB, e.z / SUB, t);
+      }
+    } else if (e.e === 'impact') {
+      const x = e.x / SUB, z = e.z / SUB;
+      if (e.kind === SHELL_HE) { this.blast(x, z, t, 1, true, DIRT, 7); if (this.vis(x, z)) this.shake(0.06, x, z, t); return; }   // 看不到的彈著不震（不洩漏）
+      // 穿甲彈：打中建築噴牆色碎片；打空或打中車輛噴火星
+      const b = e.bld ? this.w.blds[e.bld - 1] : null, fog = true;
+      this.glow!.spawn({ x, y: b ? 0.3 : 0.15, z, t0: t, life: 0.07, s0: 0.08, s1: 0.26, c0: 0xfff2c0, c1: 0xffa040, fog });
+      if (b) {
+        const wall = bldColors(b.kind).wall.getHex();
+        for (let k = 0; k < 6; k++) {
+          const a = H(k, 1) * Math.PI * 2, v = 0.6 + 1.2 * H(k, 2);
+          this.debris!.spawn({ x, y: 0.25 + 0.15 * H(k, 3), z, vx: Math.cos(a) * v, vz: Math.sin(a) * v, vy: 1.5 + 1.8 * H(k, 4), g: 10, t0: t, life: 2.2 + H(k, 5), s0: 0.035 + 0.035 * H(k, 6), s1: 0.03, c0: k % 3 ? wall : RUBBLE_COLORS[k % RUBBLE_COLORS.length].getHex(), spin: 10, seed: H(k, 7), fog });
+        }
+        for (let k = 0; k < 3; k++) this.puff!.spawn({ x: x + (H(k, 8) - 0.5) * 0.3, y: 0.2 + 0.1 * k, z: z + (H(k, 9) - 0.5) * 0.3, vy: 0.3, t0: t, life: 1.6 + 0.6 * H(k, 10), s0: 0.08, s1: 0.32, c0: 0x9a8b74, c1: 0xa8a090, fog });
+      } else {
+        for (let k = 0; k < 6; k++) {
+          const a = H(k, 11) * Math.PI * 2, v = 1.4 + 1.8 * H(k, 12);
+          this.glow!.spawn({ x, y: 0.15, z, vx: Math.cos(a) * v, vz: Math.sin(a) * v, vy: 1.4 + 1.6 * H(k, 13), g: 9, t0: t, life: 0.3 + 0.25 * H(k, 14), s0: 0.035, s1: 0.02, c0: 0xfff0b0, c1: 0xff6a20, fog });
+        }
+        for (let k = 0; k < 2; k++) this.puff!.spawn({ x, y: 0.06, z, vy: 0.2, t0: t + 0.05 * k, life: 1.2, s0: 0.07, s1: 0.24, c0: 0x8a7a62, c1: 0x9c9384, fog });
+      }
+    } else if (e.e === 'stage') {
+      const b = this.w.blds[e.bld - 1], from = this.lastStage[b.id] ?? STAGE_INTACT;
+      this.lastStage[b.id] = e.stage;
+      this.stage4(b, from, e.stage, t);
+    } else if (e.e === 'kill') {
+      const u = this.w.units[e.unit - 1];
+      if (!u || !this.visibleUnit(u)) return;
+      const x = u.x / SUB, z = u.z / SUB, fog = u.side !== SIDE_PLAYER;
+      if (u.kind === UK_OBSERVER) {
+        for (let k = 0; k < 3; k++) this.puff!.spawn({ x, y: 0.08, z, vy: 0.2, t0: t + 0.05 * k, life: 1.4, s0: 0.06, s1: 0.22, c0: 0x9a8b74, c1: 0xa59c8c, fog });
+        return;
+      }
+      const tank = u.kind === UK_TANK;
+      this.blast(x, z, t, tank ? 1.25 : 0.9, fog, STEEL, tank ? 7 : 5);
+      this.shake(tank ? 0.07 : 0.045, x, z, t);
+      if (tank) this.toss.set(u.id, { t0: t, vx: (H(1, 30) - 0.5) * 1.4, vz: (H(2, 30) - 0.5) * 1.4, spin: 5 + 6 * H(3, 30), yaw: Math.atan2(-u.aimZ, u.aimX), tilt: H(4, 30) - 0.5 });
+      if (tank) this.addEmitter(E_WRECKFIRE, u.id, x - 0.15, z - 0.15, 0.3, 0.3, 0.2, t, t + 15, fog);
+      this.addEmitter(E_WRECKSMOKE, u.id, x, z, 0, 0, 0.25, t + 0.3, tank ? Infinity : t + 10, fog);
+    } else if (e.e === 'build') {
+      // R006 布陣落地：腳下揚一圈塵
+      const b = this.w.blds[e.bld - 1];
+      if (!b) return;
+      if (this.lastStage.length > b.id) this.lastStage[b.id] = STAGE_INTACT;
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2, cx = b.x + b.w / 2, cz = b.z + b.d / 2, r = Math.max(b.w, b.d) * 0.55;
+        this.puff!.spawn({ x: cx + Math.cos(a) * r, y: 0.05, z: cz + Math.sin(a) * r, vx: Math.cos(a) * 0.8, vz: Math.sin(a) * 0.8, drag: 2.5, vy: 0.1, t0: t + 0.03 * k, life: 1.6, s0: 0.12, s1: 0.4, c0: 0x9a8b74, c1: 0xb0a898 });
+      }
+    }
+  }
+
+  // 建築換階段：完好 → 沒屋頂＝屋頂炸飛、起火；任何 → 瓦礫＝倒塌殘影沉進地面、大團揚塵、碎塊四散
+  private stage4(b: Building, from: number, to: number, t: number) {
+    const s = this.fxSeq++, H = (k: number, salt: number) => hash2(s, k, salt);
+    const cx = b.x + b.w / 2, cz = b.z + b.d / 2, wallH = wallHeight(b), rise = ROOF_RISE[b.kind] ?? 0.32, col = bldColors(b.kind);
+    const wall = col.wall.getHex(), roof = col.roof.getHex();
+    if (from === STAGE_INTACT && to !== STAGE_INTACT) {
+      const n = Math.min(20, 10 + 2 * b.w * b.d);
+      for (let k = 0; k < n; k++) {
+        const x = b.x + 0.15 + H(k, 1) * (b.w - 0.3), z = b.z + 0.15 + H(k, 2) * (b.d - 0.3);
+        this.debris!.spawn({ x, y: wallH + rise * 0.5, z, vx: (x - cx) * 1.6 + (H(k, 3) - 0.5), vz: (z - cz) * 1.6 + (H(k, 4) - 0.5), vy: 2.2 + 2.4 * H(k, 5), g: 9, t0: t, life: 3.5 + 1.5 * H(k, 6), s0: 0.07 + 0.06 * H(k, 7), s1: 0.025, c0: roof, spin: 6 + 8 * H(k, 8), seed: H(k, 9) });
+      }
+      this.glow!.spawn({ x: cx, y: wallH * 0.7, z: cz, t0: t, life: 0.2, s0: 0.3, s1: 0.85, c0: 0xffe8a0, c1: 0xff7020 });
+      for (let k = 0; k < 6; k++) this.puff!.spawn({ x: cx + (H(k, 10) - 0.5) * b.w, y: wallH, z: cz + (H(k, 11) - 0.5) * b.d, vy: 0.45, t0: t + 0.04 * k, life: 2.2 + H(k, 12), s0: 0.14, s1: 0.5, c0: 0x9a8b74, c1: 0x9c9384 });
+      this.shake(0.035, cx, cz, t);
+    }
+    if (to === STAGE_ROOFLESS) {
+      this.addEmitter(E_FIRE, b.id, b.x + 0.15, b.z + 0.15, b.w - 0.3, b.d - 0.3, wallH * 0.72, t, t + 20, false);
+      this.addEmitter(E_SMOKE, b.id, b.x, b.z, b.w, b.d, wallH * 0.72, t + 0.4, Infinity, false);
+      return;
+    }
+    if (to !== STAGE_RUBBLE) return;
+    for (const em of this.emitters) if (em.id === b.id && (em.kind === E_FIRE || em.kind === E_SMOKE)) em.until = Math.min(em.until, t);
+    const h = (from === STAGE_INTACT ? wallH + rise : wallH * 0.72) + 0.05;
+    const g = buildingGeo(new Geo(), b, from);
+    this.ghosts!.add(g, t, h, cx, cz, hash2(b.id, 3, 77));
+    const R = Math.max(b.w, b.d) * 0.5;
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2 + H(k, 13) * 0.4, v = 1.2 + 0.9 * H(k, 14);
+      this.puff!.spawn({ x: cx + Math.cos(a) * R, y: 0.08, z: cz + Math.sin(a) * R, vx: Math.cos(a) * v, vz: Math.sin(a) * v, drag: 1.6, vy: 0.14, t0: t + 0.05 + 0.02 * (k % 4), life: 2.6 + 1.2 * H(k, 15), s0: 0.25, s1: 0.8 + 0.3 * H(k, 16), c0: 0x9a8b74, c1: 0xb0a898 });
+    }
+    for (let k = 0; k < 6; k++) this.puff!.spawn({ x: cx + (H(k, 17) - 0.5) * b.w * 0.6, y: 0.2, z: cz + (H(k, 18) - 0.5) * b.d * 0.6, vy: 0.6 + 0.3 * H(k, 19), t0: t + 0.15 * k, life: 3 + H(k, 20), s0: 0.3, s1: 1 + 0.3 * H(k, 21), c0: 0x8d8170, c1: 0xa69e90 });
+    const pal = [wall, wall, roof, RUBBLE_COLORS[0].getHex(), RUBBLE_COLORS[1].getHex(), RUBBLE_COLORS[2].getHex()];
+    for (let k = 0; k < 22; k++) {
+      const a = H(k, 22) * Math.PI * 2, v = 0.5 + 1.3 * H(k, 23);
+      this.debris!.spawn({ x: cx + Math.cos(a) * R * 0.5, y: h * (0.25 + 0.7 * H(k, 24)), z: cz + Math.sin(a) * R * 0.5, vx: Math.cos(a) * v, vz: Math.sin(a) * v, vy: 1 + 2.2 * H(k, 25), g: 10, t0: t + 0.1 * H(k, 26), life: 4 + 2 * H(k, 27), s0: 0.06 + 0.08 * H(k, 28), s1: 0.05 + 0.05 * H(k, 29), c0: pal[k % pal.length], spin: 4 + 6 * H(k, 30), seed: H(k, 31) });
+    }
+    this.glow!.spawn({ x: cx, y: 0.03, z: cz, t0: t, life: 0.5, s0: R * 1.2, s1: R * 2, c0: 0xc08040, c1: 0x201000, flat: true });
+    this.addEmitter(E_DUST, b.id, b.x, b.z, b.w, b.d, 0.1, t + 0.6, t + 6, false);
+    this.shake(0.08, cx, cz, t);
+  }
+
+  private emit(em: Emitter, t: number, n: number) {
+    const H = (k: number) => hash2(em.id * 131 + em.kind, n, k), fog = em.fog;
+    const x = em.x + H(1) * em.w, z = em.z + H(2) * em.d;
+    if (em.kind === E_FIRE || em.kind === E_WRECKFIRE) {
+      const wreck = em.kind === E_WRECKFIRE;
+      this.glow!.spawn({ x, y: wreck ? 0.15 : 0.05 + 0.4 * em.h * H(3), z, vy: 0.7 + 0.4 * H(4), drag: 1, t0: t, life: 0.45 + 0.3 * H(5), s0: 0.06, s1: (wreck ? 0.12 : 0.15) + 0.06 * H(6), c0: 0xffe27a, c1: 0xff3c10, fog });
+      if (n % 3 === 0) this.glow!.spawn({ x, y: em.h * 0.8, z, vx: (H(7) - 0.5) * 0.6, vz: (H(8) - 0.5) * 0.6, vy: 1.3 + 0.5 * H(9), drag: 0.5, t0: t, life: 1.2 + 0.4 * H(10), s0: 0.024, s1: 0.016, c0: 0xffc050, c1: 0xff3000, fog });
+      if (n % 5 === 0) this.puff!.spawn({ x, y: em.h + 0.1, z, vy: 0.55, t0: t, life: 3, s0: 0.1, s1: 0.5, c0: 0x2e2b28, c1: 0x76726e, fog });
+    } else if (em.kind === E_SMOKE) {
+      this.puff!.spawn({ x: em.x + em.w * (0.3 + 0.4 * H(1)), y: em.h * 0.8, z: em.z + em.d * (0.3 + 0.4 * H(2)), vy: 0.45, t0: t, life: 3.4, s0: 0.13, s1: 0.6, c0: 0x3d3a37, c1: 0x8a8784, fog });
+    } else if (em.kind === E_WRECKSMOKE) {
+      this.puff!.spawn({ x: em.x + (H(1) - 0.5) * 0.15, y: em.h, z: em.z + (H(2) - 0.5) * 0.15, vy: 0.55, t0: t, life: 3.2, s0: 0.1, s1: 0.5, c0: 0x221f1d, c1: 0x5d5a57, fog });
+    } else {
+      this.puff!.spawn({ x, y: 0.05, z, vy: 0.12, t0: t, life: 2, s0: 0.16, s1: 0.48, c0: 0x9a8b74, c1: 0xa59c8c, fog });
+    }
+  }
+
+  private updateFx(t: number) {
+    this.ghosts!.update(t);
+    let j = 0;
+    for (const em of this.emitters) {
+      const oldest = t - E_LIFE[em.kind];
+      if (em.next < oldest) em.next = em.t0 + Math.ceil((oldest - em.t0) / em.every) * em.every;
+      while (em.next <= t && em.next < em.until) { this.emit(em, em.next, Math.round((em.next - em.t0) / em.every)); em.next += em.every; }
+      // 火光：貼地、閃爍的加色光暈（不加燈）
+      if ((em.kind === E_FIRE || em.kind === E_WRECKFIRE) && t >= em.t0 && t < em.until && (!em.fog || this.vis(em.x, em.z))) {
+        const fl = 0.75 + 0.25 * Math.sin(t * 23 + em.id) * Math.sin(t * 7.3 + em.id * 2), r = Math.max(em.w, em.d, 0.4) * 0.9 + 0.35;
+        this.glow!.put(em.x + em.w / 2, 0.03, em.z + em.d / 2, r * fl, 0.02, r * fl, 0, 0xff7a2a, 0.55 * fl);
+      }
+      if (em.next < em.until) this.emitters[j++] = em;
+    }
+    this.emitters.length = j;
+    this.puff!.update(t, this.vis); this.glow!.update(t, this.vis); this.debris!.update(t, this.vis); this.ring!.update(t, this.vis);
+    this.puff!.finish(); this.glow!.finish(); this.debris!.finish(); this.ring!.finish();
+  }
+
+  // 砲塔飛起：彈道、翻滾，落在車旁（繞砲塔中心轉）
+  private tossMatrix(T: Toss, x: number, z: number, t: number): THREE.Matrix4 {
+    const dt = Math.max(0, t - T.t0), g = 9, vy = 3.4, tl = (2 * vy) / g, k = Math.min(dt, tl);
+    const px = x + T.vx * k, pz = z + T.vz * k;
+    let py: number, rx: number, ry: number, rz: number;
+    if (dt < tl) { py = 0.2 + vy * dt - 0.5 * g * dt * dt; rx = T.spin * dt; ry = T.yaw + T.spin * 0.5 * dt; rz = T.spin * 0.7 * dt; }
+    else { py = 0.07; rx = T.tilt * 0.8; ry = T.yaw + T.spin * 0.5 * tl; rz = 0.45 + T.tilt * 0.3; }
+    const e = this.tmp;
+    e.position.set(px, py, pz); e.rotation.set(rx, ry, rz); e.scale.setScalar(1); e.updateMatrix();
+    return this.mA.multiplyMatrices(e.matrix, this.mB.makeTranslation(0, -0.2, 0));
+  }
+
+  // 守衛與煙霧測試用
+  get pools() {
+    return this.r4 ? { puff: this.puff!.count, glow: this.glow!.count, debris: this.debris!.count, ring: this.ring!.count, ghost: this.ghosts!.count }
+      : { puff: 0, glow: 0, debris: 0, ring: 0, ghost: 0 };
+  }
+  get poolCaps() { return this.r4 ? { puff: this.puff!.cap, glow: this.glow!.cap, debris: this.debris!.cap, ring: this.ring!.cap } : null; }
+  fxDigest(): string {
+    if (!this.r4) return 'off';
+    let h = 0x811c9dc5;
+    h = this.puff!.digest(h); h = this.glow!.digest(h); h = this.debris!.digest(h); h = this.ring!.digest(h); h = this.ghosts!.digest(h);
+    return h.toString(16).padStart(8, '0');
   }
 
   // ---- 鏡頭 ----
@@ -374,6 +648,15 @@ export class BattleView {
 
   render(renderer: THREE.WebGLRenderer, style: Style, cssW: number, cssH: number, dpr: number) {
     this.layout(cssW, cssH);
+    // R004 鏡頭震動：只加在畫面這一趟（點選用的 layout() 會重排鏡頭，不受影響）；幅度 ≤ 0.08 格、0.4 秒內衰減
+    const k = (this.lastT - this.shakeT0) / 0.4;
+    if (this.r4 && k >= 0 && k < 1) {
+      const a = this.shakeAmp * (1 - k) * (1 - k), ph = this.shakeT0 * 13.7;
+      this.cam.position.x += a * Math.sin(this.lastT * 71 + ph);
+      this.cam.position.y += a * 0.6 * Math.sin(this.lastT * 53 + ph * 2);
+      this.cam.position.z += a * Math.cos(this.lastT * 67 + ph);
+      this.cam.updateMatrixWorld();
+    }
     this.pipe.render(renderer, this.scene, this.cam, style, cssW, cssH, dpr);
   }
 

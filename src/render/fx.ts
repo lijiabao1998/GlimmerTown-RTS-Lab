@@ -20,6 +20,7 @@ export interface Spawn {
   spin?: number;               // 碎片轉速（弧度/秒）
   seed?: number;               // 碎片轉軸（0–1）
   fog?: boolean;               // 射擊線索：看不到的地方不畫（R100）
+  flat?: boolean;              // 光：壓扁貼地（地面光暈）
 }
 
 export const WIND_X = 0.22, WIND_Z = -0.1;   // 固定的風（格/秒），只影響畫面
@@ -57,7 +58,7 @@ export class Pool {
     _c.setHex(p.c0); s[o + 10] = _c.r; s[o + 11] = _c.g; s[o + 12] = _c.b;
     _c.setHex(p.c1 ?? p.c0); s[o + 13] = _c.r; s[o + 14] = _c.g; s[o + 15] = _c.b;
     s[o + 16] = p.g ?? 0; s[o + 17] = p.drag ?? 0; s[o + 18] = p.spin ?? 0; s[o + 19] = p.seed ?? 0;
-    this.fog[i] = p.fog ? 1 : 0;
+    this.fog[i] = (p.fog ? 1 : 0) | (p.flat ? 2 : 0);
   }
 
   // 每幀：先 begin，再 update（存著的粒子），再 put（不存狀態、每幀重算的實例，例如曳光），最後 finish
@@ -104,11 +105,12 @@ export class Pool {
         const r = s[o + 8] + (s[o + 9] - s[o + 8]) * (1 - (1 - k) * (1 - k));
         sx = sz = r; sy = 1; fade = (1 - k) * (1 - k);
       } else {
-        y = Math.max(0.02, y + s[o + 4] * D - 0.5 * s[o + 16] * dt * dt);
+        const flat = this.mode === M_FLAT || (this.fog[i] & 2) !== 0;
+        if (!flat) y = Math.max(0.02, y + s[o + 4] * D - 0.5 * s[o + 16] * dt * dt);
         const r = s[o + 8] + (s[o + 9] - s[o + 8]) * (1 - (1 - k) * (1 - k));
-        sx = sz = r; sy = this.mode === M_FLAT ? 0.02 : r; fade = Math.pow(1 - k, 1.5);
+        sx = sz = r; sy = flat ? 0.02 : r; fade = Math.pow(1 - k, 1.5);
       }
-      if (this.fog[i] && !visible(x, z)) continue;
+      if ((this.fog[i] & 1) && !visible(x, z)) continue;
       _c.setRGB(s[o + 10] + (s[o + 13] - s[o + 10]) * mix, s[o + 11] + (s[o + 14] - s[o + 11]) * mix, s[o + 12] + (s[o + 15] - s[o + 12]) * mix);
       this.write(x, y, z, sx, sy, sz, fade);
     }
