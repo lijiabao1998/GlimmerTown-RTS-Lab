@@ -18,6 +18,8 @@ const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean 
 const r004 = q.get('noR004') !== '1';
 // R008 車輛有重量：車轍、揚塵、後座、砲塔轉向、受擊閃光。逃生閥 ?noR008=1
 const r008 = q.get('noR008') !== '1';
+// R009 血條與戰況。逃生閥 ?noR009=1
+const r009 = q.get('noR009') !== '1';
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
 renderer.shadowMap.enabled = true;
@@ -56,7 +58,7 @@ const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.k
 function reset(s = seed, build = r006) {
   w = createWorld(s);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009);
   log = []; pending = []; acc = 0; selected.clear();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   if (build) { paused = true; refreshPreview(); }
@@ -216,6 +218,15 @@ addEventListener('keydown', e => {
 
 reset();
 
+// R009 選取資訊：平均血量與正在做什麼
+const ORD_NAME = ['待命', '移動', '攻擊', '砲擊'];
+function selInfo(sel: typeof w.units): string {
+  const hp = Math.round((100 * sel.reduce((p, u) => p + u.hp / UNIT_KINDS[u.kind].hp, 0)) / sel.length);
+  const n = [0, 0, 0, 0];
+  for (const u of sel) n[u.order] = (n[u.order] ?? 0) + 1;
+  return `血量 ${hp}%｜${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}`;
+}
+
 // ---- HUD ----
 hud = initHud({
   state: () => {
@@ -226,6 +237,7 @@ hud = initHud({
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : undefined,
       mine: mine.length, theirs: theirs.length,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => u.kind === UK_TANK).length, guns: sel.filter(u => u.kind === UK_HOWITZER).length,
+      info: r009 && sel.length ? selInfo(sel) : undefined,
     };
   },
   togglePause: () => { if (phase === 'battle') paused = !paused; },
@@ -277,7 +289,7 @@ const rts = {
     reset(SCRIPT_SEED, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009);
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -287,6 +299,8 @@ const rts = {
   focus: (x: number, z: number, zoom = 1) => { view.target.set(x, 0, z); view.zoom = zoom; },
   info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, fx: fxOn, px: style.pixelCss, r004: fxOn && r004, pools: view.pools }),
   fxDigest: () => view.fxDigest(),
+  bars: () => view.bars,
+  select: (ids: number[]) => { selected.clear(); for (const id of ids) if (w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER) selected.add(id); hud?.update(); return [...selected]; },
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
   playScript: (ticks = SCRIPT_TICKS) => {
     reset(SCRIPT_SEED, false);
