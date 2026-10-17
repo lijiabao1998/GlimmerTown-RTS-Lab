@@ -58,6 +58,7 @@ export class BattleView {
   private nextSmoke = 0;
   private marker: { x: number; z: number; until: number; col: THREE.Color } | null = null;
   private tmp = new THREE.Object3D();
+  private observerHeights = new Map<number, { x: number; z: number; height: number }>();
 
   constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true) {
     this.w = w; this.fxOn = fxOn; this.fogOn = fogOn;
@@ -118,7 +119,14 @@ export class BattleView {
     if (u.kind !== UK_OBSERVER) return 0;
     const id = this.w.occ[idx(Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
     const b = id ? this.w.blds[id - 1] : null;
-    return b && b.hp > 0 ? b.floors * 0.55 + 0.8 : 0;
+    if (!b || b.hp <= 0) return 0;
+    const cached = this.observerHeights.get(u.id);
+    if (cached && cached.x === u.x && cached.z === u.z) return cached.height;
+    // Anchor the garrison indicator to the real roof/floor surface, including damage.
+    const ray = new THREE.Raycaster(new THREE.Vector3(u.x / SUB, 20, u.z / SUB), new THREE.Vector3(0, -1, 0));
+    const height = ray.intersectObject(this.town, false)[0]?.point.y ?? 0;
+    this.observerHeights.set(u.id, { x: u.x, z: u.z, height });
+    return height;
   }
 
   visibleAt(x: number, z: number): boolean {
@@ -188,7 +196,7 @@ export class BattleView {
         if (this.fxOn) this.burst(u.x / SUB, 0.2, u.z / SUB, 0.45, simT, 4, false);
       }
     }
-    if (townDirty) { this.town.geometry.dispose(); this.town.geometry = buildTown(this.w).geometry(); }
+    if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w).geometry(); }
     if (groundDirty) this.groundTex.needsUpdate = true;
   }
 

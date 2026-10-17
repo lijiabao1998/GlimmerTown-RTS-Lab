@@ -55,3 +55,11 @@ const move = (u,x,z) => ({t:'move',side:u.side,ids:[u.id],x,z});
  assert(v.observerMesh.geometry.attributes.position.count>off.observerMesh.geometry.attributes.position.count,'detail valve removes detail');v.dispose();off.dispose();
 }
 console.log('observer: spawn, sight, entry/exit, noncombat, cover/collapse, artillery, replay and render valve passed');
+
+{
+ const w=blank(),o=activate(w,9,6,6),b=house(w,6,6,1,1),v=new BattleView(w,false);
+ assert(Math.abs(v.unitHeight(o)-0.78)<1e-5,'garrison marker feet meet actual house ridge');
+ b.hp=70;v.onEvents([{e:'stage',bld:1,stage:1}],0);
+ assert(v.unitHeight(o)<0.2,'roof loss moves marker to actual interior floor/beam');
+ v.dispose();
+}
