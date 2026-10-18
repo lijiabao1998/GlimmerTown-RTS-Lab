@@ -2,7 +2,7 @@
 import { isqrt } from './math.ts';
 import { nextU32, randInt, type RngState } from './rng.ts';
 import {
-  N, idx, inMap, cellOf, blocks, bldMaxHp, TER_ROAD, BK_COTTAGE, BK_HOUSE, BK_BARN, BK_PILLBOX, SIDE_PLAYER, SIDE_ENEMY,
+  N, idx, inMap, cellOf, blocks, bldMaxHp, TER_ROAD, TER_MUD, BK_COTTAGE, BK_HOUSE, BK_BARN, BK_PILLBOX, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Building,
 } from './world.ts';
 
@@ -86,6 +86,7 @@ export function buildError(w: World, cmd: BuildCmd): string | null {
     if (!territory(cmd.side, x, z)) return territory(1 - cmd.side, x, z) ? 'foreign' : 'neutral';
   }
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_ROAD) return 'road';
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_MUD) return 'mud';   // R026
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[idx(x, z)]) return 'occupied';
   for (const u of w.units) {
     if (!u.alive) continue;
