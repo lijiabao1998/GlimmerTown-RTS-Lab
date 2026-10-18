@@ -66,7 +66,8 @@ async function main() {
       await E('__rts.pause(true);__rts.runScript(0);__rts.issue({t:"eco",inf:1,guns:1,tanks:1});__rts.stepN(1);__rts.pause(true);__rts.focus(27,27,1);__rts.select([1,4,9]);');
       await frames();
     };
-    const mouse = (type, x, y, modifiers = 0) => page.send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, modifiers });
+    // Keep button and buttons consistent while dragging, as Puppeteer's CdpMouse.move does.
+    const mouse = (type, x, y, modifiers = 0) => page.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, modifiers });
     const touch = (type, points) => page.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x,y,id=1]) => ({ x, y, id })) });
     const gunPoint = async () => {
       const p = await E('__rts.screenOf(4)');
@@ -89,9 +90,11 @@ async function main() {
         const x0 = Math.floor(Math.min(...points.map(p=>p.p[0])))-12, x1=Math.ceil(Math.max(...points.map(p=>p.p[0])))+12;
         const y0 = Math.floor(Math.min(...points.map(p=>p.p[1])))-12, y1=Math.ceil(Math.max(...points.map(p=>p.p[1])))+12;
         const want = points.map(p=>p.id).sort((a,b)=>a-b), before=await state();
+        await E(`window.__r109Trace=[];for(const type of ['pointerdown','pointermove','pointerup','pointercancel','lostpointercapture','resize','blur'])window.addEventListener(type,e=>window.__r109Trace.push({type,id:e.pointerId,pointer:e.pointerType,button:e.button,buttons:e.buttons,shift:e.shiftKey,target:e.target?.id||e.target?.tagName,x:e.clientX,y:e.clientY}),true);`);
         for (const [ax,ay,bx,by] of [[x0,y0,x1,y1],[x1,y0,x0,y1],[x0,y1,x1,y0],[x1,y1,x0,y0]]) {
           await E('__rts.select([9])'); await mouse('mousePressed',ax,ay,8); await mouse('mouseMoved',bx,by,8); await frames();
-          assertions(await E('!!document.querySelector("#selection-box:not([hidden])")'), 'box: real Shift drag displays rectangle');
+          const boxVisible=await E('!!document.querySelector("#selection-box:not([hidden])")');
+          assertions(boxVisible, 'box: real Shift drag displays rectangle '+(boxVisible?'':JSON.stringify(await E('({events:window.__r109Trace,phase:__rts.phase(),winner:__rts.winner(),help:document.querySelector("#help")?.hidden,report:document.querySelector("#report")?.hidden,box:document.querySelector("#selection-box")?.outerHTML})'))));
           if (!overlay['index.html']) await shot(page,path.join(ROOT,'shots/r109-box.png'));
           await mouse('mouseReleased',bx,by,8); await frames();
           assert.deepEqual((await state()).selected.sort((a,b)=>a-b),want,'box: four directions add all live friendly projected units');
