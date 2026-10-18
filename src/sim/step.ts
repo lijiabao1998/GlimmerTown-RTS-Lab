@@ -366,7 +366,7 @@ function updateShells(w: World): void {
 }
 
 function checkWinner(w: World): void {
-  if (w.winner >= 0 || w.shells.length) return;      // 還有砲彈在飛就先不判（可能同歸於盡）
+  if (w.winner >= 0 || w.shells.some(s => s.kind !== SHELL_SMOKE)) return; // 只等可能改變結局的砲彈；無傷害煙幕不拖延戰報
   if (w.eco) {   // R019：有指揮部時，指揮部塌了才輸（全軍覆沒但指揮部還在可以再出兵）
     const a = !!hqAlive(w, SIDE_PLAYER), b = !!hqAlive(w, SIDE_ENEMY);
     if (!a && !b) w.winner = 2; else if (!b) w.winner = SIDE_PLAYER; else if (!a) w.winner = SIDE_ENEMY;
