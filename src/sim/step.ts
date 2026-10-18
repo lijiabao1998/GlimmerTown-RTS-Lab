@@ -281,10 +281,13 @@ function pierced(k: { pierce: number; soft: number }, t: Unit, dmg: number): num
 // R021：能進駐的單位待在還站著的房子裡時，射線不算自己這棟
 function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) return 0; const b = bldAt(w, cellOf(u.x), cellOf(u.z)); return b && b.hp > 0 ? b.id : 0; }
 
-function damageUnit(w: World, u: Unit, dmg: number): void {
+function damageUnit(w: World, u: Unit, dmg: number, allowCraterCover = true): void {
   if (!u.alive || dmg <= 0) return;
-  const home = UNIT_KINDS[u.kind].garrison && blocks(w, cellOf(u.x), cellOf(u.z)) ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
-  const cover = !home ? 100 : home.kind === BK_PILLBOX ? 25 : 50;   // R024 碉堡裡只吃四分之一
+  const x = cellOf(u.x), z = cellOf(u.z);
+  const home = UNIT_KINDS[u.kind].garrison && blocks(w, x, z) ? bldAt(w, x, z) : null;
+  // R106：只用命中前已有的彈坑；建築掩護更強，不疊乘。倒塌傷害不吃地形掩護。
+  const ground = allowCraterCover && inMap(x, z) && w.crater[idx(x, z)] > 0 ? 75 : 100;
+  const cover = !home ? ground : home.kind === BK_PILLBOX ? 25 : 50;   // R024 碉堡裡只吃四分之一
   u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor * cover) / 10000);
   if (u.hp <= 0) { u.hp = 0; u.alive = false; u.path = []; u.pathIdx = 0; u.order = ORD_IDLE; w.events.push({ e: 'kill', unit: u.id }); }
 }
@@ -296,7 +299,7 @@ function damageBld(w: World, b: Building, dmg: number): void {
   const after = stageOf(b);
   if (after !== before) w.events.push({ e: 'stage', bld: b.id, stage: after });
   if (b.hp === 0) for (const u of w.units) {
-    if (u.alive && UNIT_KINDS[u.kind].garrison && bldAt(w, cellOf(u.x), cellOf(u.z))?.id === b.id) damageUnit(w, u, 20);
+    if (u.alive && UNIT_KINDS[u.kind].garrison && bldAt(w, cellOf(u.x), cellOf(u.z))?.id === b.id) damageUnit(w, u, 20, false);
   }
 }
 
