@@ -3,7 +3,7 @@
 import { dist } from './math.ts';
 import { hqAlive } from './eco.ts';
 import {
-  N, SUB, center, cellOf, inMap, idx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR,
+  N, SUB, center, cellOf, inMap, idx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY,
   ORD_IDLE, ORD_ATTACK, SIDE_PLAYER, type World, type Unit, type AiState,
 } from './world.ts';
 
@@ -56,8 +56,11 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
     if (q.length < 2) {
       // R022 有砲（guns）時普通以上各保持一門：看到敵方坦克就先補反戰車砲；平常排在榴彈砲後面
       const foeArmor = seen.some(u => UNIT_KINDS[u.kind].armored), guns = e.guns && lv >= 2;
+      // R023 坦克以 armored 算（輕、中、重一起）；有 tanks 時普通以上各保持一台輕、重坦克，其餘出中坦克
+      const tankN = mine.filter(u => UNIT_KINDS[u.kind].armored).length + q.filter(k => UNIT_KINDS[k].armored).length;
+      const tankPick = e.tanks && lv >= 2 ? (has(UK_LIGHT) < 1 ? UK_LIGHT : has(UK_HEAVY) < 1 ? UK_HEAVY : UK_TANK) : UK_TANK;
       const want = has(UK_OBSERVER) < 1 ? UK_OBSERVER : guns && foeArmor && has(UK_ATGUN) < 1 ? UK_ATGUN : e.inf && has(UK_INFANTRY) < (lv >= 2 ? 2 : 1) ? UK_INFANTRY
-        : has(UK_HOWITZER) < (lv >= 2 ? 2 : 1) && has(UK_TANK) >= 2 ? UK_HOWITZER : guns && has(UK_MORTAR) < 1 ? UK_MORTAR : guns && has(UK_ATGUN) < 1 ? UK_ATGUN : UK_TANK;
+        : has(UK_HOWITZER) < (lv >= 2 ? 2 : 1) && tankN >= 2 ? UK_HOWITZER : guns && has(UK_MORTAR) < 1 ? UK_MORTAR : guns && has(UK_ATGUN) < 1 ? UK_ATGUN : tankPick;
       if (e.supply[side] >= UNIT_KINDS[want].cost) out.push({ t: 'produce', side, kind: want });
     }
   }
@@ -70,7 +73,8 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
       st.wp = (st.wp + 1) % pts.length; st.ox = center(pts[st.wp][0]); st.oz = center(pts[st.wp][1]);
     }
   }
-  const tanks = mine.filter(u => u.kind === UK_TANK), guns = mine.filter(u => u.kind === UK_HOWITZER || u.kind === UK_MORTAR), obs = mine.filter(u => u.kind === UK_OBSERVER);
+  const tanks = mine.filter(u => UNIT_KINDS[u.kind].armored),   // R023：輕、中、重坦克一起（沒有新坦克時就是原本的坦克）
+    guns = mine.filter(u => u.kind === UK_HOWITZER || u.kind === UK_MORTAR), obs = mine.filter(u => u.kind === UK_OBSERVER);
 
   // ---- 坦克 ----
   // 遊戲裡沒有維修，撤退等於放棄（第一版試過：受重傷的撤回老家就再也不出來，整局僵住），所以受傷的也一起打
@@ -130,7 +134,7 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
       }
       continue;
     }
-    ok.sort((a, b) => (a.kind === UK_TANK ? 0 : 1) - (b.kind === UK_TANK ? 0 : 1) || dist(g.x, g.z, a.x, a.z) - dist(g.x, g.z, b.x, b.z) || a.id - b.id);
+    ok.sort((a, b) => (UNIT_KINDS[a.kind].armored ? 0 : 1) - (UNIT_KINDS[b.kind].armored ? 0 : 1) || dist(g.x, g.z, a.x, a.z) - dist(g.x, g.z, b.x, b.z) || a.id - b.id);
     out.push({ t: 'attack', side, ids: [g.id], target: ok[0].id });
   }
 

@@ -18,7 +18,7 @@ export type Command =
   | { t: 'stop'; side: number; ids: number[] }
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）
-  | { t: 'eco'; inf?: number; guns?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克）
   | { t: 'produce'; side: number; kind: number };   // R019：花補給排進生產佇列
 
 export interface LoggedCommand { tick: number; cmd: Command }
@@ -33,7 +33,7 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 export function applyCommand(w: World, cmd: Command): void {
   if (cmd.t === 'build') return;   // 布陣指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
