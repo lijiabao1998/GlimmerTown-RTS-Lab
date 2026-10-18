@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
   N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
-  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, type Unit, type World, type SimEvent, type Building,
+  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
@@ -16,6 +16,8 @@ import { Pipeline, type Style } from './post.ts';
 const PX = 8;                       // 地面貼圖：每格 8×8 像素
 const MAX_UNITS = 64, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
 export const TURRET_RATE = 3;        // R008 砲塔最大轉速（弧度／秒）
+const DASH_CAP = 900;                 // R011 地上短線最多幾段
+const DK_PATH = 0, DK_ATTACK = 1, DK_FIRE = 2, DK_END = 3, DK_CROSS = 4;
 const ELEV = Math.PI / 6;           // 鏡頭仰角 30°，水平 45°（與 2D 線、3D-lab 相同的 2:1 斜視）
 const BASE_HALF_H = 9;              // zoom=1 時畫面上下各看幾格
 
@@ -124,7 +126,13 @@ export class BattleView {
   // 守衛用：上一幀畫了哪些血條（預配，不每幀配置）
   readonly barDbg = { n: 0, id: new Int32Array(MAX_UNITS + 64), frac: new Float32Array(MAX_UNITS + 64), ghost: new Float32Array(MAX_UNITS + 64), r: new Float32Array(MAX_UNITS + 64), g: new Float32Array(MAX_UNITS + 64) };
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true) {
+  // ---- R011 指令回饋（?noR011=1 時不畫）----
+  private dash: THREE.InstancedMesh | null = null;
+  private nd11 = 0;
+  // 守衛用：上一幀畫了哪些短線（預配）
+  readonly dashDbg = { n: 0, x: new Float32Array(DASH_CAP), z: new Float32Array(DASH_CAP), kind: new Uint8Array(DASH_CAP), unit: new Int32Array(DASH_CAP) };
+
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true) {
     this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
@@ -174,6 +182,10 @@ export class BattleView {
     this.observerMesh = inst(observer(observerDetails), toon({ vertexColors: true }), MAX_UNITS, true);
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
+    if (r011) {
+      // 地上的短線片（加色＝在地上發亮，越淡＝顏色越暗），會被房子擋住（測深度、不寫深度）
+      this.dash = inst(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }), DASH_CAP, false);
+    }
     if (r009) {
       // 血條：一片從 x=0 往右長的四邊形；畫在所有東西上面（不測深度、不寫深度＝沒有描邊），朝著鏡頭
       const quad = new THREE.PlaneGeometry(1, 1).translate(0.5, 0, 0);
@@ -429,6 +441,7 @@ export class BattleView {
     };
     if (this.r4) this.updateFx(simT);
     if (this.r9) this.bars9(simT, selected);
+    if (this.dash) this.orders11(selected);
     fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
   }
 
@@ -769,6 +782,63 @@ export class BattleView {
     return k >= 1 || k < 0 ? now : now + (this.barFrom[id] - now) * (1 - k);
   }
   get bars() { return this.r9 ? { bg: this.barBg!.count, fill: this.barFill!.count } : { bg: 0, fill: 0 }; }
+
+
+  // ======== R011 指令回饋 ========
+  // 只畫被選取的我方單位：剩下的路（綠／紅／橘，越遠越淡）、終點方塊、攻擊線（看得到畫到目標身上，看不到畫到最後已知位置）、砲擊準星
+  private orders11(selected: Set<number>) {
+    const w = this.w, dbg = this.dashDbg;
+    this.nd11 = 0; dbg.n = 0;
+    for (const id of selected) {
+      const u = id >= 1 && id <= w.units.length ? w.units[id - 1] : null;
+      if (!u || !u.alive || u.side !== SIDE_PLAYER) continue;
+      const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * this.alpha9) / SUB, z = (this.prevZ[u.id] + (u.z - this.prevZ[u.id]) * this.alpha9) / SUB;
+      const col = u.order === ORD_ATTACK ? 0xff5040 : u.order === ORD_FIRE_AT ? 0xffa030 : 0x6cff70;
+      // 剩下的路：沿折線每 0.3 格一段
+      let px = x, pz = z, walked = 0, ex = x, ez = z;
+      for (let i = u.pathIdx; i < u.path.length && this.nd11 < DASH_CAP; i++) {
+        const c = u.path[i], cx = (c % N) + 0.5, cz = (c - (c % N)) / N + 0.5;
+        walked = this.dashes11(u.id, DK_PATH, px, pz, cx, cz, col, walked);
+        px = cx; pz = cz; ex = cx; ez = cz;
+      }
+      if (u.pathIdx < u.path.length) this.dash11(u.id, DK_END, ex, ez, 0.16, 0.16, 0, col, 1);
+      if (u.order === ORD_ATTACK) {
+        const t = w.units[u.target - 1];
+        const seen = !!t && t.alive && this.visibleUnit(t);
+        const tx = seen ? (this.prevX[t.id] + (t.x - this.prevX[t.id]) * this.alpha9) / SUB : u.tx / SUB, tz = seen ? (this.prevZ[t.id] + (t.z - this.prevZ[t.id]) * this.alpha9) / SUB : u.tz / SUB;
+        this.dashes11(u.id, DK_ATTACK, x, z, tx, tz, 0xff4030, 0);
+      } else if (u.order === ORD_FIRE_AT) {
+        const tx = u.tx + 0.5, tz = u.tz + 0.5;
+        this.dashes11(u.id, DK_FIRE, x, z, tx, tz, 0xff9a20, 0);
+        this.dash11(u.id, DK_CROSS, tx, tz, 0.6, 0.06, Math.PI / 4, 0xffb040, 1);
+        this.dash11(u.id, DK_CROSS, tx, tz, 0.6, 0.06, -Math.PI / 4, 0xffb040, 1);
+      }
+    }
+    const d = this.dash!;
+    d.count = this.nd11; d.instanceMatrix.needsUpdate = true;
+    if (d.instanceColor) d.instanceColor.needsUpdate = true;
+  }
+  // 一條線段上的虛線；walked＝之前已經走了多遠（讓整條路的虛線間距連續、越遠越淡）；回傳走到哪
+  private dashes11(id: number, kind: number, ax: number, az: number, bx: number, bz: number, col: number, walked: number): number {
+    const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz), yaw = Math.atan2(-dz, dx), STEP = 0.3;
+    if (len < 1e-6) return walked;
+    let s = (STEP - (walked % STEP)) % STEP;
+    for (; s < len && this.nd11 < DASH_CAP; s += STEP) {
+      const fade = Math.max(0.3, 1 - (walked + s) / 14);
+      this.dash11(id, kind, ax + (dx * s) / len, az + (dz * s) / len, 0.13, 0.045, yaw, col, fade);
+    }
+    return walked + len;
+  }
+  private dash11(id: number, kind: number, x: number, z: number, sx: number, sz: number, yaw: number, col: number, fade: number) {
+    if (this.nd11 >= DASH_CAP) return;
+    const m = this.tmp, dbg = this.dashDbg;
+    m.position.set(x, 0.03, z); m.rotation.set(0, yaw, 0); m.scale.set(sx, 1, sz); m.updateMatrix();
+    this.dash!.setMatrixAt(this.nd11, m.matrix);
+    this.dash!.setColorAt(this.nd11, this.barColor.setHex(col).multiplyScalar(fade));
+    dbg.x[dbg.n] = x; dbg.z[dbg.n] = z; dbg.kind[dbg.n] = kind; dbg.unit[dbg.n] = id; dbg.n++;
+    this.nd11++;
+  }
+  get dashes() { return this.dash ? this.dash.count : 0; }
 
   // ---- 鏡頭 ----
   layout(cssW: number, cssH: number) {
