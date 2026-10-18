@@ -42,6 +42,44 @@ function windows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: nu
   }
 }
 
+// ---- R028 外牆細節：依建築編號固定挑一種（只有畫面；關掉＝全部原樣）----
+export const FAC_BRICK = 0, FAC_TIMBER = 1, FAC_TILE = 2, FAC_BOARD = 3;
+let facadesOn = true;
+export function setFacades(on: boolean): void { facadesOn = on; }
+const PLASTER = C(0xe8dec4), OAK = C(0x3a2a1f), TILE = C(0xa3533a), TILE_D = C(0x7e3d2b), BOARD_D = C(0xbfb8a6);
+export function facadeStyle(b: Building): number {
+  if (!facadesOn) return FAC_BRICK;
+  const r = hash2(b.id, 3, 28);
+  if (b.kind === BK_HOUSE || b.kind === BK_SHOP) return r < 0.34 ? FAC_BRICK : r < 0.67 ? FAC_TIMBER : b.floors >= 2 ? FAC_TILE : FAC_TIMBER;
+  if (b.kind === BK_COTTAGE) return r < 0.5 ? FAC_BOARD : FAC_BRICK;
+  return FAC_BRICK;
+}
+// 四面牆各畫一層薄薄的外牆細節（外凸不到 0.01 格，窗戶 0.012 還露在外面）
+function facade(g: Geo, b: Building, style: number, x0: number, z0: number, x1: number, z1: number, h: number) {
+  const t = 0.008, faces: [number, number, number, number, number][] = [   // 沿著哪一軸、起點、終點、牆面座標、往外的方向
+    [0, x0, x1, z1, 1], [0, x0, x1, z0, -1], [1, z0, z1, x1, 1], [1, z0, z1, x0, -1],
+  ];
+  const strip = (axis: number, a0: number, a1: number, at: number, dir: number, y0: number, y1: number, c: THREE.Color, out = t) => {
+    const o0 = dir > 0 ? at : at - out, o1 = dir > 0 ? at + out : at;
+    if (axis === 0) g.box(a0, y0, o0, a1, y1, o1, c, null); else g.box(o0, y0, a0, o1, y1, a1, c, null);
+  };
+  for (const [axis, a0, a1, at, dir] of faces) {
+    if (style === FAC_TIMBER) {                                   // 角柱、每層的橫梁、間柱
+      strip(axis, a0, a0 + 0.035, at, dir, 0, h, OAK); strip(axis, a1 - 0.035, a1, at, dir, 0, h, OAK);
+      for (let f = 0; f <= b.floors; f++) { const y = Math.min(h - 0.03, f * FLOOR_H + (f ? 0.04 : 0)); strip(axis, a0, a1, at, dir, y, y + 0.03, OAK); }
+      const n = Math.max(2, Math.round((a1 - a0) / 0.22));
+      for (let k = 1; k < n; k++) { const a = a0 + ((a1 - a0) * k) / n; if (Math.abs(a - Math.round(a - 0.5) - 0.5) < 0.09) continue; strip(axis, a - 0.012, a + 0.012, at, dir, 0.03, h - 0.03, OAK); }   // 窗戶那一段不擋
+    } else if (style === FAC_TILE) {                              // 一樓紅磚，二樓以上掛瓦：底色加一道道瓦縫
+      const y0 = FLOOR_H + 0.04;
+      strip(axis, a0, a1, at, dir, y0, h, TILE);
+      for (let y = y0 + 0.045; y < h - 0.01; y += 0.045) strip(axis, a0, a1, at, dir, y, y + 0.008, TILE_D, t + 0.002);
+      strip(axis, a0, a1, at, dir, y0 - 0.02, y0, OAK, t + 0.003);    // 掛瓦下緣的收邊板
+    } else if (style === FAC_BOARD) {                             // 白色護牆板：一條條橫線
+      for (let y = 0.05; y < h - 0.02; y += 0.05) strip(axis, a0, a1, at, dir, y, y + 0.006, BOARD_D);
+    }
+  }
+}
+
 // R019 指揮部：一圈沙包、指揮所小屋、天線、旗桿與陣營色的旗（不畫任何徽記）
 const FLAG = [C(0x3b6fb6), C(0x8a8a84)];
 function hq(g: Geo, b: Building) {
@@ -91,10 +129,11 @@ function intact(g: Geo, b: Building) {
     windows(g, b, x0, z0 + tw, x1, z1, h);
     return;
   }
-  const h = wallHeight(b), alongX = b.w >= b.d;
-  g.box(x0, 0, z0, x1, h, z1, p.wall, null);
+  const h = wallHeight(b), alongX = b.w >= b.d, style = facadeStyle(b), wall = style === FAC_TIMBER ? PLASTER : p.wall;
+  g.box(x0, 0, z0, x1, h, z1, wall, null);
   const rise = b.kind === BK_BARN ? 0.42 : b.kind === BK_SHOP ? 0.22 : 0.32;
-  g.gable(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, rise, alongX, p.roof, p.wall);
+  g.gable(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, rise, alongX, p.roof, wall);
+  if (style) facade(g, b, style, x0, z0, x1, z1, h);
   if (b.kind === BK_HOUSE || b.kind === BK_SHOP) {                           // 煙囪
     const cx = alongX ? x1 - 0.18 : (x0 + x1) / 2, cz = alongX ? (z0 + z1) / 2 : z1 - 0.18;
     g.box(cx - 0.05, h, cz - 0.05, cx + 0.05, h + rise + 0.12, cz + 0.05, p.wall);
