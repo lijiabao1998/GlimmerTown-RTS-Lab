@@ -23,7 +23,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -706,6 +706,26 @@ await withBrowser({ width: 1280, height: 800, port: PORTS.facades + 2 }, async (
   await page.evaluate('__rts.focus(20, 12.5, 4); 0'); await sleep(500);
   await shot(page, path.join(SHOTS, 'desktop-facades.png'));
   log(page.errors.length === 0, '外牆細節特寫（桌機）零頁面錯誤', page.errors.join(' | '));
+});
+
+// ---- R027 人行道與黑白路緣：開局繪製呼叫、三角形跟關掉時一樣；?noR027=1 雜湊不變；桌機 High Street 特寫 ----
+let stInfo = null;
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.streets }, async ({ open, page }) => {
+  await open('');
+  stInfo = await page.evaluate('__rts.info()');
+  log(page.errors.length === 0, '人行道與路緣（手機）零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR027 }, async ({ open, page }) => {
+  await open('noR027=1');
+  const info = await page.evaluate('__rts.info()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(info.calls === stInfo.calls && info.triangles === stInfo.triangles && h === nodeHash && page.errors.length === 0, '?noR027=1：開局繪製呼叫、三角形跟開著一樣（只畫在地面貼圖）、雜湊不變',
+    `開 ${stInfo.calls}／${stInfo.triangles}、關 ${info.calls}／${info.triangles}；${h}`);
+});
+await withBrowser({ width: 1280, height: 800, port: PORTS.streets + 2 }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate('__rts.focus(14, 15.5, 4.5); 0'); await sleep(500);
+  await shot(page, path.join(SHOTS, 'desktop-streets.png'));
+  log(page.errors.length === 0, '人行道特寫（桌機）零頁面錯誤', page.errors.join(' | '));
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);

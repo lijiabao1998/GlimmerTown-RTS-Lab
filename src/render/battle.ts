@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
+  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -13,6 +13,9 @@ import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING, RISE_S } from './fx.ts'
 import { tankHull, tankTurret, howitzer, observer, soldier } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
 
+// R027 人行道與黑白路緣（只有手排地圖；畫面開關）
+let streets27 = true;
+export function setStreets(on: boolean): void { streets27 = on; }
 const PX = 8;                       // 地面貼圖：每格 8×8 像素
 const MAX_UNITS = 512, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
 export const TURRET_RATE = 3;        // R008 砲塔最大轉速（弧度／秒）
@@ -297,6 +300,16 @@ export class BattleView {
         const joint = gz % 3 === 0 || (gx + (Math.floor(gz / 3) % 2) * 2) % 4 === 0;
         r = 126 + sn * 22 + n * 6; g = 120 + sn * 18 + n * 6; bl = 108 + sn * 14 + n * 6;
         if (joint) { r -= 30; g -= 30; bl -= 26; }
+        if (streets27) {   // R027 貼著房子那一側：2 像素人行道石板＋1 像素路緣（1939–40 燈火管制：路緣漆黑白相間）
+          const sides = [[-1, 0, px, py], [1, 0, PX - 1 - px, py], [0, -1, py, px], [0, 1, PX - 1 - py, px]];
+          for (const [dx, dz, d, along] of sides) {
+            const nx = x + dx, nz = z + dz;
+            if (!inMap(nx, nz) || !w.occ[idx(nx, nz)] || d > 2) continue;
+            if (d <= 1) { const j = (along + (dx ? gz : gx)) % 3 === 0; r = 170 + n * 10 - (j ? 22 : 0); g = 166 + n * 10 - (j ? 22 : 0); bl = 154 + n * 8 - (j ? 20 : 0); }
+            else { const white = ((dx ? gz : gx) >> 1) % 2 === 0; r = g = bl = white ? 226 + n * 12 : 38 + n * 8; }
+            break;
+          }
+        }
       } else if (ter === TER_ROAD) {
         const rut = (px === 2 || px === 5 || py === 2 || py === 5) ? -10 : 0;
         r = 132 + n * 14 + rut; g = 118 + n * 12 + rut; bl = 90 + n * 10 + rut;
