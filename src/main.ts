@@ -8,6 +8,8 @@ import { BattleView } from './render/battle.ts';
 import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
+import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
+import { initReportView, type ReportView } from './ui/reportView.ts';
 
 const q = new URLSearchParams(location.search);
 const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
@@ -18,6 +20,9 @@ const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean 
 const r004 = q.get('noR004') !== '1';
 // R008 車輛有重量：車轍、揚塵、後座、砲塔轉向、受擊閃光。逃生閥 ?noR008=1
 const r008 = q.get('noR008') !== '1';
+// R010 結局與戰報：最後一擊慢動作、鏡頭移到最後一擊、戰報。逃生閥 ?noR010=1＝原本的橫幅
+const r010 = q.get('noR010') !== '1';
+let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: number } | null = null, reportShown = false, reportView: ReportView | undefined;
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
 renderer.shadowMap.enabled = true;
@@ -58,6 +63,7 @@ function reset(s = seed, build = r006) {
   view?.dispose();
   view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008);
   log = []; pending = []; acc = 0; selected.clear();
+  stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   if (build) { paused = true; refreshPreview(); }
   ui();
@@ -114,6 +120,7 @@ function tick() {
   const now = pending; pending = [];
   step(w, now);
   view.onEvents(w.events, simT());
+  statsStep(stats, w, w.events);
 }
 
 // ---- 輸入：單指點＝選取／下指令；單指拖＝平移；雙指＝縮放；滾輪＝縮放；右鍵＝下指令 ----
@@ -222,7 +229,7 @@ hud = initHud({
     const mine = w.units.filter(u => u.side === SIDE_PLAYER && u.alive), theirs = w.units.filter(u => u.side === SIDE_ENEMY && u.alive && view.visibleUnit(u));
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
     return {
-      tick: w.tick, paused, speed, fireMode, winner: w.winner,
+      tick: w.tick, paused, speed, fireMode, winner: w.winner, report: r010,
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : undefined,
       mine: mine.length, theirs: theirs.length,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => u.kind === UK_TANK).length, guns: sel.filter(u => u.kind === UK_HOWITZER).length,
@@ -234,6 +241,7 @@ hud = initHud({
   selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); },
   restart: () => reset(),
 });
+reportView = initReportView({ again: () => reset() });
 buildBar = initBuildBar(BUILD_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost })), {
   state: () => {
     const kd = buildKind(pickKind)!;
@@ -249,7 +257,17 @@ buildBar = initBuildBar(BUILD_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL
 renderer.setAnimationLoop(() => {
   const t = performance.now(), dt = Math.min(0.25, (t - lastT) / 1000);
   lastT = t;
-  if (!paused && phase === 'battle') acc += dt * speed;
+  // R010：勝負一出現，2.5 秒慢動作（0.25 倍）、鏡頭 1 秒內移到最後一擊並拉近；之後出戰報
+  if (r010 && w.winner >= 0 && endT0 < 0) { endT0 = t; endFrom = { x: view.target.x, z: view.target.z, zoom: view.zoom }; }
+  const since = endT0 < 0 ? -1 : t - endT0;
+  if (!paused && phase === 'battle') acc += dt * speed * slowmoFactor(since);
+  if (endFrom && stats.lastKill && since >= 0 && since <= 1200) {
+    const k = Math.min(1, since / 1000), e = k * k * (3 - 2 * k);
+    view.target.x = endFrom.x + (stats.lastKill.x / SUB - endFrom.x) * e;
+    view.target.z = endFrom.z + (stats.lastKill.z / SUB - endFrom.z) * e;
+    view.zoom = endFrom.zoom + (Math.max(endFrom.zoom, 1.6) - endFrom.zoom) * e;
+  }
+  if (r010 && !reportShown && since >= SLOWMO_MS) { reportShown = true; reportView?.show(makeReport(w, stats)); hud?.update(); }
   let steps = 0;
   while (acc >= 1 / TICK_HZ && steps < 8) { acc -= 1 / TICK_HZ; tick(); steps++; }
   if (steps === 8) acc = 0;   // 機器太慢：丟掉積欠的時間，不追
@@ -288,6 +306,18 @@ const rts = {
   info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, fx: fxOn, px: style.pixelCss, r004: fxOn && r004, pools: view.pools }),
   fxDigest: () => view.fxDigest(),
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
+  // 任意指令紀錄，從第 0 步一步一步跑（每一步都餵畫面與戰報統計）；回傳雜湊
+  playLog: (s: number, lg: LoggedCommand[], ticks: number) => {
+    reset(s, false);
+    let i = 0;
+    while (w.tick < ticks) {
+      while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }
+      tick();
+    }
+    return hashWorld(w);
+  },
+  winner: () => w.winner,
+  report: () => ({ shown: !!reportView?.visible(), data: makeReport(w, stats) }),
   playScript: (ticks = SCRIPT_TICKS) => {
     reset(SCRIPT_SEED, false);
     let i = 0;

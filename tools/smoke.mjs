@@ -9,6 +9,7 @@ import { runScript, SCRIPT, SCRIPT_TICKS } from '../src/sim/script.ts';
 import { FLOOR_H } from '../src/render/buildings.ts';
 import { buildError, BUILD_KINDS } from '../src/sim/build.ts';
 import { spotted } from '../src/sim/step.ts';
+import { endgameLog } from './endgame.mjs';
 
 const t0 = Date.now(), fails = [];
 function log(ok, name, detail = '') {
@@ -20,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, report: 8651, reportMobile: 8671, noR010: 8691 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -241,6 +242,40 @@ await withBrowser({ width: 800, height: 600, port: PORTS.noR008 }, async ({ open
   await open('noR008=1');
   const h = await page.evaluate(`__rts.pause(true); __rts.playScript(${SCRIPT_TICKS})`);
   log(h === nodeHash && page.errors.length === 0, '?noR008=1：一步一步跑完腳本，雜湊不變、零頁面錯誤', `${h} / ${nodeHash} ${page.errors.join(' | ')}`);
+});
+
+
+// ---- R010 結局與戰報：一份會打完的固定紀錄（Node 產生），瀏覽器一步一步跑到勝負出現，量慢動作、等戰報 ----
+const END = endgameLog();
+const endHash = hashWorld(runLog(createWorld(1944), END.log, END.endTick));
+for (const [W, H, mobile, port, name] of [[1280, 800, false, PORTS.report, 'desktop-report.png'], [412, 860, true, PORTS.reportMobile, 'mobile-report.png']]) {
+  await withBrowser({ width: W, height: H, mobile, port }, async ({ open, page }) => {
+    await open('');
+    const h = await page.evaluate(`__rts.pause(true); __rts.playLog(1944, ${JSON.stringify(END.log)}, ${END.endTick})`);
+    await page.evaluate('__rts.pause(false)');
+    await sleep(100);
+    const a = await page.evaluate('__rts.tick()'); await sleep(2000); const b = await page.evaluate('__rts.tick()');
+    if (!mobile) log(h === endHash && b - a >= 9 && b - a <= 11, `勝負出現後慢動作：2 秒推進 ${b - a} 步（0.25 倍＝10 步，±10%）；雜湊等於 Node`, `勝方 ${END.winner}、第 ${END.endTick} 步；${h} / ${endHash}`);
+    await sleep(1200);
+    const rp = await page.evaluate('__rts.report()');
+    const box = await page.evaluate("(() => { const p = document.querySelector('#report .panel')?.getBoundingClientRect(); const bs = [...document.querySelectorAll('#report .acts button')].map(b => { const r = b.getBoundingClientRect(); return [r.width, r.height]; }); return p ? { l: p.left, t: p.top, r: p.right, b: p.bottom, bs } : null; })()");
+    await shot(page, path.join(SHOTS, name));
+    const inside = !!box && box.l >= 0 && box.t >= 0 && box.r <= W && box.b <= H && box.bs.every(([bw, bh]) => bw >= 44 && bh >= 44);
+    log(rp.shown && rp.data.winner === END.winner && inside, `戰報出現（${mobile ? '手機' : '桌機'}）：勝方對、面板與按鈕都在畫面內、按鈕 ≥ 44 像素`, `${JSON.stringify(box)}；擊毀 ${rp.data.kills}、損失 ${rp.data.lost}、開火 ${rp.data.fires}`);
+    const [x, y] = await page.evaluate("(() => { const r = document.getElementById('rp-again').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()");
+    if (mobile) await touchTap(page, x, y); else await page.evaluate("document.getElementById('rp-again').click()");
+    await sleep(300);
+    const ph = await page.evaluate('__rts.phase()'), t = await page.evaluate('__rts.tick()'), gone = !(await page.evaluate('__rts.report()')).shown;
+    log(ph === 'build' && t === 0 && gone, `按「再來一局」（${mobile ? '觸控' : '滑鼠'}）：回到布陣、第 0 步、戰報收起`, `phase ${ph}，tick ${t}`);
+    log(page.errors.length === 0, `戰報（${mobile ? '手機' : '桌機'}）零頁面錯誤`, page.errors.join(' | '));
+  });
+}
+await withBrowser({ width: 800, height: 600, port: PORTS.noR010 }, async ({ open, page }) => {
+  await open('noR010=1');
+  const h = await page.evaluate(`__rts.pause(true); __rts.playLog(1944, ${JSON.stringify(END.log)}, ${END.endTick})`);
+  await page.evaluate('__rts.pause(false)'); await sleep(3200);
+  const rp = await page.evaluate('__rts.report()'), ban = await page.evaluate("!document.getElementById('banner').hidden && document.getElementById('banner').textContent");
+  log(!rp.shown && ban === '勝利' && h === endHash && page.errors.length === 0, '?noR010=1：只有「勝利」橫幅、沒有戰報、雜湊不變、零頁面錯誤', `戰報 ${rp.shown}，橫幅 ${ban}，${h}`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
