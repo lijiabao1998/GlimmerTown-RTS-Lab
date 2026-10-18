@@ -9,6 +9,7 @@ import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
+import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
@@ -84,10 +85,13 @@ const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.k
 
 // R018 電腦對手：開戰時送 ai 指令（記在指令紀錄裡，重播自動一致）。?ai=1|2|3 選難度；逃生閥 ?noR018=1＝敵人原地還擊
 const r018 = q.get('noR018') !== '1';
+// R019 生產與補給：開戰時送 eco（雙方指揮部、補給、打掉指揮部才贏）。逃生閥 ?noR019=1
+const r019 = q.get('noR019') !== '1';
+let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018) {
+function reset(s = seed, build = r006, ai = r018, eco = r019) {
   w = createWorld(s);
   view?.dispose();
   view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
@@ -95,10 +99,13 @@ function reset(s = seed, build = r006, ai = r018) {
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   if (build) { paused = true; refreshPreview(); }
-  else if (ai) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });   // 沒有布陣：開頁就開打，電腦第 0 步接手
+  else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
+    if (eco) issue({ t: 'eco' });
+    if (ai) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
+  }
   ui();
 }
-function ui() { hud?.update(); buildBar?.update(); }
+function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); }
 
 // 開戰：我方布陣＋敵方布陣都寫進指令紀錄（第 0 步），馬上走第一步讓房子落地（中間不畫任何一幀，不會閃）
 function startBattle() {
@@ -106,6 +113,7 @@ function startBattle() {
   const pv = previewWorld(), enemy = enemyPlan(pv);
   for (const c of plan) issue(c);
   for (const c of enemy) issue(c);
+  if (r019) issue({ t: 'eco' });
   if (r018) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   phase = 'battle'; plan = []; buildHint = '';
   if (r016) startBanner();
@@ -297,6 +305,13 @@ hud = initHud({
   help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
+prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }], {
+  state: () => {
+    const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
+    return { visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5 };
+  },
+  produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }),
+});
 // R013 說明面板：開著的時候暫停，關掉回到原來的暫停狀態
 let pausedBeforeHelp = false;
 // R015 小地圖：點哪裡鏡頭滑過去（有 R012 就平滑）
@@ -349,6 +364,7 @@ renderer.setAnimationLoop(() => {
   view.update(alpha, simT(alpha), selected);
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
+  prodBar?.update();
   minimap?.frame(t);
 });
 
@@ -365,7 +381,7 @@ const rts = {
   selected: () => [...selected],
   // 用跟 Node 一樣的路徑重跑腳本戰鬥，回傳雜湊；畫面換成腳本跑完的世界
   runScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false, false);
+    reset(SCRIPT_SEED, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
     view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
@@ -381,6 +397,7 @@ const rts = {
   bars: () => view.bars,
   dashes: () => view.dashes,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
+  eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq] } : null),
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
@@ -391,7 +408,7 @@ const rts = {
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
   // 任意指令紀錄，從第 0 步一步一步跑（每一步都餵畫面與戰報統計）；回傳雜湊
   playLog: (s: number, lg: LoggedCommand[], ticks: number) => {
-    reset(s, false, false);
+    reset(s, false, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }
@@ -403,7 +420,7 @@ const rts = {
   paused: () => paused,
   report: () => ({ shown: !!reportView?.visible(), data: makeReport(w, stats) }),
   playScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false, false);
+    reset(SCRIPT_SEED, false, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) issue(SCRIPT[i].cmd); i++; }

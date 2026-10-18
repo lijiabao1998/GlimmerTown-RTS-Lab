@@ -41,7 +41,7 @@ const DX = [1, -1, 0, 0, 1, 1, -1, -1];
 const DZ = [0, 0, 1, -1, 1, -1, 1, -1];
 
 // 把佔地當成擋路，從第一個活著的單位做廣度搜尋（跟 A* 一樣八方向、不切角），看每個活著的單位是不是都走得到
-function stillConnected(w: World, fx: number, fz: number, fw: number, fd: number): boolean {
+export function stillConnected(w: World, fx: number, fz: number, fw: number, fd: number): boolean {
   const unitCell = new Uint8Array(N * N);
   let start = -1;
   for (const u of w.units) if (u.alive) { const c = idx(cellOf(u.x), cellOf(u.z)); unitCell[c] = 1; if (start < 0) start = c; }

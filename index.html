@@ -65,6 +65,15 @@
     /* R015 小地圖：右上、按鈕列下面（手機在標題列下面） */
     #minimap { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 50px); pointer-events: auto;
       background: rgba(20, 24, 18, 0.55); border: 1px solid rgba(220, 230, 200, 0.35); border-radius: 4px; image-rendering: pixelated; touch-action: none; }
+    /* R019 生產列：貼在提示列上方（bottom 由 src/ui/production.ts 設定） */
+    #prodbar { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: 52px; flex-wrap: wrap; background: rgba(28, 34, 26, 0.86); border: 1px solid #6c745f; }
+    #prodbar[hidden] { display: none; }
+    #prodbar button { min-height: 44px; min-width: 64px; padding: 0 10px; }
+    #prodbar button b { margin-left: 4px; color: #ffd36a; font-weight: 800; }
+    #prodbar button.dim { opacity: 0.45; }
+    #prodbar .info { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; margin-left: auto; }
+    #prodbar #pb-prog { display: inline-block; width: 48px; height: 6px; background: #3a4352; border-radius: 3px; overflow: hidden; margin-left: 6px; }
+    #prodbar #pb-prog i { display: block; height: 100%; width: 0; background: #8cd06a; }
     @media (max-width: 640px) { #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 92px); } }
     /* R016 開戰大字：不擋點擊 */
     #start-banner { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); pointer-events: none; white-space: nowrap; font-size: clamp(44px, 14vw, 72px); font-weight: 900; letter-spacing: 0.25em;
