@@ -8,6 +8,8 @@ import { BattleView } from './render/battle.ts';
 import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
+import { Gestures, inSelectionRect, type SelectionRect } from './ui/gestures.ts';
+import { initCommandMenu, bombardCommand, bombardTarget, type CommandMenu } from './ui/commandMenu.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
 import { applyMap, MAP_RYE } from './sim/maps.ts';
@@ -47,6 +49,9 @@ const r015 = q.get('noR015') !== '1';
 let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
+const r109 = q.get('noR109') !== '1';
+let commandMenu: CommandMenu | undefined;
+let battleHint: string | undefined;
 const r107 = q.get('noR107') !== '1'; // 只關煙團畫面；煙幕指令與視線模擬保持啟用
 const r105 = q.get('noR105') !== '1';
 setMaterials(r105); // R105 材質視覺提示；只關畫面，模擬不變
@@ -111,6 +116,7 @@ const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
 function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {
+  if (r109) clearGestureInput();
   w = createWorld(s);
   if (map) applyMap(w, MAP_RYE);   // R026：布陣預覽就要看到 Rye；同一條 map 指令記在紀錄第 0 步，重播時由 step 套（套過的不再套）
   view?.dispose();
@@ -179,7 +185,9 @@ const simT = (alpha = 0) => (w.tick + alpha) / TICK_HZ;
 function tick() {
   view.snapshot();
   const now = pending; pending = [];
+  const priorWinner = w.winner;
   step(w, now);
+  if (r109 && priorWinner < 0 && w.winner >= 0) clearGestureInput();
   view.onEvents(w.events, simT());
   if (minimap && w.events.some(e => e.e === 'stage' || e.e === 'build' || (e.e === 'impact' && e.kind === SHELL_HE))) minimap.dirty();   // R015 地形變了才重畫底圖
   statsStep(stats, w, w.events);
@@ -201,6 +209,7 @@ function pickUnit(cx: number, cy: number): number {
 }
 
 function order(cx: number, cy: number) {
+  if (r109) battleHint = undefined;
   if (phase === 'build') { placeAt(cx, cy); return; }
   const route = routeBattleOrder(w, selected, fireMode, ammo, {
     unit: pickUnit(cx, cy),
@@ -213,6 +222,7 @@ function order(cx: number, cy: number) {
 }
 
 function tap(cx: number, cy: number, additive: boolean) {
+  if (r109) battleHint = undefined;
   const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
     const now = performance.now();
@@ -227,8 +237,73 @@ function tap(cx: number, cy: number, additive: boolean) {
   order(cx, cy);
 }
 
+// R109 只加快捷手勢；矩形用和點選相同的畫面座標（包含進駐屋頂高度）。
+function selectInBox(rect: SelectionRect) {
+  for (const u of w.units) {
+    if (!u.alive || u.side !== SIDE_PLAYER) continue;
+    const [x, y] = view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight);
+    if (inSelectionRect(rect, x, y)) selected.add(u.id);
+  }
+  battleHint = undefined; hud?.update();
+}
+const selectionBox = r109 ? document.createElement('div') : null;
+if (selectionBox) { selectionBox.id = 'selection-box'; selectionBox.hidden = true; document.body.appendChild(selectionBox); }
+const gestures = r109 ? new Gestures({
+  enabled: () => phase === 'battle' && w.winner < 0 && !help.visible() && !reportView?.visible(),
+  box: rect => {
+    if (!selectionBox) return;
+    selectionBox.hidden = !rect;
+    if (rect) {
+      fling.stop(); glide.stop();
+      selectionBox.style.left = `${rect.left}px`; selectionBox.style.top = `${rect.top}px`;
+      selectionBox.style.width = `${rect.right - rect.left}px`; selectionBox.style.height = `${rect.bottom - rect.top}px`;
+    }
+  },
+  select: selectInBox,
+  hold: (cx, cy) => {
+    fling.stop(); glide.stop();
+    const target = bombardTarget(w, {
+      unit: pickUnit(cx, cy), building: view.buildingAt(cx, cy, innerWidth, innerHeight),
+      ground: view.groundAt(cx, cy, innerWidth, innerHeight),
+    });
+    battleHint = target ? '選擇這一格的高爆砲擊或煙幕；放手不會下指令。' : '這裡不在地圖內，請長按地圖上的目標。';
+    hud?.update(); prodBar?.update();
+    if (target) commandMenu?.open(target, cx, cy);
+  },
+  dismiss: () => { if (commandMenu?.isOpen()) { commandMenu.close(); battleHint = undefined; hud?.update(); } },
+}) : null;
+function clearGestureInput() {
+  gestures?.cancel(); pointers.clear(); dragged = true; pinchD = 0;
+  fling.stop(); glide.stop(); dragV = { vx: 0, vy: 0, t: 0 }; battleHint = undefined;
+}
+if (r109) {
+  commandMenu = initCommandMenu({
+    choose: (chosen, target) => {
+      if (phase !== 'battle' || w.winner >= 0 || help.visible() || reportView?.visible()) {
+        battleHint = '目前不能下砲擊指令。'; hud?.update(); return;
+      }
+      const cmd = bombardCommand(w, selected, target, chosen);
+      if (cmd) {
+        issue(cmd); view.setMarker(target.x + 0.5, target.z + 0.5, simT(), true);
+        battleHint = chosen === 'smoke' ? '已下煙幕指令；其他單位保持原指令。' : '已下高爆砲擊指令；其他單位保持原指令。';
+      } else battleHint = chosen === 'smoke' ? '煙幕只供存活的我方榴彈砲；請先選取榴彈砲。' : '高爆砲擊需先選取存活的我方榴彈砲或迫擊砲。';
+      hud?.update();
+    },
+    cancel: () => { battleHint = undefined; hud?.update(); },
+  });
+  // HUD／小地圖仍照原本操作；它們不能留下地圖上的長按計時或框。
+  document.addEventListener('pointerdown', e => {
+    if (e.target !== canvas && (!commandMenu?.contains(e.target) || pointers.size > 0)) clearGestureInput();
+  }, true);
+  addEventListener('blur', clearGestureInput);
+  addEventListener('resize', clearGestureInput);
+}
+
 canvas.addEventListener('pointerdown', e => {
+  const dismissOnly = !!commandMenu?.isOpen();
+  if (dismissOnly) { commandMenu?.close(); battleHint = undefined; hud?.update(); }
   canvas.setPointerCapture(e.pointerId);
+  gestures?.down(e, dismissOnly);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
   fling.stop(); dragV = { vx: 0, vy: 0, t: performance.now() };   // R012：按下去慣性立刻停
   if (pointers.size === 1) dragged = false;
@@ -239,6 +314,7 @@ canvas.addEventListener('pointermove', e => {
   if (!p) return;
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
   p.x = e.clientX; p.y = e.clientY;
+  if (gestures?.move(e)) return;
   if (pointers.size === 1) {
     if (!dragged && Math.hypot(p.x - p.sx, p.y - p.sy) > 8) dragged = true;
     if (dragged) {
@@ -256,17 +332,20 @@ canvas.addEventListener('pointermove', e => {
 const up = (e: PointerEvent) => {
   const p = pointers.get(e.pointerId);
   pointers.delete(e.pointerId);
+  if (gestures?.up(e)) { dragV = { vx: 0, vy: 0, t: 0 }; return; }
   // R012：單指拖曳放手（最後一次移動在 80 毫秒內）＝帶著速度滑出去
   if (r012 && p && dragged && !pointers.size && performance.now() - dragV.t < 80) fling.start(dragV.vx, dragV.vy);
   if (!p || dragged || pointers.size) return;
   if (e.button === 2) order(e.clientX, e.clientY); else tap(e.clientX, e.clientY, e.shiftKey);
 };
 canvas.addEventListener('pointerup', up);
-canvas.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); dragged = true; });
+canvas.addEventListener('pointercancel', e => { if (r109) clearGestureInput(); else { pointers.delete(e.pointerId); dragged = true; } });
+// 正常 pointerup 後瀏覽器會自動失去 capture，不能把剛開的選單關掉。
+canvas.addEventListener('lostpointercapture', e => { if (r109 && pointers.has(e.pointerId)) clearGestureInput(); });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; if (r012) view.zoomAt(f, e.clientX, e.clientY, innerWidth, innerHeight); else view.zoomBy(f); }, { passive: false });
 addEventListener('keydown', e => {
-  if (e.key === 'Escape') { selected.clear(); fireMode = false; ammo = 'he'; hud?.update(); }
+  if (e.key === 'Escape') { if (r109) clearGestureInput(); selected.clear(); fireMode = false; ammo = 'he'; hud?.update(); }
   if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
 });
 
@@ -288,7 +367,7 @@ hud = initHud({
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
     return {
       tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: r010,
-      build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : undefined,
+      build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : battleHint,
       mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
@@ -321,7 +400,7 @@ if (r015) minimap = initMinimap({
   view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
   tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
-const help = initHelp({ open: () => { pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } });
+const help = initHelp({ open: () => { if (r109) clearGestureInput(); pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } }, r109);
 buildBar = initBuildBar(BUILD_KINDS_NOW.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
   state: () => {
     const kd = buildKind(pickKind)!;
@@ -347,7 +426,7 @@ renderer.setAnimationLoop(() => {
     view.target.z = endFrom.z + (stats.lastKill.z / SUB - endFrom.z) * e;
     view.zoom = endFrom.zoom + (Math.max(endFrom.zoom, 1.6) - endFrom.zoom) * e;
   }
-  if (r010 && !reportShown && since >= SLOWMO_MS) { reportShown = true; reportView?.show(makeReport(w, stats)); hud?.update(); }
+  if (r010 && !reportShown && since >= SLOWMO_MS) { if (r109) clearGestureInput(); reportShown = true; reportView?.show(makeReport(w, stats)); hud?.update(); }
   let steps = 0;
   while (acc >= 1 / TICK_HZ && steps < 8) { acc -= 1 / TICK_HZ; tick(); steps++; }
   if (steps === 8) acc = 0;   // 機器太慢：丟掉積欠的時間，不追
