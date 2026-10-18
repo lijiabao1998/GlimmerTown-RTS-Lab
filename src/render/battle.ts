@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
+  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -16,6 +16,8 @@ import { Pipeline, type Style } from './post.ts';
 const PX = 8;                       // 地面貼圖：每格 8×8 像素
 const MAX_UNITS = 64, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
 export const TURRET_RATE = 3;        // R008 砲塔最大轉速（弧度／秒）
+const HOLE_CAP = 160;                 // R014 牆上痕跡最多幾個（滿了丟最舊的）
+const C_HOLE = 0x1b1713, C_SOOT = 0x2a2521;
 const DASH_CAP = 900;                 // R011 地上短線最多幾段
 const DK_PATH = 0, DK_ATTACK = 1, DK_FIRE = 2, DK_END = 3, DK_CROSS = 4;
 const ELEV = Math.PI / 6;           // 鏡頭仰角 30°，水平 45°（與 2D 線、3D-lab 相同的 2:1 斜視）
@@ -132,7 +134,16 @@ export class BattleView {
   // 守衛用：上一幀畫了哪些短線（預配）
   readonly dashDbg = { n: 0, x: new Float32Array(DASH_CAP), z: new Float32Array(DASH_CAP), kind: new Uint8Array(DASH_CAP), unit: new Int32Array(DASH_CAP) };
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true) {
+  // ---- R014 牆上的彈孔（?noR014=1 時不畫）----
+  private holeMesh: THREE.InstancedMesh | null = null;
+  // 痕跡：環狀覆寫最舊的；kind 0＝彈孔（深色孔＋淺色碎灰泥兩片）、1＝燻黑
+  readonly holes = { next: 0, live: new Uint8Array(HOLE_CAP), bld: new Int32Array(HOLE_CAP), kind: new Uint8Array(HOLE_CAP), x: new Float32Array(HOLE_CAP), y: new Float32Array(HOLE_CAP), z: new Float32Array(HOLE_CAP), nx: new Int8Array(HOLE_CAP), nz: new Int8Array(HOLE_CAP), w: new Float32Array(HOLE_CAP), h: new Float32Array(HOLE_CAP), r: new Float32Array(HOLE_CAP), g: new Float32Array(HOLE_CAP), b: new Float32Array(HOLE_CAP) };
+  private holesDirty = false;
+  private holeSeq = 0;
+  // 每一步之前記下在飛、會打中建築的穿甲彈（彈著事件沒有射手位置）
+  private apSnap = { n: 0, sx: new Float64Array(MAX_SHELLS), sz: new Float64Array(MAX_SHELLS), ex: new Float64Array(MAX_SHELLS), ez: new Float64Array(MAX_SHELLS), bld: new Int32Array(MAX_SHELLS) };
+
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true) {
     this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
@@ -182,6 +193,11 @@ export class BattleView {
     this.observerMesh = inst(observer(observerDetails), toon({ vertexColors: true }), MAX_UNITS, true);
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
+    if (r014) {
+      const mat = toon({ polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+      this.holeMesh = inst(new THREE.PlaneGeometry(1, 1), mat, HOLE_CAP * 2, false);
+      this.holeMesh.receiveShadow = true;
+    }
     if (r011) {
       // 地上的短線片（加色＝在地上發亮，越淡＝顏色越暗），會被房子擋住（測深度、不寫深度）
       this.dash = inst(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }), DASH_CAP, false);
@@ -293,9 +309,16 @@ export class BattleView {
   }
 
   // ---- 每一步之前記下位置（插值用）；之後吃事件 ----
-  snapshot() { for (const u of this.w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; } }
+  snapshot() {
+    for (const u of this.w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; }
+    if (this.holeMesh) {   // R014：記下會打中建築的穿甲彈從哪裡打來
+      const a = this.apSnap; a.n = 0;
+      for (const sh of this.w.shells) if (sh.kind === SHELL_AP && sh.hitBld && a.n < MAX_SHELLS) { a.sx[a.n] = sh.sx; a.sz[a.n] = sh.sz; a.ex[a.n] = sh.ex; a.ez[a.n] = sh.ez; a.bld[a.n] = sh.hitBld; a.n++; }
+    }
+  }
 
   onEvents(events: SimEvent[], simT: number) {
+    if (this.holeMesh) this.holes14(events);
     if (this.r8) this.vehicles8(events, simT);
     if (this.r4) { this.frameNo++; for (const e of events) this.fx4(e, simT); }   // 世界剛走一步：可見度快取作廢
     let townDirty = false, groundDirty = false;
@@ -839,6 +862,91 @@ export class BattleView {
     this.nd11++;
   }
   get dashes() { return this.dash ? this.dash.count : 0; }
+
+
+  // ======== R014 牆上的彈孔 ========
+  private holes14(events: SimEvent[]) {
+    const w = this.w, H = this.holes;
+    for (const e of events) {
+      if (e.e === 'impact' && e.kind === SHELL_AP && e.bld) {
+        const b = w.blds[e.bld - 1], a = this.apSnap;
+        if (!b || !this.visibleAt(e.x, e.z)) continue;          // 看不到的命中不留痕跡（方向會洩漏射手位置）
+        for (let i = 0; i < a.n; i++) {
+          if (a.bld[i] !== e.bld || a.ex[i] !== e.x || a.ez[i] !== e.z) continue;
+          this.mark14(b, 0, a.sx[i] / SUB, a.sz[i] / SUB, e.x / SUB, e.z / SUB);
+          break;
+        }
+      } else if (e.e === 'impact' && e.kind === SHELL_HE) {
+        if (!this.visibleAt(e.x, e.z)) continue;
+        const R = UNIT_KINDS[UK_HOWITZER].splash / SUB, ix = e.x / SUB, iz = e.z / SUB;
+        for (const b of w.blds) {
+          if (b.hp <= 0) continue;
+          const cx = Math.max(b.x, Math.min(b.x + b.w, ix)), cz = Math.max(b.z, Math.min(b.z + b.d, iz));
+          if (Math.hypot(cx - ix, cz - iz) > R + 0.5) continue;
+          this.mark14(b, 1, ix, iz, b.x + b.w / 2, b.z + b.d / 2);
+        }
+      } else if (e.e === 'stage') {
+        const b = w.blds[e.bld - 1];
+        const keepBelow = e.stage === STAGE_RUBBLE ? -1 : wallHeight(b) * 0.72 * 0.7;   // 空殼的牆頂是鋸齒（七成到十成）
+        for (let i = 0; i < HOLE_CAP; i++) if (H.live[i] && H.bld[i] === b.id && H.y[i] + H.h[i] / 2 > keepBelow) { H.live[i] = 0; this.holesDirty = true; }
+      }
+    }
+    if (this.holesDirty) this.rebuild14();
+  }
+
+  // 從 (sx,sz) 往 (ex,ez) 的直線打進建築的牆（模型的牆內縮 0.1 格；教堂只算中殿），落在進入的那一面
+  private mark14(b: Building, kind: number, sx: number, sz: number, ex: number, ez: number) {
+    const x0 = b.x + 0.1, x1 = b.x + b.w - 0.1, z0 = b.z + 0.1 + (b.kind === BK_CHURCH ? 0.9 : 0), z1 = b.z + b.d - 0.1;
+    const dx = ex - sx, dz = ez - sz;
+    let tIn = -Infinity, tOut = Infinity, axis = -1;
+    for (const [s0, d, lo, hi, ax] of [[sx, dx, x0, x1, 0], [sz, dz, z0, z1, 1]] as const) {
+      if (Math.abs(d) < 1e-9) { if (s0 < lo || s0 > hi) return; continue; }
+      let t1 = (lo - s0) / d, t2 = (hi - s0) / d;
+      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+      if (t1 > tIn) { tIn = t1; axis = ax; }
+      tOut = Math.min(tOut, t2);
+    }
+    if (axis < 0 || tIn > tOut || tIn < 0) return;                 // 射手在牆裡面、或打不到這棟
+    const seq = this.holeSeq++, hh = (k: number) => hash2(b.id * 977 + seq, k, 141);
+    let px = sx + dx * tIn, pz = sz + dz * tIn;
+    const nx = axis === 0 ? (dx > 0 ? -1 : 1) : 0, nz = axis === 1 ? (dz > 0 ? -1 : 1) : 0;
+    // 沿牆面錯開一點（同一個方向連打不會疊成一個點），夾在牆面內
+    if (axis === 0) pz = Math.max(z0 + 0.08, Math.min(z1 - 0.08, pz + (hh(1) - 0.5) * 0.3)); else px = Math.max(x0 + 0.08, Math.min(x1 - 0.08, px + (hh(1) - 0.5) * 0.3));
+    const top = stageOf(b) === STAGE_INTACT ? wallHeight(b) : wallHeight(b) * 0.72 * 0.7;
+    const H = this.holes, i = H.next;
+    H.next = (H.next + 1) % HOLE_CAP;
+    H.live[i] = 1; H.bld[i] = b.id; H.kind[i] = kind; H.x[i] = px; H.z[i] = pz; H.nx[i] = nx; H.nz[i] = nz;
+    if (kind === 0) { H.w[i] = 0.13 + 0.05 * hh(2); H.h[i] = 0.1 + 0.04 * hh(3); H.y[i] = 0.1 + hh(4) * Math.max(0.02, top - 0.2); }
+    else { H.w[i] = 0.28 + 0.12 * hh(2); H.h[i] = Math.min(0.24, top * 0.6); H.y[i] = H.h[i] / 2 + 0.01; }
+    const wall = bldColors(b.kind).wall;
+    H.r[i] = wall.r + (1 - wall.r) * 0.35; H.g[i] = wall.g + (1 - wall.g) * 0.35; H.b[i] = wall.b + (1 - wall.b) * 0.35;   // 碎掉的灰泥：牆色偏亮
+    this.holesDirty = true;
+  }
+
+  // 痕跡有變才重寫實例（不是每幀）：彈孔兩片（外圈淺色碎灰泥、裡面深色孔），燻黑一片
+  private rebuild14() {
+    const H = this.holes, m = this.tmp, mesh = this.holeMesh!;
+    let n = 0;
+    for (let k = 0; k < HOLE_CAP; k++) {
+      const i = (H.next + k) % HOLE_CAP;                              // 從最舊的開始畫，新的疊在上面
+      if (!H.live[i]) continue;
+      const yaw = H.nx[i] ? (H.nx[i] > 0 ? Math.PI / 2 : -Math.PI / 2) : (H.nz[i] > 0 ? 0 : Math.PI);
+      const layers = H.kind[i] === 0 ? 2 : 1;
+      for (let l = 0; l < layers; l++) {
+        const off = 0.006 + 0.003 * l, sc = H.kind[i] === 0 && l === 0 ? 1.55 : 1;
+        m.position.set(H.x[i] + H.nx[i] * off, H.y[i], H.z[i] + H.nz[i] * off); m.rotation.set(0, yaw, 0); m.scale.set(H.w[i] * sc, H.h[i] * sc, 1); m.updateMatrix();
+        mesh.setMatrixAt(n, m.matrix);
+        if (H.kind[i] === 1) this.barColor.setHex(C_SOOT); else if (l === 0) this.barColor.setRGB(H.r[i], H.g[i], H.b[i]); else this.barColor.setHex(C_HOLE);
+        mesh.setColorAt(n, this.barColor);
+        n++;
+      }
+    }
+    mesh.count = n; mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    this.holesDirty = false;
+  }
+  get holeCount() { let c = 0; for (let i = 0; i < HOLE_CAP; i++) c += this.holes.live[i]; return c; }
+  get holeInstances() { return this.holeMesh ? this.holeMesh.count : 0; }
 
   // ---- 鏡頭 ----
   layout(cssW: number, cssH: number) {

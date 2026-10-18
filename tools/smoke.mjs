@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851 , holes: 8891, noR014: 8911 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -368,6 +368,24 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR012 },
   const c0 = await camAt(page); await sleep(300); const c1 = await camAt(page);
   const h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(c0.x === c1.x && c0.z === c1.z && h === nodeHash && page.errors.length === 0, '?noR012=1：放手立刻停、雜湊不變、零頁面錯誤', `${c0.x.toFixed(2)},${c0.z.toFixed(2)} → ${c1.x.toFixed(2)},${c1.z.toFixed(2)}；${h}`);
+});
+
+
+// ---- R014 牆上的彈孔：腳本第 600 步讓 2 號坦克開到教堂東南邊（90 步），再打教堂東南角 125 步；鏡頭看得到的是東、南兩面 ----
+const holesJs = "__rts.pause(true); __rts.runScript(600); __rts.issue({ t: 'move', side: 0, ids: [2], x: 16, z: 15 }); __rts.stepN(90); __rts.issue({ t: 'fireAt', side: 0, ids: [2], x: 14, z: 13 }); __rts.stepN(125); __rts.focus(14.2, 13.4, 2.6); 0";
+await withBrowser({ width: 1280, height: 800, port: PORTS.holes }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate(holesJs); await sleep(400);
+  const info = await page.evaluate('__rts.info()'), hs = await page.evaluate('__rts.holes()'), b = (await page.evaluate('__rts.blds()'))[0];
+  await shot(page, path.join(SHOTS, 'desktop-holes.png'));
+  log(hs.count > 0 && hs.instances > 0 && b.hp > 0 && info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles, '彈孔特寫：牆上有痕跡、房子還站著、繪製呼叫 ≤ 22、三角形 ≤ 80,000', `${JSON.stringify(hs)}；教堂 ${b.hp}/${b.maxHp}；${JSON.stringify({ calls: info.calls, triangles: info.triangles })}`);
+  log(page.errors.length === 0, '彈孔特寫零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 800, height: 600, port: PORTS.noR014 }, async ({ open, page }) => {
+  await open('noR014=1');
+  await page.evaluate(holesJs); await sleep(300);
+  const hs = await page.evaluate('__rts.holes()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(hs.count === 0 && hs.instances === 0 && h === nodeHash && page.errors.length === 0, '?noR014=1：沒有彈孔、雜湊不變、零頁面錯誤', `${JSON.stringify(hs)}；${h}`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
