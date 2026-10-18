@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -306,6 +306,26 @@ await withBrowser({ width: 800, height: 600, port: PORTS.noR010 }, async ({ open
   await page.evaluate('__rts.pause(false)'); await sleep(3200);
   const rp = await page.evaluate('__rts.report()'), ban = await page.evaluate("!document.getElementById('banner').hidden && document.getElementById('banner').textContent");
   log(!rp.shown && ban === '勝利' && h === endHash && page.errors.length === 0, '?noR010=1：只有「勝利」橫幅、沒有戰報、雜湊不變、零頁面錯誤', `戰報 ${rp.shown}，橫幅 ${ban}，${h}`);
+});
+
+
+// ---- R011 指令回饋：腳本第 300 步，三輛坦克改下移動、榴彈砲改轟另一格，全選我方 ----
+const ordersJs = "__rts.pause(true); __rts.runScript(300); __rts.issue({ t: 'move', side: 0, ids: [1, 2, 3], x: 13, z: 21 }); __rts.issue({ t: 'fireAt', side: 0, ids: [4], x: 12, z: 12 }); __rts.stepN(10); __rts.select([1, 2, 3, 4, 9]); __rts.focus(17, 18, 1.4); 0";
+for (const [W, H, mobile, port, name] of [[1280, 800, false, PORTS.orders, 'desktop-orders.png'], [412, 860, true, PORTS.ordersMobile, 'mobile-orders.png']]) {
+  await withBrowser({ width: W, height: H, mobile, port }, async ({ open, page }) => {
+    await open('');
+    await page.evaluate(ordersJs); await sleep(400);
+    const info = await page.evaluate('__rts.info()'), n = await page.evaluate('__rts.dashes()');
+    await shot(page, path.join(SHOTS, name));
+    log(n > 0 && info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles, `指令回饋（${mobile ? '手機' : '桌機'}）：有路線與準星、繪製呼叫 ≤ 22、三角形 ≤ 80,000`, `${n} 段；${JSON.stringify({ calls: info.calls, triangles: info.triangles })}`);
+    log(page.errors.length === 0, `指令回饋（${mobile ? '手機' : '桌機'}）零頁面錯誤`, page.errors.join(' | '));
+  });
+}
+await withBrowser({ width: 800, height: 600, port: PORTS.noR011 }, async ({ open, page }) => {
+  await open('noR011=1');
+  await page.evaluate(ordersJs); await sleep(300);
+  const n = await page.evaluate('__rts.dashes()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(n === 0 && h === nodeHash && page.errors.length === 0, '?noR011=1：不畫指令回饋、雜湊不變、零頁面錯誤', `${n} 段；${h}`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
