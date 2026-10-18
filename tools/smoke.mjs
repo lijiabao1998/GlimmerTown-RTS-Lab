@@ -10,6 +10,8 @@ import { FLOOR_H } from '../src/render/buildings.ts';
 import { buildError, BUILD_KINDS } from '../src/sim/build.ts';
 import { spotted } from '../src/sim/step.ts';
 import { endgameLog } from './endgame.mjs';
+import { applyMap, MAP_RYE } from '../src/sim/maps.ts';
+const withRye = w => { applyMap(w, MAP_RYE); return w; };   // R026：預設網址開的是 Rye，挑合法格子要用同一張地圖
 
 const t0 = Date.now(), fails = [];
 function log(ok, name, detail = '') {
@@ -21,15 +23,15 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
 function freeCellNear(cx, cz) {
-  const w = createWorld(1944);
+  const w = createWorld(1944), rye = withRye(createWorld(1944));   // R026：兩張地圖上都是空地
   for (let r = 0; r < 6; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     const x = cx + dx, z = cz + dz;
-    if (x >= 0 && z >= 0 && x < N && z < N && !bldAt(w, x, z)) return [x, z];
+    if (x >= 0 && z >= 0 && x < N && z < N && !bldAt(w, x, z) && !bldAt(rye, x, z)) return [x, z];
   }
   return [cx, cz];
 }
@@ -71,7 +73,7 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.build }, 
   log(info.calls <= BUDGET.calls && info.triangles <= BUDGET.triangles, `手機開局預算：繪製呼叫 ≤ ${BUDGET.calls}、三角形 ≤ ${BUDGET.triangles}`, JSON.stringify(info));
   await shot(page, path.join(SHOTS, 'mobile-start.png'));
   // 挑一格合法的農舍位置（Node 用同一支 buildError 判），而且畫面上點得到（在畫布上、不在布陣列底下）
-  const w0 = createWorld(1944), cottage = BUILD_KINDS.find(k => k.w === 1 && k.d === 1);
+  const w0 = withRye(createWorld(1944)), cottage = BUILD_KINDS.find(k => k.w === 1 && k.d === 1);
   let cell = null, tx = 0, ty = 0;
   for (let z = 17; z < N && !cell; z++) for (let x = 17; x < N && !cell; x++) {
     if (buildError(w0, { t: 'build', side: 0, kind: cottage.kind, x, z })) continue;
@@ -440,7 +442,7 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR015 },
 const tapStart = async page => { const r = await page.evaluate("(() => { const b = document.getElementById('bb-start').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()"); await touchTap(page, r[0], r[1]); };
 await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.start }, async ({ open, page }) => {
   await open('');
-  const w0 = createWorld(1944), cot = BUILD_KINDS.find(k => k.w === 1 && k.d === 1);
+  const w0 = withRye(createWorld(1944)), cot = BUILD_KINDS.find(k => k.w === 1 && k.d === 1);
   let placed = false;
   for (let z = 17; z < N && !placed; z++) for (let x = 17; x < N && !placed; x++) {
     if (buildError(w0, { t: 'build', side: 0, kind: cot.kind, x, z })) continue;
@@ -626,7 +628,7 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.pillbox }
   await open('');
   const r = await page.evaluate("(() => { const b = document.getElementById('bb-k6'); if (!b) return null; const q = b.getBoundingClientRect(); return [q.x + q.width / 2, q.y + q.height / 2, q.width, q.height]; })()");
   if (r) await touchTap(page, r[0], r[1]);
-  const w0 = createWorld(1944);
+  const w0 = withRye(createWorld(1944));
   let cell = null, tx = 0, ty = 0;
   for (let z = 17; z < N && !cell; z++) for (let x = 17; x < N && !cell; x++) {
     if (buildError(w0, { t: 'build', side: 0, kind: 6, x, z })) continue;
@@ -655,6 +657,30 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR024 },
   await page.evaluate('__rts.pause(true)');
   const lg = await page.evaluate('__rts.log()'), pb = lg.filter(c => c.cmd.t === 'build' && c.cmd.kind === 6).length, h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(!btn && pb === 0 && h === nodeHash && page.errors.length === 0, '?noR024=1：布陣列沒有碉堡、敵方不蓋、雜湊不變', `${h}；敵方碉堡 ${pb}`);
+});
+
+// ---- R026 Rye 1940：開頁布陣就是 Rye（有泥灘、教堂）、預算內；桌機全圖樣張；?noR026=1 回到亂數村莊、雜湊不變 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.rye }, async ({ open, page }) => {
+  await open('');
+  const m = await page.evaluate('__rts.map()'), bl = await page.evaluate('__rts.blds()'), info = await page.evaluate('__rts.info()'), ref = withRye(createWorld(1944));
+  const church = bl.some(b => b.kind === 3 && b.w === 3 && b.d === 3);
+  await shot(page, path.join(SHOTS, 'mobile-rye.png'));
+  log(m === MAP_RYE && church && bl.length === ref.blds.length && info.calls <= BUDGET.calls && info.triangles <= BUDGET.triangles && page.errors.length === 0, 'Rye：開頁布陣是 Rye（教堂 3×3、建築數＝Node）、手機開局在預算內、零頁面錯誤',
+    `map ${m}；建築 ${bl.length}／${ref.blds.length}；${JSON.stringify({ calls: info.calls, triangles: info.triangles })}`);
+});
+await withBrowser({ width: 1280, height: 800, port: PORTS.ryeDesk }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate('__rts.focus(16, 15, 1.25); 0'); await sleep(500);
+  await shot(page, path.join(SHOTS, 'desktop-rye.png'));
+  await page.evaluate('__rts.focus(17, 13, 3); 0'); await sleep(500);
+  const info = await page.evaluate('__rts.info()');
+  await shot(page, path.join(SHOTS, 'desktop-rye-citadel.png'));
+  log(info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles && page.errors.length === 0, 'Rye 舊城特寫（桌機）：繪製呼叫 ≤ 22、三角形 ≤ 80,000、零頁面錯誤', JSON.stringify({ calls: info.calls, triangles: info.triangles }));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR026 }, async ({ open, page }) => {
+  await open('noR026=1');
+  const m = await page.evaluate('__rts.map()'), bl = await page.evaluate('__rts.blds()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(m === 0 && bl.length === createWorld(1944).blds.length && h === nodeHash && page.errors.length === 0, '?noR026=1：回到亂數村莊、雜湊不變', `map ${m}；建築 ${bl.length}；${h}`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);

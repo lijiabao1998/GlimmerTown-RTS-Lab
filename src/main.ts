@@ -9,6 +9,7 @@ import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
+import { applyMap, MAP_RYE } from './sim/maps.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
@@ -68,7 +69,7 @@ let plan: BuildCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
 const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡' };
 const BUILD_WHY: Record<string, string> = {
   tick: '已經開戰，不能再蓋', map: '超出地圖', foreign: '那是敵方半場（紅色）；只能蓋在我方半場（藍色）',
-  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', road: '不能蓋在路上', occupied: '那裡已經有房子',
+  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: '那裡已經有房子',
   unit: '有單位站在那裡', blocked: '會堵死通路', gap: '太靠近別的房子（要隔一格）',
 };
 const BUILD_TIP = '布陣：點藍色地面蓋房子當掩體、擋視線；點蓋好的房子拿掉；蓋好按「開戰」';
@@ -90,6 +91,7 @@ const r019 = q.get('noR019') !== '1';
 // R021 步兵班：eco 帶 inf＝1（雙方各一班、可出步兵）。逃生閥 ?noR021=1
 const r021 = q.get('noR021') !== '1';
 const r022 = q.get('noR022') !== '1';   // R022 反戰車砲、迫擊砲（關掉＝eco 不帶 guns：生產列沒有、電腦不出）
+const r026 = q.get('noR026') !== '1';   // R026 Rye 1940 手排地圖（關掉＝亂數村莊）
 const r024 = q.get('noR024') !== '1';   // R024 碉堡（關掉＝布陣列沒有碉堡、敵方布陣也不蓋）
 const BUILD_KINDS_NOW = r024 ? BUILD_KINDS_24 : BUILD_KINDS;
 const r023 = q.get('noR023') !== '1';   // R023 輕坦克、重坦克（關掉＝eco 不帶 tanks：生產列沒有、電腦不出）
@@ -98,13 +100,15 @@ let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019) {
+function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {
   w = createWorld(s);
+  if (map) applyMap(w, MAP_RYE);   // R026：布陣預覽就要看到 Rye；同一條 map 指令記在紀錄第 0 步，重播時由 step 套（套過的不再套）
   view?.dispose();
   view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
   log = []; pending = []; acc = 0; selected.clear();
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
+  if (map) issue({ t: 'map', id: MAP_RYE });
   if (build) { paused = true; refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(ecoCmd());
@@ -391,7 +395,7 @@ const rts = {
   selected: () => [...selected],
   // 用跟 Node 一樣的路徑重跑腳本戰鬥，回傳雜湊；畫面換成腳本跑完的世界
   runScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false, false, false);
+    reset(SCRIPT_SEED, false, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
     view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
@@ -409,6 +413,7 @@ const rts = {
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0 } : null),
   men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n }),
+  map: () => w.map ?? 0,
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
@@ -419,7 +424,7 @@ const rts = {
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
   // 任意指令紀錄，從第 0 步一步一步跑（每一步都餵畫面與戰報統計）；回傳雜湊
   playLog: (s: number, lg: LoggedCommand[], ticks: number) => {
-    reset(s, false, false, false);
+    reset(s, false, false, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }
@@ -431,7 +436,7 @@ const rts = {
   paused: () => paused,
   report: () => ({ shown: !!reportView?.visible(), data: makeReport(w, stats) }),
   playScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false, false, false);
+    reset(SCRIPT_SEED, false, false, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) issue(SCRIPT[i].cmd); i++; }

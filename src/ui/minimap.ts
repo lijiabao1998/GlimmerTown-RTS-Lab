@@ -1,5 +1,5 @@
 // R015 小地圖：上半是純函式（座標換算、要畫哪些點，Node 守衛直接測），下半是 DOM 畫布。只讀世界、不改世界。
-import { N, TER_ROAD, TER_FIELD, SIDE_PLAYER, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
+import { N, TER_ROAD, TER_FIELD, TER_MUD, SIDE_PLAYER, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
 
 // 菱形，方向跟主畫面一樣：主畫面的「右」＝世界 (+x,−z)、「上」＝世界 (−x,−z)。
 // 小地圖 px = w/2 + (x − z)·s、py = (x + z)·s/2，s = w/(2N)；整張高 = w/2。
@@ -38,7 +38,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
       const i = z * N + x, t = w.ter[i], id = w.occ[i], b = id ? w.blds[id - 1] : null;
       ctx.fillStyle = b ? (stageOf(b) === STAGE_RUBBLE ? '#6f6559' : b.builtBy === SIDE_PLAYER ? '#a9c4e6' : '#cfc3a8')
-        : w.crater[i] ? '#4a3f33' : t === TER_ROAD ? '#8f7f62' : t === TER_FIELD ? '#9a9450' : '#5b7a42';
+        : w.crater[i] ? '#4a3f33' : t === TER_ROAD ? '#8f7f62' : t === TER_FIELD ? '#9a9450' : t === TER_MUD ? '#4d6470' : '#5b7a42';
       cell(ctx, x, z);
     }
     baseDirty = false;

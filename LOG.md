@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R026 | 2026-10-18 | Claude | Rye 1940 手排地圖（預設）：舊城街道（High St、Mermaid St、Watchbell St、Lion St、Church Square、East Cliff 經 Landgate、Conduit Hill、The Strand、Cinque Ports St）、46 棟（St Mary's、Ypres Tower、Landgate 兩塔、Strand 倉庫、車站）；Rother／Tillingham／Rock Channel 泥灘（四成速度、不擋視線、不能蓋）與橋；鎮上石板路；map 指令第 0 步先套；?noR026=1 | 本機 typecheck、unit 51、build、smoke 104 全綠；rye.mjs 5 條、6 種弄壞都落在對的守衛；黃金不變；開局 12 calls | claude/r026-rye | 仍是 32×32（R025 放大）；沒有地勢、鐵路；建築外觀通用；沒有選地圖介面 |
 | R024 | 2026-10-18 | Claude | Type 22 碉堡：布陣 3 點、耐久 400；進駐只吃四分之一傷害；直射只刮四分之一、榴彈砲／迫擊砲全吃；矮六角混凝土＋槍眼＋沙包模型（合併網格、不加呼叫）；敵方布陣也會蓋；?noR024=1 | 本機 typecheck、unit 50、build、smoke 101 全綠；pillbox.mjs 5 條、5 種弄壞都落在對的守衛；黃金不變 | claude/r024-pillbox | 龍牙、鐵絲網、沙包陣地（要分車／人通行）；碉堡沒有射界；電腦對戰中不蓋 |
 | R023 | 2026-10-18 | Claude | 輕坦克與重坦克：輕（快三成、視野 12、穿甲七成、30）、重（慢、裝甲只吃七成、火力 40、65）；坦克類改看 armored（電腦坦克組、選取、戰報、畫面）；eco tanks 才能出、電腦普通以上各出一台；共用車體／砲塔網格只差縮放；?noR023=1 | 本機 typecheck、unit 49、build、smoke 98 全綠；tanks.mjs 5 條、6 種弄壞都落在對的守衛；黃金不變；特寫 17 calls | claude/r023-tanks | 外型只差比例；裝甲不分面；Android 實機未測 |
 | R022 | 2026-10-18 | Claude | 反戰車砲與迫擊砲：反戰車砲直射 10 格、架好才打、打坦克 48（坦克打坦克 34）、打非裝甲只剩三成；迫擊砲間接 2–12 格、越過房子、有散布與試射校準；eco guns 才能出（35／30）、電腦普通以上各出一門（看到坦克先補反戰車砲）；兩種都畫進榴彈砲網格、迫擊砲兩個砲手用小兵網格；?noR022=1 | 本機 typecheck、unit 48、build、smoke 93 全綠；guns.mjs 5 條、8 種弄壞都落在對的守衛；黃金不變；新砲特寫 19 calls | claude/r022-guns | 反戰車砲沒有隱蔽加成、沒有拖車；迫擊砲沒有煙幕彈；Android 實機未測 |

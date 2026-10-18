@@ -10,6 +10,7 @@ export const TICK_HZ = 20;      // 每秒 20 步
 export const TER_GRASS = 0;
 export const TER_ROAD = 1;
 export const TER_FIELD = 2;     // 農田（比草地慢）
+export const TER_MUD = 3;       // R026 泥灘（潮間帶、河道）：走得過但很慢、不擋視線、不能蓋房子
 
 // 雙方
 export const SIDE_PLAYER = 0;
@@ -153,6 +154,7 @@ export interface World extends RngState {
   events: SimEvent[];
   ai?: AiState[];         // R018：哪一方由電腦指揮（ai 指令設定）
   eco?: EcoState;         // R019：補給、指揮部、生產佇列
+  map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
 }
 
 export const idx = (x: number, z: number) => z * N + x;
@@ -185,7 +187,7 @@ export function blocks(w: World, x: number, z: number): boolean {
 // 地形速度倍率（百分比）：路最快，瓦礫、彈坑最慢
 export function speedPct(w: World, x: number, z: number): number {
   const i = idx(x, z);
-  let p = w.ter[i] === TER_ROAD ? 100 : w.ter[i] === TER_FIELD ? 70 : 85;
+  let p = w.ter[i] === TER_ROAD ? 100 : w.ter[i] === TER_FIELD ? 70 : w.ter[i] === TER_MUD ? 40 : 85;
   if (w.occ[i]) p = 45;                      // 走得進來的建築格一定是瓦礫
   if (w.crater[i]) p = Math.min(p, 75 - w.crater[i] * 10);
   return p;
@@ -297,6 +299,7 @@ export function hashWorld(w: World): string {
     f.int(r ? 1 : 0);
     if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
   }
+  if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
   if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp);   // R018：只有開了電腦才折
   f.int(w.shells.length);

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
+  N, SUB, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -292,9 +292,19 @@ export class BattleView {
     for (let py = 0; py < PX; py++) for (let px = 0; px < PX; px++) {
       const gx = x * PX + px, gz = z * PX + py, n = hash2(gx, gz, 3);
       let r: number, g: number, bl: number;
-      if (ter === TER_ROAD) {
+      if (ter === TER_ROAD && w.map) {   // R026 手排地圖的街道：錯縫的石板，灰縫比石頭暗
+        const sx = Math.floor((gx + (Math.floor(gz / 3) % 2) * 2) / 4), sn = hash2(sx, Math.floor(gz / 3), 11);
+        const joint = gz % 3 === 0 || (gx + (Math.floor(gz / 3) % 2) * 2) % 4 === 0;
+        r = 126 + sn * 22 + n * 6; g = 120 + sn * 18 + n * 6; bl = 108 + sn * 14 + n * 6;
+        if (joint) { r -= 30; g -= 30; bl -= 26; }
+      } else if (ter === TER_ROAD) {
         const rut = (px === 2 || px === 5 || py === 2 || py === 5) ? -10 : 0;
         r = 132 + n * 14 + rut; g = 118 + n * 12 + rut; bl = 90 + n * 10 + rut;
+      } else if (ter === TER_MUD) {   // R026 泥灘：濕泥上一道道水光（潮溝）
+        const wet = hash2(Math.floor(gx / 3), gz, 5) > 0.55, glint = wet && n > 0.82;
+        r = 74 + n * 12; g = 78 + n * 10; bl = 70 + n * 8;
+        if (wet) { r = 66 + n * 10; g = 88 + n * 12; bl = 98 + n * 14; }
+        if (glint) { r += 40; g += 42; bl += 40; }
       } else if (ter === TER_FIELD) {
         const row = (gx + gz) % 3 === 0 ? -16 : 0;
         r = 150 + n * 18 + row; g = 146 + n * 14 + row; bl = 74 + n * 10;
