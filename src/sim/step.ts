@@ -1,5 +1,6 @@
 // 一步＝1/20 秒。順序固定：套指令 → 全部單位移動 → 車輛推擠（R005）→ 全部單位開火 → 砲彈飛行與落地 → 判勝負。
 import { isqrt, dist } from './math.ts';
+import { armorPct } from './armor.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
 import { applyBuild, type BuildCmd } from './build.ts';
@@ -136,6 +137,7 @@ function moveUnit(w: World, u: Unit): void {
     else if (u.order === ORD_FIRE_AT && !inRange(u, center(u.tx), center(u.tz))) u.order = ORD_IDLE;   // 走到底還打不到：放棄
     return;
   }
+  const oldX = u.x, oldZ = u.z;
   const c = u.path[u.pathIdx], gx = center(c % N), gz = center((c - (c % N)) / N);
   const k = UNIT_KINDS[u.kind];
   const spd = Math.max(1, Math.floor((k.speed * speedPct(w, cellOf(u.x), cellOf(u.z))) / 100));
@@ -143,6 +145,7 @@ function moveUnit(w: World, u: Unit): void {
   if (d <= spd) { u.x = gx; u.z = gz; u.pathIdx++; }
   else if (k.radius > 0) stepVehicle(w, u, u.x + Math.trunc((dx * spd) / d), u.z + Math.trunc((dz * spd) / d), spd);
   else { u.x += Math.trunc((dx * spd) / d); u.z += Math.trunc((dz * spd) / d); }
+  if (k.armored && (u.x !== oldX || u.z !== oldZ)) { u.hullX = u.x - oldX; u.hullZ = u.z - oldZ; }
   if (u.pathIdx >= u.path.length && u.order === ORD_MOVE) u.order = ORD_IDLE;
 }
 
@@ -306,7 +309,7 @@ function land(w: World, s: Shell): void {
     if (s.hitBld) { const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一
     else {
       const t = unitById(w, s.target);
-      if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, k.dmgUnit));
+      if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, s.kind === SHELL_AP ? Math.floor(k.dmgUnit * armorPct(t, s.sx, s.sz) / 100) : k.dmgUnit));
     }
     w.events.push({ e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld });
     return;

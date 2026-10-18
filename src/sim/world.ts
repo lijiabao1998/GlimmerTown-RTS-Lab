@@ -105,6 +105,7 @@ export interface Unit {
   pathIdx: number;
   cooldown: number;
   ranging?: Ranging; // optional so earlier saved worlds can still advance
+  hullX?: number; hullZ?: number; // R104 車體整數方向；舊世界缺欄位時保留原傷害
   aimX: number; aimZ: number; // 最後一次開火的方向（位置單位的向量；渲染轉砲塔用）
 }
 
@@ -268,7 +269,7 @@ export function createWorld(seed: number): World {
   // 兵力：玩家在右下角（靠鏡頭），敵人在左上角
   const spawn = (side: number, kind: number, cx: number, cz: number) => {
     const k = UNIT_KINDS[kind];
-    w.units.push({ id: w.units.length + 1, side, kind, x: center(cx), z: center(cz), hp: k.hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB });
+    w.units.push({ id: w.units.length + 1, side, kind, x: center(cx), z: center(cz), hp: k.hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB, ...(k.armored ? { hullX: side === SIDE_PLAYER ? -SUB : SUB, hullZ: side === SIDE_PLAYER ? -SUB : SUB } : {}) });
   };
   spawn(SIDE_PLAYER, UK_TANK, 24, 26); spawn(SIDE_PLAYER, UK_TANK, 26, 24); spawn(SIDE_PLAYER, UK_TANK, 26, 27);
   spawn(SIDE_PLAYER, UK_HOWITZER, 29, 29);
@@ -295,6 +296,7 @@ export function hashWorld(w: World): string {
     f.int(u.id).int(u.side).int(u.kind).int(u.x).int(u.z).int(u.hp).int(u.alive ? 1 : 0).int(u.order).int(u.target)
       .int(u.tx).int(u.tz).int(u.pathIdx).int(u.cooldown).int(u.aimX).int(u.aimZ).int(u.path.length);
     for (const c of u.path) f.int(c);
+    if (u.hullX !== undefined && u.hullZ !== undefined) f.int(0x4134).int(u.hullX).int(u.hullZ);
     const r = u.ranging;
     f.int(r ? 1 : 0);
     if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
