@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -516,6 +516,37 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR019 },
   await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await sleep(200);
   const shown = await page.evaluate("!document.getElementById('prodbar').hidden"), lg = await page.evaluate('__rts.log()'), e = await page.evaluate('__rts.eco()');
   log(!shown && !e && !lg.some(c => c.cmd.t === 'eco') && page.errors.length === 0, '?noR019=1：沒有生產列、沒有指揮部、紀錄裡沒有 eco', `${lg.length} 條指令`);
+});
+
+
+// ---- R021 步兵班：開戰雙方各一班；手機真觸控按「步兵」；桌機跑 60 秒拍步兵特寫；?noR021=1 沒有步兵 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.inf }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await page.evaluate('__rts.stepN(1)');
+  const us = await page.evaluate('__rts.units()'), squads = [0, 1].map(s => us.filter(u => u.side === s && u.kind === 3).length);
+  const r = await page.evaluate("(() => { const b = document.getElementById('pb-k3'); if (!b) return null; const q = b.getBoundingClientRect(); return [q.x + q.width / 2, q.y + q.height / 2, q.width, q.height]; })()");
+  if (r) await touchTap(page, r[0], r[1]);
+  await page.evaluate('__rts.stepN(1)');
+  const e = await page.evaluate('__rts.eco()');
+  log(squads[0] === 1 && squads[1] === 1 && !!r && r[2] >= 44 && r[3] >= 44 && e.queue[0].includes(3), '開戰雙方各一班步兵；觸控按「步兵」排進佇列', `各 ${squads}；按鈕 ${r ? r[2].toFixed(0) + '×' + r[3].toFixed(0) : '無'}；佇列 ${e.queue[0]}`);
+  log(page.errors.length === 0, '步兵（手機）零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 1280, height: 800, port: PORTS.infDesk }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0');
+  for (let k = 0; k < 20; k++) { await page.evaluate('__rts.stepN(30)'); await sleep(50); }   // 分段跑、中間畫幀：倒下的人才記得到
+  const inf = (await page.evaluate('__rts.units()')).find(u => u.side === 0 && u.kind === 3 && u.alive) ?? (await page.evaluate('__rts.units()')).find(u => u.side === 0 && u.kind === 3);
+  await page.evaluate(`__rts.focus(${inf.x / 256}, ${inf.z / 256}, 2.6); 0`); await sleep(400);
+  const info = await page.evaluate('__rts.info()'), men = await page.evaluate('__rts.men()');
+  await shot(page, path.join(SHOTS, 'desktop-infantry.png'));
+  log(men.alive + men.bodies > 0 && info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles, '步兵特寫（開戰 30 秒）：有小兵、繪製呼叫 ≤ 22、三角形 ≤ 80,000', `${JSON.stringify(men)}；${JSON.stringify({ calls: info.calls, triangles: info.triangles })}`);
+  log(page.errors.length === 0, '步兵（桌機）零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR021 }, async ({ open, page }) => {
+  await open('noR021=1');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await page.evaluate('__rts.stepN(1)');
+  const us = await page.evaluate('__rts.units()'), btn = await page.evaluate("!!document.getElementById('pb-k3')"), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(!us.some(u => u.kind === 3) && !btn && h === nodeHash && page.errors.length === 0, '?noR021=1：沒有步兵、沒有步兵按鈕、雜湊不變', h);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);

@@ -54,3 +54,16 @@ export function observer(detail = true): THREE.BufferGeometry {
   }
   return g.geometry();
 }
+
+// R021 步兵：一個小兵（約觀測員的六成高）——綁腿、軍服（吃陣營色）、背包、頭盔、步槍；本地座標朝 +x。不畫任何徽記。
+export function soldier(): THREE.BufferGeometry {
+  const g = new Geo();
+  g.box(-0.03, 0, -0.045, 0.03, 0.1, -0.01, DARK);        // 腿
+  g.box(-0.03, 0, 0.01, 0.03, 0.1, 0.045, DARK);
+  g.box(-0.04, 0.1, -0.05, 0.04, 0.22, 0.05, W);          // 身體
+  g.box(-0.07, 0.11, -0.04, -0.04, 0.2, 0.04, DARK);      // 背包
+  g.box(-0.03, 0.22, -0.03, 0.03, 0.28, 0.03, MID);       // 臉
+  g.box(-0.05, 0.27, -0.05, 0.05, 0.3, 0.05, W);          // 頭盔（淺盆形，用陣營色）
+  g.box(0.02, 0.15, 0.045, 0.2, 0.17, 0.06, STEEL);       // 步槍
+  return g.geometry();
+}

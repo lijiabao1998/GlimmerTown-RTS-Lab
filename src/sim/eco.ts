@@ -2,7 +2,7 @@
 import { findPath } from './path.ts';
 import { stillConnected } from './build.ts';
 import {
-  N, SUB, idx, inMap, cellOf, center, blocks, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, BK_HQ, TER_ROAD,
+  N, SUB, idx, inMap, cellOf, center, blocks, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, BK_HQ, TER_ROAD,
   ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, type World, type Building,
 } from './world.ts';
 
@@ -10,7 +10,7 @@ export const ECO_START = 60;          // 開局補給
 export const ECO_INCOME_TICKS = 20;   // 每 20 步（1 秒）+1
 export const ECO_QUEUE = 5;           // 佇列最多幾個
 export const ECO_POP = 16;            // 每方同時活著最多幾台
-export const PRODUCIBLE = [UK_TANK, UK_HOWITZER, UK_OBSERVER];
+export const PRODUCIBLE = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY];
 
 const corner = (side: number) => (side === SIDE_PLAYER ? N - 1 : 0);
 
@@ -35,7 +35,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
 }
 
 // eco 指令：只在第 0 步有效；雙方各放一座指揮部、開始累積補給
-export function startEco(w: World): void {
+export function startEco(w: World, inf = 0): void {
   if (w.eco || w.tick !== 0) return;
   const hq = [0, 0];
   for (const side of [SIDE_PLAYER, SIDE_ENEMY]) {
@@ -48,7 +48,8 @@ export function startEco(w: World): void {
     w.events.push({ e: 'build', bld: id });
     hq[side] = id;
   }
-  w.eco = { supply: [ECO_START, ECO_START], hq, queue: [[], []], prog: [0, 0] };
+  w.eco = { supply: [ECO_START, ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}) };
+  if (inf) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_INFANTRY, b); }   // R021：雙方各一班步兵
 }
 
 export const hqAlive = (w: World, side: number): Building | null => {
@@ -59,7 +60,7 @@ export const hqAlive = (w: World, side: number): Building | null => {
 // produce 指令：補給夠、佇列沒滿、指揮部還在才接
 export function produce(w: World, side: number, kind: number): void {
   const e = w.eco;
-  if (!e || (side !== 0 && side !== 1) || !PRODUCIBLE.includes(kind) || !hqAlive(w, side)) return;
+  if (!e || (side !== 0 && side !== 1) || !PRODUCIBLE.includes(kind) || !hqAlive(w, side) || (kind === UK_INFANTRY && !e.inf)) return;
   const cost = UNIT_KINDS[kind].cost;
   if (e.supply[side] < cost || e.queue[side].length >= ECO_QUEUE) return;
   e.supply[side] -= cost; e.queue[side].push(kind);
@@ -78,16 +79,23 @@ export function ecoStep(w: World): void {
     const k = UNIT_KINDS[q[0]];
     if (e.prog[side] < k.buildTicks) { e.prog[side]++; continue; }
     if (w.units.filter(u => u.alive && u.side === side).length >= ECO_POP) continue;   // 人數滿了：做好的先等著
-    const spot = spawnCell(w, hq);
-    if (!spot) continue;
-    const kind = q.shift()!, id = w.units.length + 1;
+    if (!spawnCell(w, hq)) continue;
+    const kind = q.shift()!;
     e.prog[side] = 0;
-    w.units.push({ id, side, kind, x: center(spot[0]), z: center(spot[1]), hp: UNIT_KINDS[kind].hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB });
-    const u = w.units[id - 1], hx = hq.x + 1, hz = hq.z + 1, mid = N >> 1;
-    const rx = hx + Math.sign(mid - hx) * 4, rz = hz + Math.sign(mid - hz) * 4;
-    const p = findPath(w, spot[0], spot[1], Math.max(0, Math.min(N - 1, rx)), Math.max(0, Math.min(N - 1, rz)));
-    if (p.length) { u.order = ORD_MOVE; u.tx = rx; u.tz = rz; u.path = p; u.pathIdx = 0; }
+    spawnUnit(w, side, kind, hq);
   }
+}
+
+// 在指揮部旁出生、走向集結點（往地圖中央 4 格）
+function spawnUnit(w: World, side: number, kind: number, hq: Building): void {
+  const spot = spawnCell(w, hq);
+  if (!spot) return;
+  const id = w.units.length + 1;
+  w.units.push({ id, side, kind, x: center(spot[0]), z: center(spot[1]), hp: UNIT_KINDS[kind].hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB });
+  const u = w.units[id - 1], hx = hq.x + 1, hz = hq.z + 1, mid = N >> 1;
+  const rx = Math.max(0, Math.min(N - 1, hx + Math.sign(mid - hx) * 4)), rz = Math.max(0, Math.min(N - 1, hz + Math.sign(mid - hz) * 4));
+  const p = findPath(w, spot[0], spot[1], rx, rz);
+  if (p.length) { u.order = ORD_MOVE; u.tx = rx; u.tz = rz; u.path = p; u.pathIdx = 0; }
 }
 
 // 指揮部旁一圈的空格，挑沒有車停著、離地圖中央最近的（決定性）

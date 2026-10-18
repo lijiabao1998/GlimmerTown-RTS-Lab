@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
+  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -10,7 +10,7 @@ import { territory } from '../sim/build.ts';
 import { buildTown, smokeSources, buildingGeo, bldColors, wallHeight, RUBBLE_COLORS, ROOF_RISE } from './buildings.ts';
 import { Geo } from './geo.ts';
 import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING, RISE_S } from './fx.ts';
-import { tankHull, tankTurret, howitzer, observer } from './unitArt.ts';
+import { tankHull, tankTurret, howitzer, observer, soldier } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
 
 const PX = 8;                       // 地面貼圖：每格 8×8 像素
@@ -20,6 +20,10 @@ const HOLE_CAP = 160;                 // R014 牆上痕跡最多幾個（滿了�
 const C_HOLE = 0x1b1713, C_SOOT = 0x2a2521;
 const DASH_CAP = 900;                 // R011 地上短線最多幾段
 const DK_PATH = 0, DK_ATTACK = 1, DK_FIRE = 2, DK_END = 3, DK_CROSS = 4;
+const MEN_CAP = 1600, BODY_CAP = 300;   // R021 小兵實例上限、倒下的人上限
+// 一班六個人的位置（班長前進方向的本地座標：兩排三列）
+const SLOTS: [number, number][] = [[0.07, -0.15], [0.07, 0], [0.07, 0.15], [-0.11, -0.15], [-0.11, 0], [-0.11, 0.15]];
+const C_BODY = [new THREE.Color(0x3c4526), new THREE.Color(0x4a4944)];
 const ELEV = Math.PI / 6;           // 鏡頭仰角 30°，水平 45°（與 2D 線、3D-lab 相同的 2:1 斜視）
 const BASE_HALF_H = 9;              // zoom=1 時畫面上下各看幾格
 
@@ -63,6 +67,11 @@ export class BattleView {
   private turret: THREE.InstancedMesh;
   private gun: THREE.InstancedMesh;
   private observerMesh: THREE.InstancedMesh;
+  private men: THREE.InstancedMesh;
+  // R021 倒下的人：位置、朝向、陣營（環狀覆寫最舊的）；每台步兵上一次看到的人數
+  readonly bodies = { n: 0, next: 0, x: new Float32Array(BODY_CAP), z: new Float32Array(BODY_CAP), y: new Float32Array(BODY_CAP), yaw: new Float32Array(BODY_CAP), side: new Uint8Array(BODY_CAP) };
+  private lastMen = new Int8Array(MAX_UNITS + 1).fill(-1);
+  readonly menDbg = { alive: 0 };
   private discs: THREE.InstancedMesh;
   private rings: THREE.InstancedMesh;
   private shells: THREE.InstancedMesh;
@@ -195,6 +204,7 @@ export class BattleView {
     this.turret = inst(tankTurret(), toon({ vertexColors: true }), MAX_UNITS, true);
     this.gun = inst(howitzer(), toon({ vertexColors: true }), MAX_UNITS, true);
     this.observerMesh = inst(observer(observerDetails), toon({ vertexColors: true }), MAX_UNITS, true);
+    this.men = inst(soldier(), toon({ vertexColors: true }), MEN_CAP, true);   // R021 步兵：活著的小兵＋倒下的人
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
     if (r014) {
@@ -240,7 +250,7 @@ export class BattleView {
   }
 
   unitHeight(u: Unit): number {
-    if (u.kind !== UK_OBSERVER) return 0;
+    if (!UNIT_KINDS[u.kind].garrison) return 0;   // 觀測員、步兵可以站在屋頂上
     const id = this.w.occ[idx(Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
     const b = id ? this.w.blds[id - 1] : null;
     if (!b || b.hp <= 0) return 0;
@@ -379,12 +389,12 @@ export class BattleView {
   // ---- 每一幀 ----
   update(alpha: number, simT: number, selected: Set<number>) {
     const w = this.w, m = this.tmp;
-    this.alpha9 = alpha;
+    this.alpha9 = alpha; this.menDbg.alive = 0;
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
     if (w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
-    let nh = 0, ng = 0, no = 0, nd = 0, nr = 0;
+    let nh = 0, ng = 0, no = 0, nd = 0, nr = 0, nm = 0;
     for (const u of w.units) {
       if (!this.visibleUnit(u)) continue;
       const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * alpha) / SUB;
@@ -408,6 +418,7 @@ export class BattleView {
         this.gun.setMatrixAt(ng, m.matrix); this.gun.setColorAt(ng, col);
         ng++;
       }
+      if (u.kind === UK_INFANTRY) nm = this.squad21(u, x, z, simT, col, nm);
       if (u.kind === UK_OBSERVER) {
         const y = this.unitHeight(u);
         m.position.set(x, y, z); m.rotation.set(0, this.yaw[u.id], u.alive ? 0 : Math.PI / 2); m.scale.setScalar(1); m.updateMatrix();
@@ -435,6 +446,10 @@ export class BattleView {
       const x = (s.sx + (s.ex - s.sx) * p) / SUB, z = (s.sz + (s.ez - s.sz) * p) / SUB;
       if (s.side !== SIDE_PLAYER && !this.visibleAt(x * SUB, z * SUB)) continue;
       const d = Math.hypot(s.ex - s.sx, s.ez - s.sz) / SUB;
+      if (this.r4 && s.kind === SHELL_SMALL) {   // R021 步槍子彈：細短的曳光
+        this.glow!.put(x, 0.14, z, 0.16, 0.014, 0.014, Math.atan2(-(s.ez - s.sz), s.ex - s.sx), 0xfff3c0, 0.9);
+        continue;
+      }
       if (this.r4 && s.kind === SHELL_AP) {   // 曳光：沿彈道拉長的亮條（加色），比一顆小方塊看得出誰打誰
         const yaw = Math.atan2(-(s.ez - s.sz), s.ex - s.sx);
         this.glow!.put(x, 0.2, z, 0.34, 0.03, 0.03, yaw, 0xfff0b8);
@@ -474,6 +489,8 @@ export class BattleView {
     if (this.r4) this.updateFx(simT);
     if (this.r9) this.bars9(simT, selected);
     if (this.dash) this.orders11(selected);
+    nm = this.bodies21(nm);
+    fin(this.men, nm);
     fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
   }
 
@@ -532,6 +549,11 @@ export class BattleView {
     if (e.e === 'fire') {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
+      if (u.kind === UK_INFANTRY) {   // R021 步槍：小小的槍口火光
+        const a = Math.atan2(u.aimZ, u.aimX), x0 = e.x / SUB + Math.cos(a) * 0.18, z0 = e.z / SUB + Math.sin(a) * 0.18, y0 = this.unitHeight(u) + 0.16;
+        this.glow!.spawn({ x: x0, y: y0, z: z0, t0: t, life: 0.06, s0: 0.03, s1: 0.07, c0: 0xfff6c8, c1: 0xffa040, fog: u.side !== SIDE_PLAYER });
+        return;
+      }
       const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER, L = gun ? 0.42 : 0.44, y = gun ? 0.32 : 0.2;
       const mx = e.x / SUB + Math.cos(a) * L, mz = e.z / SUB + Math.sin(a) * L, fog = u.side !== SIDE_PLAYER;
       this.glow!.spawn({ x: mx, y, z: mz, t0: t, life: 0.08, s0: 0.1, s1: gun ? 0.34 : 0.22, c0: 0xfff6c8, c1: 0xffa040, fog });
@@ -546,6 +568,10 @@ export class BattleView {
       }
     } else if (e.e === 'impact') {
       const x = e.x / SUB, z = e.z / SUB;
+      if (e.kind === SHELL_SMALL) {   // R021 子彈：一點塵、一點火星，不爆炸、不震
+        this.puff!.spawn({ x, y: 0.05, z, vy: 0.15, t0: t, life: 0.7, s0: 0.03, s1: 0.1, c0: 0x9a8b74, c1: 0xa59c8c, fog: true });
+        return;
+      }
       if (e.kind === SHELL_HE) { this.blast(x, z, t, 1, true, DIRT, 7); if (this.vis(x, z)) this.shake(0.06, x, z, t); return; }   // 看不到的彈著不震（不洩漏）
       // 穿甲彈：打中建築噴牆色碎片；打空或打中車輛噴火星
       const b = e.bld ? this.w.blds[e.bld - 1] : null, fog = true;
@@ -572,7 +598,7 @@ export class BattleView {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
       const x = u.x / SUB, z = u.z / SUB, fog = u.side !== SIDE_PLAYER;
-      if (u.kind === UK_OBSERVER) {
+      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY) {
         for (let k = 0; k < 3; k++) this.puff!.spawn({ x, y: 0.08, z, vy: 0.2, t0: t + 0.05 * k, life: 1.4, s0: 0.06, s1: 0.22, c0: 0x9a8b74, c1: 0xa59c8c, fog });
         return;
       }
@@ -710,7 +736,7 @@ export class BattleView {
     for (const u of this.w.units) {
       if (u.hp < this.lastHp[u.id]) this.flashT0[u.id] = t;
       this.lastHp[u.id] = u.hp;
-      if (!u.alive || u.kind === UK_OBSERVER) continue;
+      if (!u.alive || UNIT_KINDS[u.kind].radius === 0) continue;   // 步兵（觀測員、步兵班）不壓車轍
       const dx = u.x - this.prevX[u.id], dz = u.z - this.prevZ[u.id];
       if (!dx && !dz) continue;
       const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = u.kind === UK_TANK ? 0.13 : 0.11;
@@ -962,6 +988,40 @@ export class BattleView {
   get ghostCount() { return this.ghosts ? this.ghosts.count : 0; }
   get holeCount() { let c = 0; for (let i = 0; i < HOLE_CAP; i++) c += this.holes.live[i]; return c; }
   get holeInstances() { return this.holeMesh ? this.holeMesh.count : 0; }
+
+
+  // ======== R021 步兵班 ========
+  // 一班畫成 6 個小兵（兩排三列，跟著前進方向）；人數＝血量 ÷ 10 無條件進位；少了的人留在原地倒下
+  private squad21(u: Unit, x: number, z: number, t: number, col: THREE.Color, n: number): number {
+    const k = UNIT_KINDS[u.kind], men = u.alive ? Math.min(k.men, Math.ceil((u.hp * k.men) / k.hp)) : 0;
+    const yaw = this.yaw[u.id], cy = Math.cos(yaw), sy = Math.sin(yaw), y = this.unitHeight(u), moving = u.pathIdx < u.path.length;
+    const last = this.lastMen[u.id] < 0 ? men : this.lastMen[u.id];
+    for (let i = men; i < last; i++) {   // 剛倒下的人：留一個躺著的在他的位置
+      const [ax, az] = SLOTS[i], bx = x + ax * cy + az * sy, bz = z - ax * sy + az * cy, B = this.bodies, j = B.next;
+      B.x[j] = bx; B.z[j] = bz; B.y[j] = y; B.yaw[j] = yaw + (i - 2.5) * 0.7; B.side[j] = u.side;
+      B.next = (B.next + 1) % BODY_CAP; B.n = Math.min(BODY_CAP, B.n + 1);
+    }
+    this.lastMen[u.id] = men;
+    const m = this.tmp, aim = Math.atan2(-u.aimZ, u.aimX), scale = y > 0 ? 0.75 : 1;   // 屋頂上站得擠一點
+    for (let i = 0; i < men && n < MEN_CAP; i++) {
+      const [ax, az] = SLOTS[i], bob = moving ? 0.012 * Math.abs(Math.sin(t * 11 + i * 1.7)) : 0;
+      m.position.set(x + (ax * cy + az * sy) * scale, y + bob, z + (-ax * sy + az * cy) * scale);
+      m.rotation.set(0, moving ? yaw : aim, 0); m.scale.setScalar(1); m.updateMatrix();
+      this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, col); n++;
+    }
+    this.menDbg.alive += men;
+    return n;
+  }
+  private bodies21(n: number): number {
+    const B = this.bodies, m = this.tmp;
+    for (let k = 0; k < B.n && n < MEN_CAP; k++) {
+      const j = (B.next - B.n + k + BODY_CAP) % BODY_CAP;
+      if (B.side[j] !== SIDE_PLAYER && !this.visibleAt(B.x[j] * SUB, B.z[j] * SUB)) continue;   // 敵方的屍體在霧裡不畫
+      m.position.set(B.x[j], B.y[j] + 0.03, B.z[j]); m.rotation.set(0, B.yaw[j], Math.PI / 2); m.scale.setScalar(1); m.updateMatrix();
+      this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, C_BODY[B.side[j]]); n++;
+    }
+    return n;
+  }
 
   // ---- 鏡頭 ----
   layout(cssW: number, cssH: number) {
