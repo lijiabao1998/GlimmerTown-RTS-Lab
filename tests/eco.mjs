@@ -22,7 +22,12 @@ const T = UNIT_KINDS[UK_TANK];
     for (const a of w.units) for (const b of w.units) if (a.side !== b.side) { const p = findPath(w, ...c(a), ...c(b)); if (p[p.length - 1] !== idx(...c(b))) reach = false; }
     if (!near || onUnit || !reach) bad.push(seed);
   }
-  check(!bad.length, '指揮部：種子 0–199 雙方都放得下、在自己角落附近、不壓單位、兩方互相走得到', bad.slice(0, 10).join(',') || '全部合格');
+  // 角落最佳位置上先停一台車：指揮部要避開它
+  const w = createWorld(1944), t = w.units[0];
+  t.x = center(30); t.z = center(30);
+  step(w, [{ t: 'eco' }]);
+  const hq = w.blds[w.eco.hq[0] - 1], covers = cellOf(t.x) >= hq.x && cellOf(t.x) < hq.x + 2 && cellOf(t.z) >= hq.z && cellOf(t.z) < hq.z + 2;
+  check(!bad.length && !covers, '指揮部：種子 0–199 雙方都放得下、在自己角落附近、不壓單位、兩方互相走得到；角落停著車時避開', `${bad.slice(0, 10).join(',') || '全部合格'}；停車場景指揮部在 ${hq.x},${hq.z}（車在 30,30）`);
 }
 { // 2. 補給、生產、出生與集結、人數上限
   const w = createWorld(1944); step(w, [{ t: 'eco' }]);
