@@ -82,7 +82,12 @@ function previewWorld(): World {
 function refreshPreview() { if (phase === 'build') view.setWorld(previewWorld(), SIDE_PLAYER); }
 const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.kind)?.cost ?? 0), 0);
 
-function reset(s = seed, build = r006) {
+// R018 電腦對手：開戰時送 ai 指令（記在指令紀錄裡，重播自動一致）。?ai=1|2|3 選難度；逃生閥 ?noR018=1＝敵人原地還擊
+const r018 = q.get('noR018') !== '1';
+const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
+const AI_NAME = ['', '簡單', '普通', '困難'];
+
+function reset(s = seed, build = r006, ai = r018) {
   w = createWorld(s);
   view?.dispose();
   view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
@@ -90,6 +95,7 @@ function reset(s = seed, build = r006) {
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   if (build) { paused = true; refreshPreview(); }
+  else if (ai) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });   // 沒有布陣：開頁就開打，電腦第 0 步接手
   ui();
 }
 function ui() { hud?.update(); buildBar?.update(); }
@@ -100,6 +106,7 @@ function startBattle() {
   const pv = previewWorld(), enemy = enemyPlan(pv);
   for (const c of plan) issue(c);
   for (const c of enemy) issue(c);
+  if (r018) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   phase = 'battle'; plan = []; buildHint = '';
   if (r016) startBanner();
   view.setWorld(w, -1);
@@ -277,7 +284,7 @@ hud = initHud({
     return {
       tick: w.tick, paused, speed, fireMode, winner: w.winner, report: r010,
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : undefined,
-      mine: mine.length, theirs: theirs.length,
+      mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => u.kind === UK_TANK).length, guns: sel.filter(u => u.kind === UK_HOWITZER).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
     };
@@ -358,7 +365,7 @@ const rts = {
   selected: () => [...selected],
   // 用跟 Node 一樣的路徑重跑腳本戰鬥，回傳雜湊；畫面換成腳本跑完的世界
   runScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false);
+    reset(SCRIPT_SEED, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
     view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
@@ -374,6 +381,7 @@ const rts = {
   bars: () => view.bars,
   dashes: () => view.dashes,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
+  units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
   rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner') }),
@@ -383,7 +391,7 @@ const rts = {
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
   // 任意指令紀錄，從第 0 步一步一步跑（每一步都餵畫面與戰報統計）；回傳雜湊
   playLog: (s: number, lg: LoggedCommand[], ticks: number) => {
-    reset(s, false);
+    reset(s, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }
@@ -395,7 +403,7 @@ const rts = {
   paused: () => paused,
   report: () => ({ shown: !!reportView?.visible(), data: makeReport(w, stats) }),
   playScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false);
+    reset(SCRIPT_SEED, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) issue(SCRIPT[i].cmd); i++; }

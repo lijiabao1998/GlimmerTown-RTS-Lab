@@ -111,6 +111,9 @@ export type SimEvent =
   | { e: 'stage'; bld: number; stage: number }
   | { e: 'build'; bld: number };
 
+// R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
+export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number }
+
 export interface World extends RngState {
   seed: number;
   tick: number;
@@ -124,6 +127,7 @@ export interface World extends RngState {
   nextShell: number;
   winner: number;         // -1＝還在打；0／1＝勝方；2＝同歸於盡
   events: SimEvent[];
+  ai?: AiState[];         // R018：哪一方由電腦指揮（ai 指令設定）
 }
 
 export const idx = (x: number, z: number) => z * N + x;
@@ -266,6 +270,7 @@ export function hashWorld(w: World): string {
     f.int(r ? 1 : 0);
     if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
   }
+  if (w.ai) for (const a of w.ai) f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp);   // R018：只有開了電腦才折
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
   return f.hex();
