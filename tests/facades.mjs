@@ -1,7 +1,7 @@
 // R028 外牆細節守衛：固定、三種都出現、關掉跟原樣逐頂點相同、不改外框與屋頂高度、整張 Rye 三角形在預算內。
 import { createWorld, BK_HOUSE, BK_SHOP, STAGE_INTACT } from '../src/sim/world.ts';
 import { applyMap, MAP_RYE } from '../src/sim/maps.ts';
-import { buildingGeo, buildTown, facadeStyle, setFacades, FAC_TIMBER, FAC_TILE, FAC_BOARD } from '../src/render/buildings.ts';
+import { buildingGeo, buildTown, facadeStyle, setFacades, setMaterials, FAC_TIMBER, FAC_TILE, FAC_BOARD } from '../src/render/buildings.ts';
 import { Geo } from '../src/render/geo.ts';
 
 const ORIG_FP = ['fc43cc18', '2eb8beb0'];   // R028 之前的模型（亂數村莊、Rye）
@@ -22,8 +22,10 @@ setFacades(false);
 const off = w.blds.map(b => JSON.stringify(geo(b).pos)), offB = w.blds.map(b => bounds(geo(b))), townOff = tris(buildTown(w));
 // 關掉時跟 R028 之前的模型逐頂點相同：指紋是用 R028 之前的 buildings.ts 對同一個世界算出來的（亂數村莊、Rye 各一個）
 const fp = g => { let h = 2166136261; const s = JSON.stringify([g.pos, g.col, g.nor]); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(16); };
+// 歷史模型指紋要同時關掉後加的 R105 材質色；原指紋與斷言不變。
+setMaterials(false);
 const plain = createWorld(1944), fpOff = [fp(buildTown(plain)), fp(buildTown(w))];
-setFacades(true);
+setFacades(true); setMaterials(true);
 
 check(on.every((s, i) => s === on2[i]) && styles.has(FAC_TIMBER) && styles.has(FAC_TILE) && styles.has(FAC_BOARD), '固定：同一棟每次畫一樣；Rye 上木構、掛瓦、護牆板都有',
   `外牆種類 ${[...styles].sort()}`);

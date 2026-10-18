@@ -25,6 +25,19 @@ export const BK_SHOP = 4;
 export const BK_HQ = 5;          // R019 指揮部（eco 指令放的；打成瓦礫那一方輸）
 export const BK_PILLBOX = 6;     // R024 Type 22 碉堡（混凝土；裡面的人只吃四分之一傷害；直射只刮掉四分之一，怕榴彈砲）
 
+// R105 材質由種類推導，不往世界或指令加欄位；舊存檔保留已存的 hp／maxHp。
+export const BM_WOOD = 0;
+export const BM_BRICK = 1;
+export const BM_STONE = 2;
+export const BM_CONCRETE = 3;
+export const BLD_MATERIAL_NAMES = ['木造', '磚造', '石造', '混凝土'] as const;
+export function bldMaterial(kind: number): number {
+  if (kind === BK_BARN) return BM_WOOD;
+  if (kind === BK_CHURCH) return BM_STONE;
+  if (kind === BK_PILLBOX) return BM_CONCRETE;
+  return BM_BRICK;
+}
+
 // 單位種類
 export const UK_TANK = 0;
 export const UK_HOWITZER = 1;
@@ -196,8 +209,10 @@ export function speedPct(w: World, x: number, z: number): number {
 export function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
   if (kind === BK_HQ) return 1200;
   if (kind === BK_PILLBOX) return 400;
-  const base = kind === BK_CHURCH ? 120 : kind === BK_BARN ? 30 : 50;
-  return base + 40 * floors * w * d;
+  const material = bldMaterial(kind);
+  const base = material === BM_WOOD ? 30 : material === BM_STONE ? 120 : 50;
+  const perCell = material === BM_WOOD ? 30 : material === BM_STONE ? 50 : 40;
+  return base + perCell * floors * w * d;
 }
 
 // ---- 地圖：程序生成的二戰村莊街區 ----

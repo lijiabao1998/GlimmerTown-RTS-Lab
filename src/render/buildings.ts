@@ -5,7 +5,7 @@ import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
   stageOf, STAGE_INTACT, STAGE_ROOFLESS, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX,
-  type World, type Building,
+  bldMaterial, BM_WOOD, BM_BRICK, BM_STONE, type World, type Building,
 } from '../sim/world.ts';
 
 export const FLOOR_H = 0.36;   // 一層樓高（格）；3D-lab blockArt.ts 的換算
@@ -21,6 +21,20 @@ const PAL: Record<number, { wall: THREE.Color; roof: THREE.Color; trim: THREE.Co
   [BK_HQ]: { wall: C(0xb8a67e), roof: C(0x5c6650), trim: C(0x6a5a40) },        // R019 指揮部：沙包、橄欖帆布、木料
 };
 const GLASS = C(0x2a3038), RUBBLE = [C(0x8a7d6e), C(0x6e6458), C(0x9b8f7f), C(0x5a4f45)], CHAR = C(0x2b2724), BEAM = C(0x4a3626);
+
+// R105 材質顏色：既有網格不變；不同牆體、空殼與瓦礫讀得到木／磚／石。
+let materialsOn = true;
+export function setMaterials(on: boolean): void { materialsOn = on; }
+const MATERIAL_WALL = { [BM_WOOD]: C(0x866344), [BM_BRICK]: C(0xa5644c), [BM_STONE]: C(0xb2aea0) };
+const MATERIAL_RUBBLE = {
+  [BM_WOOD]: [C(0x6b4a33), C(0x493728), C(0x94714e), C(0x332a22)],
+  [BM_BRICK]: [C(0x9a5a44), C(0x724a39), C(0xb6795c), C(0x583e33)],
+  [BM_STONE]: [C(0xa9a596), C(0x7d7a6e), C(0xc0baaa), C(0x625e55)],
+};
+const MATERIAL_PAL: typeof PAL = {};
+for (const kind of [BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP]) MATERIAL_PAL[kind] = { ...PAL[kind], wall: MATERIAL_WALL[bldMaterial(kind) as 0 | 1 | 2] };
+const palette = (kind: number) => materialsOn ? MATERIAL_PAL[kind] ?? PAL[kind] ?? PAL[BK_HOUSE] : PAL[kind] ?? PAL[BK_HOUSE];
+const rubbleColors = (kind: number) => materialsOn && kind !== BK_HQ && kind !== BK_PILLBOX ? MATERIAL_RUBBLE[bldMaterial(kind) as 0 | 1 | 2] : RUBBLE;
 
 export function wallHeight(b: Building): number { return b.floors * FLOOR_H + 0.1; }
 
@@ -118,7 +132,7 @@ function pillbox(g: Geo, b: Building, broken: boolean) {
 function intact(g: Geo, b: Building) {
   if (b.kind === BK_HQ) { hq(g, b); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, false); return; }
-  const p = PAL[b.kind], m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
+  const p = palette(b.kind), m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   if (b.kind === BK_CHURCH) {
     const tw = 0.9, h = wallHeight(b);
     g.box(x0, 0, z0 + tw, x1, h, z1, p.wall, null);                         // 中殿
@@ -145,7 +159,7 @@ function intact(g: Geo, b: Building) {
 // 沒屋頂：四面薄牆剩七成高，牆頂鋸齒，屋裡焦黑，幾根斷梁
 function roofless(g: Geo, b: Building) {
   if (b.kind === BK_PILLBOX) { pillbox(g, b, true); return; }
-  const p = PAL[b.kind], m = 0.1, t = 0.07, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
+  const p = palette(b.kind), m = 0.1, t = 0.07, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   const h = wallHeight(b) * 0.72;
   const jag = (k: number) => h * (0.7 + 0.3 * hash2(b.id, k, 7));
   const segs = 3;
@@ -166,13 +180,13 @@ function roofless(g: Geo, b: Building) {
 }
 
 function rubble(g: Geo, b: Building) {
-  const n = 6 + b.w * b.d * 3;
+  const n = 6 + b.w * b.d * 3, colors = rubbleColors(b.kind);
   for (let k = 0; k < n; k++) {
     const hx = hash2(b.id, k, 1), hz = hash2(b.id, k, 2), hh = hash2(b.id, k, 3), hc = hash2(b.id, k, 4);
     const x = b.x + 0.12 + hx * (b.w - 0.24), z = b.z + 0.12 + hz * (b.d - 0.24), s = 0.08 + hh * 0.12;
-    g.box(x - s, 0, z - s * 0.8, x + s, 0.05 + hh * 0.12, z + s * 0.8, RUBBLE[Math.floor(hc * RUBBLE.length)]);
+    g.box(x - s, 0, z - s * 0.8, x + s, 0.05 + hh * 0.12, z + s * 0.8, colors[Math.floor(hc * colors.length)]);
   }
-  if (b.kind === BK_CHURCH) g.box(b.x + 0.1, 0, b.z + 0.1, b.x + 0.9, 0.55, b.z + 0.9, PAL[b.kind].wall);   // 塔基還站著
+  if (b.kind === BK_CHURCH) g.box(b.x + 0.1, 0, b.z + 0.1, b.x + 0.9, 0.55, b.z + 0.9, palette(b.kind).wall);   // 塔基還站著
 }
 
 // 一棟建築在指定損壞階段的模型（R004 倒塌殘影要畫「倒之前」那一段）
@@ -189,7 +203,7 @@ export function buildTown(w: World, skip?: (b: Building) => boolean): Geo {
 }
 
 // 效果用的顏色：碎片取自那棟房子的牆、屋頂與瓦礫（R004）
-export function bldColors(kind: number): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return PAL[kind] ?? PAL[BK_HOUSE]; }
+export function bldColors(kind: number): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return palette(kind); }
 export const RUBBLE_COLORS = RUBBLE;
 export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22, [BK_HQ]: 0.16, [BK_PILLBOX]: 0.06 };
 
