@@ -19,6 +19,7 @@ const MUTANTS = {
   cancelMain: ['src/main.ts', 'if (dismissOnly) { commandMenu?.close();', "if (dismissOnly && !location.search.includes('__r109mutant=cancel')) { commandMenu?.close();"],
   routing: ['src/main.ts', 'bombardCommand(w, selected, target, chosen)', "bombardCommand(w, selected, target, location.search.includes('__r109mutant=routing') ? 'he' : chosen)"],
   valve: ['src/main.ts', "const r109 = q.get('noR109') !== '1';", "const r109 = location.search.includes('__r109mutant=valve') || q.get('noR109') !== '1';"],
+  hint: ['src/main.ts', 'function clearBattleHint() {\n  if (battleHint === undefined) return;\n  battleHint = undefined;\n  hud?.update();\n}', "function clearBattleHint() {\n  if (battleHint === undefined) return;\n  battleHint = undefined;\n  if (!location.search.includes('__r109mutant=hint')) hud?.update();\n}"],
 };
 const hits = new Set();
 const plugin = {
@@ -118,6 +119,24 @@ async function main() {
         assert.deepEqual(await E('[document.querySelector("#b-fire").getAttribute("aria-pressed"),document.querySelector("#b-ammo").getAttribute("aria-pressed")]'),toolbar,'routing: toolbar modes preserved');
         await E('__rts.select([1,9])'); await hold(); const n=(await state()).log.length; await button('#cm-smoke');
         assert.equal((await state()).log.length,n,'routing: no eligible gun produces no command'); assertions(await E('document.querySelector("#hint").textContent.includes("請先選取榴彈砲")'),'routing: no-gun reason visible');
+      },
+      async hint() {
+        await viewport(true); const before=await state(), tick=await E('__rts.tick()');
+        await hold(); await button('#cm-smoke');
+        assertions(await E('document.querySelector("#hint").textContent.includes("已下煙幕指令")'),'hint: fixture smoke confirmation visible');
+        // Find bare ground away from every projected unit and HUD; assert the actual routed cell below.
+        const target=await E(`(()=>{const units=__rts.units().filter(u=>u.alive).map(u=>__rts.screenOf(u.id)),blds=__rts.blds();for(let z=25;z<=29;z++)for(let x=25;x<=29;x++){if(blds.some(b=>x>=b.x&&z>=b.z&&x<b.x+b.w&&z<b.z+b.d))continue;const p=__rts.screenOfCell(x,z),g=__rts.groundAt(...p);if(document.elementFromPoint(...p)?.tagName==='CANVAS'&&g&&Math.floor(g[0])===x&&Math.floor(g[1])===z&&units.every(u=>(u[0]-p[0])**2+(u[1]-p[1])**2>32**2))return {p,x,z};}return null;})()`);
+        assertions(target,'fixture: paused order has unobstructed bare ground');
+        await touchTap(page,...target.p); await frames();
+        assert.deepEqual((await state()).log.slice(before.log.length).map(l=>l.cmd),[{t:'fireAt',side:0,ids:[4],x:29,z:29,ammo:'smoke'},{t:'move',side:0,ids:[1,4,9],x:target.x,z:target.z}],'hint: ordinary touch retains exact queued commands');
+        assertions(await E('!document.querySelector("#hint").textContent.includes("已下煙幕指令")&&document.querySelector("#hint").textContent.includes("點地面＝移動")'),'hint: paused ordinary order immediately clears stale confirmation');
+        assert.equal(await E('__rts.tick()'),tick,'hint: clearing does not advance simulation'); assert.equal((await state()).hash,before.hash,'hint: commands stay queued while paused');
+        if(!overlay['index.html'])await shot(page,path.join(ROOT,'shots/r110-paused-hint.png'));
+        await E('__rts.select([1,9])'); await hold(); await button('#cm-smoke');
+        assertions(await E('document.querySelector("#hint").textContent.includes("請先選取榴彈砲")'),'hint: fixture no-gun error visible');
+        const n=(await state()).log.length; await touch('touchStart',[[...target.p,1]]); await touch('touchCancel',[]); await frames();
+        assertions(await E('!document.querySelector("#hint").textContent.includes("請先選取榴彈砲")'),'hint: closed-menu pointer cancellation immediately clears stale error');
+        assert.equal((await state()).log.length,n,'hint: cancellation never orders'); assert.equal(await E('__rts.tick()'),tick,'hint: cancellation stays paused');
       },
       async cancel() {
         await viewport(true); const before=await state(), p=await hold(false);
