@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751 , help: 8871 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -326,6 +326,35 @@ await withBrowser({ width: 800, height: 600, port: PORTS.noR011 }, async ({ open
   await page.evaluate(ordersJs); await sleep(300);
   const n = await page.evaluate('__rts.dashes()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(n === 0 && h === nodeHash && page.errors.length === 0, '?noR011=1：不畫指令回饋、雜湊不變、零頁面錯誤', `${n} 段；${h}`);
+});
+
+
+// ---- R013 說明面板：手機真觸控，布陣中與開打後都點得到「？」；開著時暫停，關掉回到原來的狀態 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.help }, async ({ open, page }) => {
+  await open('');
+  const center = id => page.evaluate(`(() => { const r = document.getElementById('${id}').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2, r.width, r.height]; })()`);
+  const shown = () => page.evaluate("!document.getElementById('help').hidden");
+  let [x, y, bw, bh] = await center('b-help');
+  await touchTap(page, x, y); await sleep(200);
+  const txt = await page.evaluate("document.querySelector('#help .panel').innerText"), box = await page.evaluate("(() => { const r = document.querySelector('#help .panel').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; })()");
+  await shot(page, path.join(SHOTS, 'mobile-help.png'));
+  const [ox, oy, ow, oh] = await center('help-ok');
+  log(await shown() && ['布陣', '開戰', '觀測員'].every(k => txt.includes(k)) && box[0] >= 0 && box[1] >= 0 && box[2] <= 412 && box[3] <= 860 && bw >= 44 && bh >= 36 && ow >= 44 && oh >= 44,
+    '布陣中點「？」：說明面板出現、在畫面內、提到布陣／開戰／觀測員；按鈕夠大', `面板 ${box.map(v => v.toFixed(0))}；？ ${bw.toFixed(0)}×${bh.toFixed(0)}；知道了 ${ow.toFixed(0)}×${oh.toFixed(0)}`);
+  await touchTap(page, ox, oy); await sleep(200);
+  const closed1 = !(await shown());
+  await page.evaluate('__rts.startBattle()'); await sleep(200);
+  const runningBefore = !(await page.evaluate('__rts.paused()'));
+  [x, y] = await center('b-help');
+  await touchTap(page, x, y); await sleep(150);
+  const t0 = await page.evaluate('__rts.tick()'); await sleep(500); const t1 = await page.evaluate('__rts.tick()');
+  const pausedInHelp = await page.evaluate('__rts.paused()');
+  const [ox2, oy2] = await center('help-ok');
+  await touchTap(page, ox2, oy2); await sleep(400);
+  const t2 = await page.evaluate('__rts.tick()');
+  log(closed1 && runningBefore && pausedInHelp && t1 === t0 && t2 > t1 && !(await page.evaluate('__rts.paused()')), '開打後點「？」：說明開著時暫停（tick 不動），按「知道了」回到原來的進行狀態',
+    `開打 ${runningBefore}；說明中 tick ${t0} → ${t1}（暫停 ${pausedInHelp}）；關掉後 ${t2}`);
+  log(page.errors.length === 0, '說明面板零頁面錯誤', page.errors.join(' | '));
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
