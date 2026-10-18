@@ -22,6 +22,7 @@ export const BK_BARN = 2;
 export const BK_CHURCH = 3;
 export const BK_SHOP = 4;
 export const BK_HQ = 5;          // R019 指揮部（eco 指令放的；打成瓦礫那一方輸）
+export const BK_PILLBOX = 6;     // R024 Type 22 碉堡（混凝土；裡面的人只吃四分之一傷害；直射只刮掉四分之一，怕榴彈砲）
 
 // 單位種類
 export const UK_TANK = 0;
@@ -192,6 +193,7 @@ export function speedPct(w: World, x: number, z: number): number {
 
 export function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
   if (kind === BK_HQ) return 1200;
+  if (kind === BK_PILLBOX) return 400;
   const base = kind === BK_CHURCH ? 120 : kind === BK_BARN ? 30 : 50;
   return base + 40 * floors * w * d;
 }

@@ -2,7 +2,7 @@
 import { isqrt } from './math.ts';
 import { nextU32, randInt, type RngState } from './rng.ts';
 import {
-  N, idx, inMap, cellOf, blocks, bldMaxHp, TER_ROAD, BK_COTTAGE, BK_HOUSE, BK_BARN, SIDE_PLAYER, SIDE_ENEMY,
+  N, idx, inMap, cellOf, blocks, bldMaxHp, TER_ROAD, BK_COTTAGE, BK_HOUSE, BK_BARN, BK_PILLBOX, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Building,
 } from './world.ts';
 
@@ -16,8 +16,11 @@ export const BUILD_KINDS: BuildKind[] = [
   { name: 'barn', kind: BK_BARN, w: 2, d: 2, floors: 1, cost: 3 },
 ];
 export const BUILD_POINTS = 8;
+// R024 Type 22 碉堡：另外一張表（關掉 R024 時布陣列與敵方布陣都只用原本三種，跟以前一樣）
+export const PILLBOX_KIND: BuildKind = { name: 'pillbox', kind: BK_PILLBOX, w: 1, d: 1, floors: 1, cost: 3 };
+export const BUILD_KINDS_24: BuildKind[] = [...BUILD_KINDS, PILLBOX_KIND];
 
-export const buildKind = (kind: number): BuildKind | null => BUILD_KINDS.find(k => k.kind === kind) ?? null;
+export const buildKind = (kind: number): BuildKind | null => BUILD_KINDS_24.find(k => k.kind === kind) ?? null;
 
 // 半場：我方 x+z ≥ N+2、敵方 x+z ≤ N−4，中間是無人帶
 export function territory(side: number, x: number, z: number): boolean {
@@ -113,7 +116,7 @@ export function applyBuild(w: World, cmd: BuildCmd): string | null {
 
 // 敵方布陣：只看種子與地圖，用自己的亂數狀態；在草稿世界上試蓋，傳進來的世界不變。
 // 想法：在敵軍重心往我方重心的方向 3–10 格、靠近那條線的地方放房子，替火砲與來路擋視線；用完建材為止。
-export function enemyPlan(w: World): BuildCmd[] {
+export function enemyPlan(w: World, kindsAll: BuildKind[] = BUILD_KINDS): BuildCmd[] {
   const out: BuildCmd[] = [];
   if (w.tick !== 0) return out;
   const s: World = { ...w, occ: w.occ.slice(), blds: w.blds.slice(), events: [] };
@@ -133,7 +136,7 @@ export function enemyPlan(w: World): BuildCmd[] {
   let left = BUILD_POINTS - pointsUsed(s, SIDE_ENEMY);
   for (let pass = 0; pass < 2 && left > 0; pass++) {
     for (let guard = 0; guard < 2 * BUILD_POINTS && left > 0; guard++) {
-      const kinds = BUILD_KINDS.filter(k => k.cost <= left);
+      const kinds = kindsAll.filter(k => k.cost <= left);
       if (!kinds.length) break;
       const first = randInt(r, kinds.length);
       let placed: BuildCmd | null = null;

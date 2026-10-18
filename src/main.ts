@@ -1,7 +1,7 @@
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
 import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, bldAt, cellOf, type World } from './sim/world.ts';
-import { BUILD_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
+import { BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
@@ -65,7 +65,7 @@ const SPEEDS = [1, 2, 4];
 const r006 = q.get('noR006') !== '1';
 let phase: 'build' | 'battle' = 'battle';
 let plan: BuildCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
-const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉' };
+const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡' };
 const BUILD_WHY: Record<string, string> = {
   tick: '已經開戰，不能再蓋', map: '超出地圖', foreign: '那是敵方半場（紅色）；只能蓋在我方半場（藍色）',
   neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', road: '不能蓋在路上', occupied: '那裡已經有房子',
@@ -90,6 +90,8 @@ const r019 = q.get('noR019') !== '1';
 // R021 步兵班：eco 帶 inf＝1（雙方各一班、可出步兵）。逃生閥 ?noR021=1
 const r021 = q.get('noR021') !== '1';
 const r022 = q.get('noR022') !== '1';   // R022 反戰車砲、迫擊砲（關掉＝eco 不帶 guns：生產列沒有、電腦不出）
+const r024 = q.get('noR024') !== '1';   // R024 碉堡（關掉＝布陣列沒有碉堡、敵方布陣也不蓋）
+const BUILD_KINDS_NOW = r024 ? BUILD_KINDS_24 : BUILD_KINDS;
 const r023 = q.get('noR023') !== '1';   // R023 輕坦克、重坦克（關掉＝eco 不帶 tanks：生產列沒有、電腦不出）
 const ecoCmd = (): Command => ({ t: 'eco', ...(r021 ? { inf: 1 } : {}), ...(r022 ? { guns: 1 } : {}), ...(r023 ? { tanks: 1 } : {}) });
 let prodBar: ProdBar | undefined;
@@ -115,7 +117,7 @@ function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); }
 // 開戰：我方布陣＋敵方布陣都寫進指令紀錄（第 0 步），馬上走第一步讓房子落地（中間不畫任何一幀，不會閃）
 function startBattle() {
   if (phase !== 'build') return;
-  const pv = previewWorld(), enemy = enemyPlan(pv);
+  const pv = previewWorld(), enemy = enemyPlan(pv, BUILD_KINDS_NOW);
   for (const c of plan) issue(c);
   for (const c of enemy) issue(c);
   if (r019) issue(ecoCmd());
@@ -330,7 +332,7 @@ if (r015) minimap = initMinimap({
   tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
 const help = initHelp({ open: () => { pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } });
-buildBar = initBuildBar(BUILD_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost })), {
+buildBar = initBuildBar(BUILD_KINDS_NOW.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost })), {
   state: () => {
     const kd = buildKind(pickKind)!;
     return { visible: phase === 'build', kind: pickKind, rot: pickRot, rotatable: kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };
