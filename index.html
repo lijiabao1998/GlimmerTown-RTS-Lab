@@ -37,6 +37,22 @@
     #buildbar .pips { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
     #buildbar .pips i { width: 9px; height: 12px; border-radius: 2px; background: #3a4352; display: inline-block; }
     #buildbar .pips i.on { background: #ffd36a; }
+    /* R010 戰報 */
+    #report { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: rgba(10, 12, 9, 0.45); }
+    #report[hidden], #report-open[hidden] { display: none; }
+    #report .panel { box-sizing: border-box; width: min(92vw, 460px); max-height: 86vh; overflow: auto; padding: 16px 18px; background: rgba(24, 28, 22, 0.94); border: 2px solid #c9a650; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+    #report.lose .panel { border-color: #b8553a; } #report.draw .panel { border-color: #8f8f86; }
+    #report h2 { margin: 0 0 4px; font-size: 34px; letter-spacing: 0.2em; text-align: center; color: #f2d58a; }
+    #report.lose h2 { color: #f09a7a; } #report.draw h2 { color: #d8d4c8; }
+    #report .time, #report .town { text-align: center; margin: 6px 0; font-size: 14px; }
+    #report table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+    #report th { text-align: left; font-weight: 600; color: #c8c2b0; padding: 4px 6px; white-space: nowrap; }
+    #report td { padding: 4px 6px; border-top: 1px solid #3a4234; }
+    #report tr:first-child td { border-top: none; color: #c8c2b0; font-weight: 700; }
+    #report .acts { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+    #report .acts button { min-height: 44px; min-width: 110px; font-weight: 700; }
+    #report #rp-again { background: #9a4a2e; border-color: #e0a07a; }
+    #report-open { position: absolute; left: 50%; transform: translateX(-50%); bottom: 64px; pointer-events: auto; min-height: 44px; min-width: 96px; font-weight: 700; }
     @media (max-width: 640px) { #hud .top { gap: 8px; font-size: 12px; } #hud .title small { display: none; }
       #hud .top { top: calc(max(8px, env(safe-area-inset-top)) + 46px); } }
   </style>
