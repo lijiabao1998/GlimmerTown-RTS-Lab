@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, report: 8651, reportMobile: 8671, noR010: 8691 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -245,6 +245,36 @@ await withBrowser({ width: 800, height: 600, port: PORTS.noR008 }, async ({ open
 });
 
 
+// ---- R009 血條特寫：我方第一次受傷後 0.2 秒（白色殘影還在縮），全選我方、鏡頭對準受傷的那台 ----
+const HURT = (() => {
+  const w = createWorld(1944);
+  let i = 0;
+  while (w.tick < SCRIPT_TICKS) {
+    const now = []; while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) now.push(SCRIPT[i].cmd); i++; }
+    step(w, now);
+    const u = w.units.find(u => u.side === 0 && u.alive && u.kind !== 2 && u.hp < (u.kind === 0 ? 100 : 60));
+    if (u) return { tick: w.tick + 4, id: u.id, x: u.x / 256, z: u.z / 256, mine: w.units.filter(x => x.side === 0).map(x => x.id) };
+  }
+  return null;
+})();
+const barsJs = HURT ? `__rts.pause(true); __rts.playScript(${HURT.tick}); __rts.select(${JSON.stringify(HURT.mine)}); __rts.focus(${HURT.x}, ${HURT.z}, 2); 0` : '0';
+for (const [W, H, mobile, port, name] of [[1280, 800, false, PORTS.bars, 'desktop-bars.png'], [412, 860, true, PORTS.barsMobile, 'mobile-bars.png']]) {
+  await withBrowser({ width: W, height: H, mobile, port }, async ({ open, page }) => {
+    await open('');
+    await page.evaluate(barsJs); await sleep(400);
+    const info = await page.evaluate('__rts.info()'), bars = await page.evaluate('__rts.bars()');
+    await shot(page, path.join(SHOTS, name));
+    log(!!HURT && bars.bg > 0 && bars.fill > 0 && info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles, `血條特寫（${mobile ? '手機' : '桌機'}）：有血條、繪製呼叫 ≤ 22、三角形 ≤ 80,000`,
+      `第 ${HURT?.tick} 步、#${HURT?.id} 受傷；血條 ${JSON.stringify(bars)}；${JSON.stringify({ calls: info.calls, triangles: info.triangles })}`);
+    log(page.errors.length === 0, `血條特寫（${mobile ? '手機' : '桌機'}）零頁面錯誤`, page.errors.join(' | '));
+  });
+}
+await withBrowser({ width: 800, height: 600, port: PORTS.noR009 }, async ({ open, page }) => {
+  await open('noR009=1');
+  await page.evaluate(barsJs); await sleep(300);
+  const bars = await page.evaluate('__rts.bars()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(bars.bg === 0 && bars.fill === 0 && h === nodeHash && page.errors.length === 0, '?noR009=1：不畫血條、雜湊不變、零頁面錯誤', `${JSON.stringify(bars)}；${h}`);
+});
 // ---- R010 結局與戰報：一份會打完的固定紀錄（Node 產生），瀏覽器一步一步跑到勝負出現，量慢動作、等戰報 ----
 const END = endgameLog();
 const endHash = hashWorld(runLog(createWorld(1944), END.log, END.endTick));

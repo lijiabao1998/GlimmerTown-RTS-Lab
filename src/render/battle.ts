@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
   N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
-  SIDE_PLAYER, type Unit, type World, type SimEvent, type Building,
+  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
@@ -28,6 +28,8 @@ const E_FIRE = 0, E_SMOKE = 1, E_WRECKFIRE = 2, E_WRECKSMOKE = 3, E_DUST = 4;
 const E_LIFE = [1.5, 3.6, 1.5, 3.4, 2.2];            // 這種發射器的粒子最多活幾秒（跳過太舊的發射時間用）
 type Emitter = { kind: number; id: number; x: number; z: number; w: number; d: number; h: number; t0: number; until: number; every: number; next: number; fog: boolean };
 type Toss = { t0: number; vx: number; vz: number; spin: number; yaw: number; tilt: number };
+const C_BAR_BG = new THREE.Color(0x15130f), C_BAR_HI = new THREE.Color(0x63d65a), C_BAR_MID = new THREE.Color(0xf2c23a), C_BAR_LO = new THREE.Color(0xe8402a);
+const C_BLD_HI = new THREE.Color(0xdcc08a), C_BLD_LO = new THREE.Color(0xe08a3a);
 const C_WHITE = new THREE.Color(1, 1, 1), C_HE_SHELL = new THREE.Color(0x2d2d2d), C_AP_SHELL = new THREE.Color(0xffd27a), C_SEL = new THREE.Color(0xffe066);
 const DIRT = [0x5a4636, 0x6b5440, 0x3e3226], STEEL = [0x3a3c3e, 0x55575a, 0x2c2a26];
 
@@ -107,8 +109,23 @@ export class BattleView {
   private turretT = -1;
   private cFlash = new THREE.Color();
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true) {
-    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008;
+  // ---- R009 血條（?noR009=1 時不畫）----
+  private r9 = false;
+  private barBg: THREE.InstancedMesh | null = null;
+  private barFill: THREE.InstancedMesh | null = null;
+  private barRight = new THREE.Vector3();
+  private barQ = new THREE.Quaternion();
+  private nb9 = 0;
+  private nf9 = 0;
+  private barHp = new Int32Array(MAX_UNITS + 1);
+  private barFrom = new Float64Array(MAX_UNITS + 1);
+  private barHitT = new Float64Array(MAX_UNITS + 1).fill(-99);
+  private barColor = new THREE.Color();
+  // 守衛用：上一幀畫了哪些血條（預配，不每幀配置）
+  readonly barDbg = { n: 0, id: new Int32Array(MAX_UNITS + 64), frac: new Float32Array(MAX_UNITS + 64), ghost: new Float32Array(MAX_UNITS + 64), r: new Float32Array(MAX_UNITS + 64), g: new Float32Array(MAX_UNITS + 64) };
+
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true) {
+    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
     this.scene.add(new THREE.HemisphereLight(0xe4ecff, 0x5b5444, 1.35));
@@ -157,9 +174,22 @@ export class BattleView {
     this.observerMesh = inst(observer(observerDetails), toon({ vertexColors: true }), MAX_UNITS, true);
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
+    if (r009) {
+      // 血條：一片從 x=0 往右長的四邊形；畫在所有東西上面（不測深度、不寫深度＝沒有描邊），朝著鏡頭
+      const quad = new THREE.PlaneGeometry(1, 1).translate(0.5, 0, 0);
+      const mat = (c: number) => new THREE.MeshBasicMaterial({ color: c, depthTest: false, depthWrite: false, toneMapped: false });
+      this.barBg = inst(quad, mat(0xffffff), MAX_UNITS + 64, false); this.barBg.renderOrder = 10;
+      this.barFill = inst(quad.clone(), mat(0xffffff), 2 * (MAX_UNITS + 64), false); this.barFill.renderOrder = 11;
+      // 鏡頭角度固定（45°／30°），血條的朝向算一次就好
+      const probe = new THREE.Object3D(), dir = new THREE.Vector3(Math.cos(ELEV) * Math.SQRT1_2, Math.sin(ELEV), Math.cos(ELEV) * Math.SQRT1_2);
+      probe.position.copy(dir); probe.lookAt(0, 0, 0); probe.rotateY(Math.PI);
+      this.barQ.copy(probe.quaternion);
+      this.barRight.set(1, 0, 0).applyQuaternion(this.barQ);
+      this.r9 = true;
+    }
     this.shells = inst(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshBasicMaterial(), MAX_SHELLS, false);
     this.fxMesh = inst(new THREE.IcosahedronGeometry(1, 1), toon(), MAX_FX, false);
-    for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); this.turretYaw[u.id] = this.yaw[u.id]; this.lastHp[u.id] = u.hp; }
+    for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); this.turretYaw[u.id] = this.yaw[u.id]; this.lastHp[u.id] = u.hp; this.barHp[u.id] = u.hp; this.barFrom[u.id] = u.hp; }
     if (fxOn && r004) {
       this.r4 = true;
       const add = () => new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false });
@@ -310,6 +340,7 @@ export class BattleView {
   // ---- 每一幀 ----
   update(alpha: number, simT: number, selected: Set<number>) {
     const w = this.w, m = this.tmp;
+    this.alpha9 = alpha;
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
@@ -397,6 +428,7 @@ export class BattleView {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     };
     if (this.r4) this.updateFx(simT);
+    if (this.r9) this.bars9(simT, selected);
     fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
   }
 
@@ -679,6 +711,64 @@ export class BattleView {
       this.turretYaw[u.id] += Math.max(-max, Math.min(max, d));
     }
   }
+
+
+  // ======== R009 血條與耐久條 ========
+  // 單位：受過傷或被選取才畫；扣血時白色殘影從舊血量縮到新血量（0.5 秒）。敵方只在看得到時畫（R100）。
+  // 建築：我方單位正在砲擊的那棟畫耐久條，標出「空殼」門檻（70%）。
+  private bars9(t: number, selected: Set<number>) {
+    const w = this.w, dbg = this.barDbg;
+    this.nb9 = 0; this.nf9 = 0; dbg.n = 0;
+    for (const u of w.units) {
+      const max = UNIT_KINDS[u.kind].hp;
+      if (u.hp < this.barHp[u.id]) { this.barFrom[u.id] = this.ghost9(u.id, t); this.barHitT[u.id] = t; }
+      this.barHp[u.id] = u.hp;
+      if (!u.alive || (u.hp >= max && !selected.has(u.id)) || !this.visibleUnit(u)) continue;
+      const frac = Math.max(0, u.hp / max), ghost = this.ghost9(u.id, t) / max;
+      // 綠（滿）→ 黃（一半）→ 紅（快死）
+      if (frac > 0.5) this.barColor.copy(C_BAR_MID).lerp(C_BAR_HI, (frac - 0.5) * 2); else this.barColor.copy(C_BAR_LO).lerp(C_BAR_MID, frac * 2);
+      const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * this.alpha9) / SUB, z = (this.prevZ[u.id] + (u.z - this.prevZ[u.id]) * this.alpha9) / SUB;
+      this.bar9(u.id, x, this.unitHeight(u) + (u.kind === UK_OBSERVER ? 0.85 : 0.55), z, u.kind === UK_OBSERVER ? 0.34 : 0.5, frac, Math.max(frac, Math.min(1, ghost)), this.barColor, 0);
+    }
+    // 我方正在砲擊的建築（同一棟只畫一次）
+    for (const u of w.units) {
+      if (!u.alive || u.side !== SIDE_PLAYER || u.order !== ORD_FIRE_AT || u.target > 0) continue;
+      const id = w.occ[idx(u.tx, u.tz)], b = id ? w.blds[id - 1] : null;
+      if (!b || b.hp <= 0) continue;
+      let dup = false;
+      for (let i = 0; i < dbg.n; i++) if (dbg.id[i] === -b.id) dup = true;
+      if (dup) continue;
+      const frac = b.hp / b.maxHp;
+      this.barColor.copy(frac > 0.7 ? C_BLD_HI : C_BLD_LO);
+      this.bar9(-b.id, b.x + b.w / 2, wallHeight(b) + (ROOF_RISE[b.kind] ?? 0.32) + 0.35, b.z + b.d / 2, Math.min(1.2, 0.5 + 0.25 * Math.max(b.w, b.d)), frac, frac, this.barColor, 0.7);
+    }
+    const bg = this.barBg!, fill = this.barFill!;
+    bg.count = this.nb9; fill.count = this.nf9;
+    bg.instanceMatrix.needsUpdate = true; fill.instanceMatrix.needsUpdate = true;
+    if (bg.instanceColor) bg.instanceColor.needsUpdate = true;
+    if (fill.instanceColor) fill.instanceColor.needsUpdate = true;
+  }
+  // 一條血條：底（黑框）、白色殘影、填色、門檻刻度；左端對齊、往鏡頭的右邊長
+  private bar9(id: number, cx: number, y: number, cz: number, L: number, frac: number, ghost: number, col: THREE.Color, notch: number) {
+    const R = this.barRight, x0 = cx - R.x * L / 2, y0 = y - R.y * L / 2, z0 = cz - R.z * L / 2, capB = MAX_UNITS + 64, capF = 2 * capB, dbg = this.barDbg;
+    if (this.nb9 < capB) this.put9(this.barBg!, this.nb9++, x0 - R.x * 0.02, y0 - R.y * 0.02, z0 - R.z * 0.02, L + 0.04, 0.085, C_BAR_BG);
+    if (ghost > frac && this.nf9 < capF) this.put9(this.barFill!, this.nf9++, x0, y0, z0, L * ghost, 0.05, C_WHITE);
+    if (frac > 0 && this.nf9 < capF) this.put9(this.barFill!, this.nf9++, x0, y0, z0, L * frac, 0.05, col);
+    if (notch > 0 && this.nf9 < capF) this.put9(this.barFill!, this.nf9++, x0 + R.x * L * notch, y0 + R.y * L * notch, z0 + R.z * L * notch, 0.025, 0.07, C_BAR_BG);
+    if (dbg.n < dbg.id.length) { dbg.id[dbg.n] = id; dbg.frac[dbg.n] = frac; dbg.ghost[dbg.n] = ghost; dbg.r[dbg.n] = col.r; dbg.g[dbg.n] = col.g; dbg.n++; }
+  }
+  private put9(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, len: number, h: number, col: THREE.Color) {
+    const m = this.tmp;
+    m.position.set(x, y, z); m.quaternion.copy(this.barQ); m.scale.set(Math.max(0.0001, len), h, 1); m.updateMatrix();
+    mesh.setMatrixAt(i, m.matrix); mesh.setColorAt(i, col);
+  }
+  private alpha9 = 0;
+  // 白色殘影目前停在多少血（0.5 秒內從扣血前縮到現在的血量）
+  private ghost9(id: number, t: number): number {
+    const k = (t - this.barHitT[id]) / 0.5, now = this.barHp[id];
+    return k >= 1 || k < 0 ? now : now + (this.barFrom[id] - now) * (1 - k);
+  }
+  get bars() { return this.r9 ? { bg: this.barBg!.count, fill: this.barFill!.count } : { bg: 0, fill: 0 }; }
 
   // ---- 鏡頭 ----
   layout(cssW: number, cssH: number) {
