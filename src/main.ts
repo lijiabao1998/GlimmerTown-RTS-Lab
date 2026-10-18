@@ -35,6 +35,14 @@ let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: numbe
 const r011 = q.get('noR011') !== '1';
 // R014 牆上的彈孔與燻黑。逃生閥 ?noR014=1
 const r014 = q.get('noR014') !== '1';
+// R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
+const r016 = q.get('noR016') !== '1';
+function startBanner() {
+  const el = document.createElement('div');
+  el.id = 'start-banner'; el.textContent = '開戰！';
+  (document.getElementById('hud') ?? document.body).appendChild(el);
+  setTimeout(() => el.remove(), 1300);   // 只是畫面上的字，跟模擬無關
+}
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
 renderer.shadowMap.enabled = true;
@@ -73,7 +81,7 @@ const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.k
 function reset(s = seed, build = r006) {
   w = createWorld(s);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
   log = []; pending = []; acc = 0; selected.clear();
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
@@ -89,6 +97,7 @@ function startBattle() {
   for (const c of plan) issue(c);
   for (const c of enemy) issue(c);
   phase = 'battle'; plan = []; buildHint = '';
+  if (r016) startBanner();
   view.setWorld(w, -1);
   tick();
   paused = false;
@@ -339,7 +348,7 @@ const rts = {
     reset(SCRIPT_SEED, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -352,6 +361,7 @@ const rts = {
   bars: () => view.bars,
   dashes: () => view.dashes,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
+  rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner') }),
   cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }),
   groundAt: (cx: number, cy: number) => { const p = view.groundAt(cx, cy, innerWidth, innerHeight); return p ? [p.x, p.z] : null; },
   select: (ids: number[]) => { selected.clear(); for (const id of ids) if (w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER) selected.add(id); hud?.update(); return [...selected]; },

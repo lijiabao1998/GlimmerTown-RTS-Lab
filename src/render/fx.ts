@@ -153,7 +153,8 @@ export class Pool {
 // 倒塌殘影：房子倒成瓦礫時，舊模型約 1 秒內抖動、傾斜、沉進地面（地面把沉下去的部分擋掉）。
 // 所有正在倒的房子併成一個網格，預先配好緩衝，每幀重寫 → 最多 1 次繪製呼叫。
 export const COLLAPSE_S = 1.1;
-interface Ghost { pos: number[]; nor: number[]; col: number[]; t0: number; h: number; cx: number; cz: number; lx: number; lz: number; seed: number }
+export const RISE_S = 0.7;   // R016 布陣的房子從地面升起
+interface Ghost { pos: number[]; nor: number[]; col: number[]; t0: number; h: number; cx: number; cz: number; lx: number; lz: number; seed: number; rise: boolean }
 
 export class Ghosts {
   readonly mesh: THREE.Mesh;
@@ -172,31 +173,33 @@ export class Ghosts {
     scene.add(this.mesh);
   }
 
-  add(geo: { pos: number[]; nor: number[]; col: number[] }, t0: number, h: number, cx: number, cz: number, seed: number) {
+  add(geo: { pos: number[]; nor: number[]; col: number[] }, t0: number, h: number, cx: number, cz: number, seed: number, rise = false) {
     const a = seed * 6.2832;
-    this.list.push({ pos: geo.pos, nor: geo.nor, col: geo.col, t0, h, cx, cz, lx: Math.cos(a) * 0.35, lz: Math.sin(a) * 0.35, seed });
+    this.list.push({ pos: geo.pos, nor: geo.nor, col: geo.col, t0, h, cx, cz, lx: Math.cos(a) * 0.35, lz: Math.sin(a) * 0.35, seed, rise });
   }
 
   get count() { return this.list.length; }
 
   update(t: number) {
     let j = 0;
-    for (const g of this.list) if (t < g.t0 + COLLAPSE_S) this.list[j++] = g;   // 原地丟掉倒完的（不配置新陣列）
+    for (const g of this.list) if (t < g.t0 + (g.rise ? RISE_S : COLLAPSE_S)) this.list[j++] = g;   // 原地丟掉倒完的（不配置新陣列）
     this.list.length = j;
     let v = 0;
     for (const g of this.list) {
-      const k = Math.max(0, (t - g.t0) / COLLAPSE_S);
+      const k = Math.max(0, (t - g.t0) / (g.rise ? RISE_S : COLLAPSE_S));
       if (v * 3 + g.pos.length > this.pos.length) break;
-      const sink = k * k * (g.h + 0.15);                             // 越倒越快
-      const lean = k * 0.9;                                          // 往一邊歪
-      const shake = (1 - k) * 0.03 * Math.sin((t - g.t0) * 95 + g.seed * 40);
+      // 倒塌：越倒越快地沉、往一邊歪；升起（R016）：先快後慢地冒出來，最後輕輕頓一下（略過頭再回來）、不歪
+      const up = 1 - (1 - k) * (1 - k) * (1 - k) + 0.05 * Math.sin(Math.PI * k) * k;
+      const sink = g.rise ? (1 - up) * (g.h + 0.12) : k * k * (g.h + 0.15);
+      const lean = g.rise ? 0 : k * 0.9;
+      const shake = (1 - k) * (g.rise ? 0.012 : 0.03) * Math.sin((t - g.t0) * 95 + g.seed * 40);
       for (let i = 0; i < g.pos.length; i += 3) {
         const y = g.pos[i + 1];
         this.pos[v * 3] = g.pos[i] + y * g.lx * lean + shake;
-        this.pos[v * 3 + 1] = y * (1 - 0.25 * k) - sink;
+        this.pos[v * 3 + 1] = (g.rise ? y : y * (1 - 0.25 * k)) - sink;
         this.pos[v * 3 + 2] = g.pos[i + 2] + y * g.lz * lean - shake * 0.6;
         this.nor[v * 3] = g.nor[i]; this.nor[v * 3 + 1] = g.nor[i + 1]; this.nor[v * 3 + 2] = g.nor[i + 2];
-        const dim = 1 - 0.35 * k;                                    // 揚塵裡越來越暗
+        const dim = g.rise ? 1 : 1 - 0.35 * k;                       // 倒塌時在揚塵裡越來越暗
         this.col[v * 3] = g.col[i] * dim; this.col[v * 3 + 1] = g.col[i + 1] * dim; this.col[v * 3 + 2] = g.col[i + 2] * dim;
         v++;
       }
