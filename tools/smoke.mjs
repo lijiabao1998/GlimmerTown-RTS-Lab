@@ -397,6 +397,7 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.help }, a
   log(closed1 && runningBefore && pausedInHelp && t1 === t0 && t2 > t1 && !(await page.evaluate('__rts.paused()')), '開打後點「？」：說明開著時暫停（tick 不動），按「知道了」回到原來的進行狀態',
     `開打 ${runningBefore}；說明中 tick ${t0} → ${t1}（暫停 ${pausedInHelp}）；關掉後 ${t2}`);
   log(page.errors.length === 0, '說明面板零頁面錯誤', page.errors.join(' | '));
+});
 // ---- R014 牆上的彈孔：腳本第 600 步讓 2 號坦克開到教堂東南邊（90 步），再打教堂東南角 125 步；鏡頭看得到的是東、南兩面 ----
 const holesJs = "__rts.pause(true); __rts.runScript(600); __rts.issue({ t: 'move', side: 0, ids: [2], x: 16, z: 15 }); __rts.stepN(90); __rts.issue({ t: 'fireAt', side: 0, ids: [2], x: 14, z: 13 }); __rts.stepN(125); __rts.focus(14.2, 13.4, 2.6); 0";
 await withBrowser({ width: 1280, height: 800, port: PORTS.holes }, async ({ open, page }) => {
