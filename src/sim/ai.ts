@@ -3,7 +3,7 @@
 import { dist } from './math.ts';
 import { hqAlive } from './eco.ts';
 import {
-  N, SUB, center, cellOf, inMap, idx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY,
+  N, SUB, center, cellOf, inMap, idx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR,
   ORD_IDLE, ORD_ATTACK, SIDE_PLAYER, type World, type Unit, type AiState,
 } from './world.ts';
 
@@ -54,7 +54,10 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
   if (w.eco && hqAlive(w, side)) {
     const e = w.eco, q = e.queue[side], has = (k: number) => mine.filter(u => u.kind === k).length + q.filter(x => x === k).length;
     if (q.length < 2) {
-      const want = has(UK_OBSERVER) < 1 ? UK_OBSERVER : e.inf && has(UK_INFANTRY) < (lv >= 2 ? 2 : 1) ? UK_INFANTRY : has(UK_HOWITZER) < (lv >= 2 ? 2 : 1) && has(UK_TANK) >= 2 ? UK_HOWITZER : UK_TANK;
+      // R022 有砲（guns）時普通以上各保持一門：看到敵方坦克就先補反戰車砲；平常排在榴彈砲後面
+      const foeArmor = seen.some(u => UNIT_KINDS[u.kind].armored), guns = e.guns && lv >= 2;
+      const want = has(UK_OBSERVER) < 1 ? UK_OBSERVER : guns && foeArmor && has(UK_ATGUN) < 1 ? UK_ATGUN : e.inf && has(UK_INFANTRY) < (lv >= 2 ? 2 : 1) ? UK_INFANTRY
+        : has(UK_HOWITZER) < (lv >= 2 ? 2 : 1) && has(UK_TANK) >= 2 ? UK_HOWITZER : guns && has(UK_MORTAR) < 1 ? UK_MORTAR : guns && has(UK_ATGUN) < 1 ? UK_ATGUN : UK_TANK;
       if (e.supply[side] >= UNIT_KINDS[want].cost) out.push({ t: 'produce', side, kind: want });
     }
   }
@@ -67,7 +70,7 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
       st.wp = (st.wp + 1) % pts.length; st.ox = center(pts[st.wp][0]); st.oz = center(pts[st.wp][1]);
     }
   }
-  const tanks = mine.filter(u => u.kind === UK_TANK), guns = mine.filter(u => u.kind === UK_HOWITZER), obs = mine.filter(u => u.kind === UK_OBSERVER);
+  const tanks = mine.filter(u => u.kind === UK_TANK), guns = mine.filter(u => u.kind === UK_HOWITZER || u.kind === UK_MORTAR), obs = mine.filter(u => u.kind === UK_OBSERVER);
 
   // ---- 坦克 ----
   // 遊戲裡沒有維修，撤退等於放棄（第一版試過：受重傷的撤回老家就再也不出來，整局僵住），所以受傷的也一起打
@@ -108,7 +111,7 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
     }
   }
 
-  // ---- 榴彈砲：打看得到、在射程內（最小射程外）的敵人，先打坦克 ----
+  // ---- 榴彈砲（R022 迫擊砲照同一套）：打看得到、在射程內（最小射程外）的敵人，先打坦克 ----
   for (const g of guns) {
     const k = UNIT_KINDS[g.kind];
     if (order(g) === ORD_ATTACK && w.units[g.target - 1]?.alive) continue;
@@ -129,6 +132,21 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
     }
     ok.sort((a, b) => (a.kind === UK_TANK ? 0 : 1) - (b.kind === UK_TANK ? 0 : 1) || dist(g.x, g.z, a.x, a.z) - dist(g.x, g.z, b.x, b.z) || a.id - b.id);
     out.push({ t: 'attack', side, ids: [g.id], target: ok[0].id });
+  }
+
+  // ---- R022 反戰車砲：先打看得到、射程內的裝甲，沒有才打別的；沒有目標就跟在坦克（沒有坦克就自己人）重心附近，架好不亂動 ----
+  for (const a of mine.filter(u => u.kind === UK_ATGUN)) {
+    const k = UNIT_KINDS[a.kind];
+    if (order(a) === ORD_ATTACK && w.units[a.target - 1]?.alive) continue;
+    const ok = seen.filter(t => dist(a.x, a.z, t.x, t.z) <= k.range)
+      .sort((p, q) => (UNIT_KINDS[p.kind].armored ? 0 : 1) - (UNIT_KINDS[q.kind].armored ? 0 : 1) || dist(a.x, a.z, p.x, p.z) - dist(a.x, a.z, q.x, q.z) || p.id - q.id);
+    if (ok.length) { out.push({ t: 'attack', side, ids: [a.id], target: ok[0].id }); continue; }
+    if (a.pathIdx < a.path.length) continue;
+    const ref = tanks.length ? tanks : mine.filter(u => u.kind !== UK_ATGUN && u.kind !== UK_OBSERVER);
+    if (!ref.length) continue;
+    const gx = Math.trunc(ref.reduce((s, u) => s + u.x, 0) / ref.length), gz = Math.trunc(ref.reduce((s, u) => s + u.z, 0) / ref.length);
+    if (dist(a.x, a.z, gx, gz) > 3 * SUB) out.push({ t: 'move', side, ids: [a.id], x: cellOf(gx), z: cellOf(gz) });
+    else if (foeHq && order(a) === ORD_IDLE && dist(a.x, a.z, st.ox, st.oz) <= k.range) out.push({ t: 'fireAt', side, ids: [a.id], x: foeHq.x, z: foeHq.z });
   }
 
   // ---- R021 步兵：打看得到、射程附近的非裝甲目標；沒有目標就進駐前線附近的房子 ----

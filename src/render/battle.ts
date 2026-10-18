@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
+  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -21,6 +21,8 @@ const C_HOLE = 0x1b1713, C_SOOT = 0x2a2521;
 const DASH_CAP = 900;                 // R011 地上短線最多幾段
 const DK_PATH = 0, DK_ATTACK = 1, DK_FIRE = 2, DK_END = 3, DK_CROSS = 4;
 const MEN_CAP = 1600, BODY_CAP = 300;   // R021 小兵實例上限、倒下的人上限
+// R022 砲的網格縮放（長、高、寬）：榴彈砲原樣；反戰車砲壓低放平；迫擊砲短而翹
+const GUN_SCALE22: Record<number, [number, number, number]> = { [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4] };
 // 一班六個人的位置（班長前進方向的本地座標：兩排三列）
 const SLOTS: [number, number][] = [[0.07, -0.15], [0.07, 0], [0.07, 0.15], [-0.11, -0.15], [-0.11, 0], [-0.11, 0.15]];
 const C_BODY = [new THREE.Color(0x3c4526), new THREE.Color(0x4a4944)];
@@ -413,10 +415,13 @@ export class BattleView {
         const tossed = !u.alive && this.r4 ? this.toss.get(u.id) : undefined;
         this.turret.setMatrixAt(nh, tossed ? this.tossMatrix(tossed, x, z, simT) : m.matrix); this.turret.setColorAt(nh, col);
         nh++;
-      } else if (u.kind === UK_HOWITZER) {
-        m.position.set(x + bx * 0.1, back * 0.035, z + bz * 0.1); m.rotation.set(0, u.pathIdx < u.path.length ? this.yaw[u.id] + Math.PI : aim, u.alive ? -back * 0.12 : 0.2); m.scale.setScalar(1); m.updateMatrix();
+      } else if (u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR) {
+        // R022 反戰車砲、迫擊砲畫進同一個砲的網格：用縮放改比例（反戰車砲壓低、砲管放平；迫擊砲短、砲管翹）；不多一次繪製呼叫
+        const [gx, gy, gz] = GUN_SCALE22[u.kind] ?? GUN_SCALE22[UK_HOWITZER];
+        m.position.set(x + bx * 0.1, back * 0.035, z + bz * 0.1); m.rotation.set(0, u.pathIdx < u.path.length ? this.yaw[u.id] + Math.PI : aim, u.alive ? -back * 0.12 : 0.2); m.scale.set(gx, gy, gz); m.updateMatrix();
         this.gun.setMatrixAt(ng, m.matrix); this.gun.setColorAt(ng, col);
         ng++;
+        if (u.kind === UK_MORTAR && u.alive) nm = this.crew22(u, x, z, col, nm);
       }
       if (u.kind === UK_INFANTRY) nm = this.squad21(u, x, z, simT, col, nm);
       if (u.kind === UK_OBSERVER) {
@@ -554,7 +559,7 @@ export class BattleView {
         this.glow!.spawn({ x: x0, y: y0, z: z0, t0: t, life: 0.06, s0: 0.03, s1: 0.07, c0: 0xfff6c8, c1: 0xffa040, fog: u.side !== SIDE_PLAYER });
         return;
       }
-      const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER, L = gun ? 0.42 : 0.44, y = gun ? 0.32 : 0.2;
+      const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER, L = gun ? 0.42 : u.kind === UK_MORTAR ? 0.16 : 0.44, y = gun ? 0.32 : u.kind === UK_MORTAR ? 0.26 : u.kind === UK_ATGUN ? 0.15 : 0.2;
       const mx = e.x / SUB + Math.cos(a) * L, mz = e.z / SUB + Math.sin(a) * L, fog = u.side !== SIDE_PLAYER;
       this.glow!.spawn({ x: mx, y, z: mz, t0: t, life: 0.08, s0: 0.1, s1: gun ? 0.34 : 0.22, c0: 0xfff6c8, c1: 0xffa040, fog });
       this.glow!.spawn({ x: mx, y, z: mz, vx: Math.cos(a) * 2.2, vz: Math.sin(a) * 2.2, drag: 9, t0: t, life: 0.11, s0: 0.07, s1: gun ? 0.2 : 0.13, c0: 0xffe090, c1: 0xff6020, fog });
@@ -572,7 +577,7 @@ export class BattleView {
         this.puff!.spawn({ x, y: 0.05, z, vy: 0.15, t0: t, life: 0.7, s0: 0.03, s1: 0.1, c0: 0x9a8b74, c1: 0xa59c8c, fog: true });
         return;
       }
-      if (e.kind === SHELL_HE) { this.blast(x, z, t, 1, true, DIRT, 7); if (this.vis(x, z)) this.shake(0.06, x, z, t); return; }   // 看不到的彈著不震（不洩漏）
+      if (e.kind === SHELL_HE) { this.blast(x, z, t, e.r ? 0.6 : 1, true, DIRT, e.r ? 4 : 7); if (this.vis(x, z)) this.shake(0.06, x, z, t); return; }   // 看不到的彈著不震（不洩漏）
       // 穿甲彈：打中建築噴牆色碎片；打空或打中車輛噴火星
       const b = e.bld ? this.w.blds[e.bld - 1] : null, fog = true;
       this.glow!.spawn({ x, y: b ? 0.3 : 0.15, z, t0: t, life: 0.07, s0: 0.08, s1: 0.26, c0: 0xfff2c0, c1: 0xffa040, fog });
@@ -917,7 +922,7 @@ export class BattleView {
         }
       } else if (e.e === 'impact' && e.kind === SHELL_HE) {
         if (!this.visibleAt(e.x, e.z)) continue;
-        const R = UNIT_KINDS[UK_HOWITZER].splash / SUB, ix = e.x / SUB, iz = e.z / SUB;
+        const R = (e.r ?? UNIT_KINDS[UK_HOWITZER].splash) / SUB, ix = e.x / SUB, iz = e.z / SUB;
         for (const b of w.blds) {
           if (b.hp <= 0) continue;
           const cx = Math.max(b.x, Math.min(b.x + b.w, ix)), cz = Math.max(b.z, Math.min(b.z + b.d, iz));
@@ -1010,6 +1015,16 @@ export class BattleView {
       this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, col); n++;
     }
     this.menDbg.alive += men;
+    return n;
+  }
+  // R022 迫擊砲的兩個砲手：蹲在砲後面（共用小兵網格；血少於一半剩一個）
+  private crew22(u: Unit, x: number, z: number, col: THREE.Color, n: number): number {
+    const k = UNIT_KINDS[u.kind], men = u.hp * 2 > k.hp ? 2 : 1, aim = Math.atan2(-u.aimZ, u.aimX), ca = Math.cos(aim), sa = Math.sin(aim), m = this.tmp;
+    for (let i = 0; i < men && n < MEN_CAP; i++) {
+      const ax = -0.2, az = i ? 0.13 : -0.13;
+      m.position.set(x + ax * ca + az * sa, 0, z - ax * sa + az * ca); m.rotation.set(0, aim, 0); m.scale.set(1, i ? 0.8 : 1, 1); m.updateMatrix();
+      this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, col); n++;
+    }
     return n;
   }
   private bodies21(n: number): number {

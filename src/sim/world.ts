@@ -28,6 +28,8 @@ export const UK_TANK = 0;
 export const UK_HOWITZER = 1;
 export const UK_OBSERVER = 2;
 export const UK_INFANTRY = 3;   // R021 步兵班（6 人，每 10 血一個人）
+export const UK_ATGUN = 4;      // R022 反戰車砲（直射、要架好才能打、專打裝甲）
+export const UK_MORTAR = 5;     // R022 迫擊砲（短程間接射擊、兩個砲手）
 
 export interface UnitKind {
   name: string;
@@ -49,14 +51,18 @@ export interface UnitKind {
   armored: boolean;     // R021 有裝甲（坦克）：只吃穿甲率那一部分的傷害
   pierce: number;       // R021 打裝甲目標時剩幾 %（100＝全吃）
   men: number;          // R021 畫成幾個人（0＝一個模型）
+  soft: number;         // R022 打非裝甲目標時剩幾 %（100＝全吃）
+  setup: boolean;       // R022 要停下來（架好）才能開火（間接射擊的砲本來就是）
 }
 
 // 數字都是暫定，玩家看得到的數字由業主定（AGENTS.md 規則 6）。
 export const UNIT_KINDS: UnitKind[] = [
-  { name: 'tank', hp: 100, speed: 20, range: 9 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 34, dmgBld: 25, splash: 0, sight: 10 * SUB, armor: 100, radius: 80, cost: 40, buildTicks: 300, garrison: false, armored: true, pierce: 100, men: 0 },
-  { name: 'howitzer', hp: 60, speed: 10, range: 28 * SUB, minRange: 6 * SUB, reload: 140, indirect: true, dmgUnit: 70, dmgBld: 60, splash: 384, sight: 6 * SUB, armor: 100, radius: 72, cost: 50, buildTicks: 400, garrison: false, armored: false, pierce: 100, men: 0 },
-  { name: 'observer', hp: 30, speed: 16, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 14 * SUB, armor: 100, radius: 0, cost: 15, buildTicks: 120, garrison: true, armored: false, pierce: 100, men: 0 },
-  { name: 'infantry', hp: 60, speed: 12, range: 6 * SUB, minRange: 0, reload: 24, indirect: false, dmgUnit: 12, dmgBld: 2, splash: 0, sight: 7 * SUB, armor: 100, radius: 0, cost: 25, buildTicks: 120, garrison: true, armored: false, pierce: 10, men: 6 },
+  { name: 'tank', hp: 100, speed: 20, range: 9 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 34, dmgBld: 25, splash: 0, sight: 10 * SUB, armor: 100, radius: 80, cost: 40, buildTicks: 300, garrison: false, armored: true, pierce: 100, men: 0, soft: 100, setup: false },
+  { name: 'howitzer', hp: 60, speed: 10, range: 28 * SUB, minRange: 6 * SUB, reload: 140, indirect: true, dmgUnit: 70, dmgBld: 60, splash: 384, sight: 6 * SUB, armor: 100, radius: 72, cost: 50, buildTicks: 400, garrison: false, armored: false, pierce: 100, men: 0, soft: 100, setup: false },
+  { name: 'observer', hp: 30, speed: 16, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 14 * SUB, armor: 100, radius: 0, cost: 15, buildTicks: 120, garrison: true, armored: false, pierce: 100, men: 0, soft: 100, setup: false },
+  { name: 'infantry', hp: 60, speed: 12, range: 6 * SUB, minRange: 0, reload: 24, indirect: false, dmgUnit: 12, dmgBld: 2, splash: 0, sight: 7 * SUB, armor: 100, radius: 0, cost: 25, buildTicks: 120, garrison: true, armored: false, pierce: 10, men: 6, soft: 100, setup: false },
+  { name: 'atgun', hp: 50, speed: 8, range: 10 * SUB, minRange: 0, reload: 70, indirect: false, dmgUnit: 48, dmgBld: 15, splash: 0, sight: 7 * SUB, armor: 100, radius: 64, cost: 35, buildTicks: 260, garrison: false, armored: false, pierce: 100, men: 0, soft: 30, setup: true },
+  { name: 'mortar', hp: 40, speed: 12, range: 12 * SUB, minRange: 2 * SUB, reload: 60, indirect: true, dmgUnit: 30, dmgBld: 12, splash: 256, sight: 6 * SUB, armor: 100, radius: 0, cost: 30, buildTicks: 200, garrison: false, armored: false, pierce: 50, men: 0, soft: 100, setup: false },
 ];
 
 export const ORD_IDLE = 0;
@@ -116,14 +122,14 @@ export interface Shell {
 // 給渲染看的事件：每一步開頭清空，不進雜湊
 export type SimEvent =
   | { e: 'fire'; unit: number; x: number; z: number }
-  | { e: 'impact'; kind: number; x: number; z: number; bld: number }
+  | { e: 'impact'; kind: number; x: number; z: number; bld: number; r?: number }   // R022 r：爆炸半徑（只有迫擊砲這種小號的才帶；畫面用）
   | { e: 'kill'; unit: number }
   | { e: 'stage'; bld: number; stage: number }
   | { e: 'build'; bld: number };
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
-export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number }
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number }
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number }
 
@@ -285,7 +291,7 @@ export function hashWorld(w: World): string {
     f.int(r ? 1 : 0);
     if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
   }
-  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); }   // R019（R021 步兵旗只在有時折）
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp);   // R018：只有開了電腦才折
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
