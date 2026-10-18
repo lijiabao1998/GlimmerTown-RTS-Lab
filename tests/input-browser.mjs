@@ -122,6 +122,9 @@ async function main() {
       },
       async hint() {
         await viewport(true); const before=await state(), tick=await E('__rts.tick()');
+        const hintGeometry=()=>E(`(()=>{const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height};};return {hint:rect('#hint'),production:rect('#prodbar')};})()`);
+        const beforeGeometry=await hintGeometry();
+        if(!overlay['index.html'])await shot(page,path.join(ROOT,'shots/r110-paused-before-menu.png'));
         await hold(); await button('#cm-smoke');
         assertions(await E('document.querySelector("#hint").textContent.includes("已下煙幕指令")'),'hint: fixture smoke confirmation visible');
         // Find bare ground away from every projected unit and HUD; assert the actual routed cell below.
@@ -131,6 +134,8 @@ async function main() {
         assert.deepEqual((await state()).log.slice(before.log.length).map(l=>l.cmd),[{t:'fireAt',side:0,ids:[4],x:29,z:29,ammo:'smoke'},{t:'move',side:0,ids:[1,4,9],x:target.x,z:target.z}],'hint: ordinary touch retains exact queued commands');
         assertions(await E('!document.querySelector("#hint").textContent.includes("已下煙幕指令")&&document.querySelector("#hint").textContent.includes("點地面＝移動")'),'hint: paused ordinary order immediately clears stale confirmation');
         assert.equal(await E('__rts.tick()'),tick,'hint: clearing does not advance simulation'); assert.equal((await state()).hash,before.hash,'hint: commands stay queued while paused');
+        assert.deepEqual(await hintGeometry(),beforeGeometry,'hint: cleared feedback restores the pre-menu HUD/production geometry');
+        if(!overlay['index.html'])record(`R110 paused HUD geometry (before menu = after clear): ${JSON.stringify(beforeGeometry)}`);
         if(!overlay['index.html'])await shot(page,path.join(ROOT,'shots/r110-paused-hint.png'));
         await E('__rts.select([1,9])'); await hold(); await button('#cm-smoke');
         assertions(await E('document.querySelector("#hint").textContent.includes("請先選取榴彈砲")'),'hint: fixture no-gun error visible');
