@@ -7,7 +7,7 @@ import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
-  UNIT_KINDS, UK_OBSERVER, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
+  UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building, type Shell,
 } from './world.ts';
 
@@ -18,7 +18,7 @@ export type Command =
   | { t: 'stop'; side: number; ids: number[] }
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）
-  | { t: 'eco'; inf?: number }                  // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵）
+  | { t: 'eco'; inf?: number; guns?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲）
   | { t: 'produce'; side: number; kind: number };   // R019：花補給排進生產佇列
 
 export interface LoggedCommand { tick: number; cmd: Command }
@@ -33,7 +33,7 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 export function applyCommand(w: World, cmd: Command): void {
   if (cmd.t === 'build') return;   // 布陣指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -170,7 +170,7 @@ function stepVehicle(w: World, u: Unit, nx: number, nz: number, spd: number): vo
 // - 不推進還站著的建築、不推出地圖；某一軸會撞就只推另一軸。半徑 0（步兵）與殘骸不參與。
 const SPLIT: [number, number][] = [[256, 0], [181, 181], [0, 256], [-181, 181], [-256, 0], [-181, -181], [0, -256], [181, -181]];
 const moving = (u: Unit) => u.pathIdx < u.path.length;
-const anchored = (u: Unit) => UNIT_KINDS[u.kind].indirect && !moving(u);
+const anchored = (u: Unit) => (UNIT_KINDS[u.kind].indirect || UNIT_KINDS[u.kind].setup) && !moving(u);
 
 function separate(w: World): void {
   const vs = w.units.filter(u => u.alive && UNIT_KINDS[u.kind].radius > 0);
@@ -248,7 +248,7 @@ function fireUnit(w: World, u: Unit): void {
   const k = UNIT_KINDS[u.kind];
   const aim = pickAim(w, u);
   if (k.indirect) syncRanging(w, u, aim);
-  if (k.indirect && u.pathIdx < u.path.length) return;     // 榴彈砲移動中不能打
+  if ((k.indirect || k.setup) && u.pathIdx < u.path.length) return;     // 榴彈砲、迫擊砲、反戰車砲（R022）移動中不能打
   if (!aim) return;
   const dx = aim.x - u.x, dz = aim.z - u.z, d = isqrt(dx * dx + dz * dz);
   if (d > k.range || d < k.minRange) return;
@@ -274,8 +274,8 @@ function fireUnit(w: World, u: Unit): void {
   w.shells.push(sh);
 }
 
-// R021：打裝甲目標時只剩穿甲率那一部分（坦克、榴彈砲的穿甲率是 100＝跟以前一樣）
-function pierced(k: { pierce: number }, t: Unit, dmg: number): number { return UNIT_KINDS[t.kind].armored ? Math.floor((dmg * k.pierce) / 100) : dmg; }
+// R021：打裝甲目標時只剩穿甲率那一部分（坦克、榴彈砲的穿甲率是 100＝跟以前一樣）；R022：打非裝甲目標剩 soft（既有兵種是 100＝不變）
+function pierced(k: { pierce: number; soft: number }, t: Unit, dmg: number): number { return Math.floor((dmg * (UNIT_KINDS[t.kind].armored ? k.pierce : k.soft)) / 100); }
 // R021：能進駐的單位待在還站著的房子裡時，射線不算自己這棟
 function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) return 0; const b = bldAt(w, cellOf(u.x), cellOf(u.z)); return b && b.hp > 0 ? b.id : 0; }
 
@@ -327,7 +327,7 @@ function land(w: World, s: Shell): void {
     damageBld(w, b, k.dmgBld);
   }
   if (inMap(cx, cz) && !blocks(w, cx, cz)) { const i = idx(cx, cz); if (w.crater[i] < 3) w.crater[i]++; }
-  w.events.push({ e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0 });
+  w.events.push(R < UNIT_KINDS[UK_HOWITZER].splash ? { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0, r: R } : { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0 });
 }
 
 function updateShells(w: World): void {
