@@ -32,7 +32,6 @@
 
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
-| 19 | 修補：無傷害煙幕彈不應拖延勝負／戰報 | 榴彈砲 | 模擬 | 待實測 | R107／#35 後重現：最後單位或 HQ 已敗，煙幕仍飛時延後 53 tick；保留 HE／AP 等有傷害彈的同歸於盡等待，優先於新功能 |
 | 4 | 裝甲面向：正面厚、側後薄（整數點積），繞側打傷害加成 | 坦克車 | 模擬 | 會 | 選取時畫裝甲弧 |
 | 9 | 桌機框選、手機長按叫出砲擊選單 | — | 介面 | 不會 | |
 | 10 | 選取時顯示射程圈、最小射程圈、預計散布圈 | 榴彈砲 | 介面 | 不會 | |
@@ -55,6 +54,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 修補煙幕彈拖延勝負／戰報 | R108 | [#37](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/37) | 2026-10-18 | 本機 smoke 受限，CI smoke 通過；新增彈種鍵實際觸控／Android 實機仍未測 |
 | 榴彈砲煙幕 | R107 | [#35](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/35) | 2026-10-18 | 本機 smoke 受限，CI smoke 通過；新增彈種鍵實際觸控／Android 實機未測 |
 | 彈坑輕掩體 | R106 | [#34](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/34) | 2026-10-18 | 本機 smoke 受限，CI smoke 通過；Android 實機未測 |
 | 建築材質 | R105 | [#32](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/32) | 2026-10-18 | 本機 smoke 受限，CI smoke 通過；Android 實機未測 |
