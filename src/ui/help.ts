@@ -22,9 +22,9 @@ const HTML = `
     <div class="acts"><button id="help-ok">知道了</button></div>
   </div>`;
 
-export function initHelp(on: { open: () => void; close: () => void }): Help {
+export function initHelp(on: { open: () => void; close: () => void }, gestures = false): Help {
   const root = document.createElement('div');
-  root.id = 'help'; root.hidden = true; root.innerHTML = HTML;
+  root.id = 'help'; root.hidden = true; root.innerHTML = gestures ? HTML.replace('<h3>戰術</h3>', '<p>桌機按住 Shift＋左鍵拖曳，追加框內我方單位；普通拖曳仍平移。手機長按地圖半秒，放手後選「高爆砲擊」或「煙幕」；選單只下這一次指令，不改工具列模式。高爆限間接射擊單位，煙幕限榴彈砲；其他混選單位不動。</p><h3>戰術</h3>') : HTML;
   (document.getElementById('hud') ?? document.body).appendChild(root);
   const close = () => { if (root.hidden) return; root.hidden = true; on.close(); };
   const open = () => { if (!root.hidden) return; root.hidden = false; on.open(); };
