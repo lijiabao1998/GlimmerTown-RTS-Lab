@@ -19,11 +19,13 @@
     #hud .bottom { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); font-size: 13px; }
     #hud button { min-width: 44px; height: 36px; border: 1px solid #6c745f; border-radius: 5px; background: #3c4535;
       color: #f3eedf; font: inherit; cursor: pointer; }
+    /* R107 彈種：七顆按鈕合計 360px，412px 手機保留兩側空間。 */
+    #hud .btns button { box-sizing: border-box; width: 44px; height: 44px; padding: 0; flex: 0 0 44px; }
     #hud button.on { background: #9a4a2e; border-color: #d0835f; }
     #banner { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 14px 28px;
       font-size: 32px; font-weight: 800; background: rgba(20, 22, 18, 0.82); border: 2px solid #c9a650; border-radius: 8px; }
     /* R006 布陣列：貼在提示列上方（bottom 由 src/ui/build.ts 依提示列高度設定） */
-    #hud.build #b-pause, #hud.build #b-speed, #hud.build #b-fire { display: none; }
+    #hud.build #b-pause, #hud.build #b-speed, #hud.build #b-fire, #hud.build #b-ammo { display: none; }
     #buildbar { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: 52px;
       flex-direction: column; align-items: stretch; gap: 6px; background: rgba(24, 34, 48, 0.86); border: 1px solid #4f6f96; }
     #buildbar[hidden] { display: none; }
@@ -65,7 +67,7 @@
     #help .acts { display: flex; justify-content: center; margin-top: 10px; }
     #help .acts button { min-height: 44px; min-width: 120px; font-weight: 700; background: #2f5f9a; border-color: #9cc6ff; }
     /* R015 小地圖：右上、按鈕列下面（手機在標題列下面） */
-    #minimap { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 50px); pointer-events: auto;
+    #minimap { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 58px); pointer-events: auto;
       background: rgba(20, 24, 18, 0.55); border: 1px solid rgba(220, 230, 200, 0.35); border-radius: 4px; image-rendering: pixelated; touch-action: none; }
     /* R019 生產列：貼在提示列上方（bottom 由 src/ui/production.ts 設定） */
     #prodbar { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: 52px; flex-wrap: wrap; background: rgba(28, 34, 26, 0.86); border: 1px solid #6c745f; }
@@ -77,13 +79,13 @@
     #prodbar .info { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; margin-left: auto; }
     #prodbar #pb-prog { display: inline-block; width: 48px; height: 6px; background: #3a4352; border-radius: 3px; overflow: hidden; margin-left: 6px; }
     #prodbar #pb-prog i { display: block; height: 100%; width: 0; background: #8cd06a; }
-    @media (max-width: 640px) { #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 92px); } }
+    @media (max-width: 640px) { #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
     /* R016 開戰大字：不擋點擊 */
     #start-banner { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); pointer-events: none; white-space: nowrap; font-size: clamp(44px, 14vw, 72px); font-weight: 900; letter-spacing: 0.25em;
       color: #f6dc8c; text-shadow: 0 0 18px rgba(255, 150, 40, 0.75), 0 3px 0 #5a2a12; animation: gtrts-start 1.25s ease-out forwards; }
     @keyframes gtrts-start { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.8); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); } }
     @media (max-width: 640px) { #hud .top { gap: 8px; font-size: 12px; } #hud .title small { display: none; }
-      #hud .top { top: calc(max(8px, env(safe-area-inset-top)) + 46px); } }
+      #hud .top { top: calc(max(8px, env(safe-area-inset-top)) + 60px); } }
   </style>
 </head>
 <body>

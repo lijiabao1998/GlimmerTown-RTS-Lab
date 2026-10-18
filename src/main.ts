@@ -1,12 +1,13 @@
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, bldAt, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
 import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
+import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
 import { applyMap, MAP_RYE } from './sim/maps.ts';
@@ -46,6 +47,7 @@ const r015 = q.get('noR015') !== '1';
 let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
+const r107 = q.get('noR107') !== '1'; // 只關煙團畫面；煙幕指令與視線模擬保持啟用
 const r105 = q.get('noR105') !== '1';
 setMaterials(r105); // R105 材質視覺提示；只關畫面，模擬不變
 setFacades(q.get('noR028') !== '1');
@@ -66,6 +68,7 @@ const canvas = renderer.domElement;
 let w: World, view: BattleView, log: LoggedCommand[], pending: Command[];
 let hud: Hud | undefined, buildBar: BuildBar | undefined;
 let acc = 0, paused = false, speed = 1, fireMode = false, lastT = performance.now();
+let ammo: AmmoMode = 'he';
 const selected = new Set<number>();
 const SPEEDS = [1, 2, 4];
 
@@ -111,8 +114,8 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {
   w = createWorld(s);
   if (map) applyMap(w, MAP_RYE);   // R026：布陣預覽就要看到 Rye；同一條 map 指令記在紀錄第 0 步，重播時由 step 套（套過的不再套）
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
-  log = []; pending = []; acc = 0; selected.clear();
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107);
+  log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   if (map) issue({ t: 'map', id: MAP_RYE });
@@ -199,39 +202,14 @@ function pickUnit(cx: number, cy: number): number {
 
 function order(cx: number, cy: number) {
   if (phase === 'build') { placeAt(cx, cy); return; }
-  const ids = [...selected].filter(id => w.units[id - 1].alive);
-  if (!ids.length) return;
-  const hit = pickUnit(cx, cy), t = hit ? w.units[hit - 1] : null;
-  if (t && t.side !== SIDE_PLAYER) {
-    issue({ t: 'attack', side: SIDE_PLAYER, ids, target: t.id });
-    view.setMarker(t.x / SUB, t.z / SUB, simT(), true);
-    return;
-  }
-  // 先看點到哪棟建築（屋頂、牆面都算）；沒點到建築才看地面
-  const hitB = view.buildingAt(cx, cy, innerWidth, innerHeight);
-  if (hitB) {
-    // 點房子：能進駐的（觀測員、R021 步兵）走進去，其他的轟它
-    const observers = ids.filter(id => UNIT_KINDS[w.units[id - 1].kind].garrison);
-    const armed = ids.filter(id => !UNIT_KINDS[w.units[id - 1].kind].garrison);
-    if (observers.length) issue({ t: 'move', side: SIDE_PLAYER, ids: observers, x: hitB[0], z: hitB[1] });
-    if (armed.length) issue({ t: 'fireAt', side: SIDE_PLAYER, ids: armed, x: hitB[0], z: hitB[1] });
-    view.setMarker(hitB[0] + 0.5, hitB[1] + 0.5, simT(), true);
-    return;
-  }
-  const p = view.groundAt(cx, cy, innerWidth, innerHeight);
-  if (!p) return;
-  const gx = Math.floor(p.x), gz = Math.floor(p.z);
-  if (gx < 0 || gz < 0 || gx >= N || gz >= N) return;
-  const b = bldAt(w, gx, gz);
-  // 砲擊模式點地面：只有榴彈砲接（坦克打空地沒有用）；選取裡沒有榴彈砲就照常移動
-  const guns = ids.filter(id => UNIT_KINDS[w.units[id - 1].kind].indirect);
-  if ((b && b.hp > 0) || (fireMode && guns.length)) {
-    issue({ t: 'fireAt', side: SIDE_PLAYER, ids: b && b.hp > 0 ? ids : guns, x: gx, z: gz });
-    view.setMarker(gx + 0.5, gz + 0.5, simT(), true);
-  } else {
-    issue({ t: 'move', side: SIDE_PLAYER, ids, x: gx, z: gz });
-    view.setMarker(gx + 0.5, gz + 0.5, simT(), false);
-  }
+  const route = routeBattleOrder(w, selected, fireMode, ammo, {
+    unit: pickUnit(cx, cy),
+    building: view.buildingAt(cx, cy, innerWidth, innerHeight),
+    ground: view.groundAt(cx, cy, innerWidth, innerHeight),
+  });
+  if (!route) return;
+  for (const cmd of route.commands) issue(cmd);
+  view.setMarker(route.marker.x, route.marker.z, simT(), route.marker.hostile);
 }
 
 function tap(cx: number, cy: number, additive: boolean) {
@@ -288,7 +266,7 @@ canvas.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); dr
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; if (r012) view.zoomAt(f, e.clientX, e.clientY, innerWidth, innerHeight); else view.zoomBy(f); }, { passive: false });
 addEventListener('keydown', e => {
-  if (e.key === 'Escape') { selected.clear(); hud?.update(); }
+  if (e.key === 'Escape') { selected.clear(); fireMode = false; ammo = 'he'; hud?.update(); }
   if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
 });
 
@@ -309,7 +287,7 @@ hud = initHud({
     const mine = w.units.filter(u => u.side === SIDE_PLAYER && u.alive), theirs = w.units.filter(u => u.side === SIDE_ENEMY && u.alive && view.visibleUnit(u));
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
     return {
-      tick: w.tick, paused, speed, fireMode, winner: w.winner, report: r010,
+      tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: r010,
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : undefined,
       mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
@@ -319,6 +297,7 @@ hud = initHud({
   togglePause: () => { if (phase === 'battle') paused = !paused; },
   cycleSpeed: () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; },
   toggleFire: () => { fireMode = !fireMode; },
+  toggleAmmo: () => { ammo = ammo === 'he' ? 'smoke' : 'he'; if (ammo === 'smoke') fireMode = true; },
   selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); },
   restart: () => reset(),
   help: () => help.open(),
@@ -405,7 +384,7 @@ const rts = {
     reset(SCRIPT_SEED, false, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107);
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },

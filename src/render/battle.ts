@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
+  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -12,6 +12,7 @@ import { Geo } from './geo.ts';
 import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING, RISE_S } from './fx.ts';
 import { tankHull, tankTurret, howitzer, observer, soldier } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
+import { SmokeView } from './smoke.ts';
 
 // R027 人行道與黑白路緣（只有手排地圖；畫面開關）
 let streets27 = true;
@@ -87,6 +88,8 @@ export class BattleView {
   private prevZ = new Float64Array(MAX_UNITS + 1);
   private yaw = new Float64Array(MAX_UNITS + 1);
   private fx: Fx[] = [];
+  private smoke107 = new SmokeView();
+  private r107: boolean;
   private fxSeq = 0;
   private wrecks: { id: number; until: number }[] = [];
   private nextSmoke = 0;
@@ -163,8 +166,8 @@ export class BattleView {
   // 每一步之前記下在飛、會打中建築的穿甲彈（彈著事件沒有射手位置）
   private apSnap = { n: 0, sx: new Float64Array(MAX_SHELLS), sz: new Float64Array(MAX_SHELLS), ex: new Float64Array(MAX_SHELLS), ez: new Float64Array(MAX_SHELLS), bld: new Int32Array(MAX_SHELLS) };
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true) {
-    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016;
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true) {
+    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
     this.scene.add(new THREE.HemisphereLight(0xe4ecff, 0x5b5444, 1.35));
@@ -375,6 +378,7 @@ export class BattleView {
         const b = this.w.blds[e.bld - 1];
         if (b) { for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z); groundDirty = true; }
       } else if (e.e === 'impact') {
+        if (e.kind === SHELL_SMOKE) continue;   // R107：持續煙幕從世界重建，不冒充高爆／穿甲彈著
         const x = e.x / SUB, z = e.z / SUB;
         if (e.kind === SHELL_HE) {
           const cx = Math.floor(x), cz = Math.floor(z);
@@ -469,7 +473,7 @@ export class BattleView {
       m.position.set(this.marker.x, 0.02, this.marker.z); m.rotation.set(0, 0, 0); m.scale.setScalar(1.2 - 0.6 * k); m.updateMatrix();
       this.rings.setMatrixAt(nr, m.matrix); this.rings.setColorAt(nr, this.marker.col); nr++;
     }
-    // 砲彈：穿甲彈直線、高爆彈拋物線
+    // 砲彈：穿甲彈直線；榴彈砲的高爆與煙幕共用拋物線
     let ns = 0;
     for (const s of w.shells) {
       if (ns >= MAX_SHELLS) break;
@@ -487,9 +491,10 @@ export class BattleView {
         this.glow!.put(x - Math.cos(yaw) * 0.22, 0.2, z + Math.sin(yaw) * 0.22, 0.2, 0.022, 0.022, yaw, 0xff8a30, 0.7);
         continue;
       }
-      const y = s.kind === SHELL_HE ? 0.3 + 4 * (d * 0.22) * p * (1 - p) : 0.2;
-      m.position.set(x, y, z); m.rotation.set(0, 0, 0); m.scale.setScalar(s.kind === SHELL_HE ? 1.2 : 0.8); m.updateMatrix();
-      this.shells.setMatrixAt(ns, m.matrix); this.shells.setColorAt(ns, s.kind === SHELL_HE ? C_HE_SHELL : C_AP_SHELL); ns++;
+      const indirect = s.kind === SHELL_HE || s.kind === SHELL_SMOKE;
+      const y = indirect ? 0.3 + 4 * (d * 0.22) * p * (1 - p) : 0.2;
+      m.position.set(x, y, z); m.rotation.set(0, 0, 0); m.scale.setScalar(indirect ? 1.2 : 0.8); m.updateMatrix();
+      this.shells.setMatrixAt(ns, m.matrix); this.shells.setColorAt(ns, indirect ? C_HE_SHELL : C_AP_SHELL); ns++;
     }
     // 冒煙：沒屋頂的房子、剛被擊毀的車
     if (this.fxOn && !this.r4 && simT >= this.nextSmoke) {
@@ -500,9 +505,13 @@ export class BattleView {
       for (const r of this.wrecks) { const u = w.units[r.id - 1]; this.spawn({ x: u.x / SUB, y: 0.2, z: u.z / SUB, t0: simT, life: 2.4, s0: 0.08, s1: 0.32, vy: 0.4, c0: new THREE.Color(0x2c2a28), c1: new THREE.Color(0x77736e) }); }
     }
     this.fx = this.fx.filter(f => simT < f.t0 + f.life);
-    let nf = 0;
+    // R107：先保留最多 8×5 個必要煙幕實例，再讓短命爆炸粒子使用餘額。
+    // 世界是唯一來源，剛載入的畫面與一直更新的畫面都能看到仍存活的煙團。
+    this.smoke107.update(w, this.fxOn && this.r107, this.fogOn, this.puff, this.fxMesh);
+    let nf = this.r4 ? 0 : this.smoke107.puffs;
     const c = new THREE.Color();
     for (const f of this.fx) {
+      if (nf >= MAX_FX) break;
       if (simT < f.t0 || !this.visibleAt(Math.floor(f.x * SUB), Math.floor(f.z * SUB))) continue;
       const k = (simT - f.t0) / f.life, s = f.s0 + (f.s1 - f.s0) * Math.sqrt(k), shrink = k > 0.75 ? 1 - (k - 0.75) * 4 : 1;
       m.position.set(f.x, f.y + f.vy * (simT - f.t0), f.z); m.rotation.set(0, 0, 0); m.scale.setScalar(Math.max(0.001, s * shrink)); m.updateMatrix();
@@ -576,6 +585,7 @@ export class BattleView {
   }
 
   private fx4(e: SimEvent, t: number) {
+    if (e.e === 'impact' && e.kind === SHELL_SMOKE) return;   // 沒有火球、火星、碎片或震動
     const s = this.fxSeq++, H = (k: number, salt: number) => hash2(s, k, salt);
     if (e.e === 'fire') {
       const u = this.w.units[e.unit - 1];
@@ -750,6 +760,7 @@ export class BattleView {
       : { puff: 0, glow: 0, debris: 0, ring: 0, ghost: 0 };
   }
   get poolCaps() { return this.r4 ? { puff: this.puff!.cap, glow: this.glow!.cap, debris: this.debris!.cap, ring: this.ring!.cap } : null; }
+  get smokeCounts() { return { clouds: this.smoke107.clouds, puffs: this.smoke107.puffs }; }
   fxDigest(): string {
     if (!this.r4) return 'off';
     let h = 0x811c9dc5;
