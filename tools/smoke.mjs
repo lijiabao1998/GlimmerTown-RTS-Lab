@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -583,6 +583,42 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR022 },
   await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await page.evaluate('__rts.stepN(1)');
   const btn = await page.evaluate("!!document.getElementById('pb-k4') || !!document.getElementById('pb-k5')"), e = await page.evaluate('__rts.eco()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(!btn && !e.guns && h === nodeHash && page.errors.length === 0, '?noR022=1：沒有新砲按鈕、eco 不帶 guns、雜湊不變', h);
+});
+
+// ---- R023 輕坦克、重坦克：手機生產列有兩顆新按鈕、真觸控出一台輕坦克；桌機重坦克特寫；?noR023=1 沒有 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.tanks }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await page.evaluate('__rts.stepN(1)');
+  const rect = id => page.evaluate(`(() => { const b = document.getElementById('${id}'); if (!b) return null; const q = b.getBoundingClientRect(); return [q.x + q.width / 2, q.y + q.height / 2, q.width, q.height]; })()`);
+  const lt = await rect('pb-k6'), hv = await rect('pb-k7'), bar = await page.evaluate("document.getElementById('prodbar').getBoundingClientRect().height");
+  if (lt) await touchTap(page, lt[0], lt[1]);
+  await page.evaluate('__rts.stepN(1)');
+  const e = await page.evaluate('__rts.eco()');
+  log(!!lt && !!hv && lt[2] >= 44 && lt[3] >= 44 && hv[2] >= 44 && hv[3] >= 44 && e.queue[0].includes(6) && bar <= 200, '生產列有「輕坦克」「重坦克」（≥ 44 像素）；觸控按「輕坦克」排進佇列；生產列不超過 200 像素高',
+    `輕 ${lt ? lt[2].toFixed(0) + '×' + lt[3].toFixed(0) : '無'}、重 ${hv ? hv[2].toFixed(0) + '×' + hv[3].toFixed(0) : '無'}；生產列高 ${bar.toFixed(0)}；佇列 ${e.queue[0]}`);
+  log(page.errors.length === 0, '新坦克（手機）零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 1280, height: 800, port: PORTS.tanksDesk }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0');
+  await page.evaluate("document.getElementById('pb-k6').click()");
+  for (let k = 0; k < 30; k++) { await page.evaluate('__rts.stepN(30)'); await sleep(40); }
+  await page.evaluate("document.getElementById('pb-k7').click()");
+  for (let k = 0; k < 20; k++) { await page.evaluate('__rts.stepN(30)'); await sleep(40); }
+  const us = await page.evaluate('__rts.units()'), mine = us.filter(u => u.side === 0 && (u.kind === 6 || u.kind === 7));
+  const g = mine.find(u => u.alive && u.kind === 7) ?? mine.find(u => u.alive) ?? mine[0];
+  if (g) { await page.evaluate(`__rts.focus(${g.x / 256}, ${g.z / 256}, 2.6); 0`); await sleep(400); }
+  const info = await page.evaluate('__rts.info()');
+  await shot(page, path.join(SHOTS, 'desktop-tanks.png'));
+  log(mine.some(u => u.kind === 6) && mine.some(u => u.kind === 7) && info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles, '新坦克特寫（輕、重都出來了）：繪製呼叫 ≤ 22、三角形 ≤ 80,000',
+    `我方新坦克 ${mine.map(u => u.kind).join(',')}；${JSON.stringify({ calls: info.calls, triangles: info.triangles })}`);
+  log(page.errors.length === 0, '新坦克（桌機）零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR023 }, async ({ open, page }) => {
+  await open('noR023=1');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await page.evaluate('__rts.stepN(1)');
+  const btn = await page.evaluate("!!document.getElementById('pb-k6') || !!document.getElementById('pb-k7')"), e = await page.evaluate('__rts.eco()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(!btn && !e.tanks && h === nodeHash && page.errors.length === 0, '?noR023=1：沒有新坦克按鈕、eco 不帶 tanks、雜湊不變', h);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
+  N, SUB, TER_ROAD, TER_FIELD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -21,6 +21,8 @@ const C_HOLE = 0x1b1713, C_SOOT = 0x2a2521;
 const DASH_CAP = 900;                 // R011 地上短線最多幾段
 const DK_PATH = 0, DK_ATTACK = 1, DK_FIRE = 2, DK_END = 3, DK_CROSS = 4;
 const MEN_CAP = 1600, BODY_CAP = 300;   // R021 小兵實例上限、倒下的人上限
+// R023 坦克的網格縮放（輕坦克小一號、重坦克大一號；中坦克原樣）
+const TANK_SCALE23: Record<number, number> = { [UK_LIGHT]: 0.8, [UK_HEAVY]: 1.18 };
 // R022 砲的網格縮放（長、高、寬）：榴彈砲原樣；反戰車砲壓低放平；迫擊砲短而翹
 const GUN_SCALE22: Record<number, [number, number, number]> = { [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4] };
 // 一班六個人的位置（班長前進方向的本地座標：兩排三列）
@@ -357,7 +359,7 @@ export class BattleView {
           if (this.fxOn && !this.r4) this.burst(x, 0.1, z, 0.55, simT, 5, false);
         } else if (this.fxOn && !this.r4) this.burst(x, e.bld ? 0.35 : 0.12, z, 0.22, simT, 2, !!e.bld);
       } else if (e.e === 'fire' && this.fxOn && !this.r4 && this.visibleUnit(this.w.units[e.unit - 1])) {
-        const u = this.w.units[e.unit - 1], a = Math.atan2(u.aimZ, u.aimX), L = u.kind === UK_TANK ? 0.44 : 0.4;
+        const u = this.w.units[e.unit - 1], a = Math.atan2(u.aimZ, u.aimX), L = UNIT_KINDS[u.kind].armored ? 0.44 * (TANK_SCALE23[u.kind] ?? 1) : 0.4;
         this.spawn({ x: e.x / SUB + Math.cos(a) * L, y: u.kind === UK_TANK ? 0.2 : 0.3, z: e.z / SUB + Math.sin(a) * L, t0: simT, life: 0.12, s0: 0.07, s1: 0.12, vy: 0, c0: new THREE.Color(0xfff3b0), c1: new THREE.Color(0xffb040) });
       } else if (e.e === 'kill' && this.visibleUnit(this.w.units[e.unit - 1])) {
         this.wrecks.push({ id: e.unit, until: simT + 10 });
@@ -408,10 +410,11 @@ export class BattleView {
       // R008 後座：開火後 0.3 秒內沿瞄準反方向退一下再回位（前 0.04 秒猛退，之後慢慢回）
       const rk = (simT - this.recoilT0[u.id]) / 0.3, back = this.r8 && u.alive && rk >= 0 && rk < 1 ? (rk < 0.13 ? rk / 0.13 : (1 - rk) / 0.87) ** 2 : 0;
       const bx = -Math.cos(aim) * back, bz = Math.sin(aim) * back;
-      if (u.kind === UK_TANK) {
-        m.position.set(x + bx * 0.03, 0, z + bz * 0.03); m.rotation.set(0, this.yaw[u.id], u.alive ? back * 0.05 : 0.06); m.scale.setScalar(1); m.updateMatrix();
+      if (UNIT_KINDS[u.kind].armored) {   // R023 輕、中、重坦克共用車體與砲塔網格，只差縮放
+        const ts = TANK_SCALE23[u.kind] ?? 1;
+        m.position.set(x + bx * 0.03, 0, z + bz * 0.03); m.rotation.set(0, this.yaw[u.id], u.alive ? back * 0.05 : 0.06); m.scale.set(ts * (u.kind === UK_HEAVY ? 1.06 : 1), ts * (u.kind === UK_LIGHT ? 0.85 : 1), ts); m.updateMatrix();
         this.hull.setMatrixAt(nh, m.matrix); this.hull.setColorAt(nh, col);
-        m.rotation.set(0, u.alive ? aim : aim + 0.5, u.alive ? 0 : 0.12); m.position.set(x + bx * 0.09, u.alive ? 0 : -0.02, z + bz * 0.09); m.updateMatrix();
+        m.rotation.set(0, u.alive ? aim : aim + 0.5, u.alive ? 0 : 0.12); m.position.set(x + bx * 0.09, u.alive ? 0 : -0.02, z + bz * 0.09); m.scale.setScalar(ts); m.updateMatrix();
         const tossed = !u.alive && this.r4 ? this.toss.get(u.id) : undefined;
         this.turret.setMatrixAt(nh, tossed ? this.tossMatrix(tossed, x, z, simT) : m.matrix); this.turret.setColorAt(nh, col);
         nh++;
@@ -607,7 +610,7 @@ export class BattleView {
         for (let k = 0; k < 3; k++) this.puff!.spawn({ x, y: 0.08, z, vy: 0.2, t0: t + 0.05 * k, life: 1.4, s0: 0.06, s1: 0.22, c0: 0x9a8b74, c1: 0xa59c8c, fog });
         return;
       }
-      const tank = u.kind === UK_TANK;
+      const tank = UNIT_KINDS[u.kind].armored;
       this.blast(x, z, t, tank ? 1.25 : 0.9, fog, STEEL, tank ? 7 : 5);
       this.shake(tank ? 0.07 : 0.045, x, z, t);
       if (tank) this.toss.set(u.id, { t0: t, vx: (H(1, 30) - 0.5) * 1.4, vz: (H(2, 30) - 0.5) * 1.4, spin: 5 + 6 * H(3, 30), yaw: Math.atan2(-u.aimZ, u.aimX), tilt: H(4, 30) - 0.5 });
@@ -744,7 +747,7 @@ export class BattleView {
       if (!u.alive || UNIT_KINDS[u.kind].radius === 0) continue;   // 步兵（觀測員、步兵班）不壓車轍
       const dx = u.x - this.prevX[u.id], dz = u.z - this.prevZ[u.id];
       if (!dx && !dz) continue;
-      const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = u.kind === UK_TANK ? 0.13 : 0.11;
+      const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = UNIT_KINDS[u.kind].armored ? 0.13 * (TANK_SCALE23[u.kind] ?? 1) : 0.11;
       // 兩條車轍：沿這一步走過的線段，每 1/8 格蓋一個像素；同一條車轍連續壓到同一個像素只算一次
       const steps = Math.max(1, Math.ceil((len / SUB) * PX));
       for (let side = 0; side < 2; side++) {
