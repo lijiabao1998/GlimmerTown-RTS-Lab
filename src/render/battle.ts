@@ -9,7 +9,7 @@ import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
 import { buildTown, smokeSources, buildingGeo, bldColors, wallHeight, RUBBLE_COLORS, ROOF_RISE } from './buildings.ts';
 import { Geo } from './geo.ts';
-import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING } from './fx.ts';
+import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING, RISE_S } from './fx.ts';
 import { tankHull, tankTurret, howitzer, observer } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
 
@@ -135,6 +135,10 @@ export class BattleView {
   readonly dashDbg = { n: 0, x: new Float32Array(DASH_CAP), z: new Float32Array(DASH_CAP), kind: new Uint8Array(DASH_CAP), unit: new Int32Array(DASH_CAP) };
 
   // ---- R014 牆上的彈孔（?noR014=1 時不畫）----
+  // ---- R016 開戰時布陣的房子從地面升起（?noR016=1 時直接出現）----
+  private r16 = false;
+  private rising = new Map<number, number>();   // 建築 id → 升完的模擬時間
+  private skipRising = (b: Building) => this.rising.has(b.id);
   private holeMesh: THREE.InstancedMesh | null = null;
   // 痕跡：環狀覆寫最舊的；kind 0＝彈孔（深色孔＋淺色碎灰泥兩片）、1＝燻黑
   readonly holes = { next: 0, live: new Uint8Array(HOLE_CAP), bld: new Int32Array(HOLE_CAP), kind: new Uint8Array(HOLE_CAP), x: new Float32Array(HOLE_CAP), y: new Float32Array(HOLE_CAP), z: new Float32Array(HOLE_CAP), nx: new Int8Array(HOLE_CAP), nz: new Int8Array(HOLE_CAP), w: new Float32Array(HOLE_CAP), h: new Float32Array(HOLE_CAP), r: new Float32Array(HOLE_CAP), g: new Float32Array(HOLE_CAP), b: new Float32Array(HOLE_CAP) };
@@ -143,8 +147,8 @@ export class BattleView {
   // 每一步之前記下在飛、會打中建築的穿甲彈（彈著事件沒有射手位置）
   private apSnap = { n: 0, sx: new Float64Array(MAX_SHELLS), sz: new Float64Array(MAX_SHELLS), ex: new Float64Array(MAX_SHELLS), ez: new Float64Array(MAX_SHELLS), bld: new Int32Array(MAX_SHELLS) };
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true) {
-    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009;
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true) {
+    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016;
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
     this.scene.add(new THREE.HemisphereLight(0xe4ecff, 0x5b5444, 1.35));
@@ -349,7 +353,7 @@ export class BattleView {
         if (this.fxOn && !this.r4) this.burst(u.x / SUB, 0.2, u.z / SUB, 0.45, simT, 4, false);
       }
     }
-    if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w).geometry(); }
+    if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); }
     if (groundDirty) this.groundTex.needsUpdate = true;
   }
 
@@ -462,6 +466,11 @@ export class BattleView {
       mesh.count = n; mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     };
+    if (this.rising.size) {   // R016：升完的房子併回城鎮網格
+      let done = false;
+      for (const [id, until] of this.rising) if (simT >= until) { this.rising.delete(id); done = true; }
+      if (done) { this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); this.observerHeights.clear(); }
+    }
     if (this.r4) this.updateFx(simT);
     if (this.r9) this.bars9(simT, selected);
     if (this.dash) this.orders11(selected);
@@ -574,9 +583,13 @@ export class BattleView {
       if (tank) this.addEmitter(E_WRECKFIRE, u.id, x - 0.15, z - 0.15, 0.3, 0.3, 0.2, t, t + 15, fog);
       this.addEmitter(E_WRECKSMOKE, u.id, x, z, 0, 0, 0.25, t + 0.3, tank ? Infinity : t + 10, fog);
     } else if (e.e === 'build') {
-      // R006 布陣落地：腳下揚一圈塵
+      // R006 布陣落地：腳下揚一圈塵；R016：房子從地面升起（城鎮網格先不含它，升完再併回去）
       const b = this.w.blds[e.bld - 1];
       if (!b) return;
+      if (this.r16 && this.ghosts) {
+        this.ghosts.add(buildingGeo(new Geo(), b, STAGE_INTACT), t, wallHeight(b) + (ROOF_RISE[b.kind] ?? 0.32), b.x + b.w / 2, b.z + b.d / 2, hash2(b.id, 5, 91), true);
+        this.rising.set(b.id, t + RISE_S);
+      }
       if (this.lastStage.length > b.id) this.lastStage[b.id] = STAGE_INTACT;
       for (let k = 0; k < 6; k++) {
         const a = (k / 6) * Math.PI * 2, cx = b.x + b.w / 2, cz = b.z + b.d / 2, r = Math.max(b.w, b.d) * 0.55;
@@ -945,6 +958,8 @@ export class BattleView {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     this.holesDirty = false;
   }
+  get risingCount() { return this.rising.size; }
+  get ghostCount() { return this.ghosts ? this.ghosts.count : 0; }
   get holeCount() { let c = 0; for (let i = 0; i < HOLE_CAP; i++) c += this.holes.live[i]; return c; }
   get holeInstances() { return this.holeMesh ? this.holeMesh.count : 0; }
 

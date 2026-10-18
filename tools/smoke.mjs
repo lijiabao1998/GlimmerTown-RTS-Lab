@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -435,6 +435,36 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR015 },
   await open('noR015=1');
   const mm = await page.evaluate('__rts.minimap()'), el = await page.evaluate("!!document.getElementById('minimap')"), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(!mm.shown && !el && h === nodeHash && page.errors.length === 0, '?noR015=1：沒有小地圖、雜湊不變、零頁面錯誤', `${h}`);
+});
+// ---- R016 開戰儀式：手機真觸控放一棟農舍、按「開戰」：大字與升起；大字消失後照樣點得到坦克 ----
+const tapStart = async page => { const r = await page.evaluate("(() => { const b = document.getElementById('bb-start').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()"); await touchTap(page, r[0], r[1]); };
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.start }, async ({ open, page }) => {
+  await open('');
+  const w0 = createWorld(1944), cot = BUILD_KINDS.find(k => k.w === 1 && k.d === 1);
+  let placed = false;
+  for (let z = 17; z < N && !placed; z++) for (let x = 17; x < N && !placed; x++) {
+    if (buildError(w0, { t: 'build', side: 0, kind: cot.kind, x, z })) continue;
+    const [sx, sy] = await page.evaluate(`__rts.screenOfCell(${x}, ${z})`);
+    if (sx < 30 || sy < 200 || sx > 382 || sy > 620 || await page.evaluate(`document.elementFromPoint(${sx}, ${sy})?.tagName`) !== 'CANVAS') continue;
+    await touchTap(page, sx, sy); placed = (await page.evaluate('__rts.plan()')).length === 1;
+  }
+  await tapStart(page); await sleep(150);
+  const a = await page.evaluate('__rts.rising()');
+  await shot(page, path.join(SHOTS, 'mobile-battle-start.png'));
+  await sleep(1500);
+  const b = await page.evaluate('__rts.rising()');
+  const [tx, ty] = await page.evaluate('__rts.screenOf(1)');
+  await touchTap(page, tx, ty);
+  const sel = await page.evaluate('__rts.selected()');
+  log(placed && a.banner && a.ghosts > 0 && a.rising > 0 && !b.banner && b.rising === 0 && b.ghosts === 0 && JSON.stringify(sel) === '[1]', '按「開戰」：大字出現、布陣的房子在升起；1.5 秒後大字消失、升完；之後照樣點得到坦克',
+    `放好 ${placed}；0.15 秒 ${JSON.stringify(a)}；1.65 秒 ${JSON.stringify(b)}；選取 ${JSON.stringify(sel)}`);
+  log(page.errors.length === 0, '開戰儀式零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR016 }, async ({ open, page }) => {
+  await open('noR016=1');
+  await tapStart(page); await sleep(150);
+  const a = await page.evaluate('__rts.rising()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(!a.banner && a.rising === 0 && h === nodeHash && page.errors.length === 0, '?noR016=1：沒有大字、房子直接出現、雜湊不變、零頁面錯誤', `${JSON.stringify(a)}；${h}`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);

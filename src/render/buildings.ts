@@ -102,9 +102,10 @@ export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
   return g;
 }
 
-export function buildTown(w: World): Geo {
+// skip：這一刻先不畫的建築（R016 正在從地面升起的，由殘影網格畫）
+export function buildTown(w: World, skip?: (b: Building) => boolean): Geo {
   const g = new Geo();
-  for (const b of w.blds) buildingGeo(g, b, stageOf(b));
+  for (const b of w.blds) if (!skip || !skip(b)) buildingGeo(g, b, stageOf(b));
   return g;
 }
 
