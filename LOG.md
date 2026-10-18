@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R108 | 2026-10-18 | GPT | 待辦19修補：勝負只等非煙幕彈；自然案例判敗tick54→7，HE/AP同歸於盡保留；正式程式一行 | typecheck/unit101.2秒/build/main車道綠；6組守衛＋16負控制；獨立864案例；golden f3364bb6不變；CI smoke203.4秒綠，Node/Chrome一致，四圖同R107 | [#37](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/37) | 本機Chrome socket受限，靠CI；未補新彈種鍵實機觸控；不改AI或煙幕戰術 |
 | R107 | 2026-10-18 | GPT | 待辦7榴彈砲煙幕：四發、半徑2格、20秒、固定風、8團；遮視線不傷害，既有流程切彈種；?noR107 | 本機typecheck/unit71.5秒/build/main車道綠；25組新守衛＋26負控制；CI smoke197.1秒綠，Node/Chrome f3364bb6；手機煙幕15calls/14130tris，四圖已看 | [#35](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/35) | 本機Chrome socket受限，靠CI；新增按鈕實際觸控／Android實機未測；不加AI煙幕戰術 |
 | R106 | 2026-10-18 | GPT | 待辦6彈坑輕掩體：已有坑格投射物傷害100%→75%，建築掩護優先，倒塌與首發HE不減；不改指令或畫面 | typecheck/unit72.6秒/build綠；8組新守衛＋8負控制；獨立939斷言；AI9/12/12；golden實測2269decb→d22b1d45；CI smoke/gpt-lane綠，Node/Chrome一致，手機12calls/22156tris | [#34](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/34) | 本機smoke受socket權限限制，靠CI；四圖已看；Android實機未測；小傷害沿用整數取整可能為0 |
 | R105 | 2026-10-18 | GPT | 待辦5建築材質：木／磚／石共用整數耐久，穀倉190→150、教堂840→1020；完好／空殼／瓦礫材質色與布陣材質耐久資訊；?noR105=1 | 本機 typecheck/build；材質8組＋視覺4組，12組負控制全紅；AI 9/12/12；golden實測98dc0f18→2269decb，重跑／JSON／clone一致；完整unit113.3秒綠；CI smoke/gpt-lane綠，Node/Chrome2269decb，手機12calls/22156tris | [#32](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/32) | 本機Chrome socket受限，smoke靠CI；CI四圖已看；Android實機未測 |
