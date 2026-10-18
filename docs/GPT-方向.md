@@ -33,7 +33,6 @@
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
 | 4 | 裝甲面向：正面厚、側後薄（整數點積），繞側打傷害加成 | 坦克車 | 模擬 | 會 | 選取時畫裝甲弧 |
-| 6 | 彈坑當輕掩體：單位在彈坑格受傷減少 | 對轟 | 模擬 | 會 | |
 | 7 | 煙幕彈：榴彈砲可改打煙幕，擋視線若干秒，隨固定種子的風飄 | 榴彈砲 | 模擬＋渲染 | 會 | 介面加彈種切換 |
 | 9 | 桌機框選、手機長按叫出砲擊選單 | — | 介面 | 不會 | |
 | 10 | 選取時顯示射程圈、最小射程圈、預計散布圈 | 榴彈砲 | 介面 | 不會 | |
@@ -56,6 +55,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 彈坑輕掩體 | R106 | [#34](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/34) | 2026-10-18 | 本機 smoke 受限，CI smoke 通過；Android 實機未測 |
 | 建築材質 | R105 | [#32](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/32) | 2026-10-18 | 本機 smoke 受限，CI smoke 通過；Android 實機未測 |
 | 試射修正 | R102 | [#5](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/5) | 2026-10-17 | 本機 smoke 受限，CI smoke 通過 |
 | 前進觀測員 | R101 | [#4](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/4) | 2026-10-17 | 本機 smoke 受限，CI smoke 通過 |
