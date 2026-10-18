@@ -14,6 +14,7 @@ export interface HudActions {
   toggleFire: () => void;
   selectAll: () => void;
   restart: () => void;
+  help?: () => void;   // R013 說明面板
 }
 export interface Hud { update: () => void; frame: () => void }
 
@@ -32,13 +33,14 @@ export function initHud(a: HudActions): Hud {
       <button id="b-fire" title="砲擊模式：點地面＝對那一格開火">砲擊</button>
       <button id="b-all" title="選取全部我方單位">全選</button>
       <button id="b-restart" title="重新開始">↺</button>
+      <button id="b-help" title="怎麼玩">？</button>
     </div>
     <div class="bar bottom" id="hint"></div>
     <div id="banner" hidden></div>`;
   document.body.appendChild(root);
   const $ = (id: string) => root.querySelector('#' + id) as HTMLElement;
   const act = (id: string, f: () => void) => $(id).addEventListener('click', e => { e.stopPropagation(); f(); update(); });
-  act('b-pause', a.togglePause); act('b-speed', a.cycleSpeed); act('b-fire', a.toggleFire); act('b-all', a.selectAll); act('b-restart', a.restart);
+  act('b-pause', a.togglePause); act('b-speed', a.cycleSpeed); act('b-fire', a.toggleFire); act('b-all', a.selectAll); act('b-restart', a.restart); if (a.help) act('b-help', a.help);
 
   let lastSec = -1;
   function update() {
