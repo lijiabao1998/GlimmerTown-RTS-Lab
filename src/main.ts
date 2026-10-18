@@ -1,6 +1,6 @@
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UNIT_KINDS, BK_COTTAGE, bldAt, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UNIT_KINDS, BK_COTTAGE, bldAt, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
@@ -10,6 +10,7 @@ import { initHud, type Hud } from './ui/hud.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
 import { initHelp } from './ui/help.ts';
+import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
 
@@ -35,6 +36,9 @@ let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: numbe
 const r011 = q.get('noR011') !== '1';
 // R014 牆上的彈孔與燻黑。逃生閥 ?noR014=1
 const r014 = q.get('noR014') !== '1';
+// R015 小地圖。逃生閥 ?noR015=1
+const r015 = q.get('noR015') !== '1';
+let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
 function startBanner() {
@@ -141,6 +145,7 @@ function tick() {
   const now = pending; pending = [];
   step(w, now);
   view.onEvents(w.events, simT());
+  if (minimap && w.events.some(e => e.e === 'stage' || e.e === 'build' || (e.e === 'impact' && e.kind === SHELL_HE))) minimap.dirty();   // R015 地形變了才重畫底圖
   statsStep(stats, w, w.events);
 }
 
@@ -287,6 +292,13 @@ hud = initHud({
 reportView = initReportView({ again: () => reset() });
 // R013 說明面板：開著的時候暫停，關掉回到原來的暫停狀態
 let pausedBeforeHelp = false;
+// R015 小地圖：點哪裡鏡頭滑過去（有 R012 就平滑）
+if (r015) minimap = initMinimap({
+  world: () => w,
+  visible: u => view.visibleUnit(u),
+  view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
+  tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
+});
 const help = initHelp({ open: () => { pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } });
 buildBar = initBuildBar(BUILD_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost })), {
   state: () => {
@@ -330,6 +342,7 @@ renderer.setAnimationLoop(() => {
   view.update(alpha, simT(alpha), selected);
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
+  minimap?.frame(t);
 });
 
 // ---- 守衛掛勾（tools/smoke.mjs 用）----
@@ -361,6 +374,8 @@ const rts = {
   bars: () => view.bars,
   dashes: () => view.dashes,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
+  minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
+  miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
   rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner') }),
   cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }),
   groundAt: (cx: number, cy: number) => { const p = view.groundAt(cx, cy, innerWidth, innerHeight); return p ? [p.x, p.z] : null; },

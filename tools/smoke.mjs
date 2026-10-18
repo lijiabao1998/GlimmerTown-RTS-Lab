@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911 , start: 8971, noR016: 8991 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -337,10 +337,10 @@ const camAt = page => page.evaluate('__rts.cam()');
 await withBrowser({ width: 1280, height: 800, port: PORTS.cam }, async ({ open, page }) => {
   await open('noR006=1');
   await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
-  const g0 = await page.evaluate('__rts.groundAt(1100, 150)');
-  await page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 1100, y: 150, deltaX: 0, deltaY: -120 }); await sleep(200);
-  const g1 = await page.evaluate('__rts.groundAt(1100, 150)'), c = await camAt(page);
-  log(c.zoom > 1.05 && Math.hypot(g1[0] - g0[0], g1[1] - g0[1]) < 0.05, '滾輪在右上角放大：游標下的地面格不動', `縮放 ${c.zoom.toFixed(2)}；${g0.map(v => v.toFixed(2))} → ${g1.map(v => v.toFixed(2))}`);
+  const g0 = await page.evaluate('__rts.groundAt(980, 220)');
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 980, y: 220, deltaX: 0, deltaY: -120 }); await sleep(200);
+  const g1 = await page.evaluate('__rts.groundAt(980, 220)'), c = await camAt(page);
+  log(c.zoom > 1.05 && Math.hypot(g1[0] - g0[0], g1[1] - g0[1]) < 0.05, '滾輪在右上角（小地圖左下方）放大：游標下的地面格不動', `縮放 ${c.zoom.toFixed(2)}；${g0.map(v => v.toFixed(2))} → ${g1.map(v => v.toFixed(2))}`);
   log(page.errors.length === 0, '鏡頭手感（桌機）零頁面錯誤', page.errors.join(' | '));
 });
 await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.camMobile }, async ({ open, page }) => {
@@ -416,6 +416,26 @@ await withBrowser({ width: 800, height: 600, port: PORTS.noR014 }, async ({ open
 });
 
 
+// ---- R015 小地圖：手機真觸控，點小地圖上 (8,8) 那一點，鏡頭滑過去；不擋按鈕列、布陣列、提示列 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.minimap }, async ({ open, page }) => {
+  await open('');
+  await sleep(300);
+  const mm = await page.evaluate('__rts.minimap()');
+  const rects = await page.evaluate("['b-help', 'b-all', 'b-restart', 'buildbar', 'hint'].map(id => { const e = document.getElementById(id); if (!e || e.hidden || e.offsetParent === null) return null; const r = e.getBoundingClientRect(); return [id, r.left, r.top, r.right, r.bottom]; }).filter(Boolean)");
+  const r = mm.rect, hit = rects.filter(([, l, t, rr, b]) => !(rr <= r.left || l >= r.right || b <= r.top || t >= r.bottom)).map(x => x[0]);
+  log(mm.shown && r.left >= 0 && r.top >= 0 && r.right <= 412 && r.bottom <= 860 && hit.length === 0, '小地圖在畫面內、不擋按鈕列／布陣列／提示列', `${JSON.stringify(r)}；重疊 ${hit.join(',') || '無'}`);
+  const [px, py] = await page.evaluate('__rts.miniPoint(8, 8)');
+  await touchTap(page, px, py); await sleep(700);
+  const c = await page.evaluate('__rts.cam()');
+  await shot(page, path.join(SHOTS, 'mobile-minimap.png'));
+  log(Math.hypot(c.x - 8, c.z - 8) < 1, '點小地圖上 (8,8)：鏡頭滑到那一格附近', `點 (${px.toFixed(0)},${py.toFixed(0)})；鏡頭 ${c.x.toFixed(2)},${c.z.toFixed(2)}`);
+  log(page.errors.length === 0, '小地圖零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR015 }, async ({ open, page }) => {
+  await open('noR015=1');
+  const mm = await page.evaluate('__rts.minimap()'), el = await page.evaluate("!!document.getElementById('minimap')"), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(!mm.shown && !el && h === nodeHash && page.errors.length === 0, '?noR015=1：沒有小地圖、雜湊不變、零頁面錯誤', `${h}`);
+});
 // ---- R016 開戰儀式：手機真觸控放一棟農舍、按「開戰」：大字與升起；大字消失後照樣點得到坦克 ----
 const tapStart = async page => { const r = await page.evaluate("(() => { const b = document.getElementById('bb-start').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()"); await touchTap(page, r[0], r[1]); };
 await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.start }, async ({ open, page }) => {
