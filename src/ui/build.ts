@@ -1,7 +1,7 @@
 // R006 布陣列：DOM（中文字不在 3D 裡畫）。只讀狀態、只呼叫傳進來的動作，不直接改世界。
 // 擺在提示列正上方，手機 412×860 也不蓋住上方的條與提示列；每個按鈕至少 44×44 CSS 像素。
 
-export interface BuildBarItem { kind: number; label: string; cost: number }
+export interface BuildBarItem { kind: number; label: string; cost: number; detail?: string }
 export interface BuildBarState { visible: boolean; kind: number; rot: number; rotatable: boolean; left: number; total: number; planned: number }
 export interface BuildBarActions {
   state: () => BuildBarState;
@@ -20,6 +20,7 @@ export function initBuildBar(items: BuildBarItem[], a: BuildBarActions): BuildBa
     <div class="row">${items.map(it => `<button id="bb-k${it.kind}" title="${it.label}：建材 ${it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}
       <button id="bb-rot" title="轉向（磚房橫放／直放）">轉向</button>
       <button id="bb-undo" title="拿掉最後蓋的一棟">復原</button></div>
+    <div id="bb-detail" role="status" aria-live="polite"></div>
     <div class="row"><span id="bb-left"></span><button id="bb-start" title="布陣完成，開打">開戰</button></div>`;
   (document.getElementById('hud') ?? document.body).appendChild(root);
   const $ = (id: string) => root.querySelector('#' + id) as HTMLButtonElement;
@@ -36,6 +37,8 @@ export function initBuildBar(items: BuildBarItem[], a: BuildBarActions): BuildBa
       b.classList.toggle('sel', it.kind === s.kind);
       b.classList.toggle('dim', it.cost > s.left);
     }
+    const detail = items.find(it => it.kind === s.kind)?.detail ?? '';
+    $('bb-detail').textContent = detail; $('bb-detail').hidden = !detail;
     $('bb-rot').textContent = s.rot ? '轉向 ↕' : '轉向 ↔';
     $('bb-rot').classList.toggle('dim', !s.rotatable);
     $('bb-undo').classList.toggle('dim', !s.planned);
