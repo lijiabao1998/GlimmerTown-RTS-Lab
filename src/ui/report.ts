@@ -1,7 +1,7 @@
 // R010 戰報：從世界與模擬事件算出一局的戰果。純函式、不碰 DOM、不改世界（Node 守衛直接測）。
-import { UK_TANK, UK_HOWITZER, UK_OBSERVER, SIDE_PLAYER, SIDE_ENEMY, STAGE_ROOFLESS, stageOf, type World, type SimEvent } from '../sim/world.ts';
+import { UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, SIDE_PLAYER, SIDE_ENEMY, STAGE_ROOFLESS, stageOf, type World, type SimEvent } from '../sim/world.ts';
 
-const KINDS = [UK_TANK, UK_HOWITZER, UK_OBSERVER];
+const KINDS = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY];   // R021 加步兵
 export interface BattleStats { start: number[][]; fires: number[]; lastKill: { x: number; z: number; tick: number } | null; endTick: number }
 export interface Report {
   winner: number; endTick: number; seconds: number;

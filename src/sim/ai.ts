@@ -3,7 +3,7 @@
 import { dist } from './math.ts';
 import { hqAlive } from './eco.ts';
 import {
-  N, SUB, center, cellOf, inMap, idx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER,
+  N, SUB, center, cellOf, inMap, idx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY,
   ORD_IDLE, ORD_ATTACK, SIDE_PLAYER, type World, type Unit, type AiState,
 } from './world.ts';
 
@@ -54,7 +54,7 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
   if (w.eco && hqAlive(w, side)) {
     const e = w.eco, q = e.queue[side], has = (k: number) => mine.filter(u => u.kind === k).length + q.filter(x => x === k).length;
     if (q.length < 2) {
-      const want = has(UK_OBSERVER) < 1 ? UK_OBSERVER : has(UK_HOWITZER) < (lv >= 2 ? 2 : 1) && has(UK_TANK) >= 2 ? UK_HOWITZER : UK_TANK;
+      const want = has(UK_OBSERVER) < 1 ? UK_OBSERVER : e.inf && has(UK_INFANTRY) < (lv >= 2 ? 2 : 1) ? UK_INFANTRY : has(UK_HOWITZER) < (lv >= 2 ? 2 : 1) && has(UK_TANK) >= 2 ? UK_HOWITZER : UK_TANK;
       if (e.supply[side] >= UNIT_KINDS[want].cost) out.push({ t: 'produce', side, kind: want });
     }
   }
@@ -129,6 +129,25 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
     }
     ok.sort((a, b) => (a.kind === UK_TANK ? 0 : 1) - (b.kind === UK_TANK ? 0 : 1) || dist(g.x, g.z, a.x, a.z) - dist(g.x, g.z, b.x, b.z) || a.id - b.id);
     out.push({ t: 'attack', side, ids: [g.id], target: ok[0].id });
+  }
+
+  // ---- R021 步兵：打看得到、射程附近的非裝甲目標；沒有目標就進駐前線附近的房子 ----
+  for (const f of mine.filter(u => u.kind === UK_INFANTRY)) {
+    if (order(f) === ORD_ATTACK && w.units[f.target - 1]?.alive) continue;
+    const soft = seen.filter(t => !UNIT_KINDS[t.kind].armored && dist(f.x, f.z, t.x, t.z) <= UNIT_KINDS[f.kind].range + 2 * SUB)
+      .sort((a, b) => dist(f.x, f.z, a.x, a.z) - dist(f.x, f.z, b.x, b.z) || a.id - b.id);
+    if (soft.length) { out.push({ t: 'attack', side, ids: [f.id], target: soft[0].id }); continue; }
+    const inside = bldAt(w, cellOf(f.x), cellOf(f.z));
+    if ((inside && inside.hp > 0) || f.pathIdx < f.path.length) continue;
+    const ref = tanks.length ? tanks : mine;
+    const gx = Math.trunc(ref.reduce((s, u) => s + u.x, 0) / ref.length), gz = Math.trunc(ref.reduce((s, u) => s + u.z, 0) / ref.length);
+    let pick: { x: number; z: number } | null = null, pd = 0;
+    for (const b of w.blds) {
+      if (b.hp <= 0 || b.builtBy === 1 - side) continue;
+      const bd = dist(center(b.x), center(b.z), gx, gz);
+      if (bd < 6 * SUB && (!pick || bd < pd)) { pick = { x: b.x, z: b.z }; pd = bd; }
+    }
+    if (pick) out.push({ t: 'move', side, ids: [f.id], x: pick.x, z: pick.z });
   }
 
   // ---- 觀測員：沒有坦克了就往前偵察（離開房子也要去）；普通以上平常進駐前線附近、還站著的房子 ----

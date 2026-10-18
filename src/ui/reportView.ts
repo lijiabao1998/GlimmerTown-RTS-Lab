@@ -11,7 +11,7 @@ export function initReportView(actions: { again: () => void }): ReportView {
   (document.getElementById('hud') ?? document.body).append(root, reopen);
   let last: Report | null = null;
   const row = (name: string, a: string | number, b: string | number) => `<tr><th>${name}</th><td>${a}</td><td>${b}</td></tr>`;
-  const units = (c: number[]) => `坦克 ${c[0]}・砲 ${c[1]}・觀測 ${c[2]}`;
+  const units = (c: number[]) => `坦克 ${c[0]}・砲 ${c[1]}・觀測 ${c[2]}${c[3] ? `・步兵 ${c[3]}` : ''}`;
   function show(r: Report) {
     last = r;
     const title = r.winner === 0 ? '勝利' : r.winner === 1 ? '戰敗' : '同歸於盡';

@@ -1,6 +1,6 @@
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UNIT_KINDS, BK_COTTAGE, bldAt, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UNIT_KINDS, BK_COTTAGE, bldAt, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
@@ -87,6 +87,9 @@ const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.k
 const r018 = q.get('noR018') !== '1';
 // R019 生產與補給：開戰時送 eco（雙方指揮部、補給、打掉指揮部才贏）。逃生閥 ?noR019=1
 const r019 = q.get('noR019') !== '1';
+// R021 步兵班：eco 帶 inf＝1（雙方各一班、可出步兵）。逃生閥 ?noR021=1
+const r021 = q.get('noR021') !== '1';
+const ecoCmd = (): Command => (r021 ? { t: 'eco', inf: 1 } : { t: 'eco' });
 let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
@@ -100,7 +103,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019) {
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   if (build) { paused = true; refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
-    if (eco) issue({ t: 'eco' });
+    if (eco) issue(ecoCmd());
     if (ai) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   }
   ui();
@@ -113,7 +116,7 @@ function startBattle() {
   const pv = previewWorld(), enemy = enemyPlan(pv);
   for (const c of plan) issue(c);
   for (const c of enemy) issue(c);
-  if (r019) issue({ t: 'eco' });
+  if (r019) issue(ecoCmd());
   if (r018) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   phase = 'battle'; plan = []; buildHint = '';
   if (r016) startBanner();
@@ -192,8 +195,9 @@ function order(cx: number, cy: number) {
   // 先看點到哪棟建築（屋頂、牆面都算）；沒點到建築才看地面
   const hitB = view.buildingAt(cx, cy, innerWidth, innerHeight);
   if (hitB) {
-    const observers = ids.filter(id => w.units[id - 1].kind === UK_OBSERVER);
-    const armed = ids.filter(id => w.units[id - 1].kind !== UK_OBSERVER);
+    // 點房子：能進駐的（觀測員、R021 步兵）走進去，其他的轟它
+    const observers = ids.filter(id => UNIT_KINDS[w.units[id - 1].kind].garrison);
+    const armed = ids.filter(id => !UNIT_KINDS[w.units[id - 1].kind].garrison);
     if (observers.length) issue({ t: 'move', side: SIDE_PLAYER, ids: observers, x: hitB[0], z: hitB[1] });
     if (armed.length) issue({ t: 'fireAt', side: SIDE_PLAYER, ids: armed, x: hitB[0], z: hitB[1] });
     view.setMarker(hitB[0] + 0.5, hitB[1] + 0.5, simT(), true);
@@ -293,7 +297,7 @@ hud = initHud({
       tick: w.tick, paused, speed, fireMode, winner: w.winner, report: r010,
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : undefined,
       mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
-      observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => u.kind === UK_TANK).length, guns: sel.filter(u => u.kind === UK_HOWITZER).length,
+      observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => u.kind === UK_TANK).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
     };
   },
@@ -305,7 +309,7 @@ hud = initHud({
   help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
-prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }], {
+prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : [])], {
   state: () => {
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
     return { visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5 };
@@ -398,6 +402,7 @@ const rts = {
   dashes: () => view.dashes,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq] } : null),
+  men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n }),
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,

@@ -21,7 +21,7 @@ while (w.tick < endTick + 40) {
 }
 {
   const h0 = hashWorld(w), r = makeReport(w, st), r2 = makeReport(w, st);
-  const alive = side => [0, 1, 2].map(k => w.units.filter(u => u.side === side && u.kind === k && u.alive).length);
+  const alive = side => [0, 1, 2, 3].map(k => w.units.filter(u => u.side === side && u.kind === k && u.alive).length);
   const dead = side => w.units.filter(u => u.side === side && !u.alive).length;
   const ok = r.winner === w.winner && JSON.stringify(r.left) === JSON.stringify([alive(SIDE_PLAYER), alive(SIDE_ENEMY)])
     && r.kills === dead(SIDE_ENEMY) && r.lost === dead(SIDE_PLAYER) && r.rubble === w.blds.filter(b => b.hp === 0).length

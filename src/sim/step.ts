@@ -7,7 +7,7 @@ import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
-  UNIT_KINDS, UK_OBSERVER, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
+  UNIT_KINDS, UK_OBSERVER, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building, type Shell,
 } from './world.ts';
 
@@ -18,7 +18,7 @@ export type Command =
   | { t: 'stop'; side: number; ids: number[] }
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）
-  | { t: 'eco' }                                // R019：第 0 步放雙方指揮部、開始補給
+  | { t: 'eco'; inf?: number }                  // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵）
   | { t: 'produce'; side: number; kind: number };   // R019：花補給排進生產佇列
 
 export interface LoggedCommand { tick: number; cmd: Command }
@@ -33,7 +33,7 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 export function applyCommand(w: World, cmd: Command): void {
   if (cmd.t === 'build') return;   // 布陣指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
-  if (cmd.t === 'eco') { startEco(w); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -47,14 +47,16 @@ export function applyCommand(w: World, cmd: Command): void {
     if (cmd.t === 'stop') { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
     if (cmd.t === 'move') {
       let gx = cx(cmd.x), gz = cx(cmd.z);
-      const [ox, oz] = u.kind === UK_OBSERVER ? [0, 0] : FORMATION[k % FORMATION.length];
+      // 觀測員照舊不排隊形；R021 步兵點到房子時直接進去、點地面照隊形
+      const garr = UNIT_KINDS[u.kind].garrison, intoBld = garr && blocks(w, gx, gz);
+      const [ox, oz] = u.kind === UK_OBSERVER || intoBld ? [0, 0] : FORMATION[k % FORMATION.length];
       if (inMap(gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz)) { gx += ox; gz += oz; }
       u.order = ORD_MOVE; u.tx = gx; u.tz = gz; u.target = 0;
-      u.path = findPath(w, ux, uz, gx, gz, u.kind === UK_OBSERVER ? (bldAt(w, gx, gz)?.id ?? 0) : 0, u.kind === UK_OBSERVER ? (bldAt(w, ux, uz)?.id ?? 0) : 0); u.pathIdx = 0;
+      u.path = findPath(w, ux, uz, gx, gz, garr ? (bldAt(w, gx, gz)?.id ?? 0) : 0, garr ? (bldAt(w, ux, uz)?.id ?? 0) : 0); u.pathIdx = 0;
       if (!u.path.length) u.order = ORD_IDLE;
       return;
     }
-    if (u.kind === UK_OBSERVER) return; // unarmed; old command format stays intact
+    if (UNIT_KINDS[u.kind].range === 0) return; // unarmed (observer); old command format stays intact
     if (cmd.t === 'attack') {
       const t = unitById(w, cmd.target | 0);
       if (!t || !t.alive || t.side === u.side || tooClose(u, t.x, t.z)) return;
@@ -110,7 +112,7 @@ export function spotted(w: World, side: number, x: number, z: number): boolean {
   if (!inMap(cellOf(x), cellOf(z))) return false;
   for (const u of w.units) {
     if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight) continue;
-    const home = u.kind === UK_OBSERVER ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
+    const home = UNIT_KINDS[u.kind].garrison ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
     const block = firstBlock(w, u.x, u.z, x, z, home?.id ?? 0);
     if (block < 0 || block === idx(cellOf(x), cellOf(z))) return true;
   }
@@ -220,7 +222,7 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
     if (!t.alive || t.side === u.side) continue;
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
-    if (!spotted(w, u.side, t.x, t.z) || (!k.indirect && firstBlock(w, u.x, u.z, t.x, t.z) >= 0)) continue;
+    if (!spotted(w, u.side, t.x, t.z) || (!k.indirect && firstBlock(w, u.x, u.z, t.x, t.z, homeOf(w, u)) >= 0)) continue;
     if (!best || d < bestD || (d === bestD && t.id < best.id)) { best = t; bestD = d; }
   }
   return best ? { x: best.x, z: best.z, unit: best, bld: null } : null;
@@ -241,7 +243,7 @@ function syncRanging(w: World, u: Unit, aim: { x: number; z: number; unit: Unit 
 }
 
 function fireUnit(w: World, u: Unit): void {
-  if (u.kind === UK_OBSERVER) return;
+  if (UNIT_KINDS[u.kind].range === 0) return;   // 觀測員沒有武裝
   if (u.cooldown > 0) u.cooldown--;
   const k = UNIT_KINDS[u.kind];
   const aim = pickAim(w, u);
@@ -255,11 +257,11 @@ function fireUnit(w: World, u: Unit): void {
   u.cooldown = k.reload;
   if (u.order === ORD_FIRE_AT && !aim.bld) u.target--;
   w.events.push({ e: 'fire', unit: u.id, x: u.x, z: u.z });
-  const sh: Shell = { id: w.nextShell++, side: u.side, kind: k.indirect ? SHELL_HE : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
+  const sh: Shell = { id: w.nextShell++, side: u.side, kind: k.indirect ? SHELL_HE : k.men ? SHELL_SMALL : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
   if (!k.indirect) {
-    const blockCell = firstBlock(w, u.x, u.z, aim.x, aim.z);
+    const blockCell = firstBlock(w, u.x, u.z, aim.x, aim.z, homeOf(w, u));   // R021：從自己待的房子往外打
     if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % N); sh.ez = center((blockCell - (blockCell % N)) / N); sh.target = 0; }
-    sh.T = Math.max(2, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / SUB));
+    sh.T = sh.kind === SHELL_SMALL ? Math.max(1, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / (3 * SUB))) : Math.max(2, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / SUB));
   } else {
     let r = Math.floor(d / 12);
     for (let i = 0; i < (u.ranging?.seen ?? 0); i++) r = Math.max(1, Math.floor(r / 2));
@@ -272,9 +274,14 @@ function fireUnit(w: World, u: Unit): void {
   w.shells.push(sh);
 }
 
+// R021：打裝甲目標時只剩穿甲率那一部分（坦克、榴彈砲的穿甲率是 100＝跟以前一樣）
+function pierced(k: { pierce: number }, t: Unit, dmg: number): number { return UNIT_KINDS[t.kind].armored ? Math.floor((dmg * k.pierce) / 100) : dmg; }
+// R021：能進駐的單位待在還站著的房子裡時，射線不算自己這棟
+function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) return 0; const b = bldAt(w, cellOf(u.x), cellOf(u.z)); return b && b.hp > 0 ? b.id : 0; }
+
 function damageUnit(w: World, u: Unit, dmg: number): void {
   if (!u.alive || dmg <= 0) return;
-  const cover = u.kind === UK_OBSERVER && blocks(w, cellOf(u.x), cellOf(u.z)) ? 50 : 100;
+  const cover = UNIT_KINDS[u.kind].garrison && blocks(w, cellOf(u.x), cellOf(u.z)) ? 50 : 100;
   u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor * cover) / 10000);
   if (u.hp <= 0) { u.hp = 0; u.alive = false; u.path = []; u.pathIdx = 0; u.order = ORD_IDLE; w.events.push({ e: 'kill', unit: u.id }); }
 }
@@ -286,17 +293,17 @@ function damageBld(w: World, b: Building, dmg: number): void {
   const after = stageOf(b);
   if (after !== before) w.events.push({ e: 'stage', bld: b.id, stage: after });
   if (b.hp === 0) for (const u of w.units) {
-    if (u.alive && u.kind === UK_OBSERVER && bldAt(w, cellOf(u.x), cellOf(u.z))?.id === b.id) damageUnit(w, u, 20);
+    if (u.alive && UNIT_KINDS[u.kind].garrison && bldAt(w, cellOf(u.x), cellOf(u.z))?.id === b.id) damageUnit(w, u, 20);
   }
 }
 
 function land(w: World, s: Shell): void {
   const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
-  if (s.kind === SHELL_AP) {
+  if (s.kind === SHELL_AP || s.kind === SHELL_SMALL) {
     if (s.hitBld) damageBld(w, w.blds[s.hitBld - 1], k.dmgBld);
     else {
       const t = unitById(w, s.target);
-      if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, k.dmgUnit);
+      if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, k.dmgUnit));
     }
     w.events.push({ e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld });
     return;
@@ -310,7 +317,7 @@ function land(w: World, s: Shell): void {
   for (const t of w.units) {
     if (!t.alive) continue;
     const d = dist(t.x, t.z, s.ex, s.ez);
-    if (d < R) damageUnit(w, t, Math.floor((k.dmgUnit * (R - d)) / R));
+    if (d < R) damageUnit(w, t, pierced(k, t, Math.floor((k.dmgUnit * (R - d)) / R)));
   }
   const cx = cellOf(s.ex), cz = cellOf(s.ez), rc = Math.floor(R / SUB) + 1, hit = new Set<number>();
   for (let z = cz - rc; z <= cz + rc; z++) for (let x = cx - rc; x <= cx + rc; x++) {
