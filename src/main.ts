@@ -11,6 +11,7 @@ import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
 import { applyMap, MAP_RYE } from './sim/maps.ts';
 import { setFacades } from './render/buildings.ts';
+import { setStreets } from './render/battle.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
@@ -44,7 +45,8 @@ const r015 = q.get('noR015') !== '1';
 let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
-setFacades(q.get('noR028') !== '1');   // R028 外牆細節（木構、掛瓦、護牆板）；逃生閥 ?noR028=1＝全部紅磚原樣
+setFacades(q.get('noR028') !== '1');
+setStreets(q.get('noR027') !== '1');   // R027 人行道與燈火管制路緣；逃生閥 ?noR027=1   // R028 外牆細節（木構、掛瓦、護牆板）；逃生閥 ?noR028=1＝全部紅磚原樣
 function startBanner() {
   const el = document.createElement('div');
   el.id = 'start-banner'; el.textContent = '開戰！';
