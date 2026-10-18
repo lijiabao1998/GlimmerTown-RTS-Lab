@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -465,6 +465,28 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR016 },
   await tapStart(page); await sleep(150);
   const a = await page.evaluate('__rts.rising()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(!a.banner && a.rising === 0 && h === nodeHash && page.errors.length === 0, '?noR016=1：沒有大字、房子直接出現、雜湊不變、零頁面錯誤', `${JSON.stringify(a)}；${h}`);
+});
+
+
+// ---- R018 電腦對手：預設開戰後紀錄裡有 ai 指令；跑 30 秒敵方坦克離開出生角落；瀏覽器雜湊＝Node 重播；?noR018=1 沒有 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.ai }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0');
+  const lg0 = await page.evaluate('__rts.log()'), aiCmd = lg0.find(c => c.cmd.t === 'ai');
+  const start = (await page.evaluate('__rts.units()')).filter(u => u.side === 1 && u.kind === 0);
+  const t = await page.evaluate('__rts.stepN(600 - __rts.tick())'), h = await page.evaluate('__rts.hash()');
+  const end = (await page.evaluate('__rts.units()')).filter(u => u.side === 1 && u.kind === 0);
+  const moved = Math.max(...end.map((u, i) => Math.hypot(u.x - start[i].x, u.z - start[i].z) / 256));
+  const lg = await page.evaluate('__rts.log()'), nodeH = hashWorld(runLog(createWorld(1944), lg, t));
+  log(!!aiCmd && aiCmd.tick === 0 && aiCmd.cmd.side === 1 && aiCmd.cmd.level === 2 && moved > 3 && h === nodeH, '開戰後電腦接手敵方：第 0 步有 ai 指令（普通）；30 秒內敵方坦克離開出生角落；瀏覽器雜湊＝Node 重播',
+    `${JSON.stringify(aiCmd)}；坦克最多移動 ${moved.toFixed(1)} 格；tick ${t}：${h} / ${nodeH}`);
+  log(page.errors.length === 0, '電腦對手零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR018 }, async ({ open, page }) => {
+  await open('noR018=1');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0');
+  const lg = await page.evaluate('__rts.log()');
+  log(!lg.some(c => c.cmd.t === 'ai') && page.errors.length === 0, '?noR018=1：開戰後紀錄裡沒有 ai 指令、零頁面錯誤', `${lg.length} 條指令`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);

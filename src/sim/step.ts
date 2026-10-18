@@ -3,6 +3,7 @@ import { isqrt, dist } from './math.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
 import { applyBuild, type BuildCmd } from './build.ts';
+import { aiThink, setAi, AI_THINK } from './ai.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
   UNIT_KINDS, UK_OBSERVER, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
@@ -14,7 +15,8 @@ export type Command =
   | { t: 'attack'; side: number; ids: number[]; target: number }
   | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number }
   | { t: 'stop'; side: number; ids: number[] }
-  | BuildCmd;   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
+  | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
+  | { t: 'ai'; side: number; level: number };   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）
 
 export interface LoggedCommand { tick: number; cmd: Command }
 
@@ -27,6 +29,7 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 // 指令只認：屬於下指令那一方、還活著的單位；座標夾進地圖；攻擊目標要是活著的敵人
 export function applyCommand(w: World, cmd: Command): void {
   if (cmd.t === 'build') return;   // 布陣指令只在 step() 開頭套
+  if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
     const u = unitById(w, id | 0);
@@ -335,6 +338,11 @@ export function step(w: World, cmds: Command[]): void {
   w.events = [];
   for (const c of cmds) if (c.t === 'build') applyBuild(w, c);   // R006：先蓋房子，同一步的移動才不會穿過剛蓋的房子
   for (const c of cmds) if (c.t !== 'build') applyCommand(w, c);
+  // R018：電腦在玩家指令之後、單位移動之前想（每隔 AI_THINK 步想一次），下的指令跟玩家的一樣套用
+  if (w.ai) for (const st of w.ai) if (w.tick >= st.next) {
+    for (const c of aiThink(w, st, spotted)) applyCommand(w, c);
+    st.next = w.tick + AI_THINK[st.level];
+  }
   for (const u of w.units) if (u.alive) moveUnit(w, u);
   separate(w);
   for (const u of w.units) if (u.alive) fireUnit(w, u);
