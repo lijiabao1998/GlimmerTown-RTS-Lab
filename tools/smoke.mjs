@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751 , help: 8871 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -326,6 +326,48 @@ await withBrowser({ width: 800, height: 600, port: PORTS.noR011 }, async ({ open
   await page.evaluate(ordersJs); await sleep(300);
   const n = await page.evaluate('__rts.dashes()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(n === 0 && h === nodeHash && page.errors.length === 0, '?noR011=1：不畫指令回饋、雜湊不變、零頁面錯誤', `${n} 段；${h}`);
+});
+// ---- R012 鏡頭手感：真的滾輪、真的觸控拖曳放手、真的雙擊 ----
+const touchDrag = async (page, x, y0, y1, steps = 6) => {
+  await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
+  for (let k = 1; k <= steps; k++) { await sleep(16); await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 + ((y1 - y0) * k) / steps, id: 1 }] }); }
+  await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+};
+const camAt = page => page.evaluate('__rts.cam()');
+await withBrowser({ width: 1280, height: 800, port: PORTS.cam }, async ({ open, page }) => {
+  await open('noR006=1');
+  await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
+  const g0 = await page.evaluate('__rts.groundAt(1100, 150)');
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 1100, y: 150, deltaX: 0, deltaY: -120 }); await sleep(200);
+  const g1 = await page.evaluate('__rts.groundAt(1100, 150)'), c = await camAt(page);
+  log(c.zoom > 1.05 && Math.hypot(g1[0] - g0[0], g1[1] - g0[1]) < 0.05, '滾輪在右上角放大：游標下的地面格不動', `縮放 ${c.zoom.toFixed(2)}；${g0.map(v => v.toFixed(2))} → ${g1.map(v => v.toFixed(2))}`);
+  log(page.errors.length === 0, '鏡頭手感（桌機）零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.camMobile }, async ({ open, page }) => {
+  await open('noR006=1');
+  await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
+  const s0 = await camAt(page);
+  await touchDrag(page, 200, 620, 420);
+  const c0 = await camAt(page); await sleep(300); const c1 = await camAt(page); await sleep(900); const c2 = await camAt(page); await sleep(300); const c3 = await camAt(page);
+  const dragDir = [c0.x - s0.x, c0.z - s0.z], glideDir = [c1.x - c0.x, c1.z - c0.z];
+  log(Math.hypot(...glideDir) > 0.2 && dragDir[0] * glideDir[0] + dragDir[1] * glideDir[1] > 0 && c3.x === c2.x && c3.z === c2.z, '手機快速拖曳放手：0.3 秒後還往同方向滑、1 秒後停住',
+    `拖曳 ${dragDir.map(v => v.toFixed(2))}；放手後 0.3 秒又滑 ${glideDir.map(v => v.toFixed(2))}；1.2 秒後 ${c2.x.toFixed(2)},${c2.z.toFixed(2)} → 1.5 秒 ${c3.x.toFixed(2)},${c3.z.toFixed(2)}`);
+  // 雙擊我方 1 號坦克：鏡頭跟過去、選到它
+  await page.evaluate('__rts.focus(21, 23, 1); 0'); await sleep(200);
+  const [tx, ty] = await page.evaluate('__rts.screenOf(1)');
+  await touchTap(page, tx, ty); await touchTap(page, tx, ty); await sleep(600);
+  const c = await camAt(page), sel = await page.evaluate('__rts.selected()');
+  const pos = await page.evaluate('(() => { const p = __rts.screenOf(1); return __rts.groundAt(p[0], p[1]); })()');
+  log(JSON.stringify(sel) === '[1]' && Math.hypot(c.x - pos[0], c.z - pos[1]) < 0.6, '手機雙擊我方坦克：鏡頭移到那台車、選到它', `鏡頭 ${c.x.toFixed(2)},${c.z.toFixed(2)}；坦克約 ${pos.map(v => v.toFixed(2))}；選取 ${JSON.stringify(sel)}`);
+  log(page.errors.length === 0, '鏡頭手感（手機）零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR012 }, async ({ open, page }) => {
+  await open('noR006=1&noR012=1');
+  await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
+  await touchDrag(page, 200, 620, 420);
+  const c0 = await camAt(page); await sleep(300); const c1 = await camAt(page);
+  const h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(c0.x === c1.x && c0.z === c1.z && h === nodeHash && page.errors.length === 0, '?noR012=1：放手立刻停、雜湊不變、零頁面錯誤', `${c0.x.toFixed(2)},${c0.z.toFixed(2)} → ${c1.x.toFixed(2)},${c1.z.toFixed(2)}；${h}`);
 });
 
 

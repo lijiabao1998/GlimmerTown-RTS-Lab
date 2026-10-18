@@ -8,6 +8,7 @@ import { BattleView } from './render/battle.ts';
 import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
+import { Fling, Glide } from './ui/camera.ts';
 import { initHelp } from './ui/help.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
@@ -25,6 +26,10 @@ const r008 = q.get('noR008') !== '1';
 const r009 = q.get('noR009') !== '1';
 // R010 結局與戰報：最後一擊慢動作、鏡頭移到最後一擊、戰報。逃生閥 ?noR010=1＝原本的橫幅
 const r010 = q.get('noR010') !== '1';
+// R012 鏡頭手感：縮放對準手指／游標、拖曳慣性、雙擊單位鏡頭跟過去。逃生閥 ?noR012=1
+const r012 = q.get('noR012') !== '1';
+const fling = new Fling(), glide = new Glide(), camStep = { x: 0, z: 0 };
+let dragV = { vx: 0, vy: 0, t: 0 }, lastTap = { id: 0, t: -1e9 };
 let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: number } | null = null, reportShown = false, reportView: ReportView | undefined;
 // R011 指令回饋：選取單位的路線、攻擊線、砲擊準星。逃生閥 ?noR011=1
 const r011 = q.get('noR011') !== '1';
@@ -182,6 +187,9 @@ function order(cx: number, cy: number) {
 function tap(cx: number, cy: number, additive: boolean) {
   const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
+    const now = performance.now();
+    if (r012 && lastTap.id === u.id && now - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, now / 1000);   // 雙擊：鏡頭跟過去
+    lastTap = { id: u.id, t: now };
     if (!additive) selected.clear();
     if (additive && selected.has(u.id)) selected.delete(u.id); else selected.add(u.id);
     hud?.update();
@@ -194,6 +202,7 @@ function tap(cx: number, cy: number, additive: boolean) {
 canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
+  fling.stop(); dragV = { vx: 0, vy: 0, t: performance.now() };   // R012：按下去慣性立刻停
   if (pointers.size === 1) dragged = false;
   if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinchD = Math.hypot(a.x - b.x, a.y - b.y); dragged = true; }
 });
@@ -204,23 +213,30 @@ canvas.addEventListener('pointermove', e => {
   p.x = e.clientX; p.y = e.clientY;
   if (pointers.size === 1) {
     if (!dragged && Math.hypot(p.x - p.sx, p.y - p.sy) > 8) dragged = true;
-    if (dragged) view.pan(dx, dy, innerHeight);
+    if (dragged) {
+      view.pan(dx, dy, innerHeight); glide.stop();
+      // R012：拖曳速度（CSS 像素／秒），平滑一下，放手時當慣性的初速
+      const now = performance.now(), dts = Math.max(1, now - dragV.t) / 1000, k = Math.min(1, dts / 0.05);
+      dragV = { vx: dragV.vx + (dx / dts - dragV.vx) * k, vy: dragV.vy + (dy / dts - dragV.vy) * k, t: now };
+    }
   } else if (pointers.size === 2) {
     const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinchD > 0) view.zoomBy(d / pinchD);
+    if (pinchD > 0) { if (r012) view.zoomAt(d / pinchD, (a.x + b.x) / 2, (a.y + b.y) / 2, innerWidth, innerHeight); else view.zoomBy(d / pinchD); }
     pinchD = d;
   }
 });
 const up = (e: PointerEvent) => {
   const p = pointers.get(e.pointerId);
   pointers.delete(e.pointerId);
+  // R012：單指拖曳放手（最後一次移動在 80 毫秒內）＝帶著速度滑出去
+  if (r012 && p && dragged && !pointers.size && performance.now() - dragV.t < 80) fling.start(dragV.vx, dragV.vy);
   if (!p || dragged || pointers.size) return;
   if (e.button === 2) order(e.clientX, e.clientY); else tap(e.clientX, e.clientY, e.shiftKey);
 };
 canvas.addEventListener('pointerup', up);
 canvas.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); dragged = true; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('wheel', e => { e.preventDefault(); view.zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12); }, { passive: false });
+canvas.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; if (r012) view.zoomAt(f, e.clientX, e.clientY, innerWidth, innerHeight); else view.zoomBy(f); }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { selected.clear(); hud?.update(); }
   if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
@@ -293,6 +309,13 @@ renderer.setAnimationLoop(() => {
   const alpha = Math.min(1, acc * TICK_HZ);
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.setSize(innerWidth, innerHeight, true);
+  if (fling.active) {   // R012 慣性：碰到地圖邊就停
+    fling.step(dt, camStep);
+    const bx = view.target.x, bz = view.target.z;
+    view.pan(camStep.x, camStep.z, innerHeight);
+    if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= N || view.target.z >= N) fling.stop();
+  }
+  if (glide.active) { glide.at(t / 1000, camStep); view.target.x = camStep.x; view.target.z = camStep.z; }
   view.update(alpha, simT(alpha), selected);
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
@@ -326,6 +349,8 @@ const rts = {
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,
   dashes: () => view.dashes,
+  cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }),
+  groundAt: (cx: number, cy: number) => { const p = view.groundAt(cx, cy, innerWidth, innerHeight); return p ? [p.x, p.z] : null; },
   select: (ids: number[]) => { selected.clear(); for (const id of ids) if (w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER) selected.add(id); hud?.update(); return [...selected]; },
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
   // 任意指令紀錄，從第 0 步一步一步跑（每一步都餵畫面與戰報統計）；回傳雜湊
