@@ -118,12 +118,14 @@ export interface Unit {
   pathIdx: number;
   cooldown: number;
   ranging?: Ranging; // optional so earlier saved worlds can still advance
+  fireAmmo?: number;    // R107：只有明確煙幕任務才保存；舊世界沒有此欄位
   aimX: number; aimZ: number; // 最後一次開火的方向（位置單位的向量；渲染轉砲塔用）
 }
 
 export const SHELL_AP = 0;      // 穿甲彈（直射）
 export const SHELL_HE = 1;      // 高爆彈（榴彈砲）
 export const SHELL_SMALL = 2;   // R021 步槍子彈（只打一個目標、幾乎不傷房子）
+export const SHELL_SMOKE = 3;   // R107 煙幕彈：只遮視線，不傷害或挖坑
 
 export interface Shell {
   id: number;
@@ -152,6 +154,8 @@ export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; p
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number }
 
+export interface SmokeCloud { id: number; side: number; x: number; z: number; born: number; expires: number }
+
 export interface World extends RngState {
   seed: number;
   tick: number;
@@ -168,6 +172,7 @@ export interface World extends RngState {
   ai?: AiState[];         // R018：哪一方由電腦指揮（ai 指令設定）
   eco?: EcoState;         // R019：補給、指揮部、生產佇列
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
+  smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
 }
 
 export const idx = (x: number, z: number) => z * N + x;
@@ -313,11 +318,16 @@ export function hashWorld(w: World): string {
     const r = u.ranging;
     f.int(r ? 1 : 0);
     if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
+    if (u.fireAmmo !== undefined) f.int(0x5341).int(u.fireAmmo);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
   if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp);   // R018：只有開了電腦才折
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
+  if (w.smoke) {
+    f.int(0x534d).int(w.smoke.windX).int(w.smoke.windZ).int(w.smoke.clouds.length);
+    for (const c of w.smoke.clouds) f.int(c.id).int(c.side).int(c.x).int(c.z).int(c.born).int(c.expires);
+  }
   return f.hex();
 }

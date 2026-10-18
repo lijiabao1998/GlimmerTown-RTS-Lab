@@ -13,6 +13,7 @@ export const SCRIPT: LoggedCommand[] = [
   { tick: 240, cmd: { t: 'attack', side: 0, ids: [1, 2], target: 5 } },
   { tick: 240, cmd: { t: 'attack', side: 0, ids: [3], target: 6 } },
   { tick: 500, cmd: { t: 'move', side: 1, ids: [5, 6, 7], x: 14, z: 12 } },
+  { tick: 500, cmd: { t: 'fireAt', side: 0, ids: [4], x: 24, z: 24, ammo: 'smoke' } },
   { tick: 700, cmd: { t: 'move', side: 0, ids: [1, 2, 3], x: 9, z: 9 } },
   { tick: 900, cmd: { t: 'fireAt', side: 0, ids: [4], x: 6, z: 6 } },
 ];
