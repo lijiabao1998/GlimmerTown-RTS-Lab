@@ -7,7 +7,7 @@ import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
-  UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
+  UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building, type Shell,
 } from './world.ts';
 
@@ -281,7 +281,8 @@ function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) r
 
 function damageUnit(w: World, u: Unit, dmg: number): void {
   if (!u.alive || dmg <= 0) return;
-  const cover = UNIT_KINDS[u.kind].garrison && blocks(w, cellOf(u.x), cellOf(u.z)) ? 50 : 100;
+  const home = UNIT_KINDS[u.kind].garrison && blocks(w, cellOf(u.x), cellOf(u.z)) ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
+  const cover = !home ? 100 : home.kind === BK_PILLBOX ? 25 : 50;   // R024 碉堡裡只吃四分之一
   u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor * cover) / 10000);
   if (u.hp <= 0) { u.hp = 0; u.alive = false; u.path = []; u.pathIdx = 0; u.order = ORD_IDLE; w.events.push({ e: 'kill', unit: u.id }); }
 }
@@ -300,7 +301,7 @@ function damageBld(w: World, b: Building, dmg: number): void {
 function land(w: World, s: Shell): void {
   const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
   if (s.kind === SHELL_AP || s.kind === SHELL_SMALL) {
-    if (s.hitBld) damageBld(w, w.blds[s.hitBld - 1], k.dmgBld);
+    if (s.hitBld) { const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一
     else {
       const t = unitById(w, s.target);
       if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, k.dmgUnit));

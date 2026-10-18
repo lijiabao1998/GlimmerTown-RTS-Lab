@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -619,6 +619,42 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR023 },
   await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await page.evaluate('__rts.stepN(1)');
   const btn = await page.evaluate("!!document.getElementById('pb-k6') || !!document.getElementById('pb-k7')"), e = await page.evaluate('__rts.eco()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(!btn && !e.tanks && h === nodeHash && page.errors.length === 0, '?noR023=1：沒有新坦克按鈕、eco 不帶 tanks、雜湊不變', h);
+});
+
+// ---- R024 碉堡：布陣列有「碉堡」、真觸控選了蓋一座、開戰後瀏覽器＝Node 重播；?noR024=1 沒有碉堡 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.pillbox }, async ({ open, page }) => {
+  await open('');
+  const r = await page.evaluate("(() => { const b = document.getElementById('bb-k6'); if (!b) return null; const q = b.getBoundingClientRect(); return [q.x + q.width / 2, q.y + q.height / 2, q.width, q.height]; })()");
+  if (r) await touchTap(page, r[0], r[1]);
+  const w0 = createWorld(1944);
+  let cell = null, tx = 0, ty = 0;
+  for (let z = 17; z < N && !cell; z++) for (let x = 17; x < N && !cell; x++) {
+    if (buildError(w0, { t: 'build', side: 0, kind: 6, x, z })) continue;
+    const [sx, sy] = await page.evaluate(`__rts.screenOfCell(${x}, ${z})`);
+    if (sx < 30 || sy < 130 || sx > 382 || sy > 620) continue;
+    if (await page.evaluate(`document.elementFromPoint(${sx}, ${sy})?.tagName`) !== 'CANVAS') continue;
+    cell = [x, z]; tx = sx; ty = sy;
+  }
+  if (cell) await touchTap(page, tx, ty);
+  const plan = await page.evaluate('__rts.plan()'), info = await page.evaluate('__rts.info()');
+  if (cell) { const [cx, cz] = cell; await page.evaluate(`__rts.focus(${cx + 0.5}, ${cz + 0.5}, 3); 0`); await sleep(400); await shot(page, path.join(SHOTS, 'mobile-pillbox.png')); }
+  log(!!r && r[2] >= 44 && r[3] >= 44 && plan.length === 1 && plan[0].kind === 6 && info.calls <= BUDGET.calls && info.triangles <= BUDGET.triangles, '布陣列有「碉堡」（≥ 44 像素）；觸控選了蓋一座；布陣時繪製呼叫在預算內',
+    `按鈕 ${r ? r[2].toFixed(0) + '×' + r[3].toFixed(0) : '無'}；布陣 ${JSON.stringify(plan)}；${JSON.stringify({ calls: info.calls, triangles: info.triangles })}`);
+  const s = await page.evaluate("(() => { const b = document.getElementById('bb-start').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()");
+  await touchTap(page, s[0], s[1]);
+  await page.evaluate('__rts.pause(true)');
+  const lg = await page.evaluate('__rts.log()'), t = await page.evaluate('__rts.stepN(Math.max(0, 200 - __rts.tick()))'), h = await page.evaluate('__rts.hash()');
+  const nodeH = hashWorld(runLog(createWorld(1944), lg, t));
+  log(h === nodeH && page.errors.length === 0, '有碉堡的布陣開戰後跑 200 步：瀏覽器雜湊等於 Node 重播、零頁面錯誤', `tick ${t}：${h} / ${nodeH}`);
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR024 }, async ({ open, page }) => {
+  await open('noR024=1');
+  const btn = await page.evaluate("!!document.getElementById('bb-k6')");
+  const s = await page.evaluate("(() => { const b = document.getElementById('bb-start').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()");
+  await touchTap(page, s[0], s[1]);
+  await page.evaluate('__rts.pause(true)');
+  const lg = await page.evaluate('__rts.log()'), pb = lg.filter(c => c.cmd.t === 'build' && c.cmd.kind === 6).length, h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+  log(!btn && pb === 0 && h === nodeHash && page.errors.length === 0, '?noR024=1：布陣列沒有碉堡、敵方不蓋、雜湊不變', `${h}；敵方碉堡 ${pb}`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
-  stageOf, STAGE_INTACT, STAGE_ROOFLESS, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ,
+  stageOf, STAGE_INTACT, STAGE_ROOFLESS, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX,
   type World, type Building,
 } from '../sim/world.ts';
 
@@ -15,6 +15,7 @@ const PAL: Record<number, { wall: THREE.Color; roof: THREE.Color; trim: THREE.Co
   [BK_HOUSE]: { wall: C(0x9a5a44), roof: C(0x4f5660), trim: C(0xe8e0cc) },     // 紅磚、石板瓦
   [BK_COTTAGE]: { wall: C(0xe6dfcc), roof: C(0xa8874e), trim: C(0x5a4632) },   // 白灰牆、茅草頂
   [BK_BARN]: { wall: C(0x6b4a33), roof: C(0x7b7d78), trim: C(0x3d2c20) },      // 木板、鐵皮
+  [BK_PILLBOX]: { wall: C(0x9c998e), roof: C(0x8b887d), trim: C(0x1d1f1d) },   // R024 混凝土、槍眼
   [BK_CHURCH]: { wall: C(0xa9a596), roof: C(0x4a5058), trim: C(0x7d7a6e) },    // 灰石、石板
   [BK_SHOP]: { wall: C(0xd9c9a3), roof: C(0x9c4a33), trim: C(0x3f5a4a) },      // 米色灰泥、紅瓦、綠招牌
   [BK_HQ]: { wall: C(0xb8a67e), roof: C(0x5c6650), trim: C(0x6a5a40) },        // R019 指揮部：沙包、橄欖帆布、木料
@@ -57,8 +58,28 @@ function hq(g: Geo, b: Building) {
   g.box(fx + 0.03, 0.62, fz, fx + 0.3, 0.8, fz + 0.015, FLAG[b.builtBy === 1 ? 1 : 0]);          // 旗
 }
 
+// R024 Type 22 碉堡：矮矮的六角形混凝土（用三塊錯開的方塊拼出切角），六面槍眼，頂板外挑；打壞了頂板裂開、槍眼周圍掉角
+function pillbox(g: Geo, b: Building, broken: boolean) {
+  const p = PAL[BK_PILLBOX], cx = b.x + 0.5, cz = b.z + 0.5, r = 0.36, h = 0.3, c = 0.14;
+  g.box(cx - r, 0, cz - r + c, cx + r, h, cz + r - c, p.wall);
+  g.box(cx - r + c, 0, cz - r, cx + r - c, h, cz + r, p.wall);
+  for (const [sx, sz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {                     // 槍眼：每面一條暗縫
+    const ax = cx + sx * (r + 0.004), az = cz + sz * (r + 0.004), half = 0.09;
+    if (sx) g.box(ax - 0.006, 0.17, az - half, ax + 0.006, 0.22, az + half, p.trim); else g.box(ax - half, 0.17, az - 0.006, ax + half, 0.22, az + 0.006, p.trim);
+  }
+  if (broken) {
+    g.box(cx - r + c, h, cz - r + 0.06, cx + 0.02, h + 0.05, cz + r - c, p.roof);   // 頂板只剩一半
+    g.box(cx + r - 0.12, 0, cz + r - 0.1, cx + r + 0.04, 0.06, cz + r + 0.05, RUBBLE[0]);
+  } else g.box(cx - r - 0.03, h, cz - r + 0.06, cx + r + 0.03, h + 0.06, cz + r - 0.06, p.roof);
+  for (let k = 0; k < 3; k++) {                                                    // 後面一小段沙包（開口朝自己的後方）
+    const z = cz + r + 0.06 + k * 0.001, x = cx - 0.3 + k * 0.2;
+    g.box(x, 0, z, x + 0.18, 0.09, z + 0.1, PAL[BK_HQ].wall);
+  }
+}
+
 function intact(g: Geo, b: Building) {
   if (b.kind === BK_HQ) { hq(g, b); return; }
+  if (b.kind === BK_PILLBOX) { pillbox(g, b, false); return; }
   const p = PAL[b.kind], m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   if (b.kind === BK_CHURCH) {
     const tw = 0.9, h = wallHeight(b);
@@ -84,6 +105,7 @@ function intact(g: Geo, b: Building) {
 
 // 沒屋頂：四面薄牆剩七成高，牆頂鋸齒，屋裡焦黑，幾根斷梁
 function roofless(g: Geo, b: Building) {
+  if (b.kind === BK_PILLBOX) { pillbox(g, b, true); return; }
   const p = PAL[b.kind], m = 0.1, t = 0.07, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   const h = wallHeight(b) * 0.72;
   const jag = (k: number) => h * (0.7 + 0.3 * hash2(b.id, k, 7));
@@ -130,7 +152,7 @@ export function buildTown(w: World, skip?: (b: Building) => boolean): Geo {
 // 效果用的顏色：碎片取自那棟房子的牆、屋頂與瓦礫（R004）
 export function bldColors(kind: number): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return PAL[kind] ?? PAL[BK_HOUSE]; }
 export const RUBBLE_COLORS = RUBBLE;
-export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22, [BK_HQ]: 0.16 };
+export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22, [BK_HQ]: 0.16, [BK_PILLBOX]: 0.06 };
 
 // 冒煙點：沒屋頂的房子從屋裡冒煙（渲染端的效果用）
 export function smokeSources(w: World): [number, number, number][] {
