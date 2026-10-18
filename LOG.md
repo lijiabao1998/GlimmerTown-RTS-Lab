@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R016 | 2026-10-18 | Claude | 開戰儀式：布陣的房子（雙方）開戰後 0.7 秒從地面升起（共用 R004 殘影網格、城鎮網格先跳過、升完併回）、「開戰！」大字（不擋點擊）；?noR016=1 | 本機 typecheck、unit 44、build、smoke 78 全綠；rise.mjs 3 條、5 種弄壞；手機真觸控；黃金不變 | claude/r016-battle-start | 只在看著開戰時有；沒有音效；Android 實機未測 |
 | R015 | 2026-10-18 | Claude | 小地圖：右上菱形（跟主畫面同方向）、地形與建築底圖（變了才重畫）、我方藍點、看得到的敵方紅點、鏡頭視野框；點了鏡頭滑過去；純函式 minimap.ts；?noR015=1；R012 滾輪測試點移出小地圖 | 本機 typecheck、unit 43、build、smoke 75 全綠；minimap.mjs 3 條、4 種弄壞；手機真觸控點小地圖；黃金不變 | claude/r015-minimap | 小地圖上不能縮放拖曳；手機偏小；Android 實機未測 |
 | R014 | 2026-10-18 | Claude | 牆上的彈孔：穿甲彈命中在朝射手那面牆留彈孔＋碎灰泥（射線與牆盒相交）、高爆彈燻黑旁邊的牆、看不到不留、換階段清掉；有變才重寫實例；?noR014=1 | 本機 typecheck、unit 42、build、smoke 71 全綠；holes.mjs 6 條各弄壞一次；彈孔特寫 18 calls；黃金不變 | claude/r014-wall-holes | 彈孔是貼片不是打穿；屋頂沒痕跡；教堂只算中殿；Android 實機未測 |
 | R013 | 2026-10-18 | Claude | 玩法說明：頂端「？」說明面板（五步、手勢、戰術，開著時暫停）；README 怎麼玩重寫、試玩清單、逃生閥對照表；tests/readme.mjs 要求每個 ?noR… 都寫進 README（GPT 新增閥要順手加）；修布陣列蓋住面板 | 本機 typecheck、unit 40、build、smoke 68 全綠；readme.mjs 弄壞一次；手機真觸控 | claude/r013-how-to-play | 「？」鈕高 36 沒到 44；不自動彈出；Android 實機未測 |
