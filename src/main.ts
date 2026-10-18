@@ -34,6 +34,8 @@ let dragV = { vx: 0, vy: 0, t: 0 }, lastTap = { id: 0, t: -1e9 };
 let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: number } | null = null, reportShown = false, reportView: ReportView | undefined;
 // R011 指令回饋：選取單位的路線、攻擊線、砲擊準星。逃生閥 ?noR011=1
 const r011 = q.get('noR011') !== '1';
+// R014 牆上的彈孔與燻黑。逃生閥 ?noR014=1
+const r014 = q.get('noR014') !== '1';
 // R015 小地圖。逃生閥 ?noR015=1
 const r015 = q.get('noR015') !== '1';
 let minimap: Minimap | undefined;
@@ -75,7 +77,7 @@ const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.k
 function reset(s = seed, build = r006) {
   w = createWorld(s);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014);
   log = []; pending = []; acc = 0; selected.clear();
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
@@ -350,7 +352,7 @@ const rts = {
     reset(SCRIPT_SEED, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014);
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -362,6 +364,7 @@ const rts = {
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,
   dashes: () => view.dashes,
+  holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
   cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }),
