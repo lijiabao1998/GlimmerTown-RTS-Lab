@@ -38,7 +38,7 @@
     #buildbar .pips i { width: 9px; height: 12px; border-radius: 2px; background: #3a4352; display: inline-block; }
     #buildbar .pips i.on { background: #ffd36a; }
     /* R010 戰報 */
-    #report { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: rgba(10, 12, 9, 0.45); }
+    #report { z-index: 20; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: rgba(10, 12, 9, 0.45); }
     #report[hidden], #report-open[hidden] { display: none; }
     #report .panel { box-sizing: border-box; width: min(92vw, 460px); max-height: 86vh; overflow: auto; padding: 16px 18px; background: rgba(24, 28, 22, 0.94); border: 2px solid #c9a650; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
     #report.lose .panel { border-color: #b8553a; } #report.draw .panel { border-color: #8f8f86; }
@@ -53,6 +53,15 @@
     #report .acts button { min-height: 44px; min-width: 110px; font-weight: 700; }
     #report #rp-again { background: #9a4a2e; border-color: #e0a07a; }
     #report-open { position: absolute; left: 50%; transform: translateX(-50%); bottom: 64px; pointer-events: auto; min-height: 44px; min-width: 96px; font-weight: 700; }
+    /* R013 說明面板 */
+    #help { z-index: 30; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: rgba(10, 12, 9, 0.5); }
+    #help[hidden] { display: none; }
+    #help .panel { box-sizing: border-box; width: min(92vw, 520px); max-height: 84vh; overflow: auto; padding: 14px 18px; background: rgba(24, 28, 22, 0.95); border: 2px solid #6c8fb8; border-radius: 10px; font-size: 14px; line-height: 1.55; }
+    #help h2 { margin: 0 0 6px; font-size: 22px; text-align: center; letter-spacing: 0.15em; }
+    #help h3 { margin: 10px 0 4px; font-size: 15px; color: #c8d8ee; }
+    #help ol, #help ul { margin: 4px 0; padding-left: 1.3em; } #help li { margin: 3px 0; } #help p { margin: 4px 0; }
+    #help .acts { display: flex; justify-content: center; margin-top: 10px; }
+    #help .acts button { min-height: 44px; min-width: 120px; font-weight: 700; background: #2f5f9a; border-color: #9cc6ff; }
     @media (max-width: 640px) { #hud .top { gap: 8px; font-size: 12px; } #hud .title small { display: none; }
       #hud .top { top: calc(max(8px, env(safe-area-inset-top)) + 46px); } }
   </style>

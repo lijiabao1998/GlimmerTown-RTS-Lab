@@ -9,6 +9,7 @@ import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
+import { initHelp } from './ui/help.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
 
@@ -272,8 +273,12 @@ hud = initHud({
   toggleFire: () => { fireMode = !fireMode; },
   selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); },
   restart: () => reset(),
+  help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
+// R013 說明面板：開著的時候暫停，關掉回到原來的暫停狀態
+let pausedBeforeHelp = false;
+const help = initHelp({ open: () => { pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } });
 buildBar = initBuildBar(BUILD_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost })), {
   state: () => {
     const kd = buildKind(pickKind)!;
@@ -362,6 +367,7 @@ const rts = {
     return hashWorld(w);
   },
   winner: () => w.winner,
+  paused: () => paused,
   report: () => ({ shown: !!reportView?.visible(), data: makeReport(w, stats) }),
   playScript: (ticks = SCRIPT_TICKS) => {
     reset(SCRIPT_SEED, false);
