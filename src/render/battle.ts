@@ -858,6 +858,15 @@ export class BattleView {
     this.target.x = Math.max(0, Math.min(N, this.target.x)); this.target.z = Math.max(0, Math.min(N, this.target.z));
   }
   zoomBy(f: number) { this.zoom = Math.max(0.55, Math.min(3, this.zoom * f)); }
+  // R012：縮放時 (cssX,cssY) 底下的地面點不動（正交鏡頭、方向固定：縮放後把焦點平移回來）
+  zoomAt(f: number, cssX: number, cssY: number, cssW: number, cssH: number) {
+    const a = this.groundAt(cssX, cssY, cssW, cssH);
+    this.zoomBy(f);
+    const b = this.groundAt(cssX, cssY, cssW, cssH);
+    if (!a || !b) return;
+    this.target.x = Math.max(0, Math.min(N, this.target.x + a.x - b.x));
+    this.target.z = Math.max(0, Math.min(N, this.target.z + a.z - b.z));
+  }
 
   // 螢幕點 → 點到的建築格（先打建築的網格：點屋頂、牆面都算那棟；瓦礫不算）
   buildingAt(cssX: number, cssY: number, cssW: number, cssH: number): [number, number] | null {
