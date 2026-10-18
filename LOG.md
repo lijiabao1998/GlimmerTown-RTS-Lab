@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R110 | 2026-10-18 | GPT | 修補20：普通命令／取消清除砲擊提示即刷新HUD，暫停不用等下一秒；無模擬改動 | 新11組／11語義負控制；CI7組真實Chrome／7負控制，unit69.5秒、smoke193.9秒綠；四圖同R109；前後提示幾何相同 | [#40](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/40) | 本機Chrome受限、unit68.3秒非全綠；Android未測；既有生產列壓字列修補21；待合與發布 |
 | R109 | 2026-10-18 | GPT | 待辦9：Shift追加框選、500ms長按一次性高爆／煙幕選單；普通手勢保留；?noR109 | 本機typecheck/build/main車道；21組純守衛＋23負控制；CI unit69.5秒含6組真實CDP＋6負控制、smoke194.3秒綠；golden不變；手機12calls/22156tris，四圖與R108相同，兩特寫已看 | [#38](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/38) | 首次CI因CDP drag按鍵不一致紅，修正後綠；本機Chrome受限，unit76.0秒僅browser未跑；Android實機未測 |
 | R108 | 2026-10-18 | GPT | 待辦19修補：勝負只等非煙幕彈；自然案例判敗tick54→7，HE/AP同歸於盡保留；正式程式一行 | typecheck/unit101.2秒/build/main車道綠；6組守衛＋16負控制；獨立864案例；golden f3364bb6不變；CI smoke203.4秒綠，Node/Chrome一致，四圖同R107 | [#37](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/37) | 本機Chrome socket受限，靠CI；未補新彈種鍵實機觸控；不改AI或煙幕戰術 |
 | R107 | 2026-10-18 | GPT | 待辦7榴彈砲煙幕：四發、半徑2格、20秒、固定風、8團；遮視線不傷害，既有流程切彈種；?noR107 | 本機typecheck/unit71.5秒/build/main車道綠；25組新守衛＋26負控制；CI smoke197.1秒綠，Node/Chrome f3364bb6；手機煙幕15calls/14130tris，四圖已看 | [#35](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/35) | 本機Chrome socket受限，靠CI；新增按鈕實際觸控／Android實機未測；不加AI煙幕戰術 |
