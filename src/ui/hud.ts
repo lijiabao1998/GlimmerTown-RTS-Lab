@@ -3,8 +3,9 @@
 export interface HudState {
   tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;
   mine: number; theirs: number; tanks: number; guns: number; observers: number;
-  build?: boolean; hint?: string;
-  info?: string;   // R009 選取資訊（平均血量、正在做什麼）   // R006 布陣：藏掉暫停／速度／砲擊，提示列換成布陣說明
+  build?: boolean; hint?: string;   // R006 布陣：藏掉暫停／速度／砲擊，提示列換成布陣說明
+  info?: string;   // R009 選取資訊（平均血量、正在做什麼）
+  report?: boolean;   // R010：勝負由戰報顯示，不出中間的橫幅
 }
 export interface HudActions {
   state: () => HudState;
@@ -52,7 +53,7 @@ export function initHud(a: HudActions): Hud {
       ? `${s.info ? `${s.info}。` : ''}已選：${s.tanks ? `坦克 ${s.tanks}` : ''}${s.tanks && s.guns ? '、' : ''}${s.guns ? `榴彈砲 ${s.guns}` : ''}${s.observers ? ` 觀測員 ${s.observers}（點房子進駐）` : ''}。點地面＝移動，點敵人＝攻擊，點房子＝轟它${s.fireMode ? '；砲擊模式：點地面＝對那一格開火' : ''}`
       : '點我方單位（藍圈）選取；拖曳平移，雙指或滾輪縮放';
     const ban = $('banner');
-    ban.hidden = s.winner < 0;
+    ban.hidden = s.winner < 0 || !!s.report;
     ban.textContent = s.winner === 0 ? '勝利' : s.winner === 1 ? '戰敗' : s.winner === 2 ? '同歸於盡' : '';
   }
   function frame() {
