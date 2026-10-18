@@ -21,7 +21,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -487,6 +487,35 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR018 },
   await page.evaluate('__rts.startBattle(); __rts.pause(true); 0');
   const lg = await page.evaluate('__rts.log()');
   log(!lg.some(c => c.cmd.t === 'ai') && page.errors.length === 0, '?noR018=1：開戰後紀錄裡沒有 ai 指令、零頁面錯誤', `${lg.length} 條指令`);
+});
+
+
+// ---- R019 生產與補給：手機真觸控按「坦克」，15 秒後多一台；瀏覽器雜湊＝Node 重播；?noR019=1 沒有生產列 ----
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.prod }, async ({ open, page }) => {
+  await open('');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await sleep(300);
+  const e0 = await page.evaluate('__rts.eco()'), shown = await page.evaluate("!document.getElementById('prodbar').hidden");
+  const n0 = (await page.evaluate('__rts.units()')).filter(u => u.side === 0).length;
+  const r = await page.evaluate("(() => { const b = document.getElementById('pb-k0').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2, b.width, b.height]; })()");
+  await touchTap(page, r[0], r[1]); await sleep(200);
+  await page.evaluate('__rts.stepN(1)');   // 指令在下一步才套用（暫停中）
+  const e1 = await page.evaluate('__rts.eco()');
+  const hq = (await page.evaluate('__rts.blds()'))[e0.hq[0] - 1];
+  await page.evaluate(`__rts.focus(${hq.x + 1}, ${hq.z + 1}, 1.6); 0`); await sleep(300);
+  await shot(page, path.join(SHOTS, 'mobile-production.png'));
+  const t = await page.evaluate('__rts.stepN(339)'), h = await page.evaluate('__rts.hash()');
+  const n1 = (await page.evaluate('__rts.units()')).filter(u => u.side === 0).length, lg = await page.evaluate('__rts.log()');
+  const nodeH = hashWorld(runLog(createWorld(1944), lg, t));
+  log(shown && e0 && e0.hq[0] && e1.supply[0] === e0.supply[0] - 40 && e1.queue[0].length === 1 && n1 === n0 + 1 && h === nodeH && r[2] >= 44 && r[3] >= 44 && lg.some(c => c.cmd.t === 'eco') && lg.some(c => c.cmd.t === 'produce'),
+    '開戰後有指揮部與生產列；觸控按「坦克」扣 40、佇列 1；17 秒後多一台我方單位；瀏覽器雜湊＝Node 重播',
+    `補給 ${e0?.supply[0]} → ${e1?.supply[0]}、佇列 ${e1?.queue[0].length}；我方 ${n0} → ${n1}；按鈕 ${r[2].toFixed(0)}×${r[3].toFixed(0)}；tick ${t}：${h} / ${nodeH}`);
+  log(page.errors.length === 0, '生產與補給零頁面錯誤', page.errors.join(' | '));
+});
+await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR019 }, async ({ open, page }) => {
+  await open('noR019=1');
+  await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await sleep(200);
+  const shown = await page.evaluate("!document.getElementById('prodbar').hidden"), lg = await page.evaluate('__rts.log()'), e = await page.evaluate('__rts.eco()');
+  log(!shown && !e && !lg.some(c => c.cmd.t === 'eco') && page.errors.length === 0, '?noR019=1：沒有生產列、沒有指揮部、紀錄裡沒有 eco', `${lg.length} 條指令`);
 });
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);

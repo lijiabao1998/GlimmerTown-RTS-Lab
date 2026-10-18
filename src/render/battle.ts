@@ -14,7 +14,7 @@ import { tankHull, tankTurret, howitzer, observer } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
 
 const PX = 8;                       // 地面貼圖：每格 8×8 像素
-const MAX_UNITS = 64, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
+const MAX_UNITS = 512, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
 export const TURRET_RATE = 3;        // R008 砲塔最大轉速（弧度／秒）
 const HOLE_CAP = 160;                 // R014 牆上痕跡最多幾個（滿了丟最舊的）
 const C_HOLE = 0x1b1713, C_SOOT = 0x2a2521;

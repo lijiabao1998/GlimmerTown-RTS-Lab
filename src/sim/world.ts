@@ -21,6 +21,7 @@ export const BK_COTTAGE = 1;
 export const BK_BARN = 2;
 export const BK_CHURCH = 3;
 export const BK_SHOP = 4;
+export const BK_HQ = 5;          // R019 指揮部（eco 指令放的；打成瓦礫那一方輸）
 
 // 單位種類
 export const UK_TANK = 0;
@@ -41,13 +42,15 @@ export interface UnitKind {
   sight: number;        // 視野半徑（位置單位；算「有沒有友軍看得到」用）
   armor: number;        // 承受傷害的百分比（100＝全吃）
   radius: number;       // 碰撞半徑（位置單位；0＝不參與碰撞，例如步兵）（R005）
+  cost: number;         // R019 生產要花多少補給
+  buildTicks: number;   // R019 生產要幾步
 }
 
 // 數字都是暫定，玩家看得到的數字由業主定（AGENTS.md 規則 6）。
 export const UNIT_KINDS: UnitKind[] = [
-  { name: 'tank', hp: 100, speed: 20, range: 9 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 34, dmgBld: 25, splash: 0, sight: 10 * SUB, armor: 100, radius: 80 },
-  { name: 'howitzer', hp: 60, speed: 10, range: 28 * SUB, minRange: 6 * SUB, reload: 140, indirect: true, dmgUnit: 70, dmgBld: 60, splash: 384, sight: 6 * SUB, armor: 100, radius: 72 },
-  { name: 'observer', hp: 30, speed: 16, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 14 * SUB, armor: 100, radius: 0 },
+  { name: 'tank', hp: 100, speed: 20, range: 9 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 34, dmgBld: 25, splash: 0, sight: 10 * SUB, armor: 100, radius: 80, cost: 40, buildTicks: 300 },
+  { name: 'howitzer', hp: 60, speed: 10, range: 28 * SUB, minRange: 6 * SUB, reload: 140, indirect: true, dmgUnit: 70, dmgBld: 60, splash: 384, sight: 6 * SUB, armor: 100, radius: 72, cost: 50, buildTicks: 400 },
+  { name: 'observer', hp: 30, speed: 16, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 14 * SUB, armor: 100, radius: 0, cost: 15, buildTicks: 120 },
 ];
 
 export const ORD_IDLE = 0;
@@ -112,6 +115,9 @@ export type SimEvent =
   | { e: 'build'; bld: number };
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
+// R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[] }
+
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number }
 
 export interface World extends RngState {
@@ -128,6 +134,7 @@ export interface World extends RngState {
   winner: number;         // -1＝還在打；0／1＝勝方；2＝同歸於盡
   events: SimEvent[];
   ai?: AiState[];         // R018：哪一方由電腦指揮（ai 指令設定）
+  eco?: EcoState;         // R019：補給、指揮部、生產佇列
 }
 
 export const idx = (x: number, z: number) => z * N + x;
@@ -167,6 +174,7 @@ export function speedPct(w: World, x: number, z: number): number {
 }
 
 export function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
+  if (kind === BK_HQ) return 1200;
   const base = kind === BK_CHURCH ? 120 : kind === BK_BARN ? 30 : 50;
   return base + 40 * floors * w * d;
 }
@@ -270,6 +278,7 @@ export function hashWorld(w: World): string {
     f.int(r ? 1 : 0);
     if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
   }
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } }   // R019
   if (w.ai) for (const a of w.ai) f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp);   // R018：只有開了電腦才折
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);

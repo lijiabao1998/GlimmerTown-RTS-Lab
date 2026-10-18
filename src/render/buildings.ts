@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
-  stageOf, STAGE_INTACT, STAGE_ROOFLESS, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP,
+  stageOf, STAGE_INTACT, STAGE_ROOFLESS, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ,
   type World, type Building,
 } from '../sim/world.ts';
 
@@ -17,6 +17,7 @@ const PAL: Record<number, { wall: THREE.Color; roof: THREE.Color; trim: THREE.Co
   [BK_BARN]: { wall: C(0x6b4a33), roof: C(0x7b7d78), trim: C(0x3d2c20) },      // 木板、鐵皮
   [BK_CHURCH]: { wall: C(0xa9a596), roof: C(0x4a5058), trim: C(0x7d7a6e) },    // 灰石、石板
   [BK_SHOP]: { wall: C(0xd9c9a3), roof: C(0x9c4a33), trim: C(0x3f5a4a) },      // 米色灰泥、紅瓦、綠招牌
+  [BK_HQ]: { wall: C(0xb8a67e), roof: C(0x5c6650), trim: C(0x6a5a40) },        // R019 指揮部：沙包、橄欖帆布、木料
 };
 const GLASS = C(0x2a3038), RUBBLE = [C(0x8a7d6e), C(0x6e6458), C(0x9b8f7f), C(0x5a4f45)], CHAR = C(0x2b2724), BEAM = C(0x4a3626);
 
@@ -40,7 +41,24 @@ function windows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: nu
   }
 }
 
+// R019 指揮部：一圈沙包、指揮所小屋、天線、旗桿與陣營色的旗（不畫任何徽記）
+const FLAG = [C(0x3b6fb6), C(0x8a8a84)];
+function hq(g: Geo, b: Building) {
+  const p = PAL[BK_HQ], x0 = b.x + 0.12, z0 = b.z + 0.12, x1 = b.x + b.w - 0.12, z1 = b.z + b.d - 0.12, t = 0.14;
+  const bag = (ax: number, az: number, bx: number, bz: number) => g.box(ax, 0, az, bx, 0.13, bz, p.wall);
+  bag(x0, z0, x1, z0 + t); bag(x0, z1 - t, x1, z1); bag(x0, z0 + t, x0 + t, z1 - t);
+  bag(x1 - t, z0 + t, x1, (z0 + z1) / 2 - 0.15); bag(x1 - t, (z0 + z1) / 2 + 0.15, x1, z1 - t);   // 東邊留一個口
+  const hx0 = b.x + 0.55, hz0 = b.z + 0.5, hx1 = b.x + b.w - 0.55, hz1 = b.z + b.d - 0.75;
+  g.box(hx0, 0, hz0, hx1, 0.34, hz1, p.trim, null);
+  g.gable(hx0 - 0.05, hz0 - 0.05, hx1 + 0.05, hz1 + 0.05, 0.34, 0.16, true, p.roof, p.trim);
+  g.box(x0 + 0.25, 0, z1 - 0.4, x0 + 0.28, 0.95, z1 - 0.37, C(0x3a3c3e));                        // 天線
+  const fx = x1 - 0.32, fz = z1 - 0.32;
+  g.box(fx, 0, fz, fx + 0.03, 0.85, fz + 0.03, C(0xd8d4c8));                                      // 旗桿
+  g.box(fx + 0.03, 0.62, fz, fx + 0.3, 0.8, fz + 0.015, FLAG[b.builtBy === 1 ? 1 : 0]);          // 旗
+}
+
 function intact(g: Geo, b: Building) {
+  if (b.kind === BK_HQ) { hq(g, b); return; }
   const p = PAL[b.kind], m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   if (b.kind === BK_CHURCH) {
     const tw = 0.9, h = wallHeight(b);
@@ -112,7 +130,7 @@ export function buildTown(w: World, skip?: (b: Building) => boolean): Geo {
 // 效果用的顏色：碎片取自那棟房子的牆、屋頂與瓦礫（R004）
 export function bldColors(kind: number): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return PAL[kind] ?? PAL[BK_HOUSE]; }
 export const RUBBLE_COLORS = RUBBLE;
-export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22 };
+export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22, [BK_HQ]: 0.16 };
 
 // 冒煙點：沒屋頂的房子從屋裡冒煙（渲染端的效果用）
 export function smokeSources(w: World): [number, number, number][] {
