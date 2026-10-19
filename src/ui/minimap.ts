@@ -27,12 +27,13 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
   (document.getElementById('hud') ?? document.body).appendChild(cvs);
   const base = document.createElement('canvas');
   let baseDirty = true, last = -1, g = miniGeo(160), dpr = 1;
+  let baseWorld: World | undefined;
   const cell = (ctx: CanvasRenderingContext2D, x: number, z: number) => {   // 一格＝一個小菱形
     const [p0x, p0y] = toMini(g, x, z), [p1x, p1y] = toMini(g, x + 1, z), [p2x, p2y] = toMini(g, x + 1, z + 1), [p3x, p3y] = toMini(g, x, z + 1);
     ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.lineTo(p3x, p3y); ctx.closePath(); ctx.fill();
   };
-  function paintBase() {
-    const w = a.world(), ctx = base.getContext('2d')!;
+  function paintBase(w: World) {
+    const ctx = base.getContext('2d')!;
     base.width = Math.round(g.w * dpr); base.height = Math.round(g.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, g.w, g.h);
     for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
@@ -42,19 +43,22 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
       cell(ctx, x, z);
     }
     baseDirty = false;
+    baseWorld = w;
   }
   function frame(t: number) {
+    const w = a.world();
+    if (w !== baseWorld) baseDirty = true;   // 換局先失效，不能被上一局的 100ms 節流擋住。
     if (t - last < 100 && !baseDirty) return;   // 一秒最多重畫 10 次
     last = t;
     const cssW = innerWidth < 640 ? 150 : 200;
     if (g.w !== cssW || dpr !== Math.min(devicePixelRatio || 1, 2)) { g = miniGeo(cssW); dpr = Math.min(devicePixelRatio || 1, 2); baseDirty = true; }
-    if (baseDirty) paintBase();
+    if (baseDirty) paintBase(w);
     cvs.width = Math.round(g.w * dpr); cvs.height = Math.round(g.h * dpr);
     cvs.style.width = `${g.w}px`; cvs.style.height = `${g.h}px`;
     const ctx = cvs.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(base, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    for (const d of miniDots(a.world(), a.visible)) {
+    for (const d of miniDots(w, a.visible)) {
       const [px, py] = toMini(g, d.x, d.z);
       ctx.fillStyle = d.side === SIDE_PLAYER ? '#4aa3ff' : '#ff5a3c';
       ctx.fillRect(px - 2, py - 2, 4, 4);
