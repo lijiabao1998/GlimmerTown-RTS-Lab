@@ -8,6 +8,7 @@ export interface HudState {
   ai?: string;   // R018 電腦難度
   build?: boolean; hint?: string;   // R006 布陣：藏掉暫停／速度／砲擊，提示列換成布陣說明
   rangeInfo?: string; // R113：當前單選武器的名目射程與散布上界
+  vegetationInfo?: string; // R116：閒置時的地形規則，讓操作／射程／聲測提示優先
   counterbatteryInfo?: string; // R115：只有小地圖有有效粗略情報時顯示
   info?: string;   // R009 選取資訊（平均血量、正在做什麼）
   report?: boolean;   // R010：勝負由戰報顯示，不出中間的橫幅
@@ -72,6 +73,7 @@ export function initHud(a: HudActions): Hud {
       : '點我方單位（藍圈）選取；拖曳平移，雙指或滾輪縮放';
     if (s.hint === undefined && s.rangeInfo) $('hint').textContent += `。${s.rangeInfo}`;
     if (s.hint === undefined && s.counterbatteryInfo) $('hint').textContent += `。${s.counterbatteryInfo}`;
+    if (s.hint === undefined && !sel && !s.fireMode && !s.rangeInfo && !s.counterbatteryInfo && s.vegetationInfo) $('hint').textContent += `。${s.vegetationInfo}`;
     const ban = $('banner');
     ban.hidden = s.winner < 0 || !!s.report;
     ban.textContent = s.winner === 0 ? '勝利' : s.winner === 1 ? '戰敗' : s.winner === 2 ? '同歸於盡' : '';

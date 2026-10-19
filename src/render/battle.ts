@@ -14,6 +14,7 @@ import { tankHull, tankTurret, howitzer, observer, soldier } from './unitArt.ts'
 import { Pipeline, type Style } from './post.ts';
 import { SmokeView } from './smoke.ts';
 import { RangePreview } from './rangePreview.ts';
+import { VegetationView } from './vegetation.ts';
 
 // R027 人行道與黑白路緣（只有手排地圖；畫面開關）
 let streets27 = true;
@@ -67,6 +68,7 @@ export class BattleView {
   fxOn: boolean;
 
   private w: World;
+  private mapId: number | undefined;
   private fogOn: boolean;
   private ramp = toonRamp();
   private groundTex: THREE.DataTexture;
@@ -167,11 +169,13 @@ export class BattleView {
   // 每一步之前記下在飛、會打中建築的穿甲彈（彈著事件沒有射手位置）
   private apSnap = { n: 0, sx: new Float64Array(MAX_SHELLS), sz: new Float64Array(MAX_SHELLS), ex: new Float64Array(MAX_SHELLS), ez: new Float64Array(MAX_SHELLS), bld: new Int32Array(MAX_SHELLS) };
 
+  readonly vegetation116: VegetationView;
+  get vegetationInfo(): string { return this.vegetation116.hint; }
   readonly range113: RangePreview | null;
   get rangeInfo(): string { return this.range113?.solution.legend ?? ''; }
 
   constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true) {
-    this.w = w; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
+    this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
     this.range113 = r113 ? new RangePreview() : null;
     if (this.range113) this.scene.add(this.range113.mesh);
     this.scene.background = new THREE.Color(0x3c4a3a);
@@ -207,6 +211,8 @@ export class BattleView {
     this.town = new THREE.Mesh(buildTown(w).geometry(), toon({ vertexColors: true }));
     this.town.castShadow = this.town.receiveShadow = true;
     this.scene.add(this.town);
+    this.vegetation116 = new VegetationView(this.scene, this.ramp);
+    this.vegetation116.sync(w);
 
     const inst = (g: THREE.BufferGeometry, mat: THREE.Material, n: number, shadow: boolean) => {
       const m = new THREE.InstancedMesh(g, mat, n);
@@ -282,10 +288,11 @@ export class BattleView {
   get world(): World { return this.w; }
   // R006：換一個世界來畫（布陣預覽世界 ↔ 真的世界）；重畫地面貼圖與房子，單位網格不動
   setWorld(w: World, territorySide = -1) {
-    this.w = w; this.territory = territorySide; this.observerHeights.clear();
+    this.w = w; this.mapId = w.map; this.territory = territorySide; this.observerHeights.clear();
     for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
     this.groundTex.needsUpdate = true;
     this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry();
+    this.vegetation116.sync(w);
   }
 
   visibleAt(x: number, z: number): boolean {
@@ -368,10 +375,11 @@ export class BattleView {
   }
 
   onEvents(events: SimEvent[], simT: number) {
+    if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory); // tick0 的 map 重播要同步城鎮與地面。
     if (this.holeMesh) this.holes14(events);
     if (this.r8) this.vehicles8(events, simT);
     if (this.r4) { this.frameNo++; for (const e of events) this.fx4(e, simT); }   // 世界剛走一步：可見度快取作廢
-    let townDirty = false, groundDirty = false;
+    let townDirty = false, groundDirty = false, vegetationDirty = false;
     for (const e of events) {
       if (e.e === 'stage') {
         townDirty = true;
@@ -380,7 +388,7 @@ export class BattleView {
         groundDirty = true;
         if (this.fxOn && !this.r4) this.burst(b.x + b.w / 2, 0.3, b.z + b.d / 2, 1.2, simT, 6, true);
       } else if (e.e === 'build') {
-        townDirty = true;
+        townDirty = true; vegetationDirty = true;
         const b = this.w.blds[e.bld - 1];
         if (b) { for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z); groundDirty = true; }
       } else if (e.e === 'impact') {
@@ -402,6 +410,7 @@ export class BattleView {
     }
     if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); }
     if (groundDirty) this.groundTex.needsUpdate = true;
+    this.vegetation116.sync(this.w, vegetationDirty);
   }
 
   private spawn(f: Fx) {

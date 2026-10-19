@@ -18,7 +18,7 @@ const mutations = {
   compatibility: { group: 'compatibility', file: 'route', from: "...(smoke ? { ammo:", to: "...(true ? { ammo:" },
   controller: { group: 'controller', file: 'main', from: 'routeBattleOrder(w, selected, fireMode, ammo,', to: "routeBattleOrder(w, selected, fireMode, 'he'," },
   reset: { group: 'lifecycle', file: 'main', from: "selected.clear(); fireMode = false; ammo = 'he';", to: "selected.clear(); fireMode = false;" },
-  valve: { group: 'lifecycle', file: 'main', from: 'r009, r011, r014, r016, r107);', to: 'r009, r011, r014, r016, true);' },
+  valve: { group: 'lifecycle', file: 'main', from: "r009, r011, r014, r016, r107, q.get('noR113') !== '1');", to: "r009, r011, r014, r016, true, q.get('noR113') !== '1');" },
   hud: { group: 'hud', file: 'hud', from: "const smoke = s.ammo === 'smoke';", to: 'const smoke = false;' },
   layout: { group: 'layout', file: 'css', from: 'width: 44px; height: 44px; padding: 0;', to: 'width: 44px; height: 36px; padding: 0;' },
 };
@@ -74,7 +74,7 @@ function controller(visual = true) {
   c.initHud = a => { c.actions = a; return c.hud; };
   const a0 = plain.indexOf('hud = initHud({'), a1 = plain.indexOf('\n});', a0) + 4;
   vm.runInContext(plain.slice(a0, a1), c);
-  c.reset(1944, false, false, false, false);
+  c.reset(1944, false, false, false, false, false);
   return { c, views, issued, placements };
 }
 
@@ -145,7 +145,7 @@ const groups = {
   lifecycle() {
     for (const visual of [true, false]) {
       const { c, views, issued } = controller(visual);
-      for (const action of [() => c.reset(1944, false, false, false, false), () => c.window.__rts.runScript(0), () => c.window.__rts.playLog(1944, [], 0), () => c.window.__rts.playScript(0)]) {
+      for (const action of [() => c.reset(1944, false, false, false, false, false), () => c.window.__rts.runScript(0), () => c.window.__rts.playLog(1944, [], 0), () => c.window.__rts.playScript(0)]) {
         c.ammo = 'smoke'; c.fireMode = true; c.selected.add(4); const old = views.length;
         action();
         assert.equal(c.ammo, 'he', 'fresh/reset/replay resets ammo'); assert.equal(c.fireMode, false); assert.equal(c.selected.size, 0);

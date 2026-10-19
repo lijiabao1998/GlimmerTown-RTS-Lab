@@ -16,6 +16,7 @@ import { applyMap, MAP_RYE } from './sim/maps.ts';
 import { materialBuildDetail } from './ui/materials.ts';
 import { setFacades, setMaterials } from './render/buildings.ts';
 import { setStreets } from './render/battle.ts';
+import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
@@ -47,12 +48,15 @@ const r011 = q.get('noR011') !== '1';
 const r014 = q.get('noR014') !== '1';
 // R015 小地圖。逃生閥 ?noR015=1
 const r015 = q.get('noR015') !== '1';
+const r116 = q.get('noR116') !== '1';
+setVegetation(r116); // 只關模型與提示；新局地形仍由明確的 map 指令啟用
 const r115 = q.get('noR115') !== '1'; // 只關估計區與提示，不改情報模擬
 let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
 const r109 = q.get('noR109') !== '1';
 let lastRangeInfo = '';
+let lastVegetationInfo = '';
 let lastCounterbatteryInfo = '';
 let lastCounterbatteryWorld: World | undefined;
 let commandMenu: CommandMenu | undefined;
@@ -120,16 +124,17 @@ let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {
+function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true) {
   if (r109) clearGestureInput();
   w = createWorld(s);
-  if (map) applyMap(w, MAP_RYE);   // R026：布陣預覽就要看到 Rye；同一條 map 指令記在紀錄第 0 步，重播時由 step 套（套過的不再套）
+  // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
+  if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
   view?.dispose();
   view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1');
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
-  if (map) issue({ t: 'map', id: MAP_RYE });
+  if (map || vegetation) issue({ t: 'map', id: map ? MAP_RYE : 0, ...(vegetation ? { vegetation: 1 } : {}) });
   if (build) { paused = true; refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(ecoCmd());
@@ -190,11 +195,11 @@ const simT = (alpha = 0) => (w.tick + alpha) / TICK_HZ;
 function tick() {
   view.snapshot();
   const now = pending; pending = [];
-  const priorWinner = w.winner;
+  const priorWinner = w.winner, priorMap = w.map;
   step(w, now);
   if (r109 && priorWinner < 0 && w.winner >= 0) clearGestureInput();
   view.onEvents(w.events, simT());
-  if (minimap && w.events.some(e => e.e === 'stage' || e.e === 'build' || (e.e === 'impact' && e.kind === SHELL_HE))) minimap.dirty();   // R015 地形變了才重畫底圖
+  if (minimap && (priorMap !== w.map || w.events.some(e => e.e === 'stage' || e.e === 'build' || (e.e === 'impact' && e.kind === SHELL_HE)))) minimap.dirty();   // R015 地形變了才重畫底圖
   statsStep(stats, w, w.events);
 }
 
@@ -385,6 +390,7 @@ hud = initHud({
       info: r009 && sel.length ? selInfo(sel) : undefined,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
       counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115),
+      vegetationInfo: view.vegetationInfo,
     };
   },
   togglePause: () => { if (phase === 'battle') paused = !paused; },
@@ -410,7 +416,8 @@ let pausedBeforeHelp = false;
 // R015 小地圖：點哪裡鏡頭滑過去（有 R012 就平滑）
 if (r015) minimap = initMinimap({
   counterbattery: r115,
-  world: () => w,
+  vegetation: q.get('noR116') !== '1',
+  world: () => view.world,
   visible: u => view.visibleUnit(u),
   view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
   tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
@@ -459,6 +466,8 @@ renderer.setAnimationLoop(() => {
   // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
   const rangeInfo = view.rangeInfo;
   if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
+  const vegetationInfo = view.vegetationInfo;
+  if (vegetationInfo !== lastVegetationInfo) { lastVegetationInfo = vegetationInfo; hud?.update(); }
   // 暫停／重播也檢查當前世界；同 tick 換世界不能沿用上一局的提示。
   const counterbatteryInfo = counterbatteryHint(w, phase === 'battle' && r015 && r115);
   if (w !== lastCounterbatteryWorld || counterbatteryInfo !== lastCounterbatteryInfo) {
@@ -483,7 +492,7 @@ const rts = {
   selected: () => [...selected],
   // 用跟 Node 一樣的路徑重跑腳本戰鬥，回傳雜湊；畫面換成腳本跑完的世界
   runScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false, false, false, false);
+    reset(SCRIPT_SEED, false, false, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
     view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1');
@@ -503,6 +512,8 @@ const rts = {
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0 } : null),
   men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n }),
   map: () => w.map ?? 0,
+  vegetation: () => ({ version: w.vegetation?.version ?? 0, cells: w.vegetation ? [...w.vegetation.cells] : [],
+    shown: !!view.vegetation116.mesh, count: view.vegetation116.cells, triangles: view.vegetation116.triangles, builds: view.vegetation116.builds }),
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
@@ -513,7 +524,7 @@ const rts = {
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
   // 任意指令紀錄，從第 0 步一步一步跑（每一步都餵畫面與戰報統計）；回傳雜湊
   playLog: (s: number, lg: LoggedCommand[], ticks: number) => {
-    reset(s, false, false, false, false);
+    reset(s, false, false, false, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }
@@ -525,7 +536,7 @@ const rts = {
   paused: () => paused,
   report: () => ({ shown: !!reportView?.visible(), data: makeReport(w, stats) }),
   playScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false, false, false, false);
+    reset(SCRIPT_SEED, false, false, false, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) issue(SCRIPT[i].cmd); i++; }

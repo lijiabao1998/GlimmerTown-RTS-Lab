@@ -1,6 +1,7 @@
 // R015 小地圖：上半是純函式（座標換算、要畫哪些點，Node 守衛直接測），下半是 DOM 畫布。只讀世界、不改世界。
 import { N, TER_ROAD, TER_FIELD, TER_MUD, SIDE_PLAYER, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
 import { drawCounterbattery } from './counterbattery.ts';
+import { VEG_HEDGE, VEG_WOOD, vegetationAt } from '../sim/vegetation.ts';
 
 // 菱形，方向跟主畫面一樣：主畫面的「右」＝世界 (+x,−z)、「上」＝世界 (−x,−z)。
 // 小地圖 px = w/2 + (x − z)·s、py = (x + z)·s/2，s = w/(2N)；整張高 = w/2。
@@ -24,13 +25,14 @@ export function miniDots(w: World, visible: (u: Unit) => boolean): Dot[] {
 // ---- DOM ----
 export interface Minimap { frame: (t: number) => void; dirty: () => void; el: HTMLCanvasElement; point: (x: number, z: number) => [number, number] }
 
-export function initMinimap(a: { world: () => World; visible: (u: Unit) => boolean; view: () => [number, number][]; tap: (x: number, z: number) => void; counterbattery?: boolean }): Minimap {
+export function initMinimap(a: { world: () => World; visible: (u: Unit) => boolean; view: () => [number, number][]; tap: (x: number, z: number) => void; counterbattery?: boolean; vegetation?: boolean }): Minimap {
   const cvs = document.createElement('canvas');
   cvs.id = 'minimap';
   (document.getElementById('hud') ?? document.body).appendChild(cvs);
   const base = document.createElement('canvas');
   let baseDirty = true, last = -1, g = miniGeo(160), dpr = 1;
   let baseWorld: World | undefined;
+  let baseVegetation: World['vegetation'];
   const counterbatteryPoint: [number, number] = [0, 0];
   const counterbatteryProject = (x: number, z: number) => toMini(g, x, z, counterbatteryPoint);
   const cell = (ctx: CanvasRenderingContext2D, x: number, z: number) => {   // 一格＝一個小菱形
@@ -46,13 +48,23 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
       ctx.fillStyle = b ? (stageOf(b) === STAGE_RUBBLE ? '#6f6559' : b.builtBy === SIDE_PLAYER ? '#a9c4e6' : '#cfc3a8')
         : w.crater[i] ? '#4a3f33' : t === TER_ROAD ? '#8f7f62' : t === TER_FIELD ? '#9a9450' : t === TER_MUD ? '#4d6470' : '#5b7a42';
       cell(ctx, x, z);
+      const foliage = a.vegetation !== false ? vegetationAt(w, x, z) : 0;
+      if (!b && foliage) {
+        const [px, py] = toMini(g, x + 0.5, z + 0.5);
+        ctx.fillStyle = foliage === VEG_HEDGE ? '#c4cf80' : '#314b30';
+        // 樹籬＝細短線，小樹林＝深綠小菱形；不佔用聲測圈或單位圖層。
+        if (foliage === VEG_HEDGE) ctx.fillRect(px - g.s * 0.42, py - 0.45, g.s * 0.84, 0.9);
+        else if (foliage === VEG_WOOD) { ctx.beginPath(); ctx.moveTo(px, py - 1.2); ctx.lineTo(px + 1.2, py); ctx.lineTo(px, py + 1.2); ctx.lineTo(px - 1.2, py); ctx.closePath(); ctx.fill(); }
+      }
     }
     baseDirty = false;
     baseWorld = w;
+    baseVegetation = w.vegetation;
   }
   function frame(t: number) {
     const w = a.world();
     if (w !== baseWorld) baseDirty = true;   // 換局先失效，不能被上一局的 100ms 節流擋住。
+    if (w === baseWorld && w.vegetation !== baseVegetation) baseDirty = true;   // 同一個世界在 tick0 經紀錄啟用也立即換底圖。
     if (t - last < 100 && !baseDirty) return;   // 一秒最多重畫 10 次
     last = t;
     const cssW = innerWidth < 640 ? 150 : 200;

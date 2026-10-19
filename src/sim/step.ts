@@ -7,6 +7,7 @@ import { updateCounterbattery } from './counterbattery.ts';
 import { applyBuild, type BuildCmd } from './build.ts';
 import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { applyMap } from './maps.ts';
+import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
@@ -21,7 +22,7 @@ export type Command =
   | { t: 'stop'; side: number; ids: number[] }
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）
-  | { t: 'map'; id: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
+  | { t: 'map'; id: number; vegetation?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
   | { t: 'eco'; inf?: number; guns?: number; tanks?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克）
   | { t: 'produce'; side: number; kind: number };   // R019：花補給排進生產佇列
 
@@ -117,7 +118,11 @@ export function lineCells(x0: number, z0: number, x1: number, z1: number): numbe
 
 // 從 (ax,az) 到 (bx,bz)（位置單位），回傳第一個擋住的建築格（不含起點格）；沒有擋就回傳 -1
 export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number, ignoreBuilding = 0): number {
-  const cells = lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz));
+  return firstBlockCells(w, lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz)), ignoreBuilding);
+}
+
+// LOS 與實體彈道共用原建築掃描；spotted 已有射線時不再配置第二份格陣列。
+function firstBlockCells(w: World, cells: readonly number[], ignoreBuilding = 0): number {
   for (let i = 1; i < cells.length; i++) { const c = cells[i]; if (w.occ[c] && w.occ[c] !== ignoreBuilding && w.blds[w.occ[c] - 1].hp > 0) return c; }
   return -1;
 }
@@ -128,8 +133,10 @@ export function spotted(w: World, side: number, x: number, z: number, ignoreSmok
   for (const u of w.units) {
     if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight) continue;
     if (smokeBlocks(w, u.x, u.z, x, z, ignoreSmokeId)) continue;
+    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z));
+    if (w.vegetation && vegetationBlocks(w, cells)) continue;
     const home = UNIT_KINDS[u.kind].garrison ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
-    const block = firstBlock(w, u.x, u.z, x, z, home?.id ?? 0);
+    const block = firstBlockCells(w, cells, home?.id ?? 0);
     if (block < 0 || block === idx(cellOf(x), cellOf(z))) return true;
   }
   return false;
@@ -301,13 +308,13 @@ function pierced(k: { pierce: number; soft: number }, t: Unit, dmg: number): num
 // R021：能進駐的單位待在還站著的房子裡時，射線不算自己這棟
 function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) return 0; const b = bldAt(w, cellOf(u.x), cellOf(u.z)); return b && b.hp > 0 ? b.id : 0; }
 
-function damageUnit(w: World, u: Unit, dmg: number, allowCraterCover = true): void {
+function damageUnit(w: World, u: Unit, dmg: number, allowGroundCover = true): void {
   if (!u.alive || dmg <= 0) return;
   const x = cellOf(u.x), z = cellOf(u.z);
   const home = UNIT_KINDS[u.kind].garrison && blocks(w, x, z) ? bldAt(w, x, z) : null;
   // R106：只用命中前已有的彈坑；建築掩護更強，不疊乘。倒塌傷害不吃地形掩護。
-  const ground = allowCraterCover && inMap(x, z) && w.crater[idx(x, z)] > 0 ? 75 : 100;
-  const cover = !home ? ground : home.kind === BK_PILLBOX ? 25 : 50;   // R024 碉堡裡只吃四分之一
+  const ground = !allowGroundCover ? 100 : vegetationAt(w, x, z) ? 50 : inMap(x, z) && w.crater[idx(x, z)] > 0 ? 75 : 100;
+  const cover = !home ? ground : Math.min(ground, home.kind === BK_PILLBOX ? 25 : 50);   // R024 碉堡裡只吃四分之一
   u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor * cover) / 10000);
   if (u.hp <= 0) { u.hp = 0; u.alive = false; u.path = []; u.pathIdx = 0; u.order = ORD_IDLE; w.events.push({ e: 'kill', unit: u.id }); }
 }
@@ -380,7 +387,7 @@ function checkWinner(w: World): void {
 
 export function step(w: World, cmds: Command[]): void {
   w.events = [];
-  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0);   // R026：地圖最先套
+  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 ? c.vegetation : undefined);   // R026：地圖最先套
   for (const c of cmds) if (c.t === 'build') applyBuild(w, c);   // R006：先蓋房子，同一步的移動才不會穿過剛蓋的房子
   for (const c of cmds) if (c.t !== 'build' && c.t !== 'map') applyCommand(w, c);
   ecoStep(w);   // R019：補給與生產（電腦想之前，剛出生的單位這一步就能被指揮）
