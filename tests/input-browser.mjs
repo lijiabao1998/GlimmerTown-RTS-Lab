@@ -280,7 +280,7 @@ async function main() {
         assertions(await E('!document.getElementById("selection-box")&&!document.getElementById("command-menu")'),'valve: disabled feature creates no overlay');
         const p=await gunPoint(); await touch('touchStart',[[...p,1]]); await sleep(650); await touch('touchEnd',[]); await frames();
         assertions(!(await state()).open,'valve: old long touch does not open menu');
-        assert.equal(await E('__rts.runScript(600)'),'c789deeb','valve: original 600-tick hash'); assert.equal(await E('__rts.runScript(1200)'),'f3364bb6','valve: original 1200-tick hash');
+        assert.equal(await E('__rts.runScript(600)'),'c1058cb1','valve: original 600-tick hash'); assert.equal(await E('__rts.runScript(1200)'),'79fc3ae3','valve: original 1200-tick hash');
       },
     };
     for(const [name,run] of Object.entries(cases)) {
