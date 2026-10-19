@@ -144,7 +144,7 @@ function mainFixture(query = '', w = fixtureWorld()) {
     initHud(a) { actions = a; const actual = initHud(a); return { frame: actual.frame, update() { metrics.updates++; actual.update(); } }; },
     initMinimap(a) { c.miniActions = a; metrics.minimaps++; return {}; },
   });
-  for (const name of ['r015', 'r115']) vm.runInContext(plain.match(new RegExp(`const ${name} = [^\\n]+`))[0], c);
+  for (const name of ['r015', 'r115', 'r118']) vm.runInContext(plain.match(new RegExp(`const ${name} = [^\\n]+`))[0], c);
   vm.runInContext(section('hud = initHud({', '\nreportView = initReportView'), c);
   vm.runInContext(section('if (r015) minimap = initMinimap({', '\nconst help = '), c);
   const frameSource = section('  const counterbatteryInfo = ', '\n  view.render(');

@@ -1,4 +1,5 @@
 // R019 補給與生產：指揮部、補給、生產佇列、出生與集結、有指揮部時的勝負。整數、決定性、不抽 World.rng。
+import { trenchAt } from './trenches.ts';
 import { clearVegetation } from './vegetation.ts';
 import { findPath } from './path.ts';
 import { stillConnected } from './build.ts';
@@ -28,7 +29,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
       if (!inMap(cx, cz)) { if (inner) ok = false; continue; }
       const i = idx(cx, cz);
       if (w.occ[i]) ok = false;
-      if (inner && (w.ter[i] === TER_ROAD || unitCells.has(i))) ok = false;
+      if (inner && (w.ter[i] === TER_ROAD || unitCells.has(i) || trenchAt(w, cx, cz))) ok = false;
     }
     if (ok && stillConnected(w, x, z, 2, 2)) return [x, z];
   }

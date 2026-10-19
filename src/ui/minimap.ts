@@ -2,6 +2,7 @@
 import { N, TER_ROAD, TER_FIELD, TER_MUD, SIDE_PLAYER, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
 import { drawCounterbattery } from './counterbattery.ts';
 import { VEG_HEDGE, VEG_WOOD, vegetationAt } from '../sim/vegetation.ts';
+import { TrenchRaster, TRENCH_E, TRENCH_S, TRENCH_W, TRENCH_N, TRENCH_MINI_COLORS } from '../render/trenches.ts';
 
 // 菱形，方向跟主畫面一樣：主畫面的「右」＝世界 (+x,−z)、「上」＝世界 (−x,−z)。
 // 小地圖 px = w/2 + (x − z)·s、py = (x + z)·s/2，s = w/(2N)；整張高 = w/2。
@@ -25,7 +26,7 @@ export function miniDots(w: World, visible: (u: Unit) => boolean): Dot[] {
 // ---- DOM ----
 export interface Minimap { frame: (t: number) => void; dirty: () => void; el: HTMLCanvasElement; point: (x: number, z: number) => [number, number] }
 
-export function initMinimap(a: { world: () => World; visible: (u: Unit) => boolean; view: () => [number, number][]; tap: (x: number, z: number) => void; counterbattery?: boolean; vegetation?: boolean }): Minimap {
+export function initMinimap(a: { world: () => World; visible: (u: Unit) => boolean; view: () => [number, number][]; tap: (x: number, z: number) => void; counterbattery?: boolean; vegetation?: boolean; trenches?: boolean }): Minimap {
   const cvs = document.createElement('canvas');
   cvs.id = 'minimap';
   (document.getElementById('hud') ?? document.body).appendChild(cvs);
@@ -33,6 +34,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
   let baseDirty = true, last = -1, g = miniGeo(160), dpr = 1;
   let baseWorld: World | undefined;
   let baseVegetation: World['vegetation'];
+  const trenchRaster = new TrenchRaster(a.trenches !== false);
   const counterbatteryPoint: [number, number] = [0, 0];
   const counterbatteryProject = (x: number, z: number) => toMini(g, x, z, counterbatteryPoint);
   const cell = (ctx: CanvasRenderingContext2D, x: number, z: number) => {   // 一格＝一個小菱形
@@ -40,6 +42,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.lineTo(p3x, p3y); ctx.closePath(); ctx.fill();
   };
   function paintBase(w: World) {
+    trenchRaster.sync(w, true);
     const ctx = base.getContext('2d')!;
     base.width = Math.round(g.w * dpr); base.height = Math.round(g.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, g.w, g.h);
@@ -57,6 +60,20 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
         else if (foliage === VEG_WOOD) { ctx.beginPath(); ctx.moveTo(px, py - 1.2); ctx.lineTo(px + 1.2, py); ctx.lineTo(px, py + 1.2); ctx.lineTo(px - 1.2, py); ctx.closePath(); ctx.fill(); }
       }
     }
+    // 先畫完地格，再疊接線；跨格的線不會被下一格底色蓋住。
+    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+      const i = z * N + x, kind = trenchRaster.kinds[i] - 1;
+      if (kind < 0 || w.occ[i]) continue;
+      const links = trenchRaster.links[i], [cx, cy] = toMini(g, x + 0.5, z + 0.5);
+      ctx.beginPath();
+      if (links & TRENCH_E) { const [px, py] = toMini(g, x + 1, z + 0.5); ctx.moveTo(cx, cy); ctx.lineTo(px, py); }
+      if (links & TRENCH_S) { const [px, py] = toMini(g, x + 0.5, z + 1); ctx.moveTo(cx, cy); ctx.lineTo(px, py); }
+      if (links & TRENCH_W) { const [px, py] = toMini(g, x, z + 0.5); ctx.moveTo(cx, cy); ctx.lineTo(px, py); }
+      if (links & TRENCH_N) { const [px, py] = toMini(g, x + 0.5, z); ctx.moveTo(cx, cy); ctx.lineTo(px, py); }
+      ctx.strokeStyle = '#30291f'; ctx.lineWidth = kind === 2 ? 1.8 : 2.6; ctx.stroke();
+      ctx.strokeStyle = TRENCH_MINI_COLORS[kind]; ctx.lineWidth = kind === 2 ? 0.7 : 1.2; ctx.stroke();
+      if (kind === 3) { ctx.fillStyle = '#f0d9aa'; ctx.fillRect(cx - 0.6, cy - 0.6, 1.2, 1.2); }
+    }
     baseDirty = false;
     baseWorld = w;
     baseVegetation = w.vegetation;
@@ -65,6 +82,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     const w = a.world();
     if (w !== baseWorld) baseDirty = true;   // 換局先失效，不能被上一局的 100ms 節流擋住。
     if (w === baseWorld && w.vegetation !== baseVegetation) baseDirty = true;   // 同一個世界在 tick0 經紀錄啟用也立即換底圖。
+    if (trenchRaster.sync(w)) baseDirty = true;   // 同一世界的首次啟用／追加段也先於 100ms 節流。
     if (t - last < 100 && !baseDirty) return;   // 一秒最多重畫 10 次
     last = t;
     const cssW = innerWidth < 640 ? 150 : 200;

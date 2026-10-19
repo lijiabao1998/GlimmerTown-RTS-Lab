@@ -7,17 +7,23 @@ import {
   N, idx, bldMaxHp, TER_GRASS, TER_ROAD, TER_FIELD, TER_MUD, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, type World,
 } from './world.ts';
 
-import { generateVegetation } from './vegetation.ts';
+import { generateVegetation, clearVegetation } from './vegetation.ts';
+import { trenchCells } from './trenches.ts';
 
 export const MAP_RYE = 1;
 
 // id=0 保留原亂數村莊；舊 map 指令不帶 vegetation，地圖／雜湊逐位保持。
 export function applyMap(w: World, id: number, vegetation?: number): void {
   if (w.tick !== 0 || (id !== 0 && id !== MAP_RYE)) return;
+  // 已付費布陣不會被換底圖埋掉；正常 step 先套 map 才會套戰壕。
+  if (w.trenches?.segments.length && (w.map ?? 0) !== id) return;
   const changed = id === MAP_RYE && !w.map;
   applyRye(w, id);
   if (changed && w.vegetation) delete w.vegetation; // 同 tick 換底圖時不留舊候選
-  if (vegetation === 1 && (w.map ?? 0) === id) generateVegetation(w);
+  if (vegetation === 1 && (w.map ?? 0) === id) {
+    generateVegetation(w);
+    for (const s of w.trenches?.segments ?? []) for (const [x, z] of trenchCells(s)) clearVegetation(w, x, z, 1, 1);
+  }
 }
 
 function applyRye(w: World, id: number): void {

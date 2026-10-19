@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R118 | 2026-10-19 | GPT | 四種戰壕：共享8點、可穿行、最強掩護、程序刻紋與noR118 | Node53／Chrome6負控；264d24f unit398.1秒／smoke196.7秒與lane綠；四標準圖及網路圖已看；golden不變 | [#51](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/51) | 首輪VM依賴已修；桌面小地圖首紅未重現、根因未確立，精簡觀測latest-head待CI；本機Chrome受限、Android未測；未發布 |
 | R117 | 2026-10-19 | GPT | 待辦14程序音效：自願開啟、可見砲聲／爆炸／倒塌、8聲部、4起音／幀、noR117 | 核心14／37負控、整合4／12、HUD5／11、Chrome九負控；CI unit235.6秒／smoke162.8秒綠；手機13／22888、八圖已看；golden不變 | [#50](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/50) | 首CI Enter漏字元負載已修；本機Chrome受限；Android、喇叭、真實BFCache未測；收尾head與發布待核驗 |
 | R116 | 2026-10-19 | GPT | 待辦12可穿行樹籬／小樹林：中段遮視線、最強50%掩護、建物HQ清除；可選map欄位與noR116 | 模擬10／19負控、視圖18／21、Chrome11負控；CI unit275.7秒／smoke198.5秒綠；手機13／22888；golden89aa0b92；四圖及on／off已看 | [#49](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/49) | 首CI兩項紅已修：舊fixture提示污染、建物鄰路144 bytes差異歸零；本機Chrome受限、Android未測；收尾head／發布待核驗；R114仍卡住 |
 | R115 | 2026-10-19 | GPT | 待辦11反砲兵粗略情報：三階量化砲聲、600tick到期、每方8區；小地圖橙虛線與noR115；不改AI／戰鬥 | Node13／35負控、UI21／31負控、Chrome9負控；64場76800tick戰鬥差分；CI unit217.7秒／smoke194.6秒綠；手機12／22156；golden89aa0b92；四圖與三級特寫已看 | [#48](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/48) | 首次restart像素紅，副本讀回保留exact斷言後綠，原因未證實；本機Chrome受限，Android未測；收尾head／發布待核驗；R114仍卡住 |
