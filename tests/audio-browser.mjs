@@ -246,8 +246,27 @@ async function main() {
       assert(await E('!!window.__rts?.ready && !!window.__r117test && !!window.__r117native'), 'fixture: real production app and native observer ready');
     };
     const key = async (key, code, virtual) => {
-      await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual });
+      // CDP does not infer generated text from the virtual key. Match Puppeteer's native
+      // Enter payload: USKeyboardLayout.ts (Enter) and cdp/Input.ts (CdpKeyboard.down).
+      // https://github.com/puppeteer/puppeteer/blob/main/packages/puppeteer-core/src/cdp/Input.ts
+      const text = key === 'Enter' ? { text: '\r', unmodifiedText: '\r' } : {};
+      await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual, ...text });
       await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual });
+    };
+    const keyboardProbe = async () => {
+      await E(`(() => {
+        const button = document.createElement('button'); button.id = '__r117-key-probe'; button.type = 'button'; button.textContent = 'Enter probe';
+        button.style.cssText = 'position:fixed;left:0;top:0;z-index:9999'; document.body.appendChild(button);
+        window.__r117KeyProbeEvents = [];
+        for (const type of ['keydown', 'keypress', 'keyup', 'click']) button.addEventListener(type, event => window.__r117KeyProbeEvents.push({ type, trusted: event.isTrusted, key: event.key ?? '', charCode: event.charCode ?? 0 }));
+        button.focus();
+      })()`);
+      try {
+        await key('Enter', 'Enter', 13);
+        const events = await E('__r117KeyProbeEvents'), clicks = events.filter(event => event.type === 'click');
+        assert(clicks.length === 1 && clicks[0].trusted && events.some(event => event.type === 'keypress' && event.trusted && event.charCode === 13),
+          `fixture: CDP Enter generates one trusted native button click and carriage-return keypress; events ${JSON.stringify(events)}`);
+      } finally { await E('document.getElementById("__r117-key-probe")?.remove(); delete window.__r117KeyProbeEvents'); }
     };
     const button = async (id, mode = 'mouse') => {
       const p = await E(`(() => { const b = document.getElementById(${JSON.stringify(id)}); if (!b) return null; const r = b.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2, b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2))]; })()`);
@@ -355,6 +374,7 @@ async function main() {
 
     for (const mode of ['mouse', 'touch', 'key']) {
       const mobile = mode === 'touch'; await viewport(mobile); await fresh();
+      if (mode === 'key') await keyboardProbe();
       const opening = await E('__rts.info()');
       assert(opening.calls <= 20 && opening.triangles <= 80000, `budget: ${mode} opening remains within 20 calls/80000 triangles`);
       assert.equal((await native()).contexts, 0, 'activation: loading app creates no AudioContext');
