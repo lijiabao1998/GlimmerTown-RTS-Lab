@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import { build } from 'vite';
 import { withBrowser, sleep, touchTap } from '../tools/cdp.mjs';
 import { createWorld, hashWorld, N, SUB, UK_TANK, UK_HOWITZER, ORD_IDLE, SHELL_AP, BK_COTTAGE, UNIT_KINDS } from '../src/sim/world.ts';
@@ -20,6 +21,13 @@ const strictCI = process.env.GITHUB_ACTIONS === 'true' || !!process.env.GITHUB_R
 const buildOnly = process.argv.includes('--build-only'), fixtureOnly = process.argv.includes('--fixture-only');
 const summary = [], record = s => { summary.push(s); console.log(s); };
 const digest = s => createHash('sha256').update(s).digest('hex');
+function pngRGBA(width,height,pixels) {
+  const crc=buffer=>{let c=0xffffffff;for(const b of buffer){c^=b;for(let k=0;k<8;k++)c=(c>>>1)^((c&1)?0xedb88320:0);}return(c^0xffffffff)>>>0;};
+  const chunk=(name,data)=>{const type=Buffer.from(name),out=Buffer.alloc(data.length+12);out.writeUInt32BE(data.length);type.copy(out,4);data.copy(out,8);out.writeUInt32BE(crc(Buffer.concat([type,data])),data.length+8);return out;};
+  const header=Buffer.alloc(13);header.writeUInt32BE(width);header.writeUInt32BE(height,4);header[8]=8;header[9]=6;
+  const rows=Buffer.alloc((width*4+1)*height),source=Buffer.from(pixels);for(let y=0;y<height;y++)source.copy(rows,y*(width*4+1)+1,y*width*4,(y+1)*width*4);
+  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',deflateSync(rows)),chunk('IEND',Buffer.alloc(0))]);
+}
 const canonical = plan => plan.map(c => ({ ...c, rot: c.rot ?? 0 }));
 const opening = createWorld(1944); applyMap(opening, 1, 1);
 
@@ -85,7 +93,7 @@ const instrumentation = `
 import { ORD_IDLE, SHELL_AP } from './sim/world.ts';
 ${trenchFixture.toString()}
 (window as any).__r118test = {
-  inspect: () => ({tick:w.tick,hash:hashWorld(w),phase,log:JSON.parse(JSON.stringify(log)),plan:JSON.parse(JSON.stringify(plan)),
+  inspect: () => ({tick:w.tick,hash:hashWorld(w),shownHash:hashWorld(view.world),phase,log:JSON.parse(JSON.stringify(log)),plan:JSON.parse(JSON.stringify(plan)),
     trenches:JSON.parse(JSON.stringify(w.trenches??null)),shown:JSON.parse(JSON.stringify(view.world.trenches??null)),
     units:w.units.map(u=>({id:u.id,x:u.x,z:u.z,hp:u.hp})),left:pointsLeft()}),
   ground: () => Array.from((view as any).groundPx),
@@ -116,6 +124,21 @@ function plugin(broken, hits) {
     if (broken && rel === 'src/sim/trenches.ts') {
       replace('return s ? trenchKind(s.kind)!.cover : 100;', `return s && !(${is('cover')}) ? trenchKind(s.kind)!.cover : 100;`, 'cover');
     }
+    if (rel === 'src/ui/minimap.ts') {
+      // Observe exact production calls without reading either production canvas context.
+      // A changed trace distinguishes stale camera/base state from identical calls rasterizing differently.
+      code = `import { hashWorld as r118HashWorld } from '../sim/world.ts';
+function r118Observe(ctx:any,key:string) {
+  const g:any=globalThis;g[key]=[];if(ctx.__r118trace===key)return;ctx.__r118trace=key;
+  for(const name of ['setTransform','clearRect','beginPath','moveTo','lineTo','closePath','fill','fillRect','stroke','arc','setLineDash','save','restore','rect','clip','drawImage']) {
+    const original=ctx[name].bind(ctx);ctx[name]=(...args:any[])=>{g[key].push([name,args.map(v=>v instanceof HTMLCanvasElement?{canvas:true,width:v.width,height:v.height}:v),ctx.fillStyle,ctx.strokeStyle,ctx.lineWidth,ctx.globalAlpha,ctx.lineCap,ctx.lineJoin]);return original(...args);};
+  }
+}
+` + code;
+      replace("const ctx = base.getContext('2d')!;", "const ctx = base.getContext('2d')!; r118Observe(ctx,'__r118baseOps'); (globalThis as any).__r118base=base;", 'base-observation');
+      replace("const ctx = cvs.getContext('2d')!;", "const ctx = cvs.getContext('2d')!; r118Observe(ctx,'__r118frameOps');", 'frame-observation');
+      replace('const poly = a.view();', "const poly = a.view(); (globalThis as any).__r118paintMeta={time:t,tick:w.tick,hash:r118HashWorld(w),poly:poly.map(p=>[...p]),width:cvs.width,height:cvs.height};", 'paint-observation');
+    }
     return code;
   }};
 }
@@ -126,8 +149,8 @@ async function main() {
   const goodHits=new Set(),badHits=new Set();
   await build({root:ROOT,logLevel:'error',plugins:[plugin(false,goodHits)],build:{outDir:baseline}});
   await build({root:ROOT,logLevel:'error',plugins:[plugin(true,badHits)],build:{outDir:broken}});
-  assert.deepEqual([...goodHits],['observation'],'fixture: baseline only observes');
-  assert.equal(badHits.size,7,'fixture: all six isolated semantic mutations compile');
+  assert.deepEqual([...goodHits].sort(),['base-observation','frame-observation','observation','paint-observation'].sort(),'fixture: baseline only observes');
+  assert.equal(badHits.size,10,'fixture: six isolated semantic mutations and four observational hooks compile');
   record('R118 isolated baseline/mutant builds compiled; this is not a Chrome pass'); if(buildOnly)return;
   const overlay={};
   await withBrowser({root:baseline,overlay,port:8438,width:412,height:860,mobile:true,chromeWaitMs:20000,readyMs:8000,settle:60},async({open,page})=>{
@@ -144,9 +167,24 @@ async function main() {
     const cell=async(x,z,mobile)=>{await E(`__rts.focus(${x+.5},${z+.5},1.25)`);await settle();const p=await E(`__rts.screenOfCell(${x},${z})`);assert(await E(`document.elementFromPoint(${p[0]},${p[1]})===document.querySelector('body>canvas')`),'fixture: native placement reaches unobstructed ground');await click(p[0],p[1],mobile);await settle();};
     const choose=async(cmd,mobile)=>{const before=(await inspect()).plan;if(cmd.t==='trench'){await button('bb-trench',mobile);await button('bb-t'+cmd.kind,mobile);for(let n=0;n<(cmd.rot??0);n++)await button('bb-rot',mobile);}else await button('bb-k'+cmd.kind,mobile);assert.deepEqual((await inspect()).plan,before,'input: construction controls do not leak map commands');};
     const place=async(cmd,mobile)=>{await choose(cmd,mobile);await cell(cmd.x,cmd.z,mobile);};
-    const sample=()=>E(`(()=>{const c=document.getElementById('minimap'),copy=document.createElement('canvas');copy.width=c.width;copy.height=c.height;const ctx=copy.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,0,0);return{ground:__r118test.ground(),mini:Array.from(ctx.getImageData(0,0,copy.width,copy.height).data),scene:document.querySelector('body>canvas').toDataURL(),state:__r118test.inspect(),calls:__rts.info().calls,triangles:__rts.info().triangles,cam:__rts.cam()}})()`);
+    const sample=()=>E(`(()=>{const c=document.getElementById('minimap'),copy=document.createElement('canvas');copy.width=c.width;copy.height=c.height;const ctx=copy.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,0,0);const base=globalThis.__r118base,bc=document.createElement('canvas');bc.width=base.width;bc.height=base.height;const bx=bc.getContext('2d',{willReadFrequently:true});bx.drawImage(base,0,0);return{base:Array.from(bx.getImageData(0,0,bc.width,bc.height).data),ground:__r118test.ground(),mini:Array.from(ctx.getImageData(0,0,copy.width,copy.height).data),miniWidth:c.width,miniHeight:c.height,trace:{base:globalThis.__r118baseOps,frame:globalThis.__r118frameOps,paint:globalThis.__r118paintMeta},scene:document.querySelector('body>canvas').toDataURL(),state:__r118test.inspect(),calls:__rts.info().calls,triangles:__rts.info().triangles,cam:__rts.cam()}})()`);
     const shot=async name=>{const png=await page.send('Page.captureScreenshot',{format:'png'});fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots',name),Buffer.from(png.data,'base64'));};
-    const equalPixels=(a,b,label)=>{assert(Buffer.from(a.ground).equals(Buffer.from(b.ground)),label+': exact ground pixels');assert(Buffer.from(a.mini).equals(Buffer.from(b.mini)),label+': exact minimap pixels');};
+    const equalPixels=(a,b,label)=>{
+      assert(Buffer.from(a.ground).equals(Buffer.from(b.ground)),label+': exact ground pixels');
+      const same=Buffer.from(a.mini).equals(Buffer.from(b.mini));let detail='';
+      if(!same){
+        const differences=[],diff=Buffer.alloc(a.mini.length);let count=0,max=0;
+        for(let i=0;i<a.mini.length;i+=4){let delta=0;for(let k=0;k<4;k++)delta=Math.max(delta,Math.abs(a.mini[i+k]-b.mini[i+k]));diff[i]=delta?255:0;diff[i+3]=255;if(delta){count++;max=Math.max(max,delta);if(differences.length<24)differences.push({x:(i/4)%a.miniWidth,y:Math.floor(i/4/a.miniWidth),actual:a.mini.slice(i,i+4),reference:b.mini.slice(i,i+4)});}}
+        const firstOpDifference=(x,y)=>{const i=x.findIndex((v,i)=>JSON.stringify(v)!==JSON.stringify(y[i]));return i<0?(x.length===y.length?null:{index:x.length,actual:null,reference:y[x.length]}):{index:i,actual:x[i],reference:y[i]};};
+        const info={label,count,max,first:differences,basePixelsEqual:Buffer.from(a.base).equals(Buffer.from(b.base)),baseFirstOp:firstOpDifference(a.trace.base,b.trace.base),frameFirstOp:firstOpDifference(a.trace.frame,b.trace.frame),actualPaint:a.trace.paint,referencePaint:b.trace.paint,actualCam:a.cam,referenceCam:b.cam,actualHash:a.state.hash,referenceHash:b.state.hash,actualShownHash:a.state.shownHash,referenceShownHash:b.state.shownHash,baseCallsEqual:JSON.stringify(a.trace.base)===JSON.stringify(b.trace.base),frameCallsEqual:JSON.stringify(a.trace.frame)===JSON.stringify(b.trace.frame)};
+        detail=' '+JSON.stringify(info);record('R118 minimap mismatch:'+detail);
+        const name=`r118-failure-${a.miniWidth}-${label.split(':')[0]}`,dir=path.join(ROOT,'shots');fs.mkdirSync(dir,{recursive:true});
+        fs.writeFileSync(path.join(dir,name+'-actual.png'),pngRGBA(a.miniWidth,a.miniHeight,a.mini));fs.writeFileSync(path.join(dir,name+'-reference.png'),pngRGBA(b.miniWidth,b.miniHeight,b.mini));fs.writeFileSync(path.join(dir,name+'-diff.png'),pngRGBA(a.miniWidth,a.miniHeight,diff));
+        fs.writeFileSync(path.join(dir,name+'-base-actual.png'),pngRGBA(a.miniWidth,a.miniHeight,a.base));fs.writeFileSync(path.join(dir,name+'-base-reference.png'),pngRGBA(b.miniWidth,b.miniHeight,b.base));
+        fs.writeFileSync(path.join(dir,name+'-state.json'),JSON.stringify({info,actual:a.trace,reference:b.trace,actualState:a.state,referenceState:b.state},null,2));
+      }
+      assert(same,label+': exact minimap pixels'+detail);
+    };
     const budget=(s,opening,label)=>assert(s.calls<=(opening?20:22)&&s.triangles<=80000,`${label}: existing ${opening?20:22}/80000 budget (${s.calls}/${s.triangles})`);
     const focus=async(cam={x:21,z:24,zoom:1.25})=>{await E(`__rts.focus(${cam.x},${cam.z},${cam.zoom})`);await settle();};
     const pickerLayout=async()=>{const s=await E(`(()=>{const b=document.getElementById('buildbar').getBoundingClientRect(),h=document.getElementById('hint').getBoundingClientRect(),m=document.getElementById('minimap').getBoundingClientRect();return{b:b.toJSON(),h:h.toJSON(),m:m.toJSON(),width:innerWidth,height:innerHeight}})()`);assert(s.b.left>=0&&s.b.right<=s.width&&s.b.top>=s.m.bottom&&s.b.bottom<=s.h.top-6&&s.h.bottom<=s.height,'layout: construction row clears minimap, hint and viewport');};
