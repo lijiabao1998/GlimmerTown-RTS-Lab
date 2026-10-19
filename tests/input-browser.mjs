@@ -19,6 +19,7 @@ const MUTANTS = {
   cancelMain: ['src/main.ts', 'if (dismissOnly) { commandMenu?.close();', "if (dismissOnly && !location.search.includes('__r109mutant=cancel')) { commandMenu?.close();"],
   routing: ['src/main.ts', 'bombardCommand(w, selected, target, chosen)', "bombardCommand(w, selected, target, location.search.includes('__r109mutant=routing') ? 'he' : chosen)"],
   valve: ['src/main.ts', "const r109 = q.get('noR109') !== '1';", "const r109 = location.search.includes('__r109mutant=valve') || q.get('noR109') !== '1';"],
+  productionLayout: ['src/ui/production.ts', '    if (key !== last) {', "    if (location.search.includes('__r109mutant=productionLayout') && key === last) return;\n    if (key !== last) {"],
   hint: ['src/main.ts', 'function clearBattleHint() {\n  if (battleHint === undefined) return;\n  battleHint = undefined;\n  hud?.update();\n}', "function clearBattleHint() {\n  if (battleHint === undefined) return;\n  battleHint = undefined;\n  if (!location.search.includes('__r109mutant=hint')) hud?.update();\n}"],
 };
 const hits = new Set();
@@ -61,10 +62,10 @@ async function main() {
     const state = () => E('({log:__rts.log(),selected:__rts.selected(),cam:__rts.cam(),hash:__rts.hash(),open:!!document.querySelector("#command-menu:not([hidden])")})');
     const frames = () => E('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
     const viewport = async mobile => { await page.send('Emulation.setDeviceMetricsOverride', { width: mobile ? 412 : 1280, height: mobile ? 860 : 800, deviceScaleFactor: 1, mobile }); await page.send('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: 5 }); await frames(); };
-    const fresh = async (extra = '') => {
+    const fresh = async (extra = '', selection = [1,4,9]) => {
       await open('noR018=1&noR006=1&noR016=1&' + extra);
       assertions(await E('!!window.__rts?.ready'), 'bootstrap: actual RTS ready');
-      await E('__rts.pause(true);__rts.runScript(0);__rts.issue({t:"eco",inf:1,guns:1,tanks:1});__rts.stepN(1);__rts.pause(true);__rts.focus(27,27,1);__rts.select([1,4,9]);');
+      await E(`__rts.pause(true);__rts.runScript(0);__rts.issue({t:"eco",inf:1,guns:1,tanks:1});__rts.stepN(1);__rts.pause(true);__rts.focus(27,27,1);__rts.select(${JSON.stringify(selection)});`);
       await frames();
     };
     // Keep button and buttons consistent while dragging, as Puppeteer's CdpMouse.move does.
@@ -172,6 +173,108 @@ async function main() {
         // Close the older R107 touch coverage gap using a genuine touch event.
         await button('#b-ammo'); assert.equal(await E('document.querySelector("#b-ammo").getAttribute("aria-pressed")'),'true','layout: existing ammo button accepts touch');
       },
+      async productionLayout() {
+        await viewport(true);
+        // Warm the real content cache with the short, unselected hint. No economy/tick change follows.
+        const snapshot=()=>E(`({tick:__rts.tick(),hash:__rts.hash(),eco:__rts.eco(),content:document.querySelector('#prodbar').innerHTML})`);
+        const frozen=await snapshot(), before=await state();
+        assert.equal(frozen.tick,1,'fixture: production closeup is fixed at tick 1');
+        const geometry=()=>E(`(()=>{
+          const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
+          const prod=document.querySelector('#prodbar'),hint=document.querySelector('#hint'),menu=document.querySelector('#command-menu:not([hidden])');
+          const targets=e=>[...e.querySelectorAll('button')].map(b=>{const r=rect(b);return {...r,hit:b.contains(document.elementFromPoint((r.left+r.right)/2,(r.top+r.bottom)/2))};});
+          return {production:rect(prod),hint:rect(hint),text:hint.textContent,visible:!prod.hidden,buttons:targets(prod),menu:menu?rect(menu):null,menuButtons:menu?targets(menu):[],obstacles:['#hud .btns','#hud .top','#minimap'].map(s=>document.querySelector(s)).filter(e=>e&&!e.hidden).map(rect),width:innerWidth,height:innerHeight};
+        })()`);
+        const disjoint=(a,b)=>a.right<=b.left||a.left>=b.right||a.bottom<=b.top||a.top>=b.bottom;
+        const check=async label=>{
+          const g=await geometry();
+          assertions(g.visible&&g.production.height>0&&g.hint.height>0,`fixture: ${label} has real visible production and hint rectangles`);
+          if(label==='long selection') {
+            // Same paused tick/camera/viewport for repaired and isolated old-cache closeups.
+            const png=await page.send('Page.captureScreenshot',{format:'png',clip:{x:0,y:620,width:412,height:240,scale:1}});
+            fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});
+            fs.writeFileSync(path.join(ROOT,`shots/r111-production-hint-${overlay['index.html']?'before':'after'}.png`),Buffer.from(png.data,'base64'));
+          }
+          // Independent DOM geometry contract, not a copy of the production placement calculation.
+          assertions(g.production.bottom<=g.hint.top-6,`productionLayout: ${label} preserves six-pixel hint clearance (production bottom ${g.production.bottom}, hint top ${g.hint.top})`);
+          assert.equal(g.production.bottom,g.hint.top-6,`productionLayout: ${label} tracks the hint without leaving stale excess space`);
+          assertions(g.hint.left>=0&&g.hint.right<=g.width&&g.hint.top>=0&&g.hint.bottom<=g.height,`productionLayout: ${label} prompt stays fully visible`);
+          assertions(g.buttons.every(b=>b.hit&&b.width>=44&&b.height>=44),`productionLayout: ${label} production buttons remain unobstructed touch targets`);
+          for(const r of g.obstacles)assertions(disjoint(g.hint,r),`productionLayout: ${label} prompt avoids the other HUD rectangles`);
+          if(g.menu) {
+            assertions(g.menu.left>=0&&g.menu.right<=g.width&&g.menu.top>=0&&g.menu.bottom<=g.height,`productionLayout: ${label} menu stays in viewport`);
+            for(const r of [g.production,g.hint,...g.obstacles])assertions(disjoint(g.menu,r),`productionLayout: ${label} menu avoids the actual production/prompt/HUD rectangles`);
+            assertions(g.menuButtons.every(b=>b.hit&&b.width>=44&&b.height>=44),`productionLayout: ${label} menu remains unobstructed and clickable`);
+          }
+          assert.deepEqual(await snapshot(),frozen,`productionLayout: ${label} leaves economy, tick, hash and production content unchanged`);
+          return g;
+        };
+        const sameDraws=async (previous,label)=>{
+          const now=await E('__rts.info()');
+          assert.equal(now.calls,previous.calls,`productionLayout: ${label} adds no draw call`);
+          assert.equal(now.triangles,previous.triangles,`productionLayout: ${label} adds no triangle`);
+          assertions(now.calls<=22&&now.triangles<=80000,`productionLayout: ${label} keeps the existing battle budget`);
+        };
+        const short=await check('short selection');
+        await E('__rts.select([1,4,9])'); await frames();
+        const long=await check('long selection');
+        assertions(long.hint.height>short.hint.height,'fixture: selected phone hint actually wraps onto more lines');
+        await E('__rts.select([])'); await frames();
+        const shortAgain=await check('short selection restored');
+        assert.deepEqual(shortAgain.hint,short.hint,'productionLayout: shrinking hint restores short geometry');
+        assert.deepEqual(shortAgain.production,short.production,'productionLayout: shrinking hint lowers production again');
+        await E('__rts.select([1,4,9])'); await frames();
+        const beforeMenu=await E('__rts.info()');
+        // Pass-through measurement observer in this test page only: capture the actual synchronous
+        // obstacle read performed inside menu.open, before any later animation frame can repair it.
+        await E(`(()=>{const p=document.querySelector('#prodbar'),measure=p.getBoundingClientRect.bind(p);window.__r111MenuRead=null;p.getBoundingClientRect=()=>{const r=measure();if(!window.__r111MenuRead&&document.querySelector('#command-menu:not([hidden])')){const h=document.querySelector('#hint');window.__r111MenuRead={production:r.toJSON(),hint:h.getBoundingClientRect().toJSON(),text:h.textContent};}return r;};})()`);
+        await hold(false);
+        const menuRead=await E('window.__r111MenuRead');
+        assertions(menuRead&&menuRead.text.includes('選擇這一格'),'fixture: real hold records menu.open reading the current production obstacle');
+        assert.equal(menuRead.production.bottom,menuRead.hint.top-6,'productionLayout: HUD and production synchronize before menu.open reads its obstacle');
+        const prompt=await check('held menu prompt');
+        assertions(prompt.menu,'productionLayout: real hold opens its menu');
+        await sameDraws(beforeMenu,'held prompt/menu');
+        await touch('touchEnd',[]); await frames(); await button('#cm-smoke');
+        const success=await check('smoke success');
+        assertions(success.text.includes('已下煙幕指令'),'productionLayout: smoke success prompt is visible');
+        const smokeLog=[...before.log,{tick:frozen.tick,cmd:{t:'fireAt',side:0,ids:[4],x:29,z:29,ammo:'smoke'}}];
+        assert.deepEqual((await state()).log,smokeLog,'productionLayout: smoke sends exactly one unchanged command');
+        const clear=async()=>{const p=await gunPoint();await touch('touchStart',[[...p,1]]);await touch('touchCancel',[]);await frames();};
+        const beforeClear=await E('__rts.info()'); await clear();
+        const cleared=await check('cleared smoke success');
+        assert.equal(cleared.text,long.text,'productionLayout: clearing success restores the selected hint');
+        assert.deepEqual(cleared.hint,long.hint,'productionLayout: clearing success restores hint geometry');
+        assert.deepEqual(cleared.production,long.production,'productionLayout: clearing success restores production geometry');
+        await sameDraws(beforeClear,'feedback clear');
+        await E('__rts.select([1,9])'); await frames(); await hold(); await check('no-gun menu prompt'); await button('#cm-smoke');
+        const error=await check('smoke error');
+        assertions(error.text.includes('請先選取榴彈砲'),'productionLayout: no-gun error prompt is visible');
+        await clear(); const errorCleared=await check('cleared smoke error');
+        assertions(!errorCleared.text.includes('請先選取榴彈砲')&&errorCleared.text.includes('點地面＝移動'),'productionLayout: clearing error immediately restores ordinary instructions');
+        assert.deepEqual((await state()).log,smokeLog,'productionLayout: menu, rejected smoke and cancellation add no commands');
+        const phoneDraws=await E('__rts.info()');
+        await viewport(false); const desktop=await check('desktop resize');
+        assertions(desktop.hint.height<errorCleared.hint.height,'fixture: desktop viewport changes actual prompt wrapping');
+        await viewport(true); const phone=await check('phone resize restored');
+        assert.deepEqual(phone.hint,errorCleared.hint,'productionLayout: phone resize restores hint geometry');
+        assert.deepEqual(phone.production,errorCleared.production,'productionLayout: phone resize restores production geometry');
+        await sameDraws(phoneDraws,'phone resize round trip');
+        assert.deepEqual((await state()).log,smokeLog,'productionLayout: viewport changes never issue commands');
+        // Exercise ordinary selection and ammo controls with R109 genuinely disabled.
+        await fresh('noR109=1',[]); await check('noR109 short hint');
+        assertions(await E('!document.getElementById("command-menu")'),'productionLayout: noR109 keeps the legacy interface');
+        const legacyBefore=await state(),p=await gunPoint(); await touchTap(page,...p); await frames();
+        assert.deepEqual((await state()).selected,[4],'productionLayout: noR109 ordinary touch selects the gun');
+        await check('noR109 selected hint'); await button('#b-all'); await check('noR109 all-selected hint');
+        const ammoDraws=await E('__rts.info()'); await button('#b-ammo');
+        const ammo=await check('noR109 smoke ammo hint');
+        assertions(ammo.text.includes('煙幕無傷害'),'productionLayout: noR109 ordinary ammo prompt is visible');
+        await sameDraws(ammoDraws,'noR109 ammo prompt');
+        await button('#b-fire'); await check('noR109 ordinary hint restored');
+        assert.deepEqual((await state()).log,legacyBefore.log,'productionLayout: noR109 selection/ammo controls add no commands');
+        record(`R111 paused production clearance: short ${short.hint.height}px, long ${long.hint.height}px, desktop ${desktop.hint.height}px; tick ${frozen.tick}; hash ${frozen.hash}`);
+      },
       async valve() {
         await viewport(true);
         assertions(await E('!document.getElementById("selection-box")&&!document.getElementById("command-menu")'),'valve: disabled feature creates no overlay');
@@ -181,15 +284,16 @@ async function main() {
       },
     };
     for(const [name,run] of Object.entries(cases)) {
-      await fresh(name==='valve'?'noR109=1':''); const errors=page.errors.length; try { await run(); } catch(error) { await shot(page,path.join(ROOT,`shots/r109-failure-${name}.png`)).catch(()=>{}); throw error; } assert.equal(page.errors.length,errors,`browser runtime errors in ${name}`); record(`OK real Chrome ${name}`);
+      await fresh(name==='valve'?'noR109=1':'',name==='productionLayout'?[]:undefined); const errors=page.errors.length; try { await run(); } catch(error) { await shot(page,path.join(ROOT,`shots/r109-failure-${name}.png`)).catch(()=>{}); throw error; } assert.equal(page.errors.length,errors,`browser runtime errors in ${name}`); record(`OK real Chrome ${name}`);
     }
     // The same assertion must reject each isolated broken production bundle, not a startup error.
     overlay['index.html']=fs.readFileSync(path.join(broken,'index.html'));
     for(const [name,run] of Object.entries(cases)) {
-      await fresh(`__r109mutant=${name}${name==='valve'?'&noR109=1':''}`); const errors=page.errors.length; let failure=null;
+      await fresh(`__r109mutant=${name}${name==='valve'?'&noR109=1':''}`,name==='productionLayout'?[]:undefined); const errors=page.errors.length; let failure=null;
       try { await run(); } catch(e) { failure=e; }
       if (name === 'hold' || name === 'cancel') await touch('touchCancel', []);
       assertions(failure instanceof assert.AssertionError && failure.message.startsWith(`${name}:`),`negative ${name}: expected semantic ${name} assertion, got ${failure?.stack??'no failure'}`);
+      if(name==='productionLayout')assertions(failure.message.startsWith('productionLayout: long selection preserves six-pixel hint clearance'),`negative productionLayout: expected the first failure at long-hint geometry, got ${failure.message}`);
       assert.equal(page.errors.length,errors,`negative ${name} caused an unrelated runtime error`); record(`RED real Chrome ${name}: ${failure.message.split('\n')[0]}`);
     }
   });
