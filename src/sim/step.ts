@@ -3,6 +3,7 @@ import { isqrt, dist } from './math.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
 import { smokeBlocks, advanceSmoke, spawnSmoke } from './smoke.ts';
+import { updateCounterbattery } from './counterbattery.ts';
 import { applyBuild, type BuildCmd } from './build.ts';
 import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { applyMap } from './maps.ts';
@@ -395,6 +396,7 @@ export function step(w: World, cmds: Command[]): void {
   checkWinner(w);
   w.tick++;
   advanceSmoke(w);
+  updateCounterbattery(w);
 }
 
 // 從指令紀錄跑到第 ticks 步（重播與守衛用）。紀錄要照 tick 排好。

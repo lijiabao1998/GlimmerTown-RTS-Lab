@@ -32,9 +32,9 @@
 
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
-| 23 | 修補：手機說明面板的「知道了」完整可見、可直接點到 | 手機優先／不改壞 | 介面 | 不會 | R113 圖審確認與 R112 原圖相同的既有缺口；舊 smoke 可能靠點面板外關閉，需真實按鈕 hit-target 守衛 |
+| 23 | 修補：手機說明面板的「知道了」完整可見、可直接點到 | 手機優先／不改壞 | 介面 | 不會 | R114／PR47草稿卡住：help四組／四負控通過，但既有手機雙擊smoke紅，待原路徑事件診斷；未發布 |
 | 4 | 裝甲面向：正面厚、側後薄（整數點積），繞側打傷害加成 | 坦克車 | 模擬 | 會 | 選取時畫裝甲弧 |
-| 11 | 反砲兵：開火的砲會暴露大概位置，橢圓隨開火次數縮小 | 榴彈砲 | 模擬 | 會 | |
+| 11 | 反砲兵：開火的砲會暴露大概位置，橢圓隨開火次數縮小 | 榴彈砲 | 模擬 | 會 | R115施工／驗收中；只提供粗略聲測情報，不改Claude AI；真Chrome與發布未完成 |
 | 12 | 樹籬與小樹林：擋視線、半掩護（英國鄉間） | 自己建 | 模擬＋渲染 | 會 | 地圖生成一起改 |
 | 14 | 程序生成的音效（WebAudio 合成）：開火、爆炸、倒塌 | — | 渲染 | 不會 | 要有逃生閥 |
 | 15 | 多樣戰壕：直段、折線、交通壕與加固段，連接布陣掩體 | 業主 2026-10-18「各式各樣的戰壕」 | 模擬＋渲染 | 會 | 先做通用地形與掩護；步兵專屬互動交 Claude 協作 |
@@ -47,6 +47,7 @@
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
+| 23 手機說明關閉按鈕 | 卡住，待 Claude 補受保護 smoke 診斷 | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。原事件時間／target／取消原因未記錄，不能判定偶發；不重跑賭綠、不改相機或斷言 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
 | 4 裝甲面向 | 卡住，交 Claude 整合 | R104 面向守衛通過，但 AI 難度勝場 9／12／12→7／11／9；種子 34、89 困難超時，不能削弱守衛或改 Claude AI | R104／[#31](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/31) |
 | 16 鐵絲網 | 待 Claude 協調 | ROADMAP 的 R024b 已含龍牙、鐵絲網、沙包陣地與車／人兩張通行表；GPT 不重做障礙物或只拆步兵部分 | [ROADMAP@b7991a7](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/blob/b7991a7444ddcb4583d8d0f09c3ce5c21a44b7bb/docs/ROADMAP.md#二目前進度) |
 
@@ -54,7 +55,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
-| 單選射程／近限與有效砲擊散布上界（多選另列24） | R113 | [#46](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/46) | 2026-10-19（驗收，待發布） | 本機Chrome受限，CI實測通過；Android未測；收尾head與合後發布待核驗 |
+| 單選射程／近限與有效砲擊散布上界（多選另列24） | R113 | [#46](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/46) | 2026-10-19（發布） | 本機Chrome受限，CI實測通過；Android未測；main172dd372的CI／Pages成功，公網build已逐位核對 |
 | 修補換局小地圖殘留舊底圖 | R112 | [#45](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/45) | 2026-10-19（發布） | 本機Chrome受限，CI實測通過；Android實機未測；main CI／Pages／公網build已核對 |
 | 修補生產列隨提示高度同步避讓 | R111 | [#42](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/42) | 2026-10-19（發布） | 本機Chrome受限，CI實測通過；Android實機未測；main CI／Pages／公網build已核對 |
 | 修補暫停時過期砲擊提示 | R110 | [#40](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/40) | 2026-10-19（發布） | 本機Chrome受限，CI實測通過；Android實機未測；main CI／Pages／公網build已核對 |
