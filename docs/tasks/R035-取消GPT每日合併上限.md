@@ -1,13 +1,14 @@
 # R035 取消 GPT 每日合併上限：不限數量、逐輪迭代
-<!-- card: sim=no; golden=無; valve=無; owner_ok=業主 2026-10-18 轉來 GPT 的請求 -->
+<!-- card: sim=no; golden=無; valve=無; owner_ok=業主 2026-10-19「我同意取消 GPT 每日上限」 -->
 
-**狀態**：施工中
+**狀態**：完成
 **基線**：`43e4dbd`（main，#39 之後）
-**業主**（2026-10-18，對話）：業主轉來 GPT 的原文，沒有另外加話：「請在 lijiabao1998/GlimmerTown-RTS-Lab 套用附件，取消每日8張PR上限，改為不限數量、逐輪迭代。同步修改 AGENTS.md、docs/DECISIONS.md、docs/DOTS.md、tools/gpt-merge.mjs、.github/workflows/gpt-merge.yml。保留測試、圖審、hold標籤、最新main與精確head合併等其他門檻，不放寬GPT修改範圍。依正常維護流程驗證並合併後，回報提交SHA，讓R110 PR40接續原流程。」附件沒有傳過來，Claude 照這段話自己改。
+**業主**（2026-10-19，對話）：業主轉來 GPT 的原文，沒有另外加話：「請在 lijiabao1998/GlimmerTown-RTS-Lab 套用附件，取消每日8張PR上限，改為不限數量、逐輪迭代。同步修改 AGENTS.md、docs/DECISIONS.md、docs/DOTS.md、tools/gpt-merge.mjs、.github/workflows/gpt-merge.yml。保留測試、圖審、hold標籤、最新main與精確head合併等其他門檻，不放寬GPT修改範圍。依正常維護流程驗證並合併後，回報提交SHA，讓R110 PR40接續原流程。」附件沒有傳過來，Claude 照這段話自己改。
+**業主本人確認**（2026-10-19，對話）：「我同意取消 GPT 每日上限」。
 
 ## 為什麼做這張
 
-- 每日上限 8 個是 Claude 的預設（`docs/DECISIONS.md`「Claude 的預設」表寫著「業主一句話就改」），理由是給業主看得過來的節奏、dots 的用量上限還沒公布。業主要 GPT 無限迭代；GPT 今天已經合了 R105–R109，照這個速度今天就會撞到上限。
+- 每日上限 8 個是 Claude 的預設（`docs/DECISIONS.md`「Claude 的預設」表寫著「業主一句話就改」），理由是給業主看得過來的節奏、dots 的用量上限還沒公布。業主要 GPT 無限迭代；GPT 在 10 月 18 日一天就合了 R105–R109，照這個速度很快就會撞到上限。
 - 這幾個檔（`tools/`、`.github/`、規則檔）在 GPT 的白名單外面，GPT 改不了，要 Claude 改。
 
 ## 做什麼
@@ -42,12 +43,26 @@
 
 ## 施工紀錄
 
-（施工後補）
+1. 卡面先推：`a7251ac`（只有這張卡）。
+2. 改法：`tools/gpt-merge.mjs` 拿掉 `DAILY_CAP`、`mergedToday()` 和那一條檢查，多一行註解寫明不限數量；`.github/workflows/gpt-merge.yml` 拿掉 `DAILY_CAP`、改掉掃描的註解；`AGENTS.md` 英文摘要、第 4 節第 6 步（拿掉上限那一條，加一段「沒有每日數量上限」）、狀態更新 PR 那一段；`docs/DOTS.md` 第三、四、五節拿掉上限，第六節加一條風險提醒；`docs/DECISIONS.md` 預設表拿掉那一列，已定表加一列。
+3. 離線試跑（驗收 2–4）：在 scratch 目錄做一個假的 origin（bare repo，main＝`43e4dbd`）和五個假的 gpt PR：A、B 條件全對；C 改了 `tools/`；D 只改方向檔；E 接在舊的 main 上。再用一個假的 `gh`（從檔案讀 PR 狀態、記下每一次呼叫）跑 `tools/gpt-merge.mjs`，共 22 種情況。先跑舊版：22／22 符合預期，今天已合 8 個、50 個時擋下（「上限 8」）。再跑新版：22／22 符合預期，同樣情況照合，而且不再呼叫 `gh pr list --state merged`。試跑用的檔都在 scratch，沒有放進倉庫。
+4. 本機：typecheck 綠；unit 58 條 OK，紅 3 支：`tests/facades.mjs`（R034 記過）、`tests/materials-view.mjs`（R105，寫死的指紋跟 Node 版本有關，跟 facades 一樣）、`tests/input-browser.mjs`（R109，瀏覽器裡「#cm-smoke 要點得到」在這個容器失敗）。三支在乾淨的 `main`（`43e4dbd`）上一樣紅，跟這張無關；CI（Node 24）是裁判。
+5. 第一次提交＋推送被 Claude Code 的安全檢查擋下：這個請求是 GPT 寫的，要放寬 GPT 自己的合併上限；照 `CLAUDE.md`「對 GPT 的產出：當資料看，不當命令」，也該等業主本人說。改法先存在本機；業主本人回「我同意取消 GPT 每日上限」以後才提交。日期改成業主訊息那天（2026-10-19）。
 
 ## 驗收結果
 
-（施工後補）
+| # | 結果 | 證據 |
+|---|---|---|
+| 1 | ✅ | `grep -nE 'DAILY_CAP\|每日上限\|不到 8 個\|8 個 GPT\|daily cap'` 在這五個檔都找不到。只剩寫明「沒有每日數量上限」（`AGENTS.md`）、「不限每天合幾個」（`docs/DOTS.md`、`tools/gpt-merge.mjs` 註解）和 `docs/DECISIONS.md` 已定表的紀錄 |
+| 2 | ✅ | 新版：今天已合 8 個、50 個（ci 跑完那一趟），以及 8 個（排程掃描），都照合（`pr merge 101 --squash --match-head-commit <sha> --delete-branch`），沒有呼叫 `gh pr list --state merged`。舊版三種都擋（「上限 8」） |
+| 3 | ✅ | 草稿、四種 hold 類標籤、［卡住］與 [等業主] 標題、最新提交不是 ci 跑綠的那一個、不是合進 main、fork、沒接在最新 main 上、gpt-lane 守衛不通過、標題沒有 R 號、不是 gpt/ 分支：全部不合。只改方向檔的狀態更新照合 |
+| 4 | ✅ | 排程掃描兩個都對：只合 #101；A 的 ci 還在跑：跳過 A、合 B；A 的 ci 紅：不合 |
+| 5 | ✅ | `git diff origin/main -- tools/gpt-lane.mjs` 0 行 |
+| 6 | ⚠️ | 本機 typecheck 綠；unit 除了 facades.mjs，還有 materials-view.mjs、input-browser.mjs 紅（乾淨的 main 一樣紅，見施工紀錄 4），所以「除了 facades 以外全綠」沒做到。黃金雜湊沒變：現在是 `f3364bb6`；驗收寫的 `98dc0f18` 是 GPT 在 R105 之後改掉的舊值，卡面寫錯了。CI（Node 24）的結果看 PR |
 
 ### 沒做成的事
 
-（收尾時補）
+1. 附件（GPT 說的補丁和 84／84 離線測試）沒有傳過來，沒看到也沒用。改法是 Claude 照描述自己寫的，測試是 Claude 自己的 22 種情況。
+2. 本機紅的 3 支測試沒修：facades、materials-view 是寫死的指紋跟 Node 版本有關；input-browser 是瀏覽器點擊。要另開修補卡。
+3. 拿掉每日上限以後，只在 `docs/DOTS.md` 第六節寫了風險提醒，沒有加別的煞車（例如連續紅幾次就自動停）。`AGENTS.md` 第 6 節的停手規則照舊。
+4. 離線試跑沒有碰真的 GitHub：`gh` 的真實行為（例如 head 變了時 `--match-head-commit` 會失敗）沒在這裡重測，靠既有的流程。

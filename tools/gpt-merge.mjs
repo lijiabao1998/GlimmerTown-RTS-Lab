@@ -1,21 +1,15 @@
 // GPT 車道的合併員，由 .github/workflows/gpt-merge.yml 呼叫（用 main 上的這一份，PR 改不到）。
 // 兩種模式：ci 跑完（HEAD_SHA、HEAD_BRANCH 有值）只看那一個 PR；排程掃描（沒有值）看所有開著的 gpt/* PR。
 // 只讀 git 物件、只呼叫 GitHub API，不執行 PR 裡的任何程式。條件全部成立才合（AGENTS.md 第 4 節）。
+// 不限每天合幾個（業主 2026-10-19，R035）：條件全對就合；排程掃描一輪最多合一個。
 import { execFileSync } from 'node:child_process';
 
-const DAILY_CAP = Number(process.env.DAILY_CAP || 8);
 const HOLD = ['等業主', '卡住', 'needs-human', 'hold'];
 const DIR_FILE = 'docs/GPT-方向.md';
 const run = (cmd, args, opt = {}) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 << 20, ...opt });
 const gh = (...a) => run('gh', a);
 const git = (...a) => run('git', ['-c', 'core.quotepath=off', ...a]);
 const say = m => console.log(m);
-
-const today = new Date().toISOString().slice(0, 10);
-function mergedToday() {
-  const merged = JSON.parse(gh('pr', 'list', '--state', 'merged', '--limit', '60', '--json', 'headRefName,mergedAt,isCrossRepository'));
-  return merged.filter(p => !p.isCrossRepository && p.headRefName.startsWith('gpt/') && (p.mergedAt || '').startsWith(today)).length;
-}
 
 // 這個提交上有沒有一趟跑完而且綠的 ci（pull_request 事件），而且沒有還在跑或紅的
 function ciGreen(sha) {
@@ -46,8 +40,6 @@ function tryMerge(pr, sha) {
   // 用 main 上的守衛再驗一次（ci 那一趟跑的可能是 PR 改過的工作流）
   try { say(run('node', ['tools/gpt-lane.mjs'], { env: { ...process.env, BASE: 'origin/main', HEAD_REF: sha, BRANCH: pr.headRefName } })); }
   catch (e) { return `GPT 車道守衛不通過：\n${e.stdout || e.message}`; }
-  const n = mergedToday();
-  if (!statusOnly && n >= DAILY_CAP) return `今天（UTC ${today}）已經合了 ${n} 個 GPT PR，上限 ${DAILY_CAP}（明天的排程掃描會再試）`;
 
   gh('pr', 'merge', String(pr.number), '--squash', '--match-head-commit', sha, '--delete-branch');
   say(`已合併 PR #${pr.number}（${pr.title}）`);
