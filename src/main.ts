@@ -50,6 +50,7 @@ let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
 const r109 = q.get('noR109') !== '1';
+let lastRangeInfo = '';
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
 const r107 = q.get('noR107') !== '1'; // 只關煙團畫面；煙幕指令與視線模擬保持啟用
@@ -120,7 +121,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {
   w = createWorld(s);
   if (map) applyMap(w, MAP_RYE);   // R026：布陣預覽就要看到 Rye；同一條 map 指令記在紀錄第 0 步，重播時由 step 套（套過的不再套）
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1');
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
@@ -378,6 +379,7 @@ hud = initHud({
       mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
+      rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
     };
   },
   togglePause: () => { if (phase === 'battle') paused = !paused; },
@@ -447,7 +449,10 @@ renderer.setAnimationLoop(() => {
     if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= N || view.target.z >= N) fling.stop();
   }
   if (glide.active) { glide.at(t / 1000, camStep); view.target.x = camStep.x; view.target.z = camStep.z; }
-  view.update(alpha, simT(alpha), selected);
+  view.update(alpha, simT(alpha), selected, phase === 'battle');
+  // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
+  const rangeInfo = view.rangeInfo;
+  if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
   prodBar?.update();
@@ -470,7 +475,7 @@ const rts = {
     reset(SCRIPT_SEED, false, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1');
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -482,6 +487,7 @@ const rts = {
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,
   dashes: () => view.dashes,
+  rangePreview: () => view.range113 ? { ...view.range113.solution, triangles: view.range113.mesh.geometry.drawRange.count / 3, shown: view.range113.mesh.visible } : null,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0 } : null),
   men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n }),
