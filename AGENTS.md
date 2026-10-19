@@ -1,6 +1,6 @@
 # 微光小鎮·二戰 RTS 實驗線 — 給所有 AI 寫入者的規則
 
-> **English summary.** This is `lijiabao1998/GlimmerTown-RTS-Lab`, a WWII tactical RTS (TypeScript + three.js, single-file HTML on GitHub Pages). Read this file, `docs/迭代不改壞標準.md` and `docs/DECISIONS.md` before any change. Never force-push and never rewrite `main`'s history. Only Claude may merge its own PRs once CI is green, and may push to `main` (owner 2026-10-17 23:43); everyone else never pushes to `main`. GPT (OpenAI dots + Codex) works on `gpt/<topic>` branches under section 4; it opens PRs as drafts and, once every merge condition in section 4 holds (CI incl. `smoke` and `gpt-lane` green on the latest commit, not a draft, no hold label/title, branch contains latest `main`, daily cap), may merge them itself with `gh pr merge --squash --match-head-commit <sha>` (owner 2026-10-17); the `gpt-merge` workflow (after each CI run and hourly) checks the exact same conditions and stays as the fallback merger. GPT may only touch an allow-list of paths (`src/` except `src/render/post.ts`, `index.html`, its own cards, the to-do part of `docs/GPT-方向.md`, `tests/*.mjs`, `tools/golden.json`, `LOG.md`, `README.md`). The switch in `docs/GPT-方向.md` on `main` stops everything: anything other than exactly **運行** on the first line under `## 開關` blocks GPT merges. Never generate hate symbols (swastika, SS runes) or real Nazi leaders; insignia are procedural and generic.
+> **English summary.** This is `lijiabao1998/GlimmerTown-RTS-Lab`, a WWII tactical RTS (TypeScript + three.js, single-file HTML on GitHub Pages). Read this file, `docs/迭代不改壞標準.md` and `docs/DECISIONS.md` before any change. Never force-push and never rewrite `main`'s history. Only Claude may merge its own PRs once CI is green, and may push to `main` (owner 2026-10-17 23:43); everyone else never pushes to `main`. GPT (OpenAI dots + Codex) works on `gpt/<topic>` branches under section 4; it opens PRs as drafts and, once every merge condition in section 4 holds (CI incl. `smoke` and `gpt-lane` green on the latest commit, not a draft, no hold label/title, branch contains latest `main`; no daily limit since R035), may merge them itself with `gh pr merge --squash --match-head-commit <sha>` (owner 2026-10-17); the `gpt-merge` workflow (after each CI run and hourly) checks the exact same conditions and stays as the fallback merger. GPT may only touch an allow-list of paths (`src/` except `src/render/post.ts`, `index.html`, its own cards, the to-do part of `docs/GPT-方向.md`, `tests/*.mjs`, `tools/golden.json`, `LOG.md`, `README.md`). The switch in `docs/GPT-方向.md` on `main` stops everything: anything other than exactly **運行** on the first line under `## 開關` blocks GPT merges. Never generate hate symbols (swastika, SS runes) or real Nazi leaders; insignia are procedural and generic.
 
 業主 2026-10-16 開線。Claude 讀 `CLAUDE.md`（內容一致，另加 Claude 的職責）；GPT、Codex、Grok 等其他工具讀這份。
 
@@ -65,8 +65,9 @@
    - ci 在 PR 最新提交上全綠；PR 不是草稿；沒有「等業主」「卡住」「needs-human」「hold」標籤，標題不以［等業主］［卡住］開頭；
    - 分支接在最新的 `main` 上（落後就把 `main` 合進分支，不 rebase、不 force）；
    - GPT 車道守衛（`tools/gpt-lane.mjs`，用 `main` 上那一份）通過；
-   - PR 標題是「R<號>［待辦 N］主題」（只改方向檔的狀態更新 PR 除外）；
-   - 今天（UTC）合併的 GPT PR 還不到 8 個（只改方向檔的狀態更新不算；被上限擋下的，隔天的每小時掃描會接著合）。
+   - PR 標題是「R<號>［待辦 N］主題」（只改方向檔的狀態更新 PR 除外）。
+
+   **沒有每日數量上限**（業主 2026-10-19，R035）：條件全對就合，不數今天合了幾個；仍然一次只做一個 PR、一波接一波。
 
    **GPT 自己合的做法**（跟 `tools/gpt-merge.mjs` 一樣）：
    - 先 `git fetch origin`，確認 `origin/main` 是 PR 最新提交 `<sha>` 的祖先（`git merge-base --is-ancestor origin/main <sha>`）；
@@ -81,7 +82,7 @@
 - **白名單以外的檔案**（改名也算：舊路徑、新路徑都要在白名單裡）。白名單：`src/`（`src/render/post.ts` 除外）、`index.html`、`docs/tasks/R100` 以上的卡、`docs/GPT-方向.md`、`tests/*.mjs`、`tools/golden.json`、`LOG.md`、`README.md`。其他（`.github/`、`tools/`、規則檔、`package*.json`、`vite.config.*`、`.npmrc`、`public/`……）都不准。
 - 不是剛好新增一張卡；卡號小於 R100 或不比 main 上用過的大；卡頭缺機讀欄；`sim=no` 卻改了模擬或黃金雜湊；改了黃金雜湊卻沒寫舊→新；第一個提交不是只有卡；驗收段落在第一個提交之後被改；只有卡面還沒施工。
 
-**狀態更新 PR**（只改 `docs/GPT-方向.md`，例如把開關改成停止、記卡住表）：不用卡、不用 R 號標題，分支 `gpt/status-<日期>`、標題「方向檔：<做了什麼>」，不算每日上限。
+**狀態更新 PR**（只改 `docs/GPT-方向.md`，例如把開關改成停止、記卡住表）：不用卡、不用 R 號標題，分支 `gpt/status-<日期>`、標題「方向檔：<做了什麼>」。
 
 ## 5. 仍要等業主（PR 標「等業主」，GPT 不自己合、也不會被自動合；等的時候 GPT 可以先做下一項）
 
