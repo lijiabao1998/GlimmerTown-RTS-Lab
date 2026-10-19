@@ -90,6 +90,24 @@ function changes(on, off) {
   }
   return points;
 }
+function pixelDiff(a, b) {
+  let count = 0, maxDelta = 0, minX = a.width, minY = a.height, maxX = -1, maxY = -1;
+  const quadrants = [0, 0, 0, 0];
+  for (let i = 0; i < Math.max(a.pixels.length, b.pixels.length); i += 4) {
+    let delta = 0;
+    for (let k = 0; k < 4; k++) delta = Math.max(delta, Math.abs((a.pixels[i + k] ?? -1) - (b.pixels[i + k] ?? -1)));
+    if (!delta) continue;
+    const x = (i / 4) % a.width, y = Math.floor(i / 4 / a.width);
+    count++; maxDelta = Math.max(maxDelta, delta);
+    minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    quadrants[(y >= a.height / 2 ? 2 : 0) + (x >= a.width / 2 ? 1 : 0)]++;
+  }
+  return { count, maxDelta, bounds: count ? [minX, minY, maxX, maxY] : null, quadrants };
+}
+function saveMap(name, sample) {
+  fs.mkdirSync(path.join(ROOT, 'shots'), { recursive: true });
+  fs.writeFileSync(path.join(ROOT, 'shots', name), Buffer.from(sample.png.split(',')[1], 'base64'));
+}
 function checkShape(on, off, shape, label) {
   const points = changes(on, off), w = on.width, s = w / 64;
   assert(points.length >= 8, `${label}: visible orange raster exists, including the smallest mobile ring`);
@@ -135,7 +153,10 @@ async function main() {
     const settle = async () => { await sleep(120); await frames(); };
     const state = () => E('({tick:__rts.tick(),hash:__rts.hash(),log:__rts.log(),phase:__rts.phase()})');
     const hint = () => E('document.getElementById("hint").textContent');
-    const sample = () => E(`(()=>{const c=document.getElementById('minimap');return {width:c.width,height:c.height,pixels:Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data),webgl:document.querySelector('body>canvas').toDataURL(),calls:__rts.info().calls,triangles:__rts.info().triangles,hud:document.querySelector('#hud .top').textContent}})()`);
+    // Reading the production context repeatedly can change Chrome's raster backend. Read a
+    // one-use CPU scratch copy instead, preserving both production pixels and exact assertions.
+    const sample = () => E(`(()=>{const c=document.getElementById('minimap'),copy=document.createElement('canvas');copy.width=c.width;copy.height=c.height;const ctx=copy.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,0,0);return {width:c.width,height:c.height,pixels:Array.from(ctx.getImageData(0,0,copy.width,copy.height).data),png:c.toDataURL(),webgl:document.querySelector('body>canvas').toDataURL(),calls:__rts.info().calls,triangles:__rts.info().triangles,hud:document.querySelector('#hud .top').textContent}})()`);
+    const restartContext = () => E('({tick:__rts.tick(),hash:__rts.hash(),log:__rts.log(),phase:__rts.phase(),selected:__rts.selected(),cam:__rts.cam(),viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio}})');
     const viewport = async mobile => {
       await page.send('Emulation.setDeviceMetricsOverride', { width: mobile ? 412 : 1280, height: mobile ? 860 : 800, deviceScaleFactor: 1, mobile });
       await page.send('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: 5 });
@@ -234,14 +255,32 @@ async function main() {
       await button('b-restart', mobile);
       assert.equal(await E('__rts.phase()'), 'build', `${size}: native restart begins a new build`);
       assert(!(await hint()).includes('疑似敵砲'), `${size}: restart clears intelligence hint`);
-      const restarted = await sample();
+      const restarted = await sample(), restartedContext = await restartContext();
       assert(restarted.calls <= 20 && restarted.triangles <= 80000, `${size}: restart opening stays within budget`);
-      await fresh('noR115=1'); await settle(); assert.deepEqual((await sample()).pixels, restarted.pixels, `${size}: native restart has no previous intelligence raster`);
+      await fresh('noR115=1'); await settle();
+      const original = await sample(), originalContext = await restartContext(), diff = pixelDiff(original, restarted);
+      if (diff.count || JSON.stringify(originalContext) !== JSON.stringify(restartedContext)) {
+        saveMap(`r115-${size}-restart-actual.png`, restarted);
+        saveMap(`r115-${size}-restart-reference.png`, original);
+      }
+      assert.deepEqual(restartedContext, originalContext, `${size}: restart fixture has identical world, camera, selection and viewport; actual=${JSON.stringify(restartedContext)} reference=${JSON.stringify(originalContext)}`);
+      assert.deepEqual(original.pixels, restarted.pixels, `${size}: native restart has no previous intelligence raster; diff=${JSON.stringify(diff)}`);
       await fresh('noR015=1'); await replay(654);
       assert.equal(await E('document.getElementById("minimap")'), null, `${size}: noR015 creates no minimap canvas`);
       assert(!(await hint()).includes('疑似敵砲'), `${size}: noR015 leaves no orphan intelligence hint`);
       record(`OK real Chrome ${size}: all three levels, exact expiry, replay, restart, native minimap, valves, HUD and unchanged WebGL`);
     };
+    // Isolated observation only: demonstrate whether direct readback changes this Chrome's
+    // raster backend. Its page is discarded before all baseline/mutant guards; no GPU outcome
+    // is required for success, and the production A/B pages never read their own 2D context.
+    await viewport(false); await fresh('noR115=1'); await settle();
+    const readbackBefore = await sample(), readbackContext = await restartContext();
+    await E(`(()=>{const c=document.getElementById('minimap'),ctx=c.getContext('2d');for(let i=0;i<16;i++)ctx.getImageData(0,0,c.width,c.height)})()`);
+    await settle(); const readbackAfter = await sample();
+    saveMap('r115-readback-before.png', readbackBefore); saveMap('r115-readback-after.png', readbackAfter);
+    const readbackDiagnostic = `R115 diagnostic direct readback: diff=${JSON.stringify(pixelDiff(readbackBefore, readbackAfter))}; same context=${JSON.stringify(await restartContext()) === JSON.stringify(readbackContext)}`;
+    record(readbackDiagnostic);
+    if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### R115 readback diagnostic\n${readbackDiagnostic}\n`);
     await baselineCase(false); await baselineCase(true);
     // Native click at a genuinely hidden gun must not become an exact-unit attack order.
     for (const mobile of [false, true]) {

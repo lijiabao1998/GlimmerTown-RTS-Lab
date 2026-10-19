@@ -4,7 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
-| R115 | 2026-10-19 | GPT | 待辦11反砲兵粗略情報：三階量化砲聲、600tick到期、每方8區；小地圖橙虛線與noR115；不改AI／戰鬥 | Node13＋35負控、UI21＋31負控；64場76800tick戰鬥差分一致；本機unit108.8秒僅4支Chrome受限；golden實測89aa0b92 | gpt/counterbattery-intel-r115（施工／驗收中） | 本機Chrome受限，最終守衛／CI圖審／發布待驗；Android未測；R114仍卡住 |
+| R115 | 2026-10-19 | GPT | 待辦11反砲兵粗略情報：三階量化砲聲、600tick到期、每方8區；小地圖橙虛線與noR115；不改AI／戰鬥 | Node13＋35負控、UI21＋31負控；64場76800tick戰鬥差分一致；golden89aa0b92；首CI僅新browser restart像素紅，已補副本讀回與差分待驗 | [#48](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/48)（草稿驗收中） | 本機Chrome受限；首CI未走到手機／負控／smoke，未完成圖審發布；Android未測；R114仍卡住 |
 | R114 | 2026-10-19 | GPT | 修補23：help文字獨立捲動、關閉區固定；原文／回呼不變 | CI Chrome4組／4負控、unit191秒與lane綠；四標準圖相同、4張help特寫已看；手機12／22156、golden不變 | [#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) | 卡住：smoke197.4秒手機雙擊鏡頭未移，根因資料不足；不重跑賭綠，待原路徑診斷。本機Chrome受限、Android未測；未合併發布 |
 | R113 | 2026-10-19 | GPT | 待辦10單選射程／近限與砲擊散布上界，固定一個mesh；noR113；多選另列24 | Node9／15負控、Chrome7／7負控；CI unit153.8秒、smoke195.6秒綠；手機12／22156；四圖不變、六特寫已看；golden不變 | [#46](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/46) | 首次help溢出已移除新段；舊help缺口列修補23；本機Chrome受限、Android未測；收尾head／發布待核驗 |
 | R112 | 2026-10-19 | GPT | 修補22：世界替換立即失效小地圖底圖，同幀只讀同一World，保留10Hz與dirty快取 | Node11組／19負控制；CI Chrome4組／4負控制、unit100.4秒、smoke197.0秒綠；手機12／22156；四圖與換局特寫已看；golden不變 | [#45](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/45) | 本機Chrome受限、unit114.8秒非全綠；Android未測；收尾head與合後發布待核驗 |
