@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
+import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
@@ -51,6 +52,7 @@ const r014 = q.get('noR014') !== '1';
 // R015 小地圖。逃生閥 ?noR015=1
 const r015 = q.get('noR015') !== '1';
 const r116 = q.get('noR116') !== '1';
+const r118 = q.get('noR118') !== '1'; // 只關戰壕選項與呈現；舊紀錄中的指令照常執行
 setVegetation(r116); // 只關模型與提示；新局地形仍由明確的 map 指令啟用
 const r115 = q.get('noR115') !== '1'; // 只關估計區與提示，不改情報模擬
 let minimap: Minimap | undefined;
@@ -97,24 +99,28 @@ let audioPageActive = true, audioHelpActive = false;
 function syncBattleAudio() {
   battleAudio?.setActive(phase === 'battle' && !paused && !reportShown && !audioHelpActive && !document.hidden && audioPageActive);
 }
-let plan: BuildCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
+type PlanCmd = BuildCmd | TrenchCmd;
+let plan: PlanCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
+let pickTrench = -1, trenchRot = 0;
+const TRENCH_LABEL = ['直段', '折線', '交通壕', '加固段'];
+const TRENCH_SHAPE = ['2格直線', '3格L形', '4格直線', '2格加固'];
 const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡' };
 const BUILD_WHY: Record<string, string> = {
   tick: '已經開戰，不能再蓋', map: '超出地圖', foreign: '那是敵方半場（紅色）；只能蓋在我方半場（藍色）',
-  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: '那裡已經有房子',
-  unit: '有單位站在那裡', blocked: '會堵死通路', gap: '太靠近別的房子（要隔一格）',
+  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: r118 ? '那裡已有房子或戰壕' : '那裡已經有房子',
+  trench: '那裡已經有戰壕', unit: '有單位站在那裡', blocked: '會堵死通路', gap: '太靠近別的房子（要隔一格）',
 };
 const BUILD_TIP = '布陣：點藍色地面蓋房子當掩體、擋視線；點蓋好的房子拿掉；蓋好按「開戰」';
 
-// 預覽＝真的世界的複本套上這次的布陣（同一支 applyBuild，規則只有一份）
+// 預覽＝真的世界的複本套上這次的布陣（同一支 applyBuild／applyTrench，規則只有一份）
 function previewWorld(): World {
   const pv = structuredClone(w);
-  for (const c of plan) applyBuild(pv, c);
+  for (const c of plan) { if (c.t === 'trench') applyTrench(pv, c); else applyBuild(pv, c); }
   pv.events = [];
   return pv;
 }
 function refreshPreview() { if (phase === 'build') view.setWorld(previewWorld(), SIDE_PLAYER); }
-const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.kind)?.cost ?? 0), 0);
+const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + ((c.t === 'trench' ? trenchKind(c.kind) : buildKind(c.kind))?.cost ?? 0), 0);
 
 // R018 電腦對手：開戰時送 ai 指令（記在指令紀錄裡，重播自動一致）。?ai=1|2|3 選難度；逃生閥 ?noR018=1＝敵人原地還擊
 const r018 = q.get('noR018') !== '1';
@@ -139,7 +145,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegeta
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1');
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118);
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
@@ -175,21 +181,28 @@ function placeAt(cx: number, cy: number) {
   // 點到已經放好的房子＝拿掉它（只認這次布陣的，地圖上原本的房子不算）
   const hitB = view.buildingAt(cx, cy, innerWidth, innerHeight);
   if (hitB) {
-    const k = plan.findIndex(c => { const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return hitB[0] >= c.x && hitB[1] >= c.z && hitB[0] < c.x + fw && hitB[1] < c.z + fd; });
+    const k = plan.findIndex(c => { if (c.t !== 'build') return false; const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return hitB[0] >= c.x && hitB[1] >= c.z && hitB[0] < c.x + fw && hitB[1] < c.z + fd; });
     if (k >= 0) { plan.splice(k, 1); buildHint = '拿掉了一棟'; refreshPreview(); ui(); return; }
   }
   const p = view.groundAt(cx, cy, innerWidth, innerHeight);
   if (!p) return;
   const gx = Math.floor(p.x), gz = Math.floor(p.z);
   if (gx < 0 || gz < 0 || gx >= N || gz >= N) return;
+  // 一段壕溝的任一實際格都能拿掉整段；L形空角不是戰壕。
+  const trenchIndex = plan.findIndex(c => c.t === 'trench' && trenchCells(c).some(([x, z]) => x === gx && z === gz));
+  if (trenchIndex >= 0) { plan.splice(trenchIndex, 1); buildHint = '拿掉了一段戰壕'; refreshPreview(); ui(); return; }
   const kd = buildKind(pickKind)!, rot = kd.w !== kd.d ? pickRot : 0;
-  const cmd: BuildCmd = { t: 'build', side: SIDE_PLAYER, kind: pickKind, x: gx, z: gz, ...(rot ? { rot } : {}) };
-  const err = buildError(previewWorld(), cmd);
+  const cmd: PlanCmd = pickTrench >= 0
+    ? { t: 'trench', side: SIDE_PLAYER, kind: pickTrench, x: gx, z: gz, rot: trenchRot }
+    : { t: 'build', side: SIDE_PLAYER, kind: pickKind, x: gx, z: gz, ...(rot ? { rot } : {}) };
+  const label = cmd.t === 'trench' ? TRENCH_LABEL[cmd.kind] : BUILD_LABEL[cmd.kind];
+  const cost = cmd.t === 'trench' ? trenchKind(cmd.kind)!.cost : kd.cost;
+  const pv = previewWorld(), err = cmd.t === 'trench' ? trenchError(pv, cmd) : buildError(pv, cmd);
   if (err) {
-    buildHint = err === 'points' ? `建材不夠（剩 ${pointsLeft()}，${BUILD_LABEL[pickKind]}要 ${kd.cost}）` : BUILD_WHY[err] ?? '這裡不能蓋';
+    buildHint = err === 'points' ? `建材不夠（剩 ${pointsLeft()}，${label}要 ${cost}）` : BUILD_WHY[err] ?? '這裡不能蓋';
     view.setMarker(gx + 0.5, gz + 0.5, simT(), true);
   } else {
-    plan.push(cmd); buildHint = `${BUILD_LABEL[pickKind]}蓋好了，剩建材 ${pointsLeft()}`;
+    plan.push(cmd); buildHint = `${label}蓋好了，剩建材 ${pointsLeft()}`;
     view.setMarker(gx + 0.5, gz + 0.5, simT(), false);
     refreshPreview();
   }
@@ -210,7 +223,7 @@ function tick() {
   step(w, now);
   if (r109 && priorWinner < 0 && w.winner >= 0) clearGestureInput();
   view.onEvents(w.events, simT());
-  if (minimap && (priorMap !== w.map || w.events.some(e => e.e === 'stage' || e.e === 'build' || (e.e === 'impact' && e.kind === SHELL_HE)))) minimap.dirty();   // R015 地形變了才重畫底圖
+  if (minimap && (priorMap !== w.map || w.events.some(e => e.e === 'stage' || e.e === 'build' || e.e === 'trench' || (e.e === 'impact' && e.kind === SHELL_HE)))) minimap.dirty();   // R015 地形變了才重畫底圖
   statsStep(stats, w, w.events);
 }
 
@@ -430,6 +443,7 @@ let pausedBeforeHelp = false;
 if (r015) minimap = initMinimap({
   counterbattery: r115,
   vegetation: q.get('noR116') !== '1',
+  trenches: r118,
   world: () => view.world,
   visible: u => view.visibleUnit(u),
   view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
@@ -439,13 +453,14 @@ const help = initHelp({ open: () => { if (r109) clearGestureInput(); audioHelpAc
 buildBar = initBuildBar(BUILD_KINDS_NOW.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
   state: () => {
     const kd = buildKind(pickKind)!;
-    return { visible: phase === 'build', kind: pickKind, rot: pickRot, rotatable: kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };
+    return { visible: phase === 'build', kind: pickKind, trench: pickTrench >= 0 ? pickTrench : undefined, rot: pickTrench >= 0 ? trenchRot : pickRot, rotatable: pickTrench >= 0 || kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };
   },
-  pick: kind => { pickKind = kind; buildHint = `${BUILD_LABEL[kind]}（建材 ${buildKind(kind)!.cost}）：點藍色地面放下`; hud?.update(); },
-  rotate: () => { pickRot = 1 - pickRot; hud?.update(); },
-  undo: () => { if (plan.pop()) { buildHint = '拿掉了最後一棟'; refreshPreview(); hud?.update(); } },
+  pick: kind => { pickTrench = -1; pickKind = kind; buildHint = `${BUILD_LABEL[kind]}（建材 ${buildKind(kind)!.cost}）：點藍色地面放下`; hud?.update(); },
+  pickTrench: kind => { pickTrench = kind; trenchRot = 0; buildHint = `${TRENCH_LABEL[kind]}（建材 ${trenchKind(kind)!.cost}）：點藍色地面放下；再點任一壕格整段移除`; hud?.update(); },
+  rotate: () => { if (pickTrench >= 0) trenchRot = (trenchRot + 1) % 4; else pickRot = 1 - pickRot; hud?.update(); },
+  undo: () => { if (plan.pop()) { buildHint = '拿掉了最後一項'; refreshPreview(); hud?.update(); } },
   start: () => startBattle(),
-});
+}, r118 ? TRENCH_KINDS.map(k => ({ kind: k.kind, label: TRENCH_LABEL[k.kind], cost: k.cost, detail: `${TRENCH_SHAPE[k.kind]} · 建材 ${k.cost} · 承傷 ${k.cover}%` })) : []);
 
 // R117：背景／離頁即清尾音；BFCache只暫停，真正離開才關閉context。
 if (battleAudio) {
@@ -522,7 +537,7 @@ const rts = {
     reset(SCRIPT_SEED, false, false, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1');
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118);
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -573,7 +588,7 @@ const rts = {
   },
   cellOf: (p: number) => cellOf(p),
   phase: () => phase,
-  plan: () => JSON.parse(JSON.stringify(plan)) as BuildCmd[],
+  plan: () => JSON.parse(JSON.stringify(plan)) as PlanCmd[],
   startBattle: () => startBattle(),
 };
 (window as unknown as { __rts: typeof rts }).__rts = rts;

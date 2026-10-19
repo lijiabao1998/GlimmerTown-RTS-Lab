@@ -1,4 +1,5 @@
 // R006 自己建城：開戰前（第 0 步）的布陣指令。純函式、只用整數；亂數只用自己的種子狀態，不碰 World.rng。
+import { trenchAt, trenchPointsUsed } from './trenches.ts';
 import { clearVegetation } from './vegetation.ts';
 import { isqrt } from './math.ts';
 import { nextU32, randInt, type RngState } from './rng.ts';
@@ -31,7 +32,7 @@ export function territory(side: number, x: number, z: number): boolean {
 export function pointsUsed(w: World, side: number): number {
   let p = 0;
   for (const b of w.blds) if (b.builtBy === side) p += buildKind(b.kind)?.cost ?? 0;
-  return p;
+  return p + trenchPointsUsed(w, side);
 }
 
 // 佔地（rot=1 時寬深互換）
@@ -88,7 +89,7 @@ export function buildError(w: World, cmd: BuildCmd): string | null {
   }
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_ROAD) return 'road';
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_MUD) return 'mud';   // R026
-  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[idx(x, z)]) return 'occupied';
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[idx(x, z)] || trenchAt(w, x, z)) return 'occupied';
   for (const u of w.units) {
     if (!u.alive) continue;
     const ux = cellOf(u.x), uz = cellOf(u.z);

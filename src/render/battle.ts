@@ -15,6 +15,7 @@ import { Pipeline, type Style } from './post.ts';
 import { SmokeView } from './smoke.ts';
 import { RangePreview } from './rangePreview.ts';
 import { VegetationView } from './vegetation.ts';
+import { TrenchRaster } from './trenches.ts';
 
 // R027 人行道與黑白路緣（只有手排地圖；畫面開關）
 let streets27 = true;
@@ -169,13 +170,15 @@ export class BattleView {
   // 每一步之前記下在飛、會打中建築的穿甲彈（彈著事件沒有射手位置）
   private apSnap = { n: 0, sx: new Float64Array(MAX_SHELLS), sz: new Float64Array(MAX_SHELLS), ex: new Float64Array(MAX_SHELLS), ez: new Float64Array(MAX_SHELLS), bld: new Int32Array(MAX_SHELLS) };
 
+  readonly trench118: TrenchRaster;
   readonly vegetation116: VegetationView;
   get vegetationInfo(): string { return this.vegetation116.hint; }
   readonly range113: RangePreview | null;
   get rangeInfo(): string { return this.range113?.solution.legend ?? ''; }
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true) {
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true) {
     this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
+    this.trench118 = new TrenchRaster(r118); this.trench118.sync(w);
     this.range113 = r113 ? new RangePreview() : null;
     if (this.range113) this.scene.add(this.range113.mesh);
     this.scene.background = new THREE.Color(0x3c4a3a);
@@ -289,6 +292,7 @@ export class BattleView {
   // R006：換一個世界來畫（布陣預覽世界 ↔ 真的世界）；重畫地面貼圖與房子，單位網格不動
   setWorld(w: World, territorySide = -1) {
     this.w = w; this.mapId = w.map; this.territory = territorySide; this.observerHeights.clear();
+    this.trench118.sync(w, true);
     for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
     this.groundTex.needsUpdate = true;
     this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry();
@@ -359,6 +363,8 @@ export class BattleView {
         else if (d < rad + 0.4) { r = 150 + n * 12; g = 136 + n * 10; bl = 112 + n * 8; }
         else if (d < rad + 1.6 && n < 0.55) { r *= 0.72; g *= 0.7; bl *= 0.68; }   // 焦痕
       }
+      const trench = !b ? this.trench118.pixel(i, px, py) : -1;
+      if (trench >= 0) { r = trench >>> 16; g = (trench >>> 8) & 255; bl = trench & 255; }
       const o = (gz * W + gx) * 4;
       this.groundPx[o] = Math.max(0, Math.min(255, r)); this.groundPx[o + 1] = Math.max(0, Math.min(255, g));
       this.groundPx[o + 2] = Math.max(0, Math.min(255, bl)); this.groundPx[o + 3] = 255;
@@ -380,6 +386,13 @@ export class BattleView {
     if (this.r8) this.vehicles8(events, simT);
     if (this.r4) { this.frameNo++; for (const e of events) this.fx4(e, simT); }   // 世界剛走一步：可見度快取作廢
     let townDirty = false, groundDirty = false, vegetationDirty = false;
+    const trenchEvent = events.some(e => e.e === 'trench');
+    if (trenchEvent) vegetationDirty = true;   // noR118 只隱藏壕溝，仍同步模擬已清除的植被。
+    if (this.trench118.sync(this.w, trenchEvent)) {
+      // 只在布陣狀態改變時整圖重刻，包含新接線的舊鄰格與取消後的空格。
+      for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
+      groundDirty = true; vegetationDirty = true;
+    }
     for (const e of events) {
       if (e.e === 'stage') {
         townDirty = true;

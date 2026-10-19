@@ -146,7 +146,8 @@ export type SimEvent =
   | { e: 'impact'; kind: number; x: number; z: number; bld: number; r?: number }   // R022 r：爆炸半徑（只有迫擊砲這種小號的才帶；畫面用）
   | { e: 'kill'; unit: number }
   | { e: 'stage'; bld: number; stage: number }
-  | { e: 'build'; bld: number };
+  | { e: 'build'; bld: number }
+  | { e: 'trench' };
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
@@ -158,6 +159,8 @@ export interface SmokeCloud { id: number; side: number; x: number; z: number; bo
 
 // R115：只保存量化聲源；side 是收到情報的一方，cell 是粗區內 4×4 個 2×2 子區的索引。
 export interface CounterbatteryReport { side: number; zone: number; cell: number; shots: number; last: number }
+
+export interface TrenchSegment { side: number; kind: number; x: number; z: number; rot: number }
 
 export interface World extends RngState {
   seed: number;
@@ -175,6 +178,7 @@ export interface World extends RngState {
   ai?: AiState[];         // R018：哪一方由電腦指揮（ai 指令設定）
   eco?: EcoState;         // R019：補給、指揮部、生產佇列
   vegetation?: { version: number; cells: Uint8Array }; // R116：明確啟用才保存，0 空／1 樹籬／2 小樹林
+  trenches?: { version: 1; segments: TrenchSegment[] }; // R118：只有成功布陣才保存
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
   smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
   counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
@@ -328,6 +332,10 @@ export function hashWorld(w: World): string {
   if (w.vegetation) {
     f.int(0x5647).int(w.vegetation.version).int(w.vegetation.cells.length);
     for (const c of w.vegetation.cells) f.int(c);
+  }
+  if (w.trenches) {
+    f.int(0x5452).int(w.trenches.version).int(w.trenches.segments.length);
+    for (const s of w.trenches.segments) f.int(s.side).int(s.kind).int(s.x).int(s.z).int(s.rot);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
   if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
