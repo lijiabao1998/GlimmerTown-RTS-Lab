@@ -2,12 +2,12 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx, BK_CHURCH,
+  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
-import { buildTown, smokeSources, buildingGeo, bldColors, wallHeight, RUBBLE_COLORS, ROOF_RISE } from './buildings.ts';
+import { buildTown, smokeSources, buildingGeo, bldColors, wallHeight, wallShown, wallBounds, RUBBLE_COLORS, roofRise } from './buildings.ts';
 import { Geo } from './geo.ts';
 import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING, RISE_S } from './fx.ts';
 import { tankHull, tankTurret, howitzer, observer, soldier } from './unitArt.ts';
@@ -269,7 +269,10 @@ export class BattleView {
       const t = w.tick / 20;
       for (const b of w.blds) {
         this.lastStage[b.id] = stageOf(b);
-        if (stageOf(b) === STAGE_ROOFLESS) this.addEmitter(E_SMOKE, b.id, b.x, b.z, b.w, b.d, wallHeight(b), t, Infinity, false);
+        if (stageOf(b) === STAGE_ROOFLESS) {
+          const bounds = wallShown(b) ? wallBounds(b) : null;
+          this.addEmitter(E_SMOKE, b.id, bounds?.x0 ?? b.x, bounds?.z0 ?? b.z, bounds ? bounds.x1 - bounds.x0 : b.w, bounds ? bounds.z1 - bounds.z0 : b.d, wallHeight(b) * (bounds ? 0.72 : 1), t, Infinity, false);
+        }
       }
     }
   }
@@ -687,7 +690,7 @@ export class BattleView {
       const b = this.w.blds[e.bld - 1];
       if (!b) return;
       if (this.r16 && this.ghosts) {
-        this.ghosts.add(buildingGeo(new Geo(), b, STAGE_INTACT), t, wallHeight(b) + (ROOF_RISE[b.kind] ?? 0.32), b.x + b.w / 2, b.z + b.d / 2, hash2(b.id, 5, 91), true);
+        this.ghosts.add(buildingGeo(new Geo(), b, STAGE_INTACT), t, wallHeight(b) + roofRise(b.kind), b.x + b.w / 2, b.z + b.d / 2, hash2(b.id, 5, 91), true);
         this.rising.set(b.id, t + RISE_S);
       }
       if (this.lastStage.length > b.id) this.lastStage[b.id] = STAGE_INTACT;
@@ -701,21 +704,25 @@ export class BattleView {
   // 建築換階段：完好 → 沒屋頂＝屋頂炸飛、起火；任何 → 瓦礫＝倒塌殘影沉進地面、大團揚塵、碎塊四散
   private stage4(b: Building, from: number, to: number, t: number) {
     const s = this.fxSeq++, H = (k: number, salt: number) => hash2(s, k, salt);
-    const cx = b.x + b.w / 2, cz = b.z + b.d / 2, wallH = wallHeight(b), rise = ROOF_RISE[b.kind] ?? 0.32, col = bldColors(b.kind);
+    const cx = b.x + b.w / 2, cz = b.z + b.d / 2, wallH = wallHeight(b), rise = roofRise(b.kind), col = bldColors(b.kind);
+    const bounds = wallShown(b) ? wallBounds(b) : null;
+    const fx = bounds?.x0 ?? b.x, fz = bounds?.z0 ?? b.z, fw = bounds ? bounds.x1 - bounds.x0 : b.w, fd = bounds ? bounds.z1 - bounds.z0 : b.d;
     const wall = col.wall.getHex(), roof = col.roof.getHex();
     if (from === STAGE_INTACT && to !== STAGE_INTACT) {
       const n = Math.min(20, 10 + 2 * b.w * b.d);
       for (let k = 0; k < n; k++) {
-        const x = b.x + 0.15 + H(k, 1) * (b.w - 0.3), z = b.z + 0.15 + H(k, 2) * (b.d - 0.3);
+        const inset = bounds ? 0.02 : 0.15;
+        const x = fx + inset + H(k, 1) * (fw - 2 * inset), z = fz + inset + H(k, 2) * (fd - 2 * inset);
         this.debris!.spawn({ x, y: wallH + rise * 0.5, z, vx: (x - cx) * 1.6 + (H(k, 3) - 0.5), vz: (z - cz) * 1.6 + (H(k, 4) - 0.5), vy: 2.2 + 2.4 * H(k, 5), g: 9, t0: t, life: 3.5 + 1.5 * H(k, 6), s0: 0.07 + 0.06 * H(k, 7), s1: 0.025, c0: roof, spin: 6 + 8 * H(k, 8), seed: H(k, 9) });
       }
       this.glow!.spawn({ x: cx, y: wallH * 0.7, z: cz, t0: t, life: 0.2, s0: 0.3, s1: 0.85, c0: 0xffe8a0, c1: 0xff7020 });
-      for (let k = 0; k < 6; k++) this.puff!.spawn({ x: cx + (H(k, 10) - 0.5) * b.w, y: wallH, z: cz + (H(k, 11) - 0.5) * b.d, vy: 0.45, t0: t + 0.04 * k, life: 2.2 + H(k, 12), s0: 0.14, s1: 0.5, c0: 0x9a8b74, c1: 0x9c9384 });
+      for (let k = 0; k < 6; k++) this.puff!.spawn({ x: cx + (H(k, 10) - 0.5) * fw, y: wallH, z: cz + (H(k, 11) - 0.5) * fd, vy: 0.45, t0: t + 0.04 * k, life: 2.2 + H(k, 12), s0: 0.14, s1: 0.5, c0: 0x9a8b74, c1: 0x9c9384 });
       this.shake(0.035, cx, cz, t);
     }
     if (to === STAGE_ROOFLESS) {
-      this.addEmitter(E_FIRE, b.id, b.x + 0.15, b.z + 0.15, b.w - 0.3, b.d - 0.3, wallH * 0.72, t, t + 20, false);
-      this.addEmitter(E_SMOKE, b.id, b.x, b.z, b.w, b.d, wallH * 0.72, t + 0.4, Infinity, false);
+      const inset = bounds ? 0.02 : 0.15;
+      this.addEmitter(E_FIRE, b.id, fx + inset, fz + inset, fw - 2 * inset, fd - 2 * inset, wallH * 0.72, t, t + 20, false);
+      this.addEmitter(E_SMOKE, b.id, fx, fz, fw, fd, wallH * 0.72, t + 0.4, Infinity, false);
       return;
     }
     if (to !== STAGE_RUBBLE) return;
@@ -890,7 +897,8 @@ export class BattleView {
       if (dup) continue;
       const frac = b.hp / b.maxHp;
       this.barColor.copy(frac > 0.7 ? C_BLD_HI : C_BLD_LO);
-      this.bar9(-b.id, b.x + b.w / 2, wallHeight(b) + (ROOF_RISE[b.kind] ?? 0.32) + 0.35, b.z + b.d / 2, Math.min(1.2, 0.5 + 0.25 * Math.max(b.w, b.d)), frac, frac, this.barColor, 0.7);
+      const h = wallHeight(b) * (wallShown(b) && stageOf(b) === STAGE_ROOFLESS ? 0.72 : 1);
+      this.bar9(-b.id, b.x + b.w / 2, h + roofRise(b.kind) + 0.35, b.z + b.d / 2, Math.min(1.2, 0.5 + 0.25 * Math.max(b.w, b.d)), frac, frac, this.barColor, 0.7);
     }
     const bg = this.barBg!, fill = this.barFill!;
     bg.count = this.nb9; fill.count = this.nf9;
@@ -1002,7 +1010,7 @@ export class BattleView {
       } else if (e.e === 'stage') {
         const b = w.blds[e.bld - 1];
         const keepBelow = e.stage === STAGE_RUBBLE ? -1 : wallHeight(b) * 0.72 * 0.7;   // 空殼的牆頂是鋸齒（七成到十成）
-        for (let i = 0; i < HOLE_CAP; i++) if (H.live[i] && H.bld[i] === b.id && H.y[i] + H.h[i] / 2 > keepBelow) { H.live[i] = 0; this.holesDirty = true; }
+        for (let i = 0; i < HOLE_CAP; i++) if (H.live[i] && H.bld[i] === b.id && H.y[i] + H.h[i] / 2 * (wallShown(b) && H.kind[i] === 0 ? 1.55 : 1) > keepBelow) { H.live[i] = 0; this.holesDirty = true; }
       }
     }
     if (this.holesDirty) this.rebuild14();
@@ -1010,7 +1018,8 @@ export class BattleView {
 
   // 從 (sx,sz) 往 (ex,ez) 的直線打進建築的牆（模型的牆內縮 0.1 格；教堂只算中殿），落在進入的那一面
   private mark14(b: Building, kind: number, sx: number, sz: number, ex: number, ez: number) {
-    const x0 = b.x + 0.1, x1 = b.x + b.w - 0.1, z0 = b.z + 0.1 + (b.kind === BK_CHURCH ? 0.9 : 0), z1 = b.z + b.d - 0.1;
+    const { x0, x1, z0, z1 } = wallBounds(b);
+    if (wallShown(b) && b.hp <= 0) return;
     const dx = ex - sx, dz = ez - sz;
     let tIn = -Infinity, tOut = Infinity, axis = -1;
     for (const [s0, d, lo, hi, ax] of [[sx, dx, x0, x1, 0], [sz, dz, z0, z1, 1]] as const) {
@@ -1032,6 +1041,14 @@ export class BattleView {
     H.live[i] = 1; H.bld[i] = b.id; H.kind[i] = kind; H.x[i] = px; H.z[i] = pz; H.nx[i] = nx; H.nz[i] = nz;
     if (kind === 0) { H.w[i] = 0.13 + 0.05 * hh(2); H.h[i] = 0.1 + 0.04 * hh(3); H.y[i] = 0.1 + hh(4) * Math.max(0.02, top - 0.2); }
     else { H.w[i] = 0.28 + 0.12 * hh(2); H.h[i] = Math.min(0.24, top * 0.6); H.y[i] = H.h[i] / 2 + 0.01; }
+    if (wallShown(b)) {
+      // AP 外圈也必須留在窄牆端面／低矮缺口內，不能只夾住中心點。
+      const scale = kind === 0 ? 1.55 : 1, lo = axis === 0 ? z0 : x0, hi = axis === 0 ? z1 : x1;
+      H.w[i] = Math.min(H.w[i], (hi - lo - 0.012) / scale); H.h[i] = Math.min(H.h[i], (top - 0.012) / scale);
+      const half = H.w[i] * scale / 2 + 0.006;
+      if (axis === 0) H.z[i] = Math.max(lo + half, Math.min(hi - half, H.z[i])); else H.x[i] = Math.max(lo + half, Math.min(hi - half, H.x[i]));
+      H.y[i] = Math.max(H.h[i] * scale / 2 + 0.006, Math.min(top - H.h[i] * scale / 2 - 0.006, H.y[i]));
+    }
     const wall = bldColors(b.kind).wall;
     H.r[i] = wall.r + (1 - wall.r) * 0.35; H.g[i] = wall.g + (1 - wall.g) * 0.35; H.b[i] = wall.b + (1 - wall.b) * 0.35;   // 碎掉的灰泥：牆色偏亮
     this.holesDirty = true;

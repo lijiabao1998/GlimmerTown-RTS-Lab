@@ -5,6 +5,7 @@ import { isqrt } from './math.ts';
 import { nextU32, randInt, type RngState } from './rng.ts';
 import {
   N, idx, inMap, cellOf, blocks, bldMaxHp, TER_ROAD, TER_MUD, BK_COTTAGE, BK_HOUSE, BK_BARN, BK_PILLBOX, SIDE_PLAYER, SIDE_ENEMY,
+  BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind,
   type World, type Building,
 } from './world.ts';
 
@@ -21,8 +22,14 @@ export const BUILD_POINTS = 8;
 // R024 Type 22 碉堡：另外一張表（關掉 R024 時布陣列與敵方布陣都只用原本三種，跟以前一樣）
 export const PILLBOX_KIND: BuildKind = { name: 'pillbox', kind: BK_PILLBOX, w: 1, d: 1, floors: 1, cost: 3 };
 export const BUILD_KINDS_24: BuildKind[] = [...BUILD_KINDS, PILLBOX_KIND];
+// R120 只供玩家選單／新紀錄；敵方的兩張既有布陣表不加圍牆。
+export const WALL_KINDS: BuildKind[] = [
+  { name: 'wall_brick', kind: BK_WALL_BRICK, w: 2, d: 1, floors: 1, cost: 1 },
+  { name: 'wall_stone', kind: BK_WALL_STONE, w: 2, d: 1, floors: 1, cost: 2 },
+  { name: 'wall_concrete', kind: BK_WALL_CONCRETE, w: 2, d: 1, floors: 1, cost: 3 },
+];
 
-export const buildKind = (kind: number): BuildKind | null => BUILD_KINDS_24.find(k => k.kind === kind) ?? null;
+export const buildKind = (kind: number): BuildKind | null => BUILD_KINDS_24.find(k => k.kind === kind) ?? WALL_KINDS.find(k => k.kind === kind) ?? null;
 
 // 半場：我方 x+z ≥ N+2、敵方 x+z ≤ N−4，中間是無人帶
 export function territory(side: number, x: number, z: number): boolean {
@@ -72,6 +79,43 @@ export function stillConnected(w: World, fx: number, fz: number, fw: number, fd:
   return true;
 }
 
+// R120：可緊鄰的牆不能把任何既有可通行區切成兩塊，包括沒有單位的空口袋。
+// 分別標記施工前後的連通分量；同一舊分量的剩餘格只能落在一個新分量。
+// 不要求原本隔開的區域相通，也不把被合法佔用的兩格誤算成「失去通路」。
+function wallKeepsOpenCells(w: World, fx: number, fz: number, fw: number, fd: number): boolean {
+  const before = new Int32Array(N * N), after = new Uint8Array(N * N), used = new Uint8Array(N * N + 1);
+  const queue = new Int32Array(N * N);
+  const covered = (x: number, z: number) => x >= fx && z >= fz && x < fx + fw && z < fz + fd;
+  const blocked = (x: number, z: number, placed: boolean) => blocks(w, x, z) || (placed && covered(x, z));
+  let component = 0;
+  for (const placed of [false, true]) {
+    for (let start = 0; start < N * N; start++) {
+      const sx = start % N, sz = (start - sx) / N;
+      if ((placed ? after[start] : before[start]) || blocked(sx, sz, placed)) continue;
+      if (placed) {
+        if (used[before[start]]) return false;
+        used[before[start]] = 1;
+      } else component++;
+      let head = 0, tail = 0;
+      queue[tail++] = start;
+      if (placed) after[start] = 1; else before[start] = component;
+      while (head < tail) {
+        const cur = queue[head++], cx = cur % N, cz = (cur - cx) / N;
+        for (let k = 0; k < 8; k++) {
+          const nx = cx + DX[k], nz = cz + DZ[k];
+          if (!inMap(nx, nz) || blocked(nx, nz, placed)) continue;
+          if (k >= 4 && (blocked(cx + DX[k], cz, placed) || blocked(cx, cz + DZ[k], placed))) continue;
+          const ni = idx(nx, nz);
+          if (placed ? after[ni] : before[ni]) continue;
+          if (placed) after[ni] = 1; else before[ni] = component;
+          queue[tail++] = ni;
+        }
+      }
+    }
+  }
+  return true;
+}
+
 // 不能蓋的原因（代碼）；能蓋回傳 null。順序＝玩家看到的原因的優先順序。
 // 註：跟別的建築隔一格的規矩下，合法的佔地四周一定有一圈空格，單獨一棟堵不死路；
 // 所以「會堵死通路」排在「太靠近」之前：塞進兩棟房子（或房子與地圖邊）之間的窄巷時，玩家看到的是真正的後果。
@@ -97,10 +141,14 @@ export function buildError(w: World, cmd: BuildCmd): string | null {
   }
   if (pointsUsed(w, cmd.side) + k.cost > BUILD_POINTS) return 'points';
   if (!stillConnected(w, f.x, f.z, f.w, f.d)) return 'blocked';
+  if (isWallKind(k.kind) && !wallKeepsOpenCells(w, f.x, f.z, f.w, f.d)) return 'blocked';
   // 建築之間至少隔一格：跟 createWorld 的 free() 同一條規矩（地圖外的邊框格不算）
   for (let dz = -1; dz <= f.d; dz++) for (let dx = -1; dx <= f.w; dx++) {
     const cx = f.x + dx, cz = f.z + dz;
-    if (inMap(cx, cz) && w.occ[idx(cx, cz)]) return 'gap';
+    if (inMap(cx, cz) && w.occ[idx(cx, cz)]) {
+      const neighbor = w.blds[w.occ[idx(cx, cz)] - 1];
+      if (!isWallKind(k.kind) || !isWallKind(neighbor.kind)) return 'gap';
+    }
   }
   return null;
 }
