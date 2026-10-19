@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R111 | 2026-10-19 | GPT | 修補21：生產列內容／布局快取分離，暫停長提示即避讓；穩定畫面不量幾何 | 12組／20語意負控制；CI Chrome8組／8負控制、unit93.9秒、smoke192.8秒綠；手機12／22156；四圖同R110、前後特寫已看；golden不變 | [#42](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/42) | 本機Chrome受限、unit77.0秒非全綠；Android未測；收尾head與合後發布待核驗 |
 | R035 | 2026-10-19 | Claude | 取消 GPT 每日合併上限（業主本人「我同意取消 GPT 每日上限」）：tools/gpt-merge.mjs 拿掉 DAILY_CAP 和計數；gpt-merge.yml 拿掉環境變數；AGENTS.md、DOTS.md、DECISIONS.md 同步。其他門檻（CI、等業主看圖、hold 類標籤、最新 main、--match-head-commit）和 GPT 白名單都不變 | 假 gh＋假 origin 試跑 22 種情況：舊版 22／22（第 8 個擋），新版 22／22（照合、其他門檻照擋、掃描一輪一個）；本機 typecheck 綠，unit 紅 3 支（乾淨 main 一樣）；黃金不變 | claude/r035-no-daily-cap | 附件沒傳來；本機 3 支測試跟 Node 版本／瀏覽器有關，沒修；沒加別的煞車 |
 | R110 | 2026-10-18 | GPT | 修補20：普通命令／取消清除砲擊提示即刷新HUD，暫停不用等下一秒；無模擬改動 | 新11組／11語義負控制；CI7組真實Chrome／7負控制，unit69.5秒、smoke193.9秒綠；四圖同R109；前後提示幾何相同 | [#40](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/40) | 本機Chrome受限、unit68.3秒非全綠；Android未測；既有生產列壓字列修補21；待合與發布 |
 | R109 | 2026-10-18 | GPT | 待辦9：Shift追加框選、500ms長按一次性高爆／煙幕選單；普通手勢保留；?noR109 | 本機typecheck/build/main車道；21組純守衛＋23負控制；CI unit69.5秒含6組真實CDP＋6負控制、smoke194.3秒綠；golden不變；手機12calls/22156tris，四圖與R108相同，兩特寫已看 | [#38](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/38) | 首次CI因CDP drag按鍵不一致紅，修正後綠；本機Chrome受限，unit76.0秒僅browser未跑；Android實機未測 |

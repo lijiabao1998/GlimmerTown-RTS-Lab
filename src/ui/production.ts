@@ -13,19 +13,28 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
   for (const it of items) $('pb-k' + it.kind).addEventListener('click', e => { e.stopPropagation(); a.produce(it.kind); update(); });
   const label = new Map(items.map(it => [it.kind, it.label[0]]));
   let last = '';
+  let layoutValid = false, lastHint: HTMLElement | null = null, lastHintText: string | null = null;
+  let lastWidth = -1, lastHeight = -1;
   function update() {
     const s = a.state();
     root.hidden = !s.visible;
-    if (!s.visible) return;
+    if (!s.visible) { layoutValid = false; return; }
     const key = `${s.supply}|${s.queue.join(',')}|${s.prog}`;
-    if (key === last) return;                                   // 沒變就不碰 DOM
-    last = key;
-    for (const it of items) $('pb-k' + it.kind).classList.toggle('dim', it.cost > s.supply || s.queue.length >= s.queueMax);
-    $('pb-supply').textContent = `補給 ${s.supply}`;
-    $('pb-queue').textContent = s.queue.length ? `　${s.queue.map(k => label.get(k) ?? '?').join('')}` : '';
-    ($('pb-prog').firstElementChild as HTMLElement).style.width = `${s.queue.length && s.progMax ? Math.round((100 * s.prog) / s.progMax) : 0}%`;
+    if (key !== last) {                                        // 內容沒變就不重寫；位置另外判斷
+      last = key;
+      for (const it of items) $('pb-k' + it.kind).classList.toggle('dim', it.cost > s.supply || s.queue.length >= s.queueMax);
+      $('pb-supply').textContent = `補給 ${s.supply}`;
+      $('pb-queue').textContent = s.queue.length ? `　${s.queue.map(k => label.get(k) ?? '?').join('')}` : '';
+      ($('pb-prog').firstElementChild as HTMLElement).style.width = `${s.queue.length && s.progMax ? Math.round((100 * s.prog) / s.progMax) : 0}%`;
+    }
     const hint = document.getElementById('hint');
-    if (hint) root.style.bottom = `${Math.max(8, innerHeight - hint.getBoundingClientRect().top + 6)}px`;
+    if (!hint) { layoutValid = false; return; }
+    const hintText = hint.textContent;
+    if (layoutValid && hint === lastHint && hintText === lastHintText && innerWidth === lastWidth && innerHeight === lastHeight) return;
+    const bottom = `${Math.max(8, innerHeight - hint.getBoundingClientRect().top + 6)}px`;
+    if (root.style.bottom !== bottom) root.style.bottom = bottom;
+    lastHint = hint; lastHintText = hintText; lastWidth = innerWidth; lastHeight = innerHeight;
+    layoutValid = true;
   }
   update();
   return { update };
