@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R114 | 2026-10-19 | GPT | 修補23：help文字獨立捲動、關閉區固定；原文／回呼不變 | CI Chrome4組／4負控、unit191秒與lane綠；四標準圖相同、4張help特寫已看；手機12／22156、golden不變 | [#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) | 卡住：smoke197.4秒手機雙擊鏡頭未移，根因資料不足；不重跑賭綠，待原路徑診斷。本機Chrome受限、Android未測；未合併發布 |
 | R113 | 2026-10-19 | GPT | 待辦10單選射程／近限與砲擊散布上界，固定一個mesh；noR113；多選另列24 | Node9／15負控、Chrome7／7負控；CI unit153.8秒、smoke195.6秒綠；手機12／22156；四圖不變、六特寫已看；golden不變 | [#46](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/46) | 首次help溢出已移除新段；舊help缺口列修補23；本機Chrome受限、Android未測；收尾head／發布待核驗 |
 | R112 | 2026-10-19 | GPT | 修補22：世界替換立即失效小地圖底圖，同幀只讀同一World，保留10Hz與dirty快取 | Node11組／19負控制；CI Chrome4組／4負控制、unit100.4秒、smoke197.0秒綠；手機12／22156；四圖與換局特寫已看；golden不變 | [#45](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/45) | 本機Chrome受限、unit114.8秒非全綠；Android未測；收尾head與合後發布待核驗 |
 | R111 | 2026-10-19 | GPT | 修補21：生產列內容／布局快取分離，暫停長提示即避讓；穩定畫面不量幾何 | 12組／20語意負控制；CI Chrome8組／8負控制、unit93.9秒、smoke192.8秒綠；手機12／22156；四圖同R110、前後特寫已看；golden不變 | [#42](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/42) | 本機Chrome受限、unit77.0秒非全綠；Android未測；收尾head與合後發布待核驗 |
