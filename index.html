@@ -16,6 +16,8 @@
     #hud .title { font-weight: 700; letter-spacing: 0.02em; }
     #hud .title small { opacity: 0.6; font-weight: 400; }
     #hud .btns { top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); }
+    /* R117：只有音效鍵存在才用 4px 間距；八鍵 396px，觸控目標仍為 44px。 */
+    #hud.has-audio .btns { gap: 4px; }
     #hud .bottom { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); font-size: 13px; }
     #hud button { min-width: 44px; height: 36px; border: 1px solid #6c745f; border-radius: 5px; background: #3c4535;
       color: #f3eedf; font: inherit; cursor: pointer; }

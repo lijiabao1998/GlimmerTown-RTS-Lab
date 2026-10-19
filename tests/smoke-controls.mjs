@@ -65,6 +65,7 @@ function controller(visual = true) {
     innerWidth: 412, innerHeight: 860, issue: cmd => issued.push(cmd), simT: () => 0,
     pickUnit: () => 0, placeAt: (...p) => placements.push(p), performance: { now: () => 1000 }, lastTap: {},
     hud: { update() {} }, window: {},
+    battleAudio: undefined, syncBattleAudio() {}, // R117 is absent in this legacy controller fixture.
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },
   });
   vm.runInContext(plain.match(/const r107 = [^\n]+/)[0], c);
@@ -182,11 +183,25 @@ const groups = {
     const rule = selector => { const matches = [...css.matchAll(new RegExp(`${esc(selector)}\\s*\\{([^}]+)\\}`, 'g'))]; assert.ok(matches.length, selector); return matches.map(m => m[1]); };
     const cell = rule('#hud .btns button')[0], bar = rule('#hud .bar')[0];
     const px = (s, key) => { const n = s.match(new RegExp(`(?:^|;)\\s*${key}:\\s*([\\d.]+)px`)); assert.ok(n, key); return Number(n[1]); };
-    const width = px(cell, 'width'), height = px(cell, 'height'), gap = px(bar, 'gap');
+    const width = px(cell, 'width'), height = px(cell, 'height'), gap = px(bar, 'gap'), audioGap = px(rule('#hud.has-audio .btns')[0], 'gap');
     assert.ok(width >= 44 && height >= 44, '44×44 CSS target'); assert.match(cell, /box-sizing:\s*border-box/); assert.match(cell, /flex:\s*0 0 44px/);
-    const n = [...sources.hud.matchAll(/<button id="b-/g)].length; assert.equal(n, 7);
+    assert.equal(gap, 6, 'legacy HUD keeps original 6px gap'); assert.equal(audioGap, 4, 'only optional audio HUD uses 4px gap');
     const padding = bar.match(/padding:\s*(\d+)px (\d+)px/).slice(1).map(Number);
-    const totalWidth = n * width + (n - 1) * gap + 2 * padding[1]; assert.ok(totalWidth + 16 <= 412, 'bar fits 412px with existing side insets');
+    const prior = globalThis.document; let rendered;
+    globalThis.document = { createElement: () => new Element(), body: { appendChild: el => { rendered = el; } } };
+    try {
+      for (const [audio, expectedCount, expectedWidth] of [[false, 7, 360], [true, 8, 396]]) {
+        initHud({ state: () => ({ tick: 0, paused: false, speed: 1, fireMode: false, winner: -1, mine: 1, theirs: 0, tanks: 0, guns: 0, observers: 0 }),
+          togglePause() {}, cycleSpeed() {}, toggleFire() {}, toggleAmmo() {}, selectAll() {}, restart() {}, ...(audio ? { toggleAudio() {} } : {}) });
+        const n = [...rendered.html.matchAll(/<button\b/g)].length;
+        assert.equal(n, expectedCount, `${audio ? 'optional audio' : 'legacy'} HUD actually renders its contracted button count`);
+        assert.equal(rendered.classList.contains('has-audio'), audio, 'compact spacing only exists with audio control');
+        const totalWidth = n * width + (n - 1) * (audio ? audioGap : gap) + 2 * padding[1];
+        assert.equal(totalWidth, expectedWidth, 'independent 7/8-button width contract');
+        assert.ok(totalWidth + 16 <= 412, 'bar fits 412px with existing side insets');
+        console.log(`CSS arithmetic only: 412×860; ${n} × ${width}×${height} targets; bar ${totalWidth}px`);
+      }
+    } finally { if (prior === undefined) delete globalThis.document; else globalThis.document = prior; }
     const titleRule = rule('#hud .top').at(-1), miniRule = rule('#minimap').at(-1);
     const offset = s => Number(s.match(/\+\s*(\d+)px/)[1]);
     const barBottom = 8 + height + 2 * padding[0], titleTop = 8 + offset(titleRule), titleBottom = titleTop + 12 * 1.4 + 2 * padding[0];
@@ -194,7 +209,7 @@ const groups = {
     assert.ok(8 + offset(miniRule) >= titleBottom + 2, 'mobile minimap clears title');
     assert.match(css, /#hud\.build #b-ammo\s*\{\s*display:\s*none/);
     assert.match(rule('#hud button.on')[0], /background:.*border-color:/, 'selected ammo has existing visible style');
-    console.log(`CSS arithmetic only: 412×860; ${n} × ${width}×${height} targets; bar ${totalWidth}px; bar bottom ${barBottom}, title top ${titleTop}, minimap top ${8 + offset(miniRule)}`);
+    console.log(`CSS arithmetic only: bar bottom ${barBottom}, title top ${titleTop}, minimap top ${8 + offset(miniRule)}`);
   },
 };
 for (const [name, test] of Object.entries(groups)) {

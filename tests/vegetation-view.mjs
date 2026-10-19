@@ -120,6 +120,7 @@ function mainFixture() {
     r006: false, r018: false, r019: false, r026: false, r109: false, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true,
     r116: false, fxOn: true, q: new URLSearchParams('noR116=1'),
     w: undefined, view: mockView(), selected: new Set(), log: [], pending: [], paused: true, phase: 'battle', window: {},
+    battleAudio: undefined, syncBattleAudio() {}, // Explicit absent optional audio for extracted replay/reset code.
     newStats() { return {}; }, reportView: undefined, ui() {}, refreshPreview() {},
     issue(cmd) { c.log.push({ tick: c.w.tick, cmd }); c.pending.push(cmd); }, tick() { step(c.w, c.pending); c.pending = []; },
     BattleView: class { constructor() { return mockView(); } },
