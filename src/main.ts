@@ -49,6 +49,7 @@ const r015 = q.get('noR015') !== '1';
 let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
+const r104 = q.get('noR104') !== '1'; // 裝甲弧提示；只關畫面，不改模擬
 const r109 = q.get('noR109') !== '1';
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
@@ -120,7 +121,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {
   w = createWorld(s);
   if (map) applyMap(w, MAP_RYE);   // R026：布陣預覽就要看到 Rye；同一條 map 指令記在紀錄第 0 步，重播時由 step 套（套過的不再套）
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, r104);
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
@@ -470,7 +471,7 @@ const rts = {
     reset(SCRIPT_SEED, false, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, r104);
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -479,6 +480,7 @@ const rts = {
   blds: () => w.blds.map(b => ({ ...b })),
   focus: (x: number, z: number, zoom = 1) => { view.target.set(x, 0, z); view.zoom = zoom; },
   info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, fx: fxOn, px: style.pixelCss, r004: fxOn && r004, pools: view.pools }),
+  armorArcs: () => view.armorArcCount,
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,
   dashes: () => view.dashes,
