@@ -8,12 +8,17 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { build } from 'vite';
 import { withBrowser, sleep, touchTap } from '../tools/cdp.mjs';
+import { runScript as nodeScript } from '../src/sim/script.ts';
+import { hashWorld } from '../src/sim/world.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r112-minimap-'));
 const strictCI = process.env.GITHUB_ACTIONS === 'true' || !!process.env.GITHUB_RUN_ID || !!process.env.CI;
 const summary = [], record = text => { summary.push(text); console.log(text); };
 const digest = png => createHash('sha256').update(png).digest('hex');
+// A pure UI guard follows the current simulation baseline, including independently merged work.
+// The checked-in golden still independently anchors the full replay; never rewrite it here.
+const expected = { 600: hashWorld(nodeScript(600)), 1200: hashWorld(nodeScript(1200)) };
 const hits = new Set();
 const plugin = {
   name: 'r112-isolated-minimap-mutants', enforce: 'pre',
@@ -33,6 +38,7 @@ const plugin = {
 };
 
 async function main() {
+  assert.equal(expected[1200], JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/golden.json'), 'utf8')).hash, 'fixture: current Node replay agrees with the checked-in golden');
   const started = Date.now(), baseline = path.join(temp, 'baseline'), broken = path.join(temp, 'broken');
   await build({ root: ROOT, logLevel: 'error', build: { outDir: baseline } });
   await build({ root: ROOT, logLevel: 'error', plugins: [plugin], build: { outDir: broken } });
@@ -86,7 +92,7 @@ async function main() {
     const restartCase = async (name, mobile, mutant) => {
       await viewport(mobile); await fresh(mutant ? '__r112mutant=cache' : '');
       const original = await pixels(), initial = await snapshot(), opening = await info(); budget(opening, true, name);
-      assert.equal(await E('__rts.playScript(600)'), 'c789deeb', `${name}: event-driven script preserves the original hash`);
+      assert.equal(await E('__rts.playScript(600)'), expected[600], `${name}: event-driven script agrees with current Node replay`);
       await E('__rts.pause(true)'); await settleMap();
       const damaged = await pixels();
       assert.notEqual(damaged, original, 'fixture: prior script damage/map is visibly different from a fresh Rye map');
@@ -105,12 +111,12 @@ async function main() {
     const scriptCase = async mutant => {
       const name = 'script'; await viewport(true); await fresh(mutant ? '__r112mutant=cache' : '');
       // Independent path: normal tick events dirty the old same-object cache, even in the mutant.
-      assert.equal(await E('__rts.playScript(600)'), 'c789deeb', `${name}: event-driven reference hash`);
+      assert.equal(await E('__rts.playScript(600)'), expected[600], `${name}: event-driven reference hash`);
       await E('__rts.pause(true)'); await settleMap();
       const reference = await pixels();
       await fresh(mutant ? '__r112mutant=cache' : '');
       const rye = await pixels(); assert.notEqual(rye, reference, 'fixture: reference contains a different map from Rye');
-      assert.equal(await E('__rts.runScript(600)'), 'c789deeb', `${name}: bulk world replacement preserves hash`);
+      assert.equal(await E('__rts.runScript(600)'), expected[600], `${name}: bulk world replacement preserves hash`);
       await E('__rts.pause(true)'); await settleMap();
       assert.equal(digest(await pixels()), digest(reference), `${name}: bulk replacement redraws without waiting for a future terrain event`);
       const before = await snapshot(), rendering = await info(); budget(rendering, false, name);
@@ -122,10 +128,10 @@ async function main() {
     const valveCase = async mutant => {
       const name = 'valve'; await viewport(true); await fresh('noR015=1' + (mutant ? '&__r112mutant=valve' : ''));
       assert(await E('!document.getElementById("minimap")'), `${name}: noR015 creates no minimap canvas`);
-      assert.equal(await E('__rts.runScript(600)'), 'c789deeb', `${name}: 600-tick hash unchanged`);
+      assert.equal(await E('__rts.runScript(600)'), expected[600], `${name}: 600-tick hash unchanged`);
       await E('__rts.pause(true)'); await settleMap();
       assert.deepEqual(await info(), baselineBudgets.get('script600'), `${name}: minimap on/off has identical WebGL calls and triangles`);
-      assert.equal(await E('__rts.runScript(1200)'), 'f3364bb6', `${name}: 1200-tick hash unchanged`);
+      assert.equal(await E('__rts.runScript(1200)'), expected[1200], `${name}: 1200-tick hash unchanged`);
       await restart(true);
       assert(await E('!document.getElementById("minimap")'), `${name}: restart does not recreate disabled minimap`);
     };
