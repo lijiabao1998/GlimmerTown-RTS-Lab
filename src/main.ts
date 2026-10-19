@@ -5,6 +5,7 @@ import { BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, applyBuild, buildError, buil
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
+import { BattleAudio } from './render/audio.ts';
 import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
@@ -29,6 +30,7 @@ const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
 const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)) };
 // 逃生閥：?fx=off 或 window.__noFx＝true 時不產生爆炸、煙（AGENTS.md：新效果都要關得掉）
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
+const r117 = fxOn && q.get('noR117') !== '1';
 // R004 破壞的重量：倒塌、碎片、火與曳光。逃生閥 ?noR004=1＝舊效果（模擬雜湊不變）
 const r004 = q.get('noR004') !== '1';
 // R008 車輛有重量：車轍、揚塵、後座、砲塔轉向、受擊閃光。逃生閥 ?noR008=1
@@ -89,6 +91,12 @@ const SPEEDS = [1, 2, 4];
 // ---- R006 布陣：開頁先停在第 0 步，玩家在我方半場蓋房子，按「開戰」才開打。逃生閥 ?noR006=1＝直接開打（R102 的流程）----
 const r006 = q.get('noR006') !== '1';
 let phase: 'build' | 'battle' = 'battle';
+// R117：預設靜音。只有原生音效鍵會建立／解鎖 context；模擬與重播不碰它。
+const battleAudio = r117 ? new BattleAudio(() => hud?.update()) : undefined;
+let audioPageActive = true, audioHelpActive = false;
+function syncBattleAudio() {
+  battleAudio?.setActive(phase === 'battle' && !paused && !reportShown && !audioHelpActive && !document.hidden && audioPageActive);
+}
 let plan: BuildCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
 const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡' };
 const BUILD_WHY: Record<string, string> = {
@@ -126,6 +134,7 @@ const AI_NAME = ['', '簡單', '普通', '困難'];
 
 function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true) {
   if (r109) clearGestureInput();
+  battleAudio?.reset();
   w = createWorld(s);
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
@@ -141,6 +150,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegeta
     if (ai) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   }
   ui();
+  syncBattleAudio();
 }
 function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); }
 
@@ -157,6 +167,7 @@ function startBattle() {
   view.setWorld(w, -1);
   tick();
   paused = false;
+  syncBattleAudio();
   ui();
 }
 
@@ -363,7 +374,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; if (r012) view.zoomAt(f, e.clientX, e.clientY, innerWidth, innerHeight); else view.zoomBy(f); }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (r109) clearGestureInput(); selected.clear(); fireMode = false; ammo = 'he'; hud?.update(); }
-  if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
+  if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; syncBattleAudio(); hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
 });
 
 reset();
@@ -391,9 +402,11 @@ hud = initHud({
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
       counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115),
       vegetationInfo: view.vegetationInfo,
+      audio: battleAudio?.status(),
     };
   },
-  togglePause: () => { if (phase === 'battle') paused = !paused; },
+  togglePause: () => { if (phase === 'battle') paused = !paused; syncBattleAudio(); },
+  toggleAudio: battleAudio ? () => { syncBattleAudio(); battleAudio.toggleFromGesture(); } : undefined,
   cycleSpeed: () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; },
   toggleFire: () => { fireMode = !fireMode; },
   toggleAmmo: () => { ammo = ammo === 'he' ? 'smoke' : 'he'; if (ammo === 'smoke') fireMode = true; },
@@ -422,7 +435,7 @@ if (r015) minimap = initMinimap({
   view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
   tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
-const help = initHelp({ open: () => { if (r109) clearGestureInput(); pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } }, r109);
+const help = initHelp({ open: () => { if (r109) clearGestureInput(); audioHelpActive = true; pausedBeforeHelp = paused; paused = true; syncBattleAudio(); hud?.update(); }, close: () => { audioHelpActive = false; paused = pausedBeforeHelp; syncBattleAudio(); hud?.update(); } }, r109);
 buildBar = initBuildBar(BUILD_KINDS_NOW.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
   state: () => {
     const kd = buildKind(pickKind)!;
@@ -433,6 +446,13 @@ buildBar = initBuildBar(BUILD_KINDS_NOW.map(k => ({ kind: k.kind, label: BUILD_L
   undo: () => { if (plan.pop()) { buildHint = '拿掉了最後一棟'; refreshPreview(); hud?.update(); } },
   start: () => startBattle(),
 });
+
+// R117：背景／離頁即清尾音；BFCache只暫停，真正離開才關閉context。
+if (battleAudio) {
+  document.addEventListener('visibilitychange', syncBattleAudio);
+  addEventListener('pagehide', e => { audioPageActive = false; syncBattleAudio(); if (!e.persisted) battleAudio.dispose(); });
+  addEventListener('pageshow', () => { audioPageActive = true; syncBattleAudio(); });
+}
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
@@ -449,8 +469,11 @@ renderer.setAnimationLoop(() => {
     view.zoom = endFrom.zoom + (Math.max(endFrom.zoom, 1.6) - endFrom.zoom) * e;
   }
   if (r010 && !reportShown && since >= SLOWMO_MS) { if (r109) clearGestureInput(); reportShown = true; reportView?.show(makeReport(w, stats)); hud?.update(); }
+  syncBattleAudio();
   let steps = 0;
-  while (acc >= 1 / TICK_HZ && steps < 8) { acc -= 1 / TICK_HZ; tick(); steps++; }
+  // 只在即時迴圈收新事件；所有同步stepN／playLog／SCRIPT都不會走這裡。
+  while (acc >= 1 / TICK_HZ && steps < 8) { acc -= 1 / TICK_HZ; tick(); battleAudio?.enqueue(w, w.events, view); steps++; }
+  battleAudio?.flush();
   if (steps === 8) acc = 0;   // 機器太慢：丟掉積欠的時間，不追
   const alpha = Math.min(1, acc * TICK_HZ);
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
@@ -485,8 +508,12 @@ const rts = {
   seed: () => w.seed,
   tick: () => w.tick,
   hash: () => hashWorld(w),
-  pause: (p: boolean) => { paused = p; hud?.update(); },
-  stepN: (n: number) => { for (let i = 0; i < n; i++) tick(); return w.tick; },
+  pause: (p: boolean) => { paused = p; syncBattleAudio(); hud?.update(); },
+  stepN: (n: number) => {
+    battleAudio?.silence();
+    try { for (let i = 0; i < n; i++) tick(); return w.tick; }
+    finally { battleAudio?.silence(); }
+  },
   issue: (cmd: Command) => issue(cmd),
   log: () => JSON.parse(JSON.stringify(log)) as LoggedCommand[],
   selected: () => [...selected],

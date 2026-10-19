@@ -2,6 +2,7 @@
 import type { AmmoMode } from './smoke.ts';
 
 export interface HudState {
+  audio?: { enabled: boolean; state: 'off' | 'on' | 'paused' | 'pending' | 'unavailable' }; // R117：只呈現實際音訊狀態
   ammo?: AmmoMode; howitzers?: number; // R107：只供榴彈砲的煙幕彈
   tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;
   mine: number; theirs: number; tanks: number; guns: number; observers: number; infantry?: number;
@@ -22,12 +23,14 @@ export interface HudActions {
   selectAll: () => void;
   restart: () => void;
   help?: () => void;   // R013 說明面板
+  toggleAudio?: () => void; // R117：可選，不在 HUD 內建立音訊
 }
 export interface Hud { update: () => void; frame: () => void }
 
 export function initHud(a: HudActions): Hud {
   const root = document.createElement('div');
   root.id = 'hud';
+  root.classList.toggle('has-audio', !!a.toggleAudio);
   root.innerHTML = `
     <div class="bar top">
       <span class="title">微光小鎮·二戰 RTS <small>R001</small></span>
@@ -42,6 +45,7 @@ export function initHud(a: HudActions): Hud {
       <button id="b-all" title="選取全部我方單位">全選</button>
       <button id="b-restart" title="重新開始">↺</button>
       <button id="b-help" title="怎麼玩">？</button>
+      ${a.toggleAudio ? '<button id="b-audio" title="音效已關；點按開啟" aria-label="音效已關；點按開啟" aria-pressed="false">音效關</button>' : ''}
     </div>
     <div class="bar bottom" id="hint"></div>
     <div id="banner" hidden></div>`;
@@ -49,11 +53,22 @@ export function initHud(a: HudActions): Hud {
   const $ = (id: string) => root.querySelector('#' + id) as HTMLElement;
   const act = (id: string, f: () => void) => $(id).addEventListener('click', e => { e.stopPropagation(); f(); update(); });
   act('b-pause', a.togglePause); act('b-speed', a.cycleSpeed); act('b-fire', a.toggleFire); act('b-ammo', a.toggleAmmo); act('b-all', a.selectAll); act('b-restart', a.restart); if (a.help) act('b-help', a.help);
+  if (a.toggleAudio) $('b-audio').addEventListener('click', e => { e.stopPropagation(); if (!e.isTrusted) return; a.toggleAudio!(); update(); });
 
   let lastSec = -1;
   function update() {
     const s = a.state();
     root.classList.toggle('build', !!s.build);
+    if (a.toggleAudio) {
+      const audio = s.audio ?? { enabled: false, state: 'off' }, button = $('b-audio');
+      const text = { off: '音效關', on: '音效開', paused: '音效停', pending: '待啟用', unavailable: '無音效' }[audio.state];
+      const status = { off: '音效已關', on: '音效已開', paused: '音效暫停', pending: '音效等待啟用', unavailable: '音效不可用' }[audio.state];
+      const label = `${status}；點按${audio.enabled ? '關閉' : '開啟'}`;
+      button.textContent = text;
+      button.setAttribute('aria-label', label); button.setAttribute('title', label);
+      button.setAttribute('aria-pressed', String(audio.enabled));
+      button.classList.toggle('on', audio.enabled);
+    }
     $('b-pause').textContent = s.paused ? '▶' : '⏸';
     $('b-speed').textContent = `${s.speed}×`;
     $('b-fire').classList.toggle('on', s.fireMode);

@@ -63,6 +63,7 @@ function mainFixture(enabled = true) {
     commandMenu: undefined, battleHint: undefined, document: { createElement: () => ({ id: '', hidden: false, style: {} }), body: { appendChild: el => elements.push(el) }, addEventListener: (t, f) => docEvents.set(t, f) },
     addEventListener: (t, f) => globalEvents.set(t, f), canvas, performance: { now: clock.now },
     view, w: createWorld(1944), selected: new Set(), phase: 'battle', fireMode: false, ammo: 'he', paused: false,
+    battleAudio: undefined, syncBattleAudio() {}, // Preserve the original gesture assertions without an audio engine.
     hud: { update() { layout.push('hud'); } }, prodBar: { update() { layout.push('production'); } }, help: { visible: () => helpVisible }, reportView: { visible: () => reportVisible, hide() {} },
     fling: { stop() { stops.push('fling'); }, start: (...a) => flings.push(a) }, glide: { stop() { stops.push('glide'); }, start: (...a) => glides.push(a) }, dragV: { vx: 0, vy: 0, t: 0 }, lastTap: { id: 0, t: -1e9 },
     innerWidth: 412, innerHeight: 860, SIDE_PLAYER, SIDE_ENEMY, SUB, routeBattleOrder, bombardCommand, bombardTarget, issue: cmd => issued.push(json(cmd)), simT: () => 0, placeAt() {},
