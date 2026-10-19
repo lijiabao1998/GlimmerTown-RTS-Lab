@@ -32,6 +32,7 @@
 
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
+| 22 | 修補：換局後小地圖底圖立即跟隨新世界，不殘留上一局建築／彈坑 | 自己的城與戰況必須對得上 | 介面 | 不會 | 正式模組已重現：世界替換後99.999秒仍沿用舊底圖；R111前既有問題，保留同世界dirty事件與10Hz節流 |
 | 4 | 裝甲面向：正面厚、側後薄（整數點積），繞側打傷害加成 | 坦克車 | 模擬 | 會 | 選取時畫裝甲弧 |
 | 10 | 選取時顯示射程圈、最小射程圈、預計散布圈 | 榴彈砲 | 介面 | 不會 | |
 | 11 | 反砲兵：開火的砲會暴露大概位置，橢圓隨開火次數縮小 | 榴彈砲 | 模擬 | 會 | |
@@ -53,7 +54,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
-| 修補生產列隨提示高度同步避讓 | R111 | [#42](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/42) | 2026-10-19（驗收） | 本機Chrome受限，CI實測通過；Android實機未測；收尾head／合後發布另核驗 |
+| 修補生產列隨提示高度同步避讓 | R111 | [#42](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/42) | 2026-10-19（發布） | 本機Chrome受限，CI實測通過；Android實機未測；main CI／Pages／公網build已核對 |
 | 修補暫停時過期砲擊提示 | R110 | [#40](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/40) | 2026-10-19（發布） | 本機Chrome受限，CI實測通過；Android實機未測；main CI／Pages／公網build已核對 |
 | 桌機追加框選、手機長按砲擊選單 | R109 | [#38](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/38) | 2026-10-18 | 本機 Chrome 受限，CI 真實滑鼠／觸控、smoke 通過；Android 實機未測 |
 | 修補煙幕彈拖延勝負／戰報 | R108 | [#37](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/37) | 2026-10-18 | 本機 smoke 受限，CI smoke 通過；新增彈種鍵實際觸控／Android 實機仍未測 |
