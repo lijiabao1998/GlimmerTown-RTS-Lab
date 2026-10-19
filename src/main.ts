@@ -50,7 +50,6 @@ let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
 const r109 = q.get('noR109') !== '1';
-const r113 = q.get('noR113') !== '1';
 let lastRangeInfo = '';
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
@@ -410,7 +409,7 @@ if (r015) minimap = initMinimap({
   view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
   tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
-const help = initHelp({ open: () => { if (r109) clearGestureInput(); pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } }, r109, r113);
+const help = initHelp({ open: () => { if (r109) clearGestureInput(); pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } }, r109);
 buildBar = initBuildBar(BUILD_KINDS_NOW.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
   state: () => {
     const kd = buildKind(pickKind)!;

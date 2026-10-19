@@ -38,7 +38,6 @@ const plugin = {
     const rel = path.relative(ROOT, id.split('?')[0]).replaceAll('\\', '/');
     const changes = {
       'src/main.ts': [
-        ["const r113 = q.get('noR113') !== '1';", "const r113 = q.get('__r113mutant') === 'valve' || q.get('noR113') !== '1';"],
         ['  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));', "  if (q.get('__r113mutant') === 'paint' && view.range113) view.range113.mesh.visible = false;\n  if (q.get('__r113mutant') === 'scatter' && view.range113) view.range113.mesh.geometry.setDrawRange(0, Math.min(view.range113.mesh.geometry.drawRange.count, 2 * 96 * 6));\n  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));"],
         ['if (rangeInfo !== lastRangeInfo)', "if (q.get('__r113mutant') !== 'freshness' && rangeInfo !== lastRangeInfo)"],
       ],
@@ -69,7 +68,7 @@ async function main() {
   const started = Date.now(), baseline = path.join(temp, 'baseline'), broken = path.join(temp, 'broken');
   await build({ root: ROOT, logLevel: 'error', build: { outDir: baseline } });
   await build({ root: ROOT, logLevel: 'error', plugins: [plugin], build: { outDir: broken } });
-  assert.equal(hit.size, 6, 'all isolated semantic mutations applied');
+  assert.equal(hit.size, 5, 'all isolated semantic mutations applied');
   const overlay = {};
   await withBrowser({ root: baseline, overlay, port: 8433, width: 412, height: 860, mobile: true, chromeWaitMs: 20000, readyMs: 8000, settle: 70 }, async ({ open, page }) => {
     const bounded = async (promise, label) => {
@@ -163,6 +162,7 @@ async function main() {
       assert.equal(before.scatterRadius, Math.SQRT2 * offset / SUB, 'scatter: square-corner upper bound, not one-axis radius');
       assert((await hint()).includes('散布上界') && before.aimX === gun.tx + 0.5 && before.aimZ === gun.tz + 0.5, 'scatter: visible legend and ordered cell center');
       const rendering = await info(); assert(rendering.calls === oldInfo.calls + 1 && rendering.triangles-oldInfo.triangles <= 576 && rendering.calls <= 22 && rendering.triangles <= 80000, 'scatter: budget stays bounded');
+      record(`R113 scatter: ${rendering.calls}/${rendering.triangles}, delta ${rendering.calls-oldInfo.calls}/${rendering.triangles-oldInfo.triangles}; ${old.count} independent circumference patches`);
       await shot('r113-mobile-scatter.png');
       await E('__rts.focus(16,16,0.35)'); await frames(); await shot('r113-mobile-range-overview.png');
       await button('b-ammo', true); assert.deepEqual(await diag(), before, 'scatter: toolbar ammo does not change an applied firing task');
@@ -240,6 +240,8 @@ async function main() {
 }
 try {
   await main();
+  fs.mkdirSync(path.join(ROOT, 'shots'), { recursive: true });
+  fs.writeFileSync(path.join(ROOT, 'shots/r113-browser.txt'), summary.join('\n') + '\n');
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### R113 real range-preview guards\n${summary.map(x=>'- '+x).join('\n')}\n`);
 } catch (error) {
   const message = String(error?.stack ?? error);
