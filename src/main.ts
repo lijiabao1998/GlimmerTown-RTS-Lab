@@ -208,8 +208,15 @@ function pickUnit(cx: number, cy: number): number {
   return best;
 }
 
+// R110：暫停時沒有下一個模擬秒，清提示必須同步刷新 HUD。
+function clearBattleHint() {
+  if (battleHint === undefined) return;
+  battleHint = undefined;
+  hud?.update();
+}
+
 function order(cx: number, cy: number) {
-  if (r109) battleHint = undefined;
+  if (r109) clearBattleHint();
   if (phase === 'build') { placeAt(cx, cy); return; }
   const route = routeBattleOrder(w, selected, fireMode, ammo, {
     unit: pickUnit(cx, cy),
@@ -222,7 +229,7 @@ function order(cx: number, cy: number) {
 }
 
 function tap(cx: number, cy: number, additive: boolean) {
-  if (r109) battleHint = undefined;
+  if (r109) clearBattleHint();
   const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
     const now = performance.now();
@@ -274,7 +281,7 @@ const gestures = r109 ? new Gestures({
 }) : null;
 function clearGestureInput() {
   gestures?.cancel(); pointers.clear(); dragged = true; pinchD = 0;
-  fling.stop(); glide.stop(); dragV = { vx: 0, vy: 0, t: 0 }; battleHint = undefined;
+  fling.stop(); glide.stop(); dragV = { vx: 0, vy: 0, t: 0 }; clearBattleHint();
 }
 if (r109) {
   commandMenu = initCommandMenu({
