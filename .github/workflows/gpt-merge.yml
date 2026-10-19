@@ -7,7 +7,7 @@ on:
     workflows: [ci]
     types: [completed]
   schedule:
-    - cron: '17 * * * *'   # 每小時掃一次：被每日上限擋下、業主拿掉「等業主」標籤的 PR，靠這個接著合
+    - cron: '17 * * * *'   # 每小時掃一次：ci 那一趟沒合到的（例如當時落後 main）、業主拿掉「等業主」標籤的 PR，靠這個接著合
   workflow_dispatch:
 
 permissions:
@@ -41,5 +41,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          DAILY_CAP: '8'
         run: node tools/gpt-merge.mjs

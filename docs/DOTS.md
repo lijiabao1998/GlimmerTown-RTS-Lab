@@ -64,7 +64,7 @@ https://lijiabao1998.github.io/GlimmerTown-RTS-Lab/
 1. 讀 origin/main 的 AGENTS.md、docs/GPT-方向.md、docs/迭代不改壞標準.md。開關（「## 開關」底下第一行）不是 **運行** 就什麼都不做。
 2. 你有開著的 gpt/ PR（標了「等業主」「卡住」的不算）：CI 紅就派 Codex 修；同一步連紅 3 次就標「卡住」、在方向檔卡住表記一列，換下一項。CI 綠但沒合：轉 ready、落後 main 就把 main 合進分支（不 rebase、不 force）。一次只做一個 PR。
 3. 沒有：做方向檔待辦最上面那一項（空了就自己想 3–5 項寫進去），用 docs/DOTS.md 第四節的模板派給 Codex。
-4. 合併條件全對才合（AGENTS.md 第 4 節第 6 步，一條都不能少）：PR 來自本倉庫、要合進 main；PR 最新提交上 ci 的 smoke 和 gpt-lane 都綠；不是草稿；沒有「等業主」「卡住」「needs-human」「hold」標籤，標題不以［等業主］［卡住］開頭；分支接在最新的 main 上；用 main 上那一份 tools/gpt-lane.mjs 再驗一次通過；標題是「R<號>［待辦 N］主題」；今天（UTC）合的 GPT PR 不到 8 個。全對就用 gh pr merge <號> --squash --match-head-commit <最新提交> --delete-branch 自己合（不用 --admin、不跳過檢查）；少一條就不合。你沒合，gpt-merge 工作流會照同樣的條件自動合。合完看 main 的 ci 和 Pages 綠。
+4. 合併條件全對才合（AGENTS.md 第 4 節第 6 步，一條都不能少）：PR 來自本倉庫、要合進 main；PR 最新提交上 ci 的 smoke 和 gpt-lane 都綠；不是草稿；沒有「等業主」「卡住」「needs-human」「hold」標籤，標題不以［等業主］［卡住］開頭；分支接在最新的 main 上；用 main 上那一份 tools/gpt-lane.mjs 再驗一次通過；標題是「R<號>［待辦 N］主題」。全對就用 gh pr merge <號> --squash --match-head-commit <最新提交> --delete-branch 自己合（不用 --admin、不跳過檢查）；少一條就不合。你沒合，gpt-merge 工作流會照同樣的條件自動合。合完看 main 的 ci 和 Pages 綠。
 5. 每天第一次醒來，用三行告訴我：合了什麼（附 Pages 網址）、卡住什麼、下一步做什麼。其他時候有事才講。
 
 【不准】直推 main、合併條件沒全對就合、--force、刪不是你建的分支；改白名單以外的檔案（白名單見 AGENTS.md 第 4 節，.github/、tools/、規則檔、package*.json、vite.config.*、src/render/post.ts 都不行）；改 docs/GPT-方向.md「## 待辦」以上除了開關那一行的任何字、把開關改成運行；拿掉「等業主」標籤；碰其他倉庫；改 GitHub 設定、安裝或移除 App；畫卐字、SS 符文或真實納粹領導人。
@@ -91,14 +91,14 @@ https://lijiabao1998.github.io/GlimmerTown-RTS-Lab/
    新機制要守衛：寫 tests/{主題}.mjs（獨立 Node 腳本，綠燈退出碼 0）。距離、時間用 UNIT_KINDS 推，不要寫死。
 4. 更新卡面（驗收結果、自檢清單、沒做成的事）、docs/GPT-方向.md 的待辦／已完成表、LOG.md 一列。
 5. 推送，開草稿 PR：標題「R{號}［待辦 {序}］{主題}」，內文第一行「GPT 編輯」。做完把 PR 轉成 ready。不要改白名單以外的檔案。
-6. 合併：等 PR 最新提交上 ci 的 smoke 和 gpt-lane 都綠，再照 AGENTS.md 第 4 節第 6 步逐條核對（不是草稿、沒有等業主／卡住標籤或標題、接在最新 main 上、main 上那一份 gpt-lane.mjs 本機再驗通過、今天 UTC 合的 GPT PR 不到 8 個）。條件全對才 gh pr merge {PR 號} --squash --match-head-commit {最新提交} --delete-branch；少一條就不合，交給 gpt-merge 工作流或下一輪。
+6. 合併：等 PR 最新提交上 ci 的 smoke 和 gpt-lane 都綠，再照 AGENTS.md 第 4 節第 6 步逐條核對（不是草稿、沒有等業主／卡住標籤或標題、接在最新 main 上、main 上那一份 gpt-lane.mjs 本機再驗通過）。條件全對才 gh pr merge {PR 號} --squash --match-head-commit {最新提交} --delete-branch；少一條就不合，交給 gpt-merge 工作流或下一輪。
 ```
 
 ## 五、怎麼停
 
 | 層 | 怎麼做 | 效果 |
 |---|---|---|
-| 一句話 | 對 dot 或 Claude 說「停」 | dot 開狀態更新 PR 把開關改「停止」（只改方向檔的 PR 不用等每日上限）；Claude 會提醒你做下面兩層 |
+| 一句話 | 對 dot 或 Claude 說「停」 | dot 開狀態更新 PR 把開關改「停止」；Claude 會提醒你做下面兩層 |
 | 10 秒（最快、不用推任何東西） | GitHub → Actions → 左邊點 `gpt-merge` → 右上「…」→ Disable workflow | 什麼都不會再被自動合進 `main` |
 | 開關 | 把 `docs/GPT-方向.md`「## 開關」底下那一行改成 **停止**（沒開分支規則可以在網頁直接改；開了就走 PR）。寫錯、刪掉也會當成停 | `gpt-lane` 守衛讓所有 GPT 的 PR 變紅；dot 醒來看到開關就不開工 |
 | dot 那邊 | Pause；Activity 裡停掉每個 Codex 任務；Scheduled 裡刪掉排程 | 官方：只按 Pause 停不了排程和派出去的任務，三件都要做 |
@@ -124,6 +124,7 @@ dot 說找不到第三節，或不認這段授權：把第三節整段再貼一�
 - **用量**（官方）：跟 dot 講話不算額度；dot 派出去的 Codex 任務照 Codex 額度算。上線第一個月額度放寬；之後的條件還沒公布（第三方推測 10 月 29 日前後結束）。Pro 沒有 5 小時上限，但「可能有每週上限」，雲端任務吃得比較多。**建議每週看一次用量。**
 - **第三方報導（未查證）**：Pro 200 方案 10 月 30 日起 Codex 額度從 Plus 的 20 倍降到 10 倍。
 - **越跑越偏**（第三方轉述 GPT-6 Astra 系統卡）：連續任務從 5 個增加到 10 個時，越出範圍的比例從 8.6% 升到 19.7%。所以每一波一張卡、驗收先寫、CI 當裁判，並且建議你一兩天看一次已完成表和 Pages。
+- **不限每天合幾個**（業主 2026-10-19，R035）：條件全對就一波接一波合。用量和越跑越偏的風險都跟著變高：更要一兩天看一次已完成表和 Pages，不對就說「停」。
 - **dot 回報完成不代表成功**（官方）。以 CI 和 Pages 為準。
 - **守衛擋得住粗心，擋不住存心作對**：GPT 能改 `src/`，`src/sim` 的程式又會在 CI 的守衛行程裡執行。純度掃描禁止碰行程、檔案系統與全域物件，但最後一道防線是分支規則和你偶爾看一眼。
 - **Grok Bot**：如果也想讓 Grok 參與，只讓它審 PR、留言，不讓它開工或合併，避免兩個迴圈同時推。
