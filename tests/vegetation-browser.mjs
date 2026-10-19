@@ -84,6 +84,7 @@ import { ORD_IDLE, SHELL_AP } from './sim/world.ts';
 import { spotted, firstBlock } from './sim/step.ts';
 ${forestFixture.toString()}
 ${sightContract.toString()}
+let r116TerrainSnapshot: any;
 (window as any).__r116test = {
   inspect: () => ({
     tick: w.tick, hash: hashWorld(w), phase, log: JSON.parse(JSON.stringify(log)),
@@ -97,6 +98,30 @@ ${sightContract.toString()}
     const fingerprint = (a: ArrayBufferView) => { let h = 2166136261; const bytes = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); for (const v of bytes) h = Math.imul(h ^ v, 16777619); return h >>> 0; };
     const town = (view as any).town.geometry;
     return { triangles: view.townTriangles, position: fingerprint(town.attributes.position.array), color: fingerprint(town.attributes.color.array), ground: fingerprint((view as any).groundPx) };
+  },
+  rememberTerrain: () => {
+    const town = (view as any).town.geometry;
+    r116TerrainSnapshot = { position: town.attributes.position.array.slice(), color: town.attributes.color.array.slice(), ground: (view as any).groundPx.slice() };
+  },
+  terrainDifference: () => {
+    const town = (view as any).town.geometry, current = { position: town.attributes.position.array, color: town.attributes.color.array, ground: (view as any).groundPx };
+    const fields: any = {}, cells: any = {}, width = (view as any).groundTex.image.width, height = (view as any).groundTex.image.height, cellSize = width / N;
+    for (const field of ['position', 'color', 'ground']) {
+      const a = r116TerrainSnapshot[field], b = (current as any)[field], first: any[] = []; let count = 0;
+      for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) {
+        count++; if (first.length < 64) first.push({ index: i, native: a[i] ?? null, replay: b[i] ?? null });
+        if (field === 'ground') {
+          const pixel = Math.floor(i / 4), x = Math.floor((pixel % width) / cellSize), z = Math.floor(Math.floor(pixel / width) / cellSize), key = x + ',' + z;
+          if (!cells[key]) cells[key] = { x, z, bytes: 0, terrain: w.ter[z * N + x], occupation: w.occ[z * N + x] };
+          cells[key].bytes++;
+        }
+      }
+      fields[field] = { nativeLength: a.length, replayLength: b.length, count, first };
+    }
+    const png = (pixels: Uint8Array) => { const c = document.createElement('canvas'); c.width = width; c.height = height; c.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0); return c.toDataURL(); };
+    const difference = new Uint8Array(current.ground.length);
+    for (let i = 0; i < difference.length; i += 4) { for (let k = 0; k < 3; k++) difference[i + k] = Math.abs(current.ground[i + k] - r116TerrainSnapshot.ground[i + k]); difference[i + 3] = 255; }
+    return { fields, cells: Object.values(cells), width, height, nativePNG: png(r116TerrainSnapshot.ground), replayPNG: png(current.ground), differencePNG: png(difference) };
   },
   fixture: () => {
     reset(1944, false, false, false, false, false);
@@ -308,6 +333,7 @@ async function main() {
       previewCheck(await placeNative(mobile));
       await button('bb-start',mobile); await E('__rts.pause(true)'); await settle();
       const started = await sample();
+      await E('__r116test.rememberTerrain()');
       const terrain = await E('__r116test.terrain()');
       assert(started.state.phase === 'battle' && started.state.tick > 0, `${label}: ordinary start enters battle`);
       const replayed = runLog(createWorld(1944),started.state.log,started.state.tick);
@@ -317,7 +343,15 @@ async function main() {
       budget(started,false,label); await layout(label);
       assert.equal(await E(`__rts.playLog(1944,${JSON.stringify(started.state.log)},${started.state.tick})`),started.state.hash,`${label}: Chrome replay agrees at the exact native-start tick`);
       await E(`__rts.pause(true);__rts.focus(${buildCell.x+0.5},${buildCell.z+0.5},1.25)`); await settle();
-      assert.deepEqual(await E('__r116test.terrain()'),terrain,`${label}: native-start and same-log replay have identical town geometry and ground texture`);
+      const replayTerrain = await E('__r116test.terrain()');
+      if (JSON.stringify(replayTerrain) !== JSON.stringify(terrain)) {
+        const { nativePNG, replayPNG, differencePNG, ...difference } = await E('__r116test.terrainDifference()');
+        savePNG(`r116-${label}-terrain-native.png`,nativePNG); savePNG(`r116-${label}-terrain-replay.png`,replayPNG); savePNG(`r116-${label}-terrain-diff.png`,differencePNG);
+        savePNG(`r116-${label}-native-scene.png`,started.webgl); await shot(`r116-${label}-replay-scene.png`);
+        fs.writeFileSync(path.join(ROOT,'shots',`r116-${label}-terrain-state.json`),JSON.stringify({ native: terrain, replay: replayTerrain, difference, nativeState: started.state, replayState: await inspect() },null,2));
+        record(`R116 ${label} terrain mismatch: ${JSON.stringify({native:terrain,replay:replayTerrain,cells:difference.cells})}`);
+      }
+      assert.deepEqual(replayTerrain,terrain,`${label}: native-start and same-log replay have identical town geometry and ground texture; native=${JSON.stringify(terrain)} replay=${JSON.stringify(replayTerrain)}`);
       await equalMap(await sample(),started,`${label}: replay restores exact cleared minimap pixels`,`${label}-replay`);
       await button('b-restart',mobile); await settle(); await generationCheck();
       await E(`__rts.focus(${buildCell.x+0.5},${buildCell.z+0.5},1.25)`); await settle();

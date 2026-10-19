@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import * as sim from '../src/sim/world.ts';
 import { applyMap, MAP_RYE } from '../src/sim/maps.ts';
-import { applyBuild } from '../src/sim/build.ts';
+import { applyBuild, enemyPlan, BUILD_KINDS_24 } from '../src/sim/build.ts';
 import { step, runLog } from '../src/sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from '../src/sim/script.ts';
 import { initProduction } from '../src/ui/production.ts';
@@ -26,6 +26,7 @@ const mutations = {
   ignore_replacement: { group: 'replacement', file: 'render', from: 'this.world === w && this.state === w.vegetation && !changed', to: 'this.state === w.vegetation && !changed', message: 'replacement: a different preview world rebuilds even with the same state object' },
   ignore_activation: { group: 'activation', file: 'render', from: 'this.world === w && this.state === w.vegetation && !changed', to: 'this.world === w && !changed', message: 'activation: same world map command immediately activates geometry' },
   stale_map: { group: 'activation', file: 'battle', from: 'if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory);', to: '', message: 'activation: recorded Rye map refreshes actual ground pixels in the same tick' },
+  footprint_only: { group: 'build_replay', file: 'battle', from: 'for (let z = Math.max(0, b.z - 1); z < Math.min(N, b.z + b.d + 1); z++) for (let x = Math.max(0, b.x - 1); x < Math.min(N, b.x + b.w + 1); x++) this.paintCell(x, z);', to: 'for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z);', message: 'build_replay: native construction and recorded map/build replay have byte-identical ground including adjacent curbs' },
   stale_build: { group: 'construction', file: 'battle', from: 'townDirty = true; vegetationDirty = true;', to: 'townDirty = true;', message: 'construction: build event removes the cleared cell from geometry' },
   stale_clear: { group: 'clear', file: 'render', from: 'this.scene.remove(this.mesh);', to: '', message: 'clear: old world removes foliage from the actual scene' },
   absent_symbols: { group: 'minimap', file: 'mini', from: 'if (!b && foliage) {', to: 'if (false) {', message: 'minimap: hedge has the independent light-green line symbol' },
@@ -199,6 +200,35 @@ const groups = {
     assert(v.vegetation116.mesh !== v.town, 'construction: foliage never joins building picking geometry');
     const [cx, cy] = v.screenOf(24.5, 1.23, 26.5, 412, 860);
     assert.equal(v.buildingAt(cx, cy, 412, 860), null, 'construction: clicking a tree canopy does not select a nonexistent building'); v.dispose();
+  },
+  build_replay() {
+    // Reproduce the real preview/start route and its same tick-0 map/build/eco log, with R016
+    // disabled just as the browser replay comparison does. The enemy barn touches Rye roads.
+    const native = createWorld(1944); applyMap(native, 1, 1); setVegetation(true);
+    const makeView = w => new BattleView(w, true, true, true, true, true, true, true, true, false, true, true);
+    const a = makeView(native), command = { t: 'build', side: SIDE_PLAYER, kind: BK_COTTAGE, x: 30, z: 12 };
+    const preview = structuredClone(native); assert.equal(applyBuild(preview, command), null, 'build_replay: actual preview placement is legal');
+    a.setWorld(preview, SIDE_PLAYER); a.setWorld(native, -1);
+    const commands = [{ t: 'map', id: 1, vegetation: 1 }, command, ...enemyPlan(preview, BUILD_KINDS_24), { t: 'eco', inf: 1, guns: 1, tanks: 1 }];
+    assert(commands.some(c => c.t === 'build' && c.side === 1 && c.x === 9 && c.z === 12), 'build_replay: fixed fixture includes the road-adjacent enemy barn');
+    a.snapshot(); step(native, commands); a.onEvents(native.events, native.tick / 20);
+    const replay = createWorld(1944), b = makeView(replay); b.snapshot(); step(replay, commands); b.onEvents(replay.events, replay.tick / 20);
+    assert.equal(hashWorld(native), hashWorld(replay), 'build_replay: both construction routes produce the same complete world');
+    assert.equal(sameBytes(a.groundPx, b.groundPx), true, 'build_replay: native construction and recorded map/build replay have byte-identical ground including adjacent curbs');
+    for (const attribute of ['position', 'normal', 'color']) assert.equal(sameBytes(a.town.geometry.attributes[attribute].array, b.town.geometry.attributes[attribute].array), true, `build_replay: identical ${attribute} town buffers`);
+    assert.equal(sameBytes(a.tracks, b.tracks), true, 'build_replay: neighboring repaint preserves the same vehicle tracks');
+    assert.equal(sameBytes(a.vegetation116.mesh.geometry.attributes.position.array, b.vegetation116.mesh.geometry.attributes.position.array), true);
+    a.dispose(); b.dispose();
+    // Corner construction exercises both clamp edges; the repaint still uses the existing
+    // paintCell implementation and never addresses outside the original N by N texture.
+    for (const [x, z, side] of [[0, 0, 1], [N - 1, N - 1, 0]]) {
+      const w = field([]), v = view(w), painted = [], paint = v.paintCell.bind(v);
+      v.paintCell = (cx, cz) => { painted.push([cx, cz]); paint(cx, cz); };
+      assert.equal(applyBuild(w, { t: 'build', side, kind: BK_COTTAGE, x, z }), null);
+      v.onEvents(w.events, 0);
+      assert.equal(painted.length, 4, 'build_replay: corner construction repaints only its bounded two-by-two area');
+      assert(painted.every(([cx, cz]) => cx >= 0 && cz >= 0 && cx < N && cz < N), 'build_replay: bounded repaint never reads outside the map'); v.dispose();
+    }
   },
   clear() {
     const w = field(), v = view(w); v.setWorld(createWorld(1944));

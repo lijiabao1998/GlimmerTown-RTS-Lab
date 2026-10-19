@@ -390,7 +390,11 @@ export class BattleView {
       } else if (e.e === 'build') {
         townDirty = true; vegetationDirty = true;
         const b = this.w.blds[e.bld - 1];
-        if (b) { for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z); groundDirty = true; }
+        if (b) {
+          // R027 路緣讀鄰格 occ；新房屋落地也重畫一格邊緣，與整圖重播一致。
+          for (let z = Math.max(0, b.z - 1); z < Math.min(N, b.z + b.d + 1); z++) for (let x = Math.max(0, b.x - 1); x < Math.min(N, b.x + b.w + 1); x++) this.paintCell(x, z);
+          groundDirty = true;
+        }
       } else if (e.e === 'impact') {
         if (e.kind === SHELL_SMOKE) continue;   // R107：持續煙幕從世界重建，不冒充高爆／穿甲彈著
         const x = e.x / SUB, z = e.z / SUB;

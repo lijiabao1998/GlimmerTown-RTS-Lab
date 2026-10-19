@@ -271,7 +271,7 @@ async function main() {
         await sameDraws(phoneDraws,'phone resize round trip');
         assert.deepEqual((await state()).log,smokeLog,'productionLayout: viewport changes never issue commands');
         // Exercise ordinary selection and ammo controls with R109 genuinely disabled.
-        await fresh('noR109=1',[]); await check('noR109 short hint');
+        await fresh('noR109=1&noR116=1',[]); await check('noR109 short hint');
         assertions(await E('!document.getElementById("command-menu")'),'productionLayout: noR109 keeps the legacy interface');
         const legacyBefore=await state(),p=await gunPoint(); await touchTap(page,...p); await frames();
         assert.deepEqual((await state()).selected,[4],'productionLayout: noR109 ordinary touch selects the gun');
@@ -292,13 +292,15 @@ async function main() {
         assert.equal(await E('__rts.runScript(600)'),expectedReplay[600],'valve: current Node 600-tick replay hash'); assert.equal(await E('__rts.runScript(1200)'),expectedReplay[1200],'valve: current Node 1200-tick replay hash');
       },
     };
+    // R111's deliberately frozen content cache starts with its legacy short hint. Keep the new
+    // auto-battle foliage hint out of this fixture only; vegetation-browser covers that hint.
     for(const [name,run] of Object.entries(cases)) {
-      await fresh(name==='valve'?'noR109=1':'',name==='productionLayout'?[]:undefined); const errors=page.errors.length; try { await run(); } catch(error) { await shot(page,path.join(ROOT,`shots/r109-failure-${name}.png`)).catch(()=>{}); throw error; } assert.equal(page.errors.length,errors,`browser runtime errors in ${name}`); record(`OK real Chrome ${name}`);
+      await fresh(name==='valve'?'noR109=1':name==='productionLayout'?'noR116=1':'',name==='productionLayout'?[]:undefined); const errors=page.errors.length; try { await run(); } catch(error) { await shot(page,path.join(ROOT,`shots/r109-failure-${name}.png`)).catch(()=>{}); throw error; } assert.equal(page.errors.length,errors,`browser runtime errors in ${name}`); record(`OK real Chrome ${name}`);
     }
     // The same assertion must reject each isolated broken production bundle, not a startup error.
     overlay['index.html']=fs.readFileSync(path.join(broken,'index.html'));
     for(const [name,run] of Object.entries(cases)) {
-      await fresh(`__r109mutant=${name}${name==='valve'?'&noR109=1':''}`,name==='productionLayout'?[]:undefined); const errors=page.errors.length; let failure=null;
+      await fresh(`__r109mutant=${name}${name==='valve'?'&noR109=1':name==='productionLayout'?'&noR116=1':''}`,name==='productionLayout'?[]:undefined); const errors=page.errors.length; let failure=null;
       try { await run(); } catch(e) { failure=e; }
       if (name === 'hold' || name === 'cancel') await touch('touchCancel', []);
       assertions(failure instanceof assert.AssertionError && failure.message.startsWith(`${name}:`),`negative ${name}: expected semantic ${name} assertion, got ${failure?.stack??'no failure'}`);
