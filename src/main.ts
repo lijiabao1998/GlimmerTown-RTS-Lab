@@ -19,6 +19,7 @@ import { setStreets } from './render/battle.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
+import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
 
@@ -46,11 +47,14 @@ const r011 = q.get('noR011') !== '1';
 const r014 = q.get('noR014') !== '1';
 // R015 小地圖。逃生閥 ?noR015=1
 const r015 = q.get('noR015') !== '1';
+const r115 = q.get('noR115') !== '1'; // 只關估計區與提示，不改情報模擬
 let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
 const r109 = q.get('noR109') !== '1';
 let lastRangeInfo = '';
+let lastCounterbatteryInfo = '';
+let lastCounterbatteryWorld: World | undefined;
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
 const r107 = q.get('noR107') !== '1'; // 只關煙團畫面；煙幕指令與視線模擬保持啟用
@@ -380,6 +384,7 @@ hud = initHud({
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
+      counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115),
     };
   },
   togglePause: () => { if (phase === 'battle') paused = !paused; },
@@ -404,6 +409,7 @@ prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_
 let pausedBeforeHelp = false;
 // R015 小地圖：點哪裡鏡頭滑過去（有 R012 就平滑）
 if (r015) minimap = initMinimap({
+  counterbattery: r115,
   world: () => w,
   visible: u => view.visibleUnit(u),
   view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
@@ -453,6 +459,11 @@ renderer.setAnimationLoop(() => {
   // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
   const rangeInfo = view.rangeInfo;
   if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
+  // 暫停／重播也檢查當前世界；同 tick 換世界不能沿用上一局的提示。
+  const counterbatteryInfo = counterbatteryHint(w, phase === 'battle' && r015 && r115);
+  if (w !== lastCounterbatteryWorld || counterbatteryInfo !== lastCounterbatteryInfo) {
+    lastCounterbatteryWorld = w; lastCounterbatteryInfo = counterbatteryInfo; hud?.update();
+  }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
   prodBar?.update();

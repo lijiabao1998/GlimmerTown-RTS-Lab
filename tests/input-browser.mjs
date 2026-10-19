@@ -7,6 +7,14 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { withBrowser, sleep, shot, touchTap } from '../tools/cdp.mjs';
+import { runScript as nodeScript } from '../src/sim/script.ts';
+import { hashWorld } from '../src/sim/world.ts';
+// R115: the visual valve still compares the complete current world across Node and Chrome.
+const expectedReplay = { 600: hashWorld(nodeScript(600)), 1200: hashWorld(nodeScript(1200)) };
+// Retain the independent pre-R115 combat anchors as well as full-state Node/Chrome parity.
+const legacyCombatHash = ticks => { const w = nodeScript(ticks); delete w.counterbattery; return hashWorld(w); };
+assert.equal(legacyCombatHash(600), 'c789deeb', 'original eight-command 600-tick combat anchor');
+assert.equal(legacyCombatHash(1200), 'f3364bb6', 'original eight-command 1200-tick combat anchor');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r109-input-'));
 const strictCI = process.env.GITHUB_ACTIONS === 'true' || !!process.env.GITHUB_RUN_ID || !!process.env.CI;
@@ -40,6 +48,7 @@ const plugin = {
 };
 const assertions = (condition, message) => assert.ok(condition, message);
 async function main() {
+  assert.equal(expectedReplay[1200], JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/golden.json'), 'utf8')).hash, 'fixture: current Node replay agrees with the checked-in golden');
   const started = Date.now();
   const baseline = path.join(temp, 'baseline'), broken = path.join(temp, 'broken');
   await build({ root: ROOT, logLevel: 'error', build: { outDir: baseline } });
@@ -280,7 +289,7 @@ async function main() {
         assertions(await E('!document.getElementById("selection-box")&&!document.getElementById("command-menu")'),'valve: disabled feature creates no overlay');
         const p=await gunPoint(); await touch('touchStart',[[...p,1]]); await sleep(650); await touch('touchEnd',[]); await frames();
         assertions(!(await state()).open,'valve: old long touch does not open menu');
-        assert.equal(await E('__rts.runScript(600)'),'c789deeb','valve: original 600-tick hash'); assert.equal(await E('__rts.runScript(1200)'),'f3364bb6','valve: original 1200-tick hash');
+        assert.equal(await E('__rts.runScript(600)'),expectedReplay[600],'valve: current Node 600-tick replay hash'); assert.equal(await E('__rts.runScript(1200)'),expectedReplay[1200],'valve: current Node 1200-tick replay hash');
       },
     };
     for(const [name,run] of Object.entries(cases)) {

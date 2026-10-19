@@ -92,7 +92,7 @@ function fixture({ hud = true, enabled = true } = {}) {
   const menu = { isOpen: () => menuOpen, open() { menuOpen = true; }, close() { menuOpen = false; }, contains: target => target === menu };
   const c = vm.createContext({
     w, selected, battleHint: undefined, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he',
-    r109: enabled, r009: true, r010: false, r012: false, r018: false, buildHint: '', BUILD_TIP: '布陣說明',
+    r109: enabled, r009: true, r010: false, r012: false, r018: false, r015: true, r115: true, counterbatteryHint: () => '', buildHint: '', BUILD_TIP: '布陣說明',
     SIDE_PLAYER, SIDE_ENEMY, SUB, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UNIT_KINDS,
     routeBattleOrder, bombardCommand, bombardTarget, inSelectionRect, document, canvas,
     pointers: new Map(), dragged: false, pinchD: 0, dragV: { vx: 2, vy: 3, t: 4 }, lastTap: { id: 0, t: 0 },

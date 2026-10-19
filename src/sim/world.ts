@@ -156,6 +156,9 @@ export interface AiState { side: number; level: number; next: number; ox: number
 
 export interface SmokeCloud { id: number; side: number; x: number; z: number; born: number; expires: number }
 
+// R115：只保存量化聲源；side 是收到情報的一方，cell 是粗區內 4×4 個 2×2 子區的索引。
+export interface CounterbatteryReport { side: number; zone: number; cell: number; shots: number; last: number }
+
 export interface World extends RngState {
   seed: number;
   tick: number;
@@ -173,6 +176,7 @@ export interface World extends RngState {
   eco?: EcoState;         // R019：補給、指揮部、生產佇列
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
   smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
+  counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
 }
 
 export const idx = (x: number, z: number) => z * N + x;
@@ -328,6 +332,10 @@ export function hashWorld(w: World): string {
   if (w.smoke) {
     f.int(0x534d).int(w.smoke.windX).int(w.smoke.windZ).int(w.smoke.clouds.length);
     for (const c of w.smoke.clouds) f.int(c.id).int(c.side).int(c.x).int(c.z).int(c.born).int(c.expires);
+  }
+  if (w.counterbattery?.length) {
+    f.int(0x4342).int(w.counterbattery.length);
+    for (const r of w.counterbattery) f.int(r.side).int(r.zone).int(r.cell).int(r.shots).int(r.last);
   }
   return f.hex();
 }

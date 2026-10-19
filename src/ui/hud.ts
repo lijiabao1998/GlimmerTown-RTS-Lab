@@ -8,6 +8,7 @@ export interface HudState {
   ai?: string;   // R018 電腦難度
   build?: boolean; hint?: string;   // R006 布陣：藏掉暫停／速度／砲擊，提示列換成布陣說明
   rangeInfo?: string; // R113：當前單選武器的名目射程與散布上界
+  counterbatteryInfo?: string; // R115：只有小地圖有有效粗略情報時顯示
   info?: string;   // R009 選取資訊（平均血量、正在做什麼）
   report?: boolean;   // R010：勝負由戰報顯示，不出中間的橫幅
 }
@@ -70,6 +71,7 @@ export function initHud(a: HudActions): Hud {
       ? `${s.info ? `${s.info}。` : ''}已選：${s.tanks ? `坦克 ${s.tanks}` : ''}${s.tanks && s.guns ? '、' : ''}${s.guns ? `砲 ${s.guns}` : ''}${s.infantry ? ` 步兵 ${s.infantry}` : ''}${s.observers ? ` 觀測員 ${s.observers}` : ''}${s.observers || s.infantry ? '（點房子進駐）' : ''}。點地面＝移動，點敵人＝攻擊，點房子＝轟它${s.fireMode ? '；砲擊模式：點地面＝對那一格開火' : ''}`
       : '點我方單位（藍圈）選取；拖曳平移，雙指或滾輪縮放';
     if (s.hint === undefined && s.rangeInfo) $('hint').textContent += `。${s.rangeInfo}`;
+    if (s.hint === undefined && s.counterbatteryInfo) $('hint').textContent += `。${s.counterbatteryInfo}`;
     const ban = $('banner');
     ban.hidden = s.winner < 0 || !!s.report;
     ban.textContent = s.winner === 0 ? '勝利' : s.winner === 1 ? '戰敗' : s.winner === 2 ? '同歸於盡' : '';

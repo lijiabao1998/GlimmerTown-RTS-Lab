@@ -1,6 +1,6 @@
 {
   "seed": 1944,
   "ticks": 1200,
-  "hash": "f3364bb6",
-  "note": "R107 榴彈砲煙幕：原 SCRIPT 七條不改，tick 500 加四發煙幕任務；煙團、固定風向與待發彈種進入 hash。2026-10-18 npm run unit 實際輸出 f3364bb6（68.9 秒，只因舊 golden 紅）；重跑、JSON 重播與中途深拷貝一致。舊七指令 fixture 仍為 d22b1d45。"
+  "hash": "89aa0b92",
+  "note": "R115 反砲兵：SCRIPT與戰鬥數值不變；只新增量化砲聲情報(side/zone/cell/shots/last)進入hash。2026-10-19完整npm run unit實際輸出89aa0b92（114.2秒；新Chrome受本機socket限制、3支既有browser及golden因舊值紅）。同種子、JSON重播、600tick深拷貝一致；剝除新情報後原SCRIPT1200仍f3364bb6。"
 }

@@ -1,11 +1,14 @@
 // R015 小地圖：上半是純函式（座標換算、要畫哪些點，Node 守衛直接測），下半是 DOM 畫布。只讀世界、不改世界。
 import { N, TER_ROAD, TER_FIELD, TER_MUD, SIDE_PLAYER, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
+import { drawCounterbattery } from './counterbattery.ts';
 
 // 菱形，方向跟主畫面一樣：主畫面的「右」＝世界 (+x,−z)、「上」＝世界 (−x,−z)。
 // 小地圖 px = w/2 + (x − z)·s、py = (x + z)·s/2，s = w/(2N)；整張高 = w/2。
 export interface MiniGeo { w: number; h: number; s: number }
 export const miniGeo = (w: number): MiniGeo => ({ w, h: w / 2, s: w / (2 * N) });
-export function toMini(g: MiniGeo, x: number, z: number): [number, number] { return [g.w / 2 + (x - z) * g.s, ((x + z) * g.s) / 2]; }
+export function toMini(g: MiniGeo, x: number, z: number, out: [number, number] = [0, 0]): [number, number] {
+  out[0] = g.w / 2 + (x - z) * g.s; out[1] = ((x + z) * g.s) / 2; return out;
+}
 export function fromMini(g: MiniGeo, px: number, py: number): [number, number] {
   const a = (px - g.w / 2) / g.s, b = (2 * py) / g.s;   // a = x − z、b = x + z
   return [(a + b) / 2, (b - a) / 2];
@@ -21,13 +24,15 @@ export function miniDots(w: World, visible: (u: Unit) => boolean): Dot[] {
 // ---- DOM ----
 export interface Minimap { frame: (t: number) => void; dirty: () => void; el: HTMLCanvasElement; point: (x: number, z: number) => [number, number] }
 
-export function initMinimap(a: { world: () => World; visible: (u: Unit) => boolean; view: () => [number, number][]; tap: (x: number, z: number) => void }): Minimap {
+export function initMinimap(a: { world: () => World; visible: (u: Unit) => boolean; view: () => [number, number][]; tap: (x: number, z: number) => void; counterbattery?: boolean }): Minimap {
   const cvs = document.createElement('canvas');
   cvs.id = 'minimap';
   (document.getElementById('hud') ?? document.body).appendChild(cvs);
   const base = document.createElement('canvas');
   let baseDirty = true, last = -1, g = miniGeo(160), dpr = 1;
   let baseWorld: World | undefined;
+  const counterbatteryPoint: [number, number] = [0, 0];
+  const counterbatteryProject = (x: number, z: number) => toMini(g, x, z, counterbatteryPoint);
   const cell = (ctx: CanvasRenderingContext2D, x: number, z: number) => {   // 一格＝一個小菱形
     const [p0x, p0y] = toMini(g, x, z), [p1x, p1y] = toMini(g, x + 1, z), [p2x, p2y] = toMini(g, x + 1, z + 1), [p3x, p3y] = toMini(g, x, z + 1);
     ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.lineTo(p3x, p3y); ctx.closePath(); ctx.fill();
@@ -58,6 +63,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     const ctx = cvs.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(base, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawCounterbattery(ctx, w, counterbatteryProject, a.counterbattery !== false);
     for (const d of miniDots(w, a.visible)) {
       const [px, py] = toMini(g, d.x, d.z);
       ctx.fillStyle = d.side === SIDE_PLAYER ? '#4aa3ff' : '#ff5a3c';
