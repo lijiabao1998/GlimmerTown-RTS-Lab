@@ -36,12 +36,14 @@
 | 4 | 裝甲面向：正面厚、側後薄（整數點積），繞側打傷害加成 | 坦克車 | 模擬 | 會 | 選取時畫裝甲弧 |
 | 16 | 鐵絲網：可布設、可破壞的障礙，形成繞行與清除的選擇 | 業主 2026-10-18「鐵絲網」 | 模擬＋渲染 | 會 | 與 Claude R024b 的鐵絲網／車人通行表重疊，待協調，不另寫一套 |
 | 17 | 電網防禦：先考據二戰適配與供電／斷電玩法，再決定實作範圍 | 業主 2026-10-18「電網」 | 考據／模擬＋渲染 | 待定 | 考據完成：僅支持少量專用陣地；實作仍與Claude R024b鐵絲網／通行／破壞契約重疊，待協調 |
+| 18 | 可破壞圍牆：磚牆、石牆、混凝土牆，支援連接與砲擊開口 | 業主 2026-10-18「圍牆」 | 模擬＋渲染 | 不會 | R120／PR52草稿卡住：完整unit綠但收尾head原手機雙擊smoke紅；待受保護原事件追蹤，未發布 |
 | 24 | 多選射界：呈現共同與各自射程，避免任挑單位誤導 | 坦克＋榴彈砲 | 介面 | 不會 | R113 已做單選與有效對地任務散布上界；本項另驗多選可讀性與固定預算 |
 
 ## 卡住／等業主看圖
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
+| 18 可破壞圍牆 | 卡住，待 Claude 補受保護 smoke 原事件追蹤 | R120收尾僅改文件，CI39325126373 unit492.5秒綠但手機雙擊選取[1]、鏡頭21／23不動；Node重現350ms間隔、500ms長按或取消都可同症，CI根因未定。不重跑賭綠；三個卡住PR觸發停手 | R120／[#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) |
 | 23 手機說明關閉按鈕 | 卡住，待 Claude 補受保護 smoke 診斷 | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。原事件時間／target／取消原因未記錄，不能判定偶發；不重跑賭綠、不改相機或斷言 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
 | 4 裝甲面向 | 卡住，交 Claude 整合 | R104 面向守衛通過，但 AI 難度勝場 9／12／12→7／11／9；種子 34、89 困難超時，不能削弱守衛或改 Claude AI | R104／[#31](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/31) |
 | 16 鐵絲網 | 待 Claude 協調 | ROADMAP 的 R024b 已含龍牙、鐵絲網、沙包陣地與車／人兩張通行表；GPT 不重做障礙物或只拆步兵部分 | [ROADMAP@b7991a7](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/blob/b7991a7444ddcb4583d8d0f09c3ce5c21a44b7bb/docs/ROADMAP.md#二目前進度) |
@@ -53,7 +55,6 @@ R119 預備純回退：R118 main 首次 smoke 紅時建立，僅首卡分支已�
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
-| 可連接、可轟開的磚／石／混凝土圍牆 | R120 | [#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) | 2026-10-19（驗收完成，待合併發布） | CI64支unit／smoke／lane、88負控及圖審通過；本機Chrome受限、Android未測；首紅小地圖後端原因未知，固定量測不稱遊戲修復；收尾head及發布仍待驗 |
 | 四種可通行戰壕：共享8點、相連最強掩護 | R118 | [#51](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/51) | 2026-10-19（發布） | 精簡守衛latest-head CI／圖審通過；main6f0cd8b的CI39233691481首輪雙擊紅，外部使用者attempt2於10:22 smoke／Pages綠，10:23公網build逐位核對。首輪小地圖與雙擊根因未確立；本機Chrome受限、Android未測 |
 | 可見戰場程序音效：自願開啟砲聲／爆炸／倒塌 | R117 | [#50](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/50) | 2026-10-19（發布） | 本機Chrome受限；CI真實音訊圖／九負控／圖審通過；Android、喇叭實聽與真實BFCache未測；main3654fb2的CI39221216593／Pages成功，08:25公網build逐位核對 |
 | 可穿行樹籬／小樹林：中段遮視線、最強半掩護 | R116 | [#49](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/49) | 2026-10-19（發布） | 本機Chrome受限，CI實測／圖審通過；Android未測；main91849c4的CI39212799723／Pages成功，07:04公網build已逐位核對 |
