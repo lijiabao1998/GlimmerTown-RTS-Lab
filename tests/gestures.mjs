@@ -26,7 +26,7 @@ const mutations = {
   geometry: { group: 'geometry', file: 'main', from: 'hud?.update(); prodBar?.update();\n    if (target) commandMenu?.open', to: 'hud?.update();\n    if (target) commandMenu?.open' },
   dispatch: { group: 'dispatch', file: 'main', from: 'if (gestures?.up(e))', to: 'if (false && gestures?.up(e))' },
   capture: { group: 'lifecycle', file: 'main', from: 'if (r109 && pointers.has(e.pointerId)) clearGestureInput();', to: 'if (r109) clearGestureInput();' },
-  reset: { group: 'reset', file: 'main', from: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {\n  if (r109) clearGestureInput();", to: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {" },
+  reset: { group: 'reset', file: 'main', from: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true) {\n  if (r109) clearGestureInput();", to: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true) {" },
   valve: { group: 'valve', file: 'main', from: 'const gestures = r109 ? new Gestures', to: 'const gestures = true ? new Gestures' },
 };
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
@@ -206,7 +206,7 @@ const groups = {
     const m = mainFixture();
     Object.assign(m.c, { seed: 1944, r006: false, r018: false, r019: false, r026: false, createWorld, fxOn: true, r004: false, r008: false, r009: false, r011: false, r014: false, r016: false, r107: true, q: new URLSearchParams(), newStats: () => ({}), ui() {}, BattleView: class { constructor() { return m.c.view; } } });
     vm.runInContext(extract('reset'), m.c);
-    for (const elapsed of [499, 500]) { m.send('pointerdown', touch()); m.clock.advance(elapsed); m.c.reset(1944, false, false, false, false); m.clock.advance(1000); m.send('pointerup', touch()); assert.equal(m.menu(), false, 'reset/replay clears pending and open gestures'); assert.equal(m.issued.length, 0); }
+    for (const elapsed of [499, 500]) { m.send('pointerdown', touch()); m.clock.advance(elapsed); m.c.reset(1944, false, false, false, false, false); m.clock.advance(1000); m.send('pointerup', touch()); assert.equal(m.menu(), false, 'reset/replay clears pending and open gestures'); assert.equal(m.issued.length, 0); }
     for (const name of ['runScript', 'playLog', 'playScript']) assert.match(plain.slice(plain.indexOf(`  ${name}:`), plain.indexOf(`  ${name}:`) + 200), /reset\(/, `${name} reuses reset cleanup`);
     assert.match(plain, /const help = initHelp\(\{ open: \(\) => \{ if \(r109\) clearGestureInput\(\)/);
     assert.match(plain, /if \(r109 && priorWinner < 0 && w\.winner >= 0\) clearGestureInput\(\)/);
