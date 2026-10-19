@@ -22,9 +22,10 @@ const HTML = `
     <div class="acts"><button id="help-ok">知道了</button></div>
   </div>`;
 
-export function initHelp(on: { open: () => void; close: () => void }, gestures = false): Help {
+export function initHelp(on: { open: () => void; close: () => void }, gestures = false, ranges = false): Help {
   const root = document.createElement('div');
   root.id = 'help'; root.hidden = true; root.innerHTML = gestures ? HTML.replace('<h3>戰術</h3>', '<p>桌機按住 Shift＋左鍵拖曳，追加框內我方單位；普通拖曳仍平移。手機長按地圖半秒，放手後選「高爆砲擊」或「煙幕」；選單只下這一次指令，不改工具列模式。高爆限間接射擊單位，煙幕限榴彈砲；其他混選單位不動。</p><h3>戰術</h3>') : HTML;
+  if (ranges) root.innerHTML = root.innerHTML.replace('<h3>戰術</h3>', '<p>單選一個我方武器：金圈是名目最大射程，紅圈內是最小射程死角；橘圈是目前已下達對地砲擊的散布上界，不是命中率或爆炸範圍。直射仍會被房子擋住。多選時先單選，移動或無有效砲擊任務不預測散布。</p><h3>戰術</h3>');
   (document.getElementById('hud') ?? document.body).appendChild(root);
   const close = () => { if (root.hidden) return; root.hidden = true; on.close(); };
   const open = () => { if (!root.hidden) return; root.hidden = false; on.open(); };
