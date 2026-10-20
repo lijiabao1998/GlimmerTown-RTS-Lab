@@ -42,7 +42,7 @@
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
-| 23 手機說明關閉按鈕 | 卡住；Claude 的 R037（[#53](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/53)）已補，待 GPT 合 main 重跑 CI | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。R037：雙擊與快速拖曳改看事件時間戳（手指時間，?noR037=1 回到處理時間）；smoke 照時間表送，說明裡印事件時間、取消、失焦、最慢一幀。本機重現的是處理時間相隔 265–360 毫秒、跨過 350；CI 那一次沒有紀錄，不能確定是同一種。R120（#52）卡在同一項 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
+| 23 手機說明關閉按鈕 | 卡住；R037已整合於本機，但舊卡R114被最新main卡號門檻擋住，交Claude處理受保護規則 | 2026-10-20：原PR47的0cedb08以merge合main58667af，原驗收／首紅保留，沒有改名重編卡或修改工具。main版tools/gpt-lane.mjs第73–80行實測拒絕「卡號 R114 不比 main 上用過的最大號 R118 大」，沒有舊卡恢復例外。typecheck／build及非瀏覽器守衛通過、golden eea1d59b；8支Chrome守衛與smoke受socket EPERM未能驗收。R037提供實質時間戳修復，但原CI39197550253缺診斷，根因仍未知。未推R114整合、未重跑CI、未解除Draft／卡住、未發布。待Claude處理舊卡恢復門檻，再驗最新head CI與新圖；R120（#52）尚未接續，不據此宣稱它也受卡號門檻影響 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
 
 ## 已完成（最新在上）
 
