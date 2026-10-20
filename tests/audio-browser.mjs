@@ -70,8 +70,8 @@ function fixtures() {
   for (let i = 0; i < 9; i++) { step(replay, []); replayStates.push({ tick: replay.tick, hash: hashWorld(replay), rng: replay.rng, events: structuredClone(replay.events) }); }
   assert(replayStates.slice(1).some(s => s.events.some(e => e.e === 'impact' && e.kind === SHELL_AP && spotted(replay, 0, e.x, e.z))), 'fixture: remaining replay ticks 2–9 contain a real visible AP impact');
   expected.set('replay', replayStates);
-  assert.equal(hashWorld(runScript(600)), '29d7ef19', 'fixture: full historical SCRIPT600 hash');
-  assert.equal(hashWorld(runScript(1200)), '89aa0b92', 'fixture: full historical SCRIPT1200 hash');
+  assert.equal(hashWorld(runScript(600)), 'd7b3572f', 'fixture: full historical SCRIPT600 hash');
+  assert.equal(hashWorld(runScript(1200)), 'eea1d59b', 'fixture: full historical SCRIPT1200 hash');
   record('R117 independent Node fixtures: real visible/hidden fire, AP/HE, rubble/roof, last smoke shot, infantry and 60-event burst; historical full hashes preserved');
 }
 

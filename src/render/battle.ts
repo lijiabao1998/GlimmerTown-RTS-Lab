@@ -49,6 +49,7 @@ type Emitter = { kind: number; id: number; x: number; z: number; w: number; d: n
 type Toss = { t0: number; vx: number; vz: number; spin: number; yaw: number; tilt: number };
 const C_BAR_BG = new THREE.Color(0x15130f), C_BAR_HI = new THREE.Color(0x63d65a), C_BAR_MID = new THREE.Color(0xf2c23a), C_BAR_LO = new THREE.Color(0xe8402a);
 const C_BLD_HI = new THREE.Color(0xdcc08a), C_BLD_LO = new THREE.Color(0xe08a3a);
+const C_ARMOR_FRONT = new THREE.Color(0x63d65a), C_ARMOR_REAR = new THREE.Color(0xe8402a);
 const C_WHITE = new THREE.Color(1, 1, 1), C_HE_SHELL = new THREE.Color(0x2d2d2d), C_AP_SHELL = new THREE.Color(0xffd27a), C_SEL = new THREE.Color(0xffe066);
 const DIRT = [0x5a4636, 0x6b5440, 0x3e3226], STEEL = [0x3a3c3e, 0x55575a, 0x2c2a26];
 
@@ -86,6 +87,7 @@ export class BattleView {
   readonly menDbg = { alive: 0 };
   private discs: THREE.InstancedMesh;
   private rings: THREE.InstancedMesh;
+  private armorArcs: THREE.InstancedMesh | null = null;
   private shells: THREE.InstancedMesh;
   private fxMesh: THREE.InstancedMesh;
   private prevX = new Float64Array(MAX_UNITS + 1);
@@ -176,7 +178,7 @@ export class BattleView {
   readonly range113: RangePreview | null;
   get rangeInfo(): string { return this.range113?.solution.legend ?? ''; }
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true) {
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true, r104 = true) {
     this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
     this.trench118 = new TrenchRaster(r118); this.trench118.sync(w);
     this.range113 = r113 ? new RangePreview() : null;
@@ -232,6 +234,7 @@ export class BattleView {
     this.men = inst(soldier(), toon({ vertexColors: true }), MEN_CAP, true);   // R021 步兵：活著的小兵＋倒下的人
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
+    if (r104 && fxOn) this.armorArcs = inst(new THREE.RingGeometry(0.45, 0.53, 8, 1, -Math.PI / 4, Math.PI / 2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ depthWrite: false }), MAX_RINGS * 2, false);
     if (r014) {
       const mat = toon({ polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
       this.holeMesh = inst(new THREE.PlaneGeometry(1, 1), mat, HOLE_CAP * 2, false);
@@ -460,13 +463,14 @@ export class BattleView {
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
     if (w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
-    let nh = 0, ng = 0, no = 0, nd = 0, nr = 0, nm = 0;
+    let nh = 0, ng = 0, no = 0, nd = 0, nr = 0, nm = 0, na = 0;
     for (const u of w.units) {
       if (!this.visibleUnit(u)) continue;
       const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * alpha) / SUB;
       const z = (this.prevZ[u.id] + (u.z - this.prevZ[u.id]) * alpha) / SUB;
       const mdx = u.x - this.prevX[u.id], mdz = u.z - this.prevZ[u.id];
-      if (u.alive && (mdx || mdz)) this.yaw[u.id] = Math.atan2(-mdz, mdx);
+      if (u.hullX !== undefined && u.hullZ !== undefined) this.yaw[u.id] = Math.atan2(-u.hullZ, u.hullX);
+      else if (u.alive && (mdx || mdz)) this.yaw[u.id] = Math.atan2(-mdz, mdx);
       const aim = this.r8 && u.alive ? this.turretYaw[u.id] : Math.atan2(-u.aimZ, u.aimX);
       const col = !u.alive ? WRECK : this.r8 && simT - this.flashT0[u.id] < 0.15 ? this.cFlash.copy(SIDE_COL[u.side]).lerp(C_WHITE, 0.85 * (1 - (simT - this.flashT0[u.id]) / 0.15)) : SIDE_COL[u.side];
       // R008 後座：開火後 0.3 秒內沿瞄準反方向退一下再回位（前 0.04 秒猛退，之後慢慢回）
@@ -500,6 +504,13 @@ export class BattleView {
         if (selected.has(u.id) && nr < MAX_RINGS) {
           m.position.y = this.unitHeight(u) + 0.02; m.updateMatrix();
           this.rings.setMatrixAt(nr, m.matrix); this.rings.setColorAt(nr, C_SEL); nr++;
+          if (this.armorArcs && u.side === SIDE_PLAYER && UNIT_KINDS[u.kind].armored && u.hullX !== undefined && u.hullZ !== undefined) {
+            const size = TANK_SCALE23[u.kind] ?? 1;
+            m.position.set(x, 0.025, z); m.scale.setScalar(size); m.rotation.set(0, this.yaw[u.id], 0); m.updateMatrix();
+            this.armorArcs.setMatrixAt(na, m.matrix); this.armorArcs.setColorAt(na++, C_ARMOR_FRONT);
+            m.rotation.y += Math.PI; m.updateMatrix();
+            this.armorArcs.setMatrixAt(na, m.matrix); this.armorArcs.setColorAt(na++, C_ARMOR_REAR);
+          }
         }
       }
     }
@@ -567,6 +578,7 @@ export class BattleView {
     this.range113?.update(w, selected, showRanges);
     nm = this.bodies21(nm);
     fin(this.men, nm);
+    if (this.armorArcs) fin(this.armorArcs, na);
     fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
   }
 
@@ -1213,6 +1225,8 @@ export class BattleView {
   }
 
   // 守衛用：場景裡的建築三角形數
+  get armorArcCount() { return this.armorArcs?.count ?? 0; }
+
   get townTriangles() { return this.town.geometry.attributes.position.count / 3; }
 }
 

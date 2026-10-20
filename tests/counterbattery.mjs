@@ -206,9 +206,9 @@ group('replay', () => {
 group('legacy', () => {
   semantic('script_unchanged', SCRIPT, LEGACY_SCRIPT);
   const w = runScript(1200); assert(w.counterbattery?.length, 'new SCRIPT hash includes live reports');
-  semantic('legacy', hashWorld(strip(w)), 'f3364bb6');
+  semantic('legacy', hashWorld(strip(w)), '79fc3ae3');
   const twice = runScript(1200); semantic('seed_repeat', hashWorld(w), hashWorld(twice));
-  console.log(`  stripped 1200 f3364bb6; full 600 ${hashWorld(runScript(600))}; full 1200 ${hashWorld(w)}`);
+  console.log(`  stripped 1200 79fc3ae3; full 600 ${hashWorld(runScript(600))}; full 1200 ${hashWorld(w)}`);
 });
 
 // No production source is edited. A mutant must exit on its requested semantic assertion,

@@ -18,7 +18,7 @@ const mutations = {
   compatibility: { group: 'compatibility', file: 'route', from: "...(smoke ? { ammo:", to: "...(true ? { ammo:" },
   controller: { group: 'controller', file: 'main', from: 'routeBattleOrder(w, selected, fireMode, ammo,', to: "routeBattleOrder(w, selected, fireMode, 'he'," },
   reset: { group: 'lifecycle', file: 'main', from: "selected.clear(); fireMode = false; ammo = 'he';", to: "selected.clear(); fireMode = false;" },
-  valve: { group: 'lifecycle', file: 'main', from: "r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118);", to: "r009, r011, r014, r016, true, q.get('noR113') !== '1', r118);" },
+  valve: { group: 'lifecycle', file: 'main', from: "r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);", to: "r009, r011, r014, r016, true, q.get('noR113') !== '1', r118, r104);" },
   hud: { group: 'hud', file: 'hud', from: "const smoke = s.ammo === 'smoke';", to: 'const smoke = false;' },
   layout: { group: 'layout', file: 'css', from: 'width: 44px; height: 44px; padding: 0;', to: 'width: 44px; height: 36px; padding: 0;' },
 };
@@ -56,7 +56,7 @@ function controller(visual = true) {
   const c = vm.createContext({
     createWorld, hashWorld, runLog, routeBattleOrder: route,
     seed: 1944, r006: false, r018: false, r019: false, r026: false, r109: false, r015: true, r115: true, r118: true, counterbatteryHint: () => '', battleHint: undefined,
-    r004: true, r008: true, r009: false, r010: false, r011: true, r012: false, r014: true, r016: true, fxOn: true,
+    r004: true, r008: true, r009: false, r010: false, r011: true, r012: false, r014: true, r016: true, r104: true, fxOn: true,
     SIDE_PLAYER, SIDE_ENEMY, UK_HOWITZER, UK_TANK, UK_OBSERVER, UK_INFANTRY, UK_ATGUN: 4, UK_MORTAR,
     UNIT_KINDS: {}, N, SUB, SCRIPT_SEED: 1944, SCRIPT_TICKS: 1200, SCRIPT: [],
     q: new URLSearchParams(visual ? '' : 'noR107=1'),

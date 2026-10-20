@@ -58,7 +58,7 @@ function fixtures() {
   assert(buildCell, 'fixture: a legal native cottage placement actually covers foliage');
   const p = structuredClone(opening); applyBuild(p, buildCell);
   assert(occupied(p).length < occupied(opening).length && occupied(opening).length <= 64, 'fixture: preview clears foliage without altering source');
-  assert(!legacy.vegetation && hashWorld(legacy600) === '29d7ef19', 'fixture: old SCRIPT retains its historical world and 600-tick hash');
+  assert(!legacy.vegetation && hashWorld(legacy600) === 'd7b3572f', 'fixture: old SCRIPT retains its historical world and 600-tick hash');
   record(`R116 fixtures: forest ${hashWorld(forest)} -> ${hashWorld(forestHit)}, damage ${damage}; Rye ${occupied(opening).length} cells, native cottage ${buildCell.x},${buildCell.z}`);
 }
 

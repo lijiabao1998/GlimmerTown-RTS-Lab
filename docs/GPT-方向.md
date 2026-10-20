@@ -33,29 +33,24 @@
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
 | 23 | 修補：手機說明面板的「知道了」完整可見、可直接點到 | 手機優先／不改壞 | 介面 | 不會 | R114／PR47草稿卡住：help四組／四負控通過，但既有手機雙擊smoke紅，待原路徑事件診斷；未發布 |
-| 4 | 裝甲面向：正面厚、側後薄（整數點積），繞側打傷害加成 | 坦克車 | 模擬 | 會 | 選取時畫裝甲弧 |
-| 16 | 鐵絲網：可布設、可破壞的障礙，形成繞行與清除的選擇 | 業主 2026-10-18「鐵絲網」 | 模擬＋渲染 | 會 | 與 Claude R024b 的鐵絲網／車人通行表重疊，待協調，不另寫一套 |
-| 17 | 電網防禦：先考據二戰適配與供電／斷電玩法，再決定實作範圍 | 業主 2026-10-18「電網」 | 考據／模擬＋渲染 | 待定 | 考據完成：僅支持少量專用陣地；實作仍與Claude R024b鐵絲網／通行／破壞契約重疊，待協調 |
-| 18 | 可破壞圍牆：磚牆、石牆、混凝土牆，支援連接與砲擊開口 | 業主 2026-10-18「圍牆」 | 模擬＋渲染 | 不會 | R120／PR52草稿卡住：完整unit綠但收尾head原手機雙擊smoke紅；待受保護原事件追蹤，未發布 |
+| 16 | 鐵絲網：可布設、可破壞的障礙，形成繞行與清除的選擇 | 業主 2026-10-18「鐵絲網」 | 模擬＋渲染 | 會 | R036 協調好了：鐵絲網歸這一項，Claude 的 R024b 只做龍牙、沙包陣地。要「人過不去、車過得去」就自己在尋路加步兵的通行判斷，R024b 之後沿用 |
+| 17 | 電網防禦：先考據二戰適配與供電／斷電玩法，再決定實作範圍 | 業主 2026-10-18「電網」 | 考據／模擬＋渲染 | 待定 | 保持二戰題材；不是現代科幻護盾，研究適配前不直接施工 |
+| 18 | 圍牆：矮牆、石牆與混凝土圍牆，提供可打開的遮蔽線 | 業主 2026-10-18「圍牆」 | 模擬＋渲染 | 會 | 保留既有房屋破壞；與第 12 項樹籬／小樹林區分；Claude 路線圖 R027 的石牆讓給這一項（R036） |
 | 24 | 多選射界：呈現共同與各自射程，避免任挑單位誤導 | 坦克＋榴彈砲 | 介面 | 不會 | R113 已做單選與有效對地任務散布上界；本項另驗多選可讀性與固定預算 |
 
 ## 卡住／等業主看圖
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
-| 18 可破壞圍牆 | 卡住，待 Claude 補受保護 smoke 原事件追蹤 | R120收尾僅改文件，CI39325126373 unit492.5秒綠但手機雙擊選取[1]、鏡頭21／23不動；Node重現350ms間隔、500ms長按或取消都可同症，CI根因未定。不重跑賭綠；三個卡住PR觸發停手 | R120／[#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) |
-| 23 手機說明關閉按鈕 | 卡住，待 Claude 補受保護 smoke 診斷 | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。原事件時間／target／取消原因未記錄，不能判定偶發；不重跑賭綠、不改相機或斷言 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
-| 4 裝甲面向 | 卡住，交 Claude 整合 | R104 面向守衛通過，但 AI 難度勝場 9／12／12→7／11／9；種子 34、89 困難超時，不能削弱守衛或改 Claude AI | R104／[#31](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/31) |
-| 16 鐵絲網 | 待 Claude 協調 | ROADMAP 的 R024b 已含龍牙、鐵絲網、沙包陣地與車／人兩張通行表；GPT 不重做障礙物或只拆步兵部分 | [ROADMAP@b7991a7](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/blob/b7991a7444ddcb4583d8d0f09c3ce5c21a44b7bb/docs/ROADMAP.md#二目前進度) |
-| 17 電網防禦 | 考據完成，待 Claude 協調 | 1943美軍情報記載德軍使用有限，1942日軍手冊重視專業部隊與供電；只支持罕見準備陣地，不支持通用電擊坦克。通電／斷電／破口仍共用R024b障礙身分、通行與破壞契約，不拆成另一套 | [1943原始情報第44頁](https://www.ibiblio.org/hyperwar/NHC/NewPDFs/USArmy/USArmy%20MID%20Intelligence%20Bulletins/USArmy%20MID%20Intelligence%20Bulletin%20Vol.%202%20No.%2001%201943-09-00.pdf#page=52)／[1942原始情報第18頁](https://www.bulletpicker.com/pdf/Intelligence-Bulletin-Vol-1-No-04.pdf#page=26) |
-
-R119 預備純回退：R118 main 首次 smoke 紅時建立，僅首卡分支已發布，無PR／合併；外部使用者重跑原main CI後於2026-10-19 10:22 smoke／Pages綠，故停止發布回退。所有本機工作與R119號保留，不重用；雙擊首紅根因仍未確立。
+| 18 | 可破壞圍牆：磚牆、石牆、混凝土牆，支援連接與砲擊開口 | 業主 2026-10-18「圍牆」 | 模擬＋渲染 | 不會 | R120／PR52草稿卡住：完整unit綠但收尾head原手機雙擊smoke紅；待受保護原事件追蹤，未發布 |
+| 23 手機說明關閉按鈕 | 卡住；Claude 的 R037（[#53](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/53)）已補，待 GPT 合 main 重跑 CI | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。R037：雙擊與快速拖曳改看事件時間戳（手指時間，?noR037=1 回到處理時間）；smoke 照時間表送，說明裡印事件時間、取消、失焦、最慢一幀。本機重現的是處理時間相隔 265–360 毫秒、跨過 350；CI 那一次沒有紀錄，不能確定是同一種。R120（#52）卡在同一項 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
 
 ## 已完成（最新在上）
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
-| 四種可通行戰壕：共享8點、相連最強掩護 | R118 | [#51](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/51) | 2026-10-19（發布） | 精簡守衛latest-head CI／圖審通過；main6f0cd8b的CI39233691481首輪雙擊紅，外部使用者attempt2於10:22 smoke／Pages綠，10:23公網build逐位核對。首輪小地圖與雙擊根因未確立；本機Chrome受限、Android未測 |
+| 裝甲面向（GPT 實作；困難電腦顧車頭由 Claude 接） | R104＋R036 | [#44](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/44) | 2026-10-20 | 本機 Node 22／容器：unit 的 facades、materials-view、input-browser 與 smoke 的計時、手勢項目（乾淨 main 也紅），以 CI 為準；Android 實機未測 |
+| 四種可通行戰壕：共享8點、相連最強掩護 | R118 | [#51](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/51) | 2026-10-19（收尾待latest-head） | 264d24f完整CI／圖審通過；精簡診斷守衛待CI，首輪桌面小地圖像素差異根因未確立；本機Chrome受限、Android未測；未發布 |
 | 可見戰場程序音效：自願開啟砲聲／爆炸／倒塌 | R117 | [#50](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/50) | 2026-10-19（發布） | 本機Chrome受限；CI真實音訊圖／九負控／圖審通過；Android、喇叭實聽與真實BFCache未測；main3654fb2的CI39221216593／Pages成功，08:25公網build逐位核對 |
 | 可穿行樹籬／小樹林：中段遮視線、最強半掩護 | R116 | [#49](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/49) | 2026-10-19（發布） | 本機Chrome受限，CI實測／圖審通過；Android未測；main91849c4的CI39212799723／Pages成功，07:04公網build已逐位核對 |
 | 三階粗略反砲兵情報（AI換陣地留Claude R018） | R115 | [#48](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/48) | 2026-10-19（發布） | 本機Chrome受限，CI實測通過；Android未測；main f5d4211 的 CI39205232628／Pages成功，05:43公網build已逐位核對 |

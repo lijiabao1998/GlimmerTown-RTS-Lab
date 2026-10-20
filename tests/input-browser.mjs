@@ -13,8 +13,8 @@ import { hashWorld } from '../src/sim/world.ts';
 const expectedReplay = { 600: hashWorld(nodeScript(600)), 1200: hashWorld(nodeScript(1200)) };
 // Retain the independent pre-R115 combat anchors as well as full-state Node/Chrome parity.
 const legacyCombatHash = ticks => { const w = nodeScript(ticks); delete w.counterbattery; return hashWorld(w); };
-assert.equal(legacyCombatHash(600), 'c789deeb', 'original eight-command 600-tick combat anchor');
-assert.equal(legacyCombatHash(1200), 'f3364bb6', 'original eight-command 1200-tick combat anchor');
+assert.equal(legacyCombatHash(600), 'c1058cb1', 'original eight-command 600-tick combat anchor');
+assert.equal(legacyCombatHash(1200), '79fc3ae3', 'original eight-command 1200-tick combat anchor');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r109-input-'));
 const strictCI = process.env.GITHUB_ACTIONS === 'true' || !!process.env.GITHUB_RUN_ID || !!process.env.CI;

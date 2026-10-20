@@ -2,6 +2,7 @@
 // 不偷看迷霧：敵人的位置只用「自己這一方看得到的」（spotted 由 step.ts 傳進來，避免循環 import）；對方出生角落算開局就知道的地圖情報。
 import { dist } from './math.ts';
 import { hqAlive } from './eco.ts';
+import { armorPct, ARMOR_FRONT } from './armor.ts';
 import {
   N, SUB, center, cellOf, inMap, idx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY,
   ORD_IDLE, ORD_ATTACK, SIDE_PLAYER, type World, type Unit, type AiState,
@@ -36,6 +37,17 @@ function cover(w: World, x: number, z: number): number {
   let c = 0;
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if ((dx || dz) && blocks(w, x + dx, z + dz)) c++;
   return c;
+}
+
+// R036 裝甲面向（R104）：停著、目標在射程內、但目標打過來不會打在正面的坦克，回傳朝目標的那一格（走得過去才給）。
+// 車體方向只會跟著真的移動改變（R104 的規則），所以先朝目標開一格，車頭就轉過去了。
+function turnStep(w: World, u: Unit, t: Unit): [number, number] | null {
+  if (u.hullX === undefined || u.hullZ === undefined || u.pathIdx < u.path.length) return null;
+  if (dist(u.x, u.z, t.x, t.z) > UNIT_KINDS[u.kind].range || armorPct(u, t.x, t.z) <= ARMOR_FRONT) return null;
+  const cx = cellOf(u.x), cz = cellOf(u.z), sx = Math.sign(cellOf(t.x) - cx), sz = Math.sign(cellOf(t.z) - cz);
+  const x = cx + sx, z = cz + sz;
+  if ((!sx && !sz) || !inMap(x, z) || blocks(w, x, z)) return null;
+  return [x, z];
 }
 
 // 想一次：回傳這一次要下的指令（step 會照一般指令套用）
@@ -86,7 +98,13 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
       const rank = (t: Unit, ox: number, oz: number) => (lv >= 2 ? Math.trunc((t.hp * 1000) / UNIT_KINDS[t.kind].hp) * 100000 : 0) + dist(ox, oz, t.x, t.z);
       const pick = (ox: number, oz: number) => seen.slice().sort((a, b) => rank(a, ox, oz) - rank(b, ox, oz) || a.id - b.id)[0];
       if (lv >= 2) {
-        const t = pick(gx, gz), ids = fit.filter(u => !(order(u) === ORD_ATTACK && u.target === t.id)).map(u => u.id);
+        // R036：困難的電腦會顧車頭：沒對著集火目標的坦克先朝目標開一格（轉成正面），其他照常集火
+        const t = pick(gx, gz), ids: number[] = [];
+        for (const u of fit) {
+          const turn = lv >= 3 ? turnStep(w, u, t) : null;
+          if (turn) { out.push({ t: 'move', side, ids: [u.id], x: turn[0], z: turn[1] }); continue; }
+          if (!(order(u) === ORD_ATTACK && u.target === t.id)) ids.push(u.id);
+        }
         if (ids.length) out.push({ t: 'attack', side, ids, target: t.id });
       } else for (const u of fit) {
         const t = pick(u.x, u.z);

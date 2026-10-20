@@ -94,7 +94,7 @@ function spawnUnit(w: World, side: number, kind: number, hq: Building): void {
   const spot = spawnCell(w, hq);
   if (!spot) return;
   const id = w.units.length + 1;
-  w.units.push({ id, side, kind, x: center(spot[0]), z: center(spot[1]), hp: UNIT_KINDS[kind].hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB });
+  w.units.push({ id, side, kind, x: center(spot[0]), z: center(spot[1]), hp: UNIT_KINDS[kind].hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB, ...(UNIT_KINDS[kind].armored ? { hullX: side === SIDE_PLAYER ? -SUB : SUB, hullZ: side === SIDE_PLAYER ? -SUB : SUB } : {}) });
   const u = w.units[id - 1], hx = hq.x + 1, hz = hq.z + 1, mid = N >> 1;
   const rx = Math.max(0, Math.min(N - 1, hx + Math.sign(mid - hx) * 4)), rz = Math.max(0, Math.min(N - 1, hz + Math.sign(mid - hz) * 4));
   const p = findPath(w, spot[0], spot[1], rx, rz);

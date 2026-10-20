@@ -65,7 +65,7 @@ function controller(query = '') {
     enemyPlan(w, kinds) { enemyArgs.push(kinds); return enemyPlan(w, kinds); }, setWalls: flag => wallFlags.push(flag),
     BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
     w: emptyWorld(), view: mockView(), phase: 'build', plan: [], pickKind: BK_COTTAGE, pickRot: 0, pickTrench: -1, trenchRot: 0, buildHint: '', log: [], pending: [], selected: new Set(), acc: 0,
-    r118: q.get('noR118') !== '1', r105: q.get('noR105') !== '1', r024: q.get('noR024') !== '1', r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true,
+    r118: q.get('noR118') !== '1', r105: q.get('noR105') !== '1', r024: q.get('noR024') !== '1', r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true, r104: true,
     q, seed: 1944, fxOn: true, battleAudio: undefined, stats: {}, reportView: undefined, minimap: undefined, startBanner() {}, syncBattleAudio() {}, window: {},
     newStats: () => ({}), statsStep() {}, ecoCmd: () => ({ t: 'eco' }), aiLevel: 2, innerWidth: 412, innerHeight: 860, simT: () => 0, hud: { update() {} }, ui() { c.buildBar?.update(); },
     BattleView: class { constructor() { return mockView(); } },

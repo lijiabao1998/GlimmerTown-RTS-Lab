@@ -139,15 +139,15 @@ group('replay',()=>{
   }
 });
 
-// Frozen from pre-R120 main (existing R118 fixtures), not derived from the functions under test.
+// Frozen from independent main 58667af archive (R036/R037 integrated), not derived from the functions under test.
 group('legacy',()=>{
-  assert.equal(hashWorld(createWorld(SCRIPT_SEED)),'2867b5fa','legacy: original initial SCRIPT hash');
-  const fixtures=[['script',SCRIPT,'93e6a5018876d9e0a65002c27a54e687576f170d446f4ffd6cbfb27bf0ddf06b',['29d7ef19','89aa0b92']],['rye',[{tick:0,cmd:{t:'map',id:1}},...SCRIPT],'2e2482bde8d3c62a34795e65339ebbbea063d7300619c018dc356459a1f097f7',['7259e57d','428fd56b']]];
+  assert.equal(hashWorld(createWorld(SCRIPT_SEED)),'62e00ebe','legacy: original initial SCRIPT hash');
+  const fixtures=[['script',SCRIPT,'2e4bcf04bc6870f8f4f3fd9a2049b7273e24797dcdc638d3c37093eb1ff53254',['d7b3572f','eea1d59b']],['rye',[{tick:0,cmd:{t:'map',id:1}},...SCRIPT],'475b3ca00a36bd18248d5eb1f6c843e8fdb0b9606cd95cd01de89befdd4b9c1f',['0a324ceb','204c47a5']]];
   for(const [map,digest,hashes,plan]of [
-    [0,'1dd341dd85ff705b4ec818c6b00699b9245312941da5a052264dc4ca7887b05a',['86a3cf75','9f63b33c'],[{t:'build',side:1,kind:0,x:9,z:9,rot:1},{t:'build',side:1,kind:2,x:11,z:8,rot:0},{t:'build',side:1,kind:1,x:8,z:7,rot:0},{t:'build',side:1,kind:0,x:10,z:12,rot:1}]],
-    [1,'a231d4deba636375d26842f98fc848ee55ce7d3977fb92b897f664be8c954c11',['145522d2','1cbdc75b'],[{t:'build',side:1,kind:0,x:8,z:7,rot:1},{t:'build',side:1,kind:2,x:9,z:12,rot:0},{t:'build',side:1,kind:1,x:6,z:9,rot:0},{t:'build',side:1,kind:0,x:10,z:5,rot:1}]],
+    [0,'cee6f177fcd3d6476f1c6984ee1053239223e9d47235f716337290c51d042f53',['dde837f9','7f983268'],[{t:'build',side:1,kind:0,x:9,z:9,rot:1},{t:'build',side:1,kind:2,x:11,z:8,rot:0},{t:'build',side:1,kind:1,x:8,z:7,rot:0},{t:'build',side:1,kind:0,x:10,z:12,rot:1}]],
+    [1,'e9cbe636cfe4c738d4bf200a77f750ca28ab4c97cefa76b7c13e06f6c9221c49',['4fe0da65','00a7d63e'],[{t:'build',side:1,kind:0,x:8,z:7,rot:1},{t:'build',side:1,kind:2,x:9,z:12,rot:0},{t:'build',side:1,kind:1,x:6,z:9,rot:0},{t:'build',side:1,kind:0,x:10,z:5,rot:1}]],
   ]){const w=createWorld(SCRIPT_SEED);applyMap(w,map,1);const before=structuredClone(w);assert.deepEqual(enemyPlan(w,BUILD_KINDS_24),plan,'legacy: frozen original enemy building plan');assert.deepEqual(w,before,'legacy: enemy planning leaves complete world unchanged');fixtures.push([`map${map}-eco`,[{tick:0,cmd:{t:'map',id:map,vegetation:1}},...plan.map(cmd=>({tick:0,cmd})),{tick:0,cmd:{t:'eco',inf:1,guns:1,tanks:1}},...SCRIPT],digest,hashes]);}
-  const worldDigests={script:'d2c8690f2f31d74a78c1538582d4698f33ea97cb5cd4f545416ca04cf13aa7e2',rye:'4c0404ad879149d65c4e2a6152cd9a32e3cfa8a4738e24a3f7c6093ecce04064','map0-eco':'5f631da5a5324425e49f8b82b506f10fdb255b3cc60e10406a2c20571aa8b47a','map1-eco':'61fe24aa514cd4e105679d153c4d85aefd0f457e55f656077e69a4f3718e7b1d'}; // git archive 33775e0 (pre-R120 simulation), entire JSON world each tick including events.
+  const worldDigests={script:'c2a6785e8a0db524c6ae977da636882d8d64d9e15b68d6b600c77a4db061112a',rye:'7931866f7537a9436900b08fad4f8e84a769da3ab0e8bf36972ce431f73bbf64','map0-eco':'dc0eb68ce460153f6418cb7b7d72cd13dbd12b3d7debe3cc1bca5c6d678048f0','map1-eco':'a265184eea5b363f10e953b2d1f090d8c5e1094dc870155785e6f7e346a6c5de'}; // git archive 58667af (main before R120; owner-approved numeric recalculation), entire JSON world each tick including events.
   for(const [name,log,want,hashes]of fixtures){const w=createWorld(SCRIPT_SEED),digest=createHash('sha256'),worldDigest=createHash('sha256');for(let tick=0;tick<1200;tick++){step(w,log.filter(c=>c.tick===tick).map(c=>c.cmd));digest.update(`${hashWorld(w)}:${w.rng};`);worldDigest.update(JSON.stringify(w));if(w.tick===600||w.tick===1200)assert.equal(hashWorld(w),hashes[w.tick===600?0:1],'legacy: original SCRIPT checkpoints');}assert.equal(digest.digest('hex'),want,`legacy: ${name} every-tick hash and RNG unchanged`);assert.equal(worldDigest.digest('hex'),worldDigests[name],`legacy: ${name} entire every-tick world unchanged`);}
 });
 assert(groups>0,`unknown group ${only}`);console.log(`walls: ${groups} groups passed`);

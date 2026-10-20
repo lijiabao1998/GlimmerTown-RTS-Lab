@@ -332,9 +332,9 @@ const groups = {
         if (mode === 'reset' && tick % 99 === 0) audio.reset();
         const original = structuredClone(w); audio.enqueue(w, w.events, visible); audio.flush(); ctx.finish();
         assert.deepEqual(w, original, 'replay: every tick audio preserves all world fields and event data');
-        if (tick === 599 && mode !== 'map') assert.equal(hashWorld(w), '29d7ef19', 'replay: old SCRIPT600 complete hash is frozen');
+        if (tick === 599 && mode !== 'map') assert.equal(hashWorld(w), 'd7b3572f', 'replay: old SCRIPT600 complete hash is frozen');
       }
-      assert.equal(hashWorld(w), mode === 'map' ? hashWorld(expected) : '89aa0b92', 'replay: old SCRIPT1200 and explicit map replay hashes survive every audio state');
+      assert.equal(hashWorld(w), mode === 'map' ? hashWorld(expected) : 'eea1d59b', 'replay: old SCRIPT1200 and explicit map replay hashes survive every audio state');
       assert.deepEqual(w, expected, 'replay: full world and RNG match direct simulation'); audio.dispose();
     }
   },

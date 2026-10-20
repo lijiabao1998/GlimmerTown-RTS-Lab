@@ -76,9 +76,9 @@ group('activation', () => {
 group('legacy', () => {
   // SHA256 covers every tick's complete hash and RNG, not just the final checkpoint.
   const fixtures = [
-    ['script', SCRIPT, '93e6a5018876d9e0a65002c27a54e687576f170d446f4ffd6cbfb27bf0ddf06b', ['29d7ef19', '89aa0b92']],
-    ['rye', [{ tick: 0, cmd: { t: 'map', id: 1 } }, ...SCRIPT], '2e2482bde8d3c62a34795e65339ebbbea063d7300619c018dc356459a1f097f7', ['7259e57d', '428fd56b']],
-    ['seven', SCRIPT.filter(v => !v.cmd.ammo), 'c8a1b0a5863e476c3c8f390a25768a02fe5853f63f6c996cac3878b66cbbcbbf', ['99785d7d', '068c5211']],
+    ['script', SCRIPT, '2e4bcf04bc6870f8f4f3fd9a2049b7273e24797dcdc638d3c37093eb1ff53254', ['d7b3572f', 'eea1d59b']],
+    ['rye', [{ tick: 0, cmd: { t: 'map', id: 1 } }, ...SCRIPT], '475b3ca00a36bd18248d5eb1f6c843e8fdb0b9606cd95cd01de89befdd4b9c1f', ['0a324ceb', '204c47a5']],
+    ['seven', SCRIPT.filter(v => !v.cmd.ammo), '15d34cb8c67198687508372646a048c5170467d58251162f7f484f852d3c4039', ['de5a5f8d', '5eb07503']],
   ];
   for (const [name, input, wanted, hashes] of fixtures) {
     const w = createWorld(SCRIPT_SEED), log = JSON.parse(JSON.stringify(input)), digest = createHash('sha256'); let copy;
@@ -89,7 +89,7 @@ group('legacy', () => {
       assert.equal(w.vegetation, undefined, 'legacy: old log never creates new persistent field');
       if (w.tick === 600 || w.tick === 1200) {
         assert.equal(hashWorld(w), hashes[w.tick === 600 ? 0 : 1], `legacy: ${name} frozen complete checkpoint`);
-        if (name === 'seven') { const historical = structuredClone(w); delete historical.counterbattery; assert.equal(hashWorld(historical), w.tick === 600 ? '14108ab2' : 'd22b1d45', 'legacy: historical seven-command combat hash'); }
+        if (name === 'seven') { const historical = structuredClone(w); delete historical.counterbattery; assert.equal(hashWorld(historical), w.tick === 600 ? '34478c82' : '0c40171b', 'legacy: historical seven-command combat hash'); }
       }
       if (w.tick === 600) copy = structuredClone(w);
     }

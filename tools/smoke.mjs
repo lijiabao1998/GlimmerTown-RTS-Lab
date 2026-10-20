@@ -2,7 +2,7 @@
 // 用法：npm run build && node tools/smoke.mjs　退出碼 0＝綠、1＝紅；樣張存在 shots/（不進倉庫，CI 當附件）。
 import fs from 'node:fs';
 import path from 'node:path';
-import { withBrowser, touchTap, shot, sleep, ROOT } from './cdp.mjs';
+import { withBrowser, touchTap, touchSeq, shot, sleep, ROOT } from './cdp.mjs';
 import { hashWorld, createWorld, bldAt, N } from '../src/sim/world.ts';
 import { runLog, step } from '../src/sim/step.ts';
 import { runScript, SCRIPT, SCRIPT_TICKS } from '../src/sim/script.ts';
@@ -330,12 +330,67 @@ await withBrowser({ width: 800, height: 600, port: PORTS.noR011 }, async ({ open
   log(n === 0 && h === nodeHash && page.errors.length === 0, '?noR011=1：不畫指令回饋、雜湊不變、零頁面錯誤', `${n} 段；${h}`);
 });
 // ---- R012 鏡頭手感：真的滾輪、真的觸控拖曳放手、真的雙擊 ----
-const touchDrag = async (page, x, y0, y1, steps = 6) => {
-  await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
-  for (let k = 1; k <= steps; k++) { await sleep(16); await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 + ((y1 - y0) * k) / steps, id: 1 }] }); }
-  await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+// R037：拖曳與雙擊照時間表送（cdp.mjs 的 touchSeq，事件帶明確時間戳），手指的節奏固定。頁面裡同時記下每個指標事件的時間戳與實際處理時刻、
+// 取消／失焦／視窗縮放、每一幀的間隔，印在檢查的說明裡：紅的時候看得出是手指太慢、程式處理太晚、還是被取消。
+const DRAG = (x, y0, y1, steps = 6) => [{ type: 'touchStart', x, y: y0, at: 0 },
+  ...Array.from({ length: steps }, (_, i) => ({ type: 'touchMove', x, y: y0 + ((y1 - y0) * (i + 1)) / steps, at: 16 * (i + 1) })),
+  { type: 'touchEnd', at: 16 * steps + 8 }];   // 每 16 毫秒移一次、最後一次移動後 8 毫秒放手＝快速拖曳
+const DOUBLE_TAP = (x, y) => [{ type: 'touchStart', x, y, at: 0 }, { type: 'touchEnd', at: 60 }, { type: 'touchStart', x, y, at: 180 }, { type: 'touchEnd', at: 240 }];   // 跟原本兩次 touchTap 同一個節奏：按 60、隔 120
+const touchDrag = (page, x, y0, y1, steps = 6) => touchSeq(page, DRAG(x, y0, y1, steps));
+const TRACE_ON = `(() => {
+  window.__r037 = { ev: [], frames: [], stalls: [] };
+  if (!window.__r037Hooked) {
+    window.__r037Hooked = true;
+    const rec = e => window.__r037.ev.push({ ty: e.type, ts: Math.round(e.timeStamp), at: Math.round(performance.now()) });
+    for (const ty of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture', 'resize', 'visibilitychange']) addEventListener(ty, rec, { capture: true, passive: true });
+    addEventListener('blur', e => { if (e.target === window) rec(e); }, { capture: true });
+    let last = 0; const tick = t => { if (last) window.__r037.frames.push(Math.round(t - last)); last = t; requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+  }
+  return 0; })()`;
+// 遊戲處理完某個事件之後讓頁面卡 ms 毫秒（掛在 window 的冒泡階段，排在畫布的處理程式後面；只卡一次）＝模擬掉幀
+const stallAfter = (page, type, ms, when) => page.evaluate(`(() => { const f = e => { if (!(${when})(e)) return; removeEventListener('${type}', f); const t = performance.now(); while (performance.now() - t < ${ms}) {} window.__r037.stalls.push('${type}'); }; addEventListener('${type}', f); return 0; })()`);
+const traceText = async (page, sent) => {
+  const r = await page.evaluate('window.__r037'), of = ty => r.ev.filter(e => e.ty === ty), mv = of('pointermove'), up = of('pointerup');
+  const odd = r.ev.filter(e => !/^(pointer(down|move|up)|lostpointercapture)$/.test(e.ty)).map(e => e.ty);
+  const gap = (a, b) => `手指 ${b.ts - a.ts}／處理 ${b.at - a.at} 毫秒`;
+  const parts = [`按下 ${of('pointerdown').length}、移動 ${mv.length}、放手 ${up.length}`];
+  if (mv.length && up.length) parts.push(`最後一次移動→放手：${gap(mv.at(-1), up[0])}`);
+  if (up.length >= 2) parts.push(`兩次放手相隔：${gap(up[0], up[1])}`);
+  parts.push(`取消／失焦／縮放：${odd.join(',') || '無'}`, `最慢一幀 ${Math.max(0, ...r.frames)} 毫秒`,
+    `CDP 回應最慢 ${Math.max(...sent.map(s => s.ack - s.send))} 毫秒、送出比時間表最多晚 ${Math.max(...sent.map(s => s.send - s.at))} 毫秒`);
+  if (r.stalls.length) parts.push(`卡住：${r.stalls.join(',')}`);
+  return parts.join('；');
 };
 const camAt = page => page.evaluate('__rts.cam()');
+// 快速拖曳放手；stall＞0＝遊戲處理完最後一次移動後，頁面卡 stall 毫秒才處理到放手
+async function flingCase(page, stall = 0) {
+  await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
+  await page.evaluate(TRACE_ON);
+  if (stall) await stallAfter(page, 'pointermove', stall, 'e => e.clientY <= 420.5');
+  const s0 = await camAt(page), sent = await touchDrag(page, 200, 620, 420);
+  const c0 = await camAt(page); await sleep(300); const c1 = await camAt(page); await sleep(900); const c2 = await camAt(page); await sleep(300); const c3 = await camAt(page);
+  const dragDir = [c0.x - s0.x, c0.z - s0.z], glideDir = [c1.x - c0.x, c1.z - c0.z];
+  return {
+    glided: Math.hypot(...glideDir) > 0.2 && dragDir[0] * glideDir[0] + dragDir[1] * glideDir[1] > 0, stopped: c3.x === c2.x && c3.z === c2.z,
+    still: glideDir[0] === 0 && glideDir[1] === 0, stalled: (await page.evaluate('window.__r037.stalls.length')) > 0,
+    text: `拖曳 ${dragDir.map(v => v.toFixed(2))}；放手後 0.3 秒又滑 ${glideDir.map(v => v.toFixed(2))}；1.2 秒後 ${c2.x.toFixed(2)},${c2.z.toFixed(2)} → 1.5 秒 ${c3.x.toFixed(2)},${c3.z.toFixed(2)}｜${await traceText(page, sent)}`,
+  };
+}
+// 雙擊我方 1 號坦克；stall＞0＝遊戲處理完第一次放手後，頁面卡 stall 毫秒才處理到第二下
+async function doubleTapCase(page, stall = 0) {
+  await page.evaluate('__rts.pause(true); __rts.focus(21, 23, 1); 0'); await sleep(200);
+  await page.evaluate(TRACE_ON);
+  if (stall) await stallAfter(page, 'pointerup', stall, '() => true');
+  const [tx, ty] = await page.evaluate('__rts.screenOf(1)');
+  const sent = await touchSeq(page, DOUBLE_TAP(tx, ty)); await sleep(600);
+  const c = await camAt(page), sel = JSON.stringify(await page.evaluate('__rts.selected()'));
+  const pos = await page.evaluate('(() => { const p = __rts.screenOf(1); return __rts.groundAt(p[0], p[1]); })()');
+  return {
+    followed: sel === '[1]' && Math.hypot(c.x - pos[0], c.z - pos[1]) < 0.6, stayed: sel === '[1]' && c.x === 21 && c.z === 23,
+    stalled: (await page.evaluate('window.__r037.stalls.length')) > 0,
+    text: `鏡頭 ${c.x.toFixed(2)},${c.z.toFixed(2)}；坦克約 ${pos.map(v => v.toFixed(2))}；選取 ${sel}｜${await traceText(page, sent)}`,
+  };
+}
 await withBrowser({ width: 1280, height: 800, port: PORTS.cam }, async ({ open, page }) => {
   await open('noR006=1');
   await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
@@ -347,21 +402,20 @@ await withBrowser({ width: 1280, height: 800, port: PORTS.cam }, async ({ open, 
 });
 await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.camMobile }, async ({ open, page }) => {
   await open('noR006=1');
-  await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
-  const s0 = await camAt(page);
-  await touchDrag(page, 200, 620, 420);
-  const c0 = await camAt(page); await sleep(300); const c1 = await camAt(page); await sleep(900); const c2 = await camAt(page); await sleep(300); const c3 = await camAt(page);
-  const dragDir = [c0.x - s0.x, c0.z - s0.z], glideDir = [c1.x - c0.x, c1.z - c0.z];
-  log(Math.hypot(...glideDir) > 0.2 && dragDir[0] * glideDir[0] + dragDir[1] * glideDir[1] > 0 && c3.x === c2.x && c3.z === c2.z, '手機快速拖曳放手：0.3 秒後還往同方向滑、1 秒後停住',
-    `拖曳 ${dragDir.map(v => v.toFixed(2))}；放手後 0.3 秒又滑 ${glideDir.map(v => v.toFixed(2))}；1.2 秒後 ${c2.x.toFixed(2)},${c2.z.toFixed(2)} → 1.5 秒 ${c3.x.toFixed(2)},${c3.z.toFixed(2)}`);
+  const f = await flingCase(page);
+  log(f.glided && f.stopped, '手機快速拖曳放手：0.3 秒後還往同方向滑、1 秒後停住', f.text);
   // 雙擊我方 1 號坦克：鏡頭跟過去、選到它
-  await page.evaluate('__rts.focus(21, 23, 1); 0'); await sleep(200);
-  const [tx, ty] = await page.evaluate('__rts.screenOf(1)');
-  await touchTap(page, tx, ty); await touchTap(page, tx, ty); await sleep(600);
-  const c = await camAt(page), sel = await page.evaluate('__rts.selected()');
-  const pos = await page.evaluate('(() => { const p = __rts.screenOf(1); return __rts.groundAt(p[0], p[1]); })()');
-  log(JSON.stringify(sel) === '[1]' && Math.hypot(c.x - pos[0], c.z - pos[1]) < 0.6, '手機雙擊我方坦克：鏡頭移到那台車、選到它', `鏡頭 ${c.x.toFixed(2)},${c.z.toFixed(2)}；坦克約 ${pos.map(v => v.toFixed(2))}；選取 ${JSON.stringify(sel)}`);
+  const d = await doubleTapCase(page);
+  log(d.followed, '手機雙擊我方坦克：鏡頭移到那台車、選到它', d.text);
+  // R037：遊戲處理完最後一次移動／第一下之後頁面卡住（掉幀），才處理到放手／第二下：照手指的時間判斷
+  const fStall = await flingCase(page, 150), dStall = await doubleTapCase(page, 400);
+  log(fStall.stalled && fStall.glided && fStall.stopped, 'R037 放手前畫面卡 150 毫秒：照樣滑出去、1 秒後停住', fStall.text);
+  log(dStall.stalled && dStall.followed, 'R037 雙擊兩下之間畫面卡 400 毫秒：照樣跟過去、選到它', dStall.text);
   log(page.errors.length === 0, '鏡頭手感（手機）零頁面錯誤', page.errors.join(' | '));
+  // ?noR037=1：同樣卡住，回到處理時間（舊行為）＝放手不滑、雙擊不跟；也證明上面兩項真的卡到了
+  await open('noR006=1&noR037=1');
+  const fOff = await flingCase(page, 150), dOff = await doubleTapCase(page, 400);
+  log(fOff.stalled && fOff.still && dOff.stalled && dOff.stayed && page.errors.length === 0, '?noR037=1：同樣卡住時放手不滑、雙擊不跟（處理時間＝舊行為）、零頁面錯誤', `${fOff.text}｜${dOff.text}`);
 });
 await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR012 }, async ({ open, page }) => {
   await open('noR006=1&noR012=1');
