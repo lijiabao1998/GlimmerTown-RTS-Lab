@@ -13,22 +13,26 @@ export interface BuildBarActions {
 }
 export interface BuildBar { update: () => void }
 
-export function initBuildBar(items: BuildBarItem[], a: BuildBarActions, trenches: BuildBarItem[] = []): BuildBar {
+export function initBuildBar(items: BuildBarItem[], a: BuildBarActions, trenches: BuildBarItem[] = [], walls: BuildBarItem[] = []): BuildBar {
+  const choices = [...items, ...walls];
   const root = document.createElement('div');
   root.id = 'buildbar';
   root.className = 'bar';
   root.innerHTML = `
     <div class="row">${items.map(it => `<button id="bb-k${it.kind}" title="${it.label}：建材 ${it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}
       ${trenches.length ? '<button id="bb-trench" title="戰壕：選形狀、轉向，任一方單位都能通行並獲得掩護" aria-expanded="false" aria-controls="bb-trenches">戰壕</button>' : ''}
+      ${walls.length ? '<button id="bb-wall" title="圍牆：可破壞建築，可連接、轉向、整段移除；不可射越，可駐守" aria-expanded="false" aria-controls="bb-walls">圍牆</button>' : ''}
       <button id="bb-rot" title="${trenches.length ? '轉向（磚房橫放／直放；戰壕每次90度）' : '轉向（磚房橫放／直放）'}">轉向</button>
       <button id="bb-undo" title="拿掉最後放下的一項，退回建材">復原</button></div>
     ${trenches.length ? `<div class="row" id="bb-trenches" hidden>${trenches.map(it => `<button id="bb-t${it.kind}" title="${it.label}：${it.detail ?? '建材 ' + it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}</div>` : ''}
+    ${walls.length ? `<div class="row" id="bb-walls" hidden>${walls.map(it => `<button id="bb-k${it.kind}" title="${it.label}：${it.detail ?? '建材 ' + it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}</div>` : ''}
     <div id="bb-detail" role="status" aria-live="polite"></div>
     <div class="row"><span id="bb-left"></span><button id="bb-start" title="布陣完成，開打">開戰</button></div>`;
   (document.getElementById('hud') ?? document.body).appendChild(root);
   const $ = (id: string) => root.querySelector('#' + id) as HTMLButtonElement;
   const act = (el: HTMLElement, f: () => void) => el.addEventListener('click', e => { e.stopPropagation(); f(); update(); });
-  for (const it of items) act($('bb-k' + it.kind), () => a.pick(it.kind));
+  for (const it of choices) act($('bb-k' + it.kind), () => a.pick(it.kind));
+  if (walls.length) act($('bb-wall'), () => a.pick(walls.find(it => it.kind === a.state().kind)?.kind ?? walls[0].kind));
   if (trenches.length) {
     act($('bb-trench'), () => a.pickTrench?.(a.state().trench ?? trenches[0].kind));
     for (const it of trenches) act($('bb-t' + it.kind), () => a.pickTrench?.(it.kind));
@@ -39,11 +43,17 @@ export function initBuildBar(items: BuildBarItem[], a: BuildBarActions, trenches
     const s = a.state();
     root.hidden = !s.visible;
     if (!s.visible) return;
-    for (const it of items) {
+    for (const it of choices) {
       const b = $('bb-k' + it.kind);
       b.classList.toggle('sel', s.trench === undefined && it.kind === s.kind);
       b.setAttribute('aria-pressed', String(s.trench === undefined && it.kind === s.kind));
       b.classList.toggle('dim', it.cost > s.left);
+    }
+    if (walls.length) {
+      const wallSelected = s.trench === undefined && walls.some(it => it.kind === s.kind);
+      $('bb-wall').classList.toggle('sel', wallSelected);
+      $('bb-wall').setAttribute('aria-expanded', String(wallSelected));
+      $('bb-walls').hidden = !wallSelected;
     }
     if (trenches.length) {
       $('bb-trench').classList.toggle('sel', s.trench !== undefined);
@@ -58,7 +68,7 @@ export function initBuildBar(items: BuildBarItem[], a: BuildBarActions, trenches
     }
     const detail = s.trench !== undefined
       ? `${trenches.find(it => it.kind === s.trench)?.detail ?? ''} · 轉向 ${s.rot * 90}°`
-      : items.find(it => it.kind === s.kind)?.detail ?? '';
+      : choices.find(it => it.kind === s.kind)?.detail ?? '';
     $('bb-detail').textContent = detail; $('bb-detail').hidden = !detail;
     $('bb-rot').textContent = s.trench !== undefined ? `轉向 ${s.rot * 90}°` : s.rot ? '轉向 ↕' : '轉向 ↔';
     $('bb-rot').classList.toggle('dim', !s.rotatable);

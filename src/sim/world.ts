@@ -24,6 +24,10 @@ export const BK_CHURCH = 3;
 export const BK_SHOP = 4;
 export const BK_HQ = 5;          // R019 指揮部（eco 指令放的；打成瓦礫那一方輸）
 export const BK_PILLBOX = 6;     // R024 Type 22 碉堡（混凝土；裡面的人只吃四分之一傷害；直射只刮掉四分之一，怕榴彈砲）
+export const BK_WALL_BRICK = 7; // R120：普通可破壞建築；沿用駐守、遮視線與倒塌規則
+export const BK_WALL_STONE = 8;
+export const BK_WALL_CONCRETE = 9;
+export const isWallKind = (kind: number): boolean => kind === BK_WALL_BRICK || kind === BK_WALL_STONE || kind === BK_WALL_CONCRETE;
 
 // R105 材質由種類推導，不往世界或指令加欄位；舊存檔保留已存的 hp／maxHp。
 export const BM_WOOD = 0;
@@ -33,8 +37,8 @@ export const BM_CONCRETE = 3;
 export const BLD_MATERIAL_NAMES = ['木造', '磚造', '石造', '混凝土'] as const;
 export function bldMaterial(kind: number): number {
   if (kind === BK_BARN) return BM_WOOD;
-  if (kind === BK_CHURCH) return BM_STONE;
-  if (kind === BK_PILLBOX) return BM_CONCRETE;
+  if (kind === BK_CHURCH || kind === BK_WALL_STONE) return BM_STONE;
+  if (kind === BK_PILLBOX || kind === BK_WALL_CONCRETE) return BM_CONCRETE;
   return BM_BRICK;
 }
 
@@ -224,6 +228,9 @@ export function speedPct(w: World, x: number, z: number): number {
 export function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
   if (kind === BK_HQ) return 1200;
   if (kind === BK_PILLBOX) return 400;
+  if (kind === BK_WALL_BRICK) return 130;
+  if (kind === BK_WALL_STONE) return 220;
+  if (kind === BK_WALL_CONCRETE) return 360;
   const material = bldMaterial(kind);
   const base = material === BM_WOOD ? 30 : material === BM_STONE ? 120 : 50;
   const perCell = material === BM_WOOD ? 30 : material === BM_STONE ? 50 : 40;
