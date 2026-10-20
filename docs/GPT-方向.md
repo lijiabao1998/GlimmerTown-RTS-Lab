@@ -42,7 +42,7 @@
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
-| 18 | 可破壞圍牆：磚牆、石牆、混凝土牆，支援連接與砲擊開口 | 業主 2026-10-18「圍牆」 | 模擬＋渲染 | 不會 | R120／PR52草稿卡住：完整unit綠但收尾head原手機雙擊smoke紅；待受保護原事件追蹤，未發布 |
+| 18 可連接圍牆 | R120已在本機合入R036／R037，最新head驗證中，仍草稿卡住 | 2026-10-20：獨立main58667af與整合版四組逐tick hash／RNG／完整世界摘要相同；依使用者指示更新17個舊凍結值，補測試VM的r104依賴，原驗收與首紅保留。main版lane、typecheck／build、legacy及UI負控通過；完整unit351.3秒僅8支Chrome啟動失敗，其餘守衛全過；CI／新圖待核實。本機Chrome受socket EPERM；未合併發布，不宣稱舊雙擊根因已證實 | R120／[#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) |
 | 23 手機說明關閉按鈕 | 卡住；Claude 的 R037（[#53](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/53)）已補，待 GPT 合 main 重跑 CI | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。R037：雙擊與快速拖曳改看事件時間戳（手指時間，?noR037=1 回到處理時間）；smoke 照時間表送，說明裡印事件時間、取消、失焦、最慢一幀。本機重現的是處理時間相隔 265–360 毫秒、跨過 350；CI 那一次沒有紀錄，不能確定是同一種。R120（#52）卡在同一項 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
 
 ## 已完成（最新在上）
