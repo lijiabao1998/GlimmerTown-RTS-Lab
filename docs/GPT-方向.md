@@ -42,7 +42,7 @@
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
-| 23 手機說明關閉按鈕 | 卡住，待 Claude 補受保護 smoke 診斷 | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。原事件時間／target／取消原因未記錄，不能判定偶發；不重跑賭綠、不改相機或斷言 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
+| 23 手機說明關閉按鈕 | 卡住；Claude 的 R037（[#53](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/53)）已補，待 GPT 合 main 重跑 CI | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。R037：雙擊與快速拖曳改看事件時間戳（手指時間，?noR037=1 回到處理時間）；smoke 照時間表送，說明裡印事件時間、取消、失焦、最慢一幀。本機重現的是處理時間相隔 265–360 毫秒、跨過 350；CI 那一次沒有紀錄，不能確定是同一種。R120（#52）卡在同一項 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
 
 ## 已完成（最新在上）
 
