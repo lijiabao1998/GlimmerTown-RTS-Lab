@@ -33,7 +33,6 @@
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
 | 23 | 修補：手機說明面板的「知道了」完整可見、可直接點到 | 手機優先／不改壞 | 介面 | 不會 | R114／PR47草稿卡住：R037手勢修復已在main，舊卡R114不大於main最大R120，待Claude處理受保護車道門檻；未發布 |
-| 24 | 多選射界：呈現共同與各自射程，避免任挑單位誤導 | 坦克＋榴彈砲 | 介面 | 不會 | R122 施工：獨立固定網格呈現各自名目射程／近限及真實交集，待最新 head CI 與圖審；未完成、未發布 |
 
 ## 卡住／等業主看圖
 
@@ -46,6 +45,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 多選各自名目射程／近限與共同覆蓋，獨立 noR122 | R122 | [#57](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/57) | 2026-10-20（實作驗收完成，待合併發布） | 258ba006 CI39451022446 unit410.6秒／smoke169秒／lane綠；四標準圖＋四多選圖已覆核，手機13calls／22888tri；本機Chrome受限、Android與512單位實機未測；收尾head及main CI／Pages待核實 |
 | 可布設／可轟壞鐵絲網：徒步繞行、車輛通過、共享8點與noR121 | R121 | [#55](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/55) | 2026-10-20（實作驗收完成，待合併發布） | 950cf927 CI39385380399 unit380秒／smoke169秒／lane綠；四標準＋七鐵絲圖已覆核；手機開局13calls／22888tri；本機Chrome受限、Android未測；收尾head及main CI／Pages待核實 |
 | 三種可連接／可轟開圍牆，共享8點、防封閉與noR120 | R120 | [#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) | 2026-10-20（整合驗證完成，待合併發布） | db48cafa CI39371516702 unit372.8秒／smoke169.4秒／lane綠；四標準圖及18張圍牆樣張已看；本機8Chrome受限、Android未測。舊雙擊根因仍無原紀錄，R037當前整合與負控已驗證；收尾head及main CI／Pages仍須核實 |
 | 裝甲面向（GPT 實作；困難電腦顧車頭由 Claude 接） | R104＋R036 | [#44](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/44) | 2026-10-20 | 本機 Node 22／容器：unit 的 facades、materials-view、input-browser 與 smoke 的計時、手勢項目（乾淨 main 也紅），以 CI 為準；Android 實機未測 |

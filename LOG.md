@@ -4,7 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
-| R122 | 2026-10-20 | GPT | 待辦 24 多選名目射程／近限與共同環域交集；固定單網格、獨立 noR122、無武裝排除提示，不改模擬 | 本機 typecheck/build 與 R113 Node 通過；新幾何／Chrome 守衛驗證中 | gpt/multiselect-range-r122 | 尚未完成；本機 Chrome socket EPERM，需 CI 真實像素／觸控／圖審；Android 未測 |
+| R122 | 2026-10-20 | GPT | 多選各自名目環域／共同交集、固定單網格、noR122與無武裝提示；不改模擬 | Node9組／20負控；258ba006 CI39451022446 unit410.6秒／smoke169秒／lane綠，八圖覆核 | [#57](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/57) | 首紅GLSL保留字已修；本機Chrome受限、Android／512單位實機未測；收尾head與發布待核 |
 | R121 | 2026-10-20 | GPT | 待辦16鐵絲網：獨立障礙、徒步繞行／車輛通過、共用建材與HE破壞、低矮模型／noR121 | 本機typecheck/build；七組行為／十一負控／幾何守衛；golden eea1d59b不變 | 950cf927／#55 | CI39385380399 unit380秒／smoke169秒／lane及11圖覆核通過；手機13calls／22888tri；收尾head／main部署待核，本機Chrome受限、Android未測 |
 | R120 | 2026-10-20 | GPT | 三種可破壞圍牆；整合R036裝甲／R037事件時間戳，獨立基準重算17個凍結值 | db48cafa CI39371516702 unit372.8秒／smoke169.4秒／lane綠；四標準圖＋18牆圖已看；滿額牆開局13／24680、戰鬥16／29138 | [#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) | 歷史首紅保留；未證實原雙擊原因，當前事件時間與舊行為負控已驗證。收尾head與發布待核實；本機8Chrome受限、Android未測 |
 | R037 | 2026-10-20 | Claude | 手勢計時看手指的時間：慣性 80 毫秒、拖曳初速、雙擊 350 毫秒改用 event.timeStamp（?noR037=1 關）；smoke 的快速拖曳、雙擊照時間表送（touchSeq）並印事件時間診斷；加畫面卡住兩項與負控制 | input-timing 5 組＋6 種改壞；本機 R012 段綠；CI 708bc80 unit／smoke 綠；golden 不變 | [#53](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/53) | 長按 500 毫秒仍用真計時器；其他計時項目沒動；#47、#52、main 雙擊紅的確切原因沒紀錄；Android 未測 |
