@@ -1,5 +1,5 @@
 // 格子 A*：八方向、不准切過擋路格的角；成本全是整數，平手時照格索引排，結果決定性。
-import { N, idx, inMap, blocks, speedPct, type World } from './world.ts';
+import { N, idx, inMap, blocks, wireBlocks, UK_TANK, speedPct, type World } from './world.ts';
 
 const DX = [1, -1, 0, 0, 1, 1, -1, -1];
 const DZ = [0, 0, 1, -1, 1, -1, 1, -1];
@@ -43,9 +43,9 @@ class Heap {
 }
 
 // 回傳從起點下一格到終點的格索引；終點走不到時，走到離終點最近（啟發值最小）的可達格。
-export function findPath(w: World, sx: number, sz: number, gx: number, gz: number, enterBuilding = 0, exitBuilding = 0): number[] {
+export function findPath(w: World, sx: number, sz: number, gx: number, gz: number, enterBuilding = 0, exitBuilding = 0, unitKind = UK_TANK): number[] {
   if (!inMap(sx, sz) || !inMap(gx, gz)) return [];
-  const blocked = (x: number, z: number) => blocks(w, x, z) && w.occ[idx(x, z)] !== enterBuilding && w.occ[idx(x, z)] !== exitBuilding;
+  const blocked = (x: number, z: number) => wireBlocks(w, x, z, unitKind) || (blocks(w, x, z) && w.occ[idx(x, z)] !== enterBuilding && w.occ[idx(x, z)] !== exitBuilding);
   const start = idx(sx, sz), goal = idx(gx, gz);
   if (start === goal) return [];
   const g = new Int32Array(N * N).fill(-1), came = new Int32Array(N * N).fill(-1), done = new Uint8Array(N * N);

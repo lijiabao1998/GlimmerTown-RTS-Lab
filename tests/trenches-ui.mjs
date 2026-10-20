@@ -6,8 +6,8 @@ import vm from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createWorld, hashWorld, N, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, SHELL_HE } from '../src/sim/world.ts';
-import { BUILD_KINDS, BUILD_KINDS_24, WALL_KINDS, BUILD_POINTS, buildKind, buildError, applyBuild, enemyPlan } from '../src/sim/build.ts';
+import { createWorld, hashWorld, N, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, SHELL_HE } from '../src/sim/world.ts';
+import { WIRE_KIND, BUILD_KINDS, BUILD_KINDS_24, WALL_KINDS, BUILD_POINTS, buildKind, buildError, applyBuild, enemyPlan } from '../src/sim/build.ts';
 import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench } from '../src/sim/trenches.ts';
 import { step, runLog } from '../src/sim/step.ts';
 import { materialBuildDetail } from '../src/ui/materials.ts';
@@ -55,9 +55,9 @@ function controller(visual = true) {
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
   const c = vm.createContext({
     structuredClone, createWorld, hashWorld, isWallKind, bldMaxHp, buildKind, buildError, applyBuild, enemyPlan, TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, step, runLog, materialBuildDetail,
-    BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_KINDS_NOW: BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
+    BK_WIRE, WIRE_KIND, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_KINDS_NOW: BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
     w: emptyWorld(), view: mockView(), phase: 'build', plan: [], pickKind: BK_COTTAGE, pickRot: 0, pickTrench: -1, trenchRot: 0, buildHint: '', log: [], pending: [], selected: new Set(), acc: 0,
-    r120: true, r118: visual, r105: true, r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true, r104: true,
+    r121: false, r120: true, r118: visual, r105: true, r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true, r104: true,
     q: new URLSearchParams(visual ? '' : 'noR118=1'), seed: 1944, fxOn: true, battleAudio: undefined, stats: {}, reportView: undefined, minimap: undefined, startBanner() {}, syncBattleAudio() {},
     newStats: () => ({}), statsStep() {}, ecoCmd: () => ({ t: 'eco' }), aiLevel: 2, innerWidth: 412, innerHeight: 860, simT: () => 0, hud: { update() {} }, ui() { c.buildBar?.update(); },
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },

@@ -5,7 +5,7 @@ import { isqrt } from './math.ts';
 import { nextU32, randInt, type RngState } from './rng.ts';
 import {
   N, idx, inMap, cellOf, blocks, bldMaxHp, TER_ROAD, TER_MUD, BK_COTTAGE, BK_HOUSE, BK_BARN, BK_PILLBOX, SIDE_PLAYER, SIDE_ENEMY,
-  BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind,
+  BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, BK_WIRE, UK_INFANTRY, wireAt, wireBlocks, isWallKind,
   type World, type Building,
 } from './world.ts';
 
@@ -29,7 +29,9 @@ export const WALL_KINDS: BuildKind[] = [
   { name: 'wall_concrete', kind: BK_WALL_CONCRETE, w: 2, d: 1, floors: 1, cost: 3 },
 ];
 
-export const buildKind = (kind: number): BuildKind | null => BUILD_KINDS_24.find(k => k.kind === kind) ?? WALL_KINDS.find(k => k.kind === kind) ?? null;
+export const WIRE_KIND: BuildKind = { name: 'wire', kind: BK_WIRE, w: 2, d: 1, floors: 1, cost: 1 };
+
+export const buildKind = (kind: number): BuildKind | null => BUILD_KINDS_24.find(k => k.kind === kind) ?? WALL_KINDS.find(k => k.kind === kind) ?? (kind === BK_WIRE ? WIRE_KIND : null);
 
 // 半場：我方 x+z ≥ N+2、敵方 x+z ≤ N−4，中間是無人帶
 export function territory(side: number, x: number, z: number): boolean {
@@ -39,6 +41,7 @@ export function territory(side: number, x: number, z: number): boolean {
 export function pointsUsed(w: World, side: number): number {
   let p = 0;
   for (const b of w.blds) if (b.builtBy === side) p += buildKind(b.kind)?.cost ?? 0;
+  for (const b of w.wires?.segments ?? []) if (b.builtBy === side) p += WIRE_KIND.cost;
   return p + trenchPointsUsed(w, side);
 }
 
@@ -82,11 +85,11 @@ export function stillConnected(w: World, fx: number, fz: number, fw: number, fd:
 // R120：可緊鄰的牆不能把任何既有可通行區切成兩塊，包括沒有單位的空口袋。
 // 分別標記施工前後的連通分量；同一舊分量的剩餘格只能落在一個新分量。
 // 不要求原本隔開的區域相通，也不把被合法佔用的兩格誤算成「失去通路」。
-function wallKeepsOpenCells(w: World, fx: number, fz: number, fw: number, fd: number): boolean {
+function wallKeepsOpenCells(w: World, fx: number, fz: number, fw: number, fd: number, foot = false): boolean {
   const before = new Int32Array(N * N), after = new Uint8Array(N * N), used = new Uint8Array(N * N + 1);
   const queue = new Int32Array(N * N);
   const covered = (x: number, z: number) => x >= fx && z >= fz && x < fx + fw && z < fz + fd;
-  const blocked = (x: number, z: number, placed: boolean) => blocks(w, x, z) || (placed && covered(x, z));
+  const blocked = (x: number, z: number, placed: boolean) => blocks(w, x, z) || (foot && wireBlocks(w, x, z, UK_INFANTRY)) || (placed && covered(x, z));
   let component = 0;
   for (const placed of [false, true]) {
     for (let start = 0; start < N * N; start++) {
@@ -116,6 +119,8 @@ function wallKeepsOpenCells(w: World, fx: number, fz: number, fw: number, fd: nu
   return true;
 }
 
+export const keepsFootPaths = (w: World, x: number, z: number, width: number, depth: number): boolean => !w.wires?.segments.length || wallKeepsOpenCells(w, x, z, width, depth, true);
+
 // 不能蓋的原因（代碼）；能蓋回傳 null。順序＝玩家看到的原因的優先順序。
 // 註：跟別的建築隔一格的規矩下，合法的佔地四周一定有一圈空格，單獨一棟堵不死路；
 // 所以「會堵死通路」排在「太靠近」之前：塞進兩棟房子（或房子與地圖邊）之間的窄巷時，玩家看到的是真正的後果。
@@ -133,7 +138,7 @@ export function buildError(w: World, cmd: BuildCmd): string | null {
   }
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_ROAD) return 'road';
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_MUD) return 'mud';   // R026
-  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[idx(x, z)] || trenchAt(w, x, z)) return 'occupied';
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[idx(x, z)] || trenchAt(w, x, z) || wireAt(w, x, z)) return 'occupied';
   for (const u of w.units) {
     if (!u.alive) continue;
     const ux = cellOf(u.x), uz = cellOf(u.z);
@@ -142,6 +147,7 @@ export function buildError(w: World, cmd: BuildCmd): string | null {
   if (pointsUsed(w, cmd.side) + k.cost > BUILD_POINTS) return 'points';
   if (!stillConnected(w, f.x, f.z, f.w, f.d)) return 'blocked';
   if (isWallKind(k.kind) && !wallKeepsOpenCells(w, f.x, f.z, f.w, f.d)) return 'blocked';
+  if ((k.kind === BK_WIRE || w.wires?.segments.length) && !wallKeepsOpenCells(w, f.x, f.z, f.w, f.d, true)) return 'blocked';
   // 建築之間至少隔一格：跟 createWorld 的 free() 同一條規矩（地圖外的邊框格不算）
   for (let dz = -1; dz <= f.d; dz++) for (let dx = -1; dx <= f.w; dx++) {
     const cx = f.x + dx, cz = f.z + dz;
@@ -159,6 +165,14 @@ export function applyBuild(w: World, cmd: BuildCmd): string | null {
   if (err) return err;
   const k = buildKind(cmd.kind)!, f = footprint(cmd)!, id = w.blds.length + 1, maxHp = bldMaxHp(k.kind, f.w, f.d, k.floors);
   const b: Building = { id, kind: k.kind, x: f.x, z: f.z, w: f.w, d: f.d, floors: k.floors, hp: maxHp, maxHp, builtBy: cmd.side };
+  if (k.kind === BK_WIRE) {
+    if (!w.wires) w.wires = { version: 1, segments: [] };
+    b.id = w.wires.segments.length + 1;
+    w.wires.segments.push(b);
+    clearVegetation(w, b.x, b.z, b.w, b.d);
+    w.events.push({ e: 'wire' });
+    return null;
+  }
   w.blds.push(b);
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) w.occ[idx(x, z)] = id;
   clearVegetation(w, f.x, f.z, f.w, f.d);
@@ -172,6 +186,7 @@ export function enemyPlan(w: World, kindsAll: BuildKind[] = BUILD_KINDS): BuildC
   const out: BuildCmd[] = [];
   if (w.tick !== 0) return out;
   const s: World = { ...w, occ: w.occ.slice(), blds: w.blds.slice(), events: [] };
+  if (w.wires) s.wires = { version: 1, segments: w.wires.segments.slice() };
   if (w.vegetation) s.vegetation = { version: w.vegetation.version, cells: w.vegetation.cells.slice() };
   const r: RngState = { rng: (w.seed ^ 0x52303036) >>> 0 };   // 'R006'
   nextU32(r);

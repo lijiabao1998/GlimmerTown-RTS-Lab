@@ -1,7 +1,7 @@
 // R118：開戰前的可穿行戰壕。格子清單是唯一佔地來源，不改道路、尋路或視線。
 import { BUILD_POINTS, pointsUsed, territory } from './build.ts';
 import { clearVegetation } from './vegetation.ts';
-import { idx, inMap, cellOf, TER_ROAD, TER_MUD, SIDE_PLAYER, SIDE_ENEMY, type World, type TrenchSegment } from './world.ts';
+import { idx, inMap, cellOf, wireAt, TER_ROAD, TER_MUD, SIDE_PLAYER, SIDE_ENEMY, type World, type TrenchSegment } from './world.ts';
 
 export interface TrenchCmd { t: 'trench'; side: number; kind: number; x: number; z: number; rot?: number }
 export interface TrenchKind { kind: number; name: string; cost: number; cover: number; cells: readonly (readonly [number, number])[] }
@@ -49,7 +49,7 @@ export function trenchError(w: World, cmd: TrenchCmd): string | null {
   for (const [x, z] of cells) if (!territory(cmd.side, x, z)) return territory(1 - cmd.side, x, z) ? 'foreign' : 'neutral';
   if (cells.some(([x, z]) => w.ter[idx(x, z)] === TER_ROAD)) return 'road';
   if (cells.some(([x, z]) => w.ter[idx(x, z)] === TER_MUD)) return 'mud';
-  if (cells.some(([x, z]) => w.occ[idx(x, z)] || trenchAt(w, x, z))) return 'occupied';
+  if (cells.some(([x, z]) => w.occ[idx(x, z)] || trenchAt(w, x, z) || wireAt(w, x, z))) return 'occupied';
   if (w.units.some(u => u.alive && cells.some(([x, z]) => cellOf(u.x) === x && cellOf(u.z) === z))) return 'unit';
   if (pointsUsed(w, cmd.side) + k.cost > BUILD_POINTS) return 'points';
   return null;

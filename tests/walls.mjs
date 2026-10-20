@@ -41,13 +41,13 @@ group('templates',()=>{
     assert.equal(bldMaterial(kind),[BM_BRICK,BM_STONE,BM_CONCRETE][i],'templates: wall material');assert.equal(pointsUsed(w,side),costs[i]);
     for(let z=0;z<N;z++)for(let x=0;x<N;x++)assert.equal(w.occ[idx(x,z)],x>=c.x&&x<c.x+b.w&&z>=c.z&&z<c.z+b.d?1:0,'templates: both wall cells occupied');
   }
-  const a=blank(),b=blank(),c=cmd();delete c.rot;applyBuild(a,c);applyBuild(b,cmd());assert.deepEqual(a,b,'templates: omitted rotation preserves old command format');assert.equal(buildKind(10),null);
+  const a=blank(),b=blank(),c=cmd();delete c.rot;applyBuild(a,c);applyBuild(b,cmd());assert.deepEqual(a,b,'templates: omitted rotation preserves old command format');assert.equal(buildKind(99),null);
 });
 
 group('validation',()=>{
   const reject=(c,reason,setup=()=>{})=>{const w=blank();setup(w);const before=structuredClone(w);assert.equal(buildError(w,c),reason,'validation: exact refusal reason');assert.equal(applyBuild(w,c),reason);assert.deepEqual(w,before,'validation: rejection leaves entire world unchanged');};
   for(const v of [-1,2,0.5,NaN,'0',null])reject({...cmd(),side:v},'side');
-  for(const v of [-1,3,10,7.5,NaN,'7',null])reject({...cmd(),kind:v},'kind');
+  for(const v of [-1,3,99,7.5,NaN,'7',null])reject({...cmd(),kind:v},'kind');
   for(const v of [-1,2,0.5,NaN,'0',null])reject({...cmd(),rot:v},'rot');
   for(const key of ['x','z'])for(const v of [0.5,NaN,Infinity,'20',null])reject({...cmd(),[key]:v},'coord');
   reject(cmd(),'tick',w=>w.tick=1);reject(cmd(7,0,-1,20),'map');reject(cmd(7,0,31,20),'map');reject(cmd(7,0,20,31,1),'map');reject(cmd(7,0,4,4),'foreign');reject(cmd(7,0,16,16),'neutral');

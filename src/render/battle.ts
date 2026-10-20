@@ -400,7 +400,8 @@ export class BattleView {
       groundDirty = true; vegetationDirty = true;
     }
     for (const e of events) {
-      if (e.e === 'stage') {
+      if (e.e === 'wire') { townDirty = true; vegetationDirty = true; }
+      else if (e.e === 'stage') {
         townDirty = true;
         const b = this.w.blds[e.bld - 1];
         for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z);
