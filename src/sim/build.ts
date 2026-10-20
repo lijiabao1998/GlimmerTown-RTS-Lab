@@ -1,4 +1,6 @@
 // R006 自己建城：開戰前（第 0 步）的布陣指令。純函式、只用整數；亂數只用自己的種子狀態，不碰 World.rng。
+import { trenchAt, trenchPointsUsed } from './trenches.ts';
+import { clearVegetation } from './vegetation.ts';
 import { isqrt } from './math.ts';
 import { nextU32, randInt, type RngState } from './rng.ts';
 import {
@@ -30,7 +32,7 @@ export function territory(side: number, x: number, z: number): boolean {
 export function pointsUsed(w: World, side: number): number {
   let p = 0;
   for (const b of w.blds) if (b.builtBy === side) p += buildKind(b.kind)?.cost ?? 0;
-  return p;
+  return p + trenchPointsUsed(w, side);
 }
 
 // 佔地（rot=1 時寬深互換）
@@ -87,7 +89,7 @@ export function buildError(w: World, cmd: BuildCmd): string | null {
   }
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_ROAD) return 'road';
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_MUD) return 'mud';   // R026
-  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[idx(x, z)]) return 'occupied';
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[idx(x, z)] || trenchAt(w, x, z)) return 'occupied';
   for (const u of w.units) {
     if (!u.alive) continue;
     const ux = cellOf(u.x), uz = cellOf(u.z);
@@ -111,6 +113,7 @@ export function applyBuild(w: World, cmd: BuildCmd): string | null {
   const b: Building = { id, kind: k.kind, x: f.x, z: f.z, w: f.w, d: f.d, floors: k.floors, hp: maxHp, maxHp, builtBy: cmd.side };
   w.blds.push(b);
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) w.occ[idx(x, z)] = id;
+  clearVegetation(w, f.x, f.z, f.w, f.d);
   w.events.push({ e: 'build', bld: id });
   return null;
 }
@@ -121,6 +124,7 @@ export function enemyPlan(w: World, kindsAll: BuildKind[] = BUILD_KINDS): BuildC
   const out: BuildCmd[] = [];
   if (w.tick !== 0) return out;
   const s: World = { ...w, occ: w.occ.slice(), blds: w.blds.slice(), events: [] };
+  if (w.vegetation) s.vegetation = { version: w.vegetation.version, cells: w.vegetation.cells.slice() };
   const r: RngState = { rng: (w.seed ^ 0x52303036) >>> 0 };   // 'R006'
   nextU32(r);
   let ex = 0, ez = 0, en = 0, px = 0, pz = 0, pn = 0;

@@ -1,4 +1,6 @@
 // R019 補給與生產：指揮部、補給、生產佇列、出生與集結、有指揮部時的勝負。整數、決定性、不抽 World.rng。
+import { trenchAt } from './trenches.ts';
+import { clearVegetation } from './vegetation.ts';
 import { findPath } from './path.ts';
 import { stillConnected } from './build.ts';
 import {
@@ -27,7 +29,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
       if (!inMap(cx, cz)) { if (inner) ok = false; continue; }
       const i = idx(cx, cz);
       if (w.occ[i]) ok = false;
-      if (inner && (w.ter[i] === TER_ROAD || unitCells.has(i))) ok = false;
+      if (inner && (w.ter[i] === TER_ROAD || unitCells.has(i) || trenchAt(w, cx, cz))) ok = false;
     }
     if (ok && stillConnected(w, x, z, 2, 2)) return [x, z];
   }
@@ -45,6 +47,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0): void {
     const b: Building = { id, kind: BK_HQ, x: at[0], z: at[1], w: 2, d: 2, floors: 1, hp: maxHp, maxHp, builtBy: side };
     w.blds.push(b);
     for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) w.occ[idx(at[0] + dx, at[1] + dz)] = id;
+    clearVegetation(w, b.x, b.z, b.w, b.d);
     w.events.push({ e: 'build', bld: id });
     hq[side] = id;
   }

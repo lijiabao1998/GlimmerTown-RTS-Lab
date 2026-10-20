@@ -76,7 +76,7 @@ const hit = (kind, shellKind, dx, dz, targetKind=UK_TANK) => {
 }
 {
   const w=blank(), a=add(w,0,UK_TANK,8,8), b=add(w,1,UK_TANK,9,8), c=add(w,0,UK_OBSERVER,7,8);
-  const sel=new Set([a.id,b.id,c.id]), before=hashWorld(w), on=new BattleView(w,true), off=new BattleView(w,true,true,true,true,true,true,true,true,true,true,false), fxoff=new BattleView(w,false);
+  const sel=new Set([a.id,b.id,c.id]), before=hashWorld(w), on=new BattleView(w,true), off=new BattleView(w,true,true,true,true,true,true,true,true,true,true,true,true,false), fxoff=new BattleView(w,false);
   for (const v of [on,off,fxoff]) v.update(0,0,sel);
   assert.equal(on.armorArcCount,2); assert.equal(off.armorArcCount,0); assert.equal(fxoff.armorArcCount,0);
   const m=new THREE.Matrix4(); on.armorArcs.getMatrixAt(0,m); const p=m.elements;

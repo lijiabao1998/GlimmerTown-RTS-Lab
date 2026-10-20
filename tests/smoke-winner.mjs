@@ -226,6 +226,9 @@ group('replay', () => {
 });
 
 // Independent frozen seven-command fixture, never derived from the current SCRIPT.
+// R115 adds only counterbattery memory. Keep the historical combat hashes as independent anchors;
+// strip that one new informational field from a shallow copy, never from the tested world.
+const legacyCombatHash = w => { const old = { ...w }; delete old.counterbattery; return hashWorld(old); };
 const LEGACY_SCRIPT = [
   { tick: 0, cmd: { t: 'move', side: 0, ids: [1, 2, 3], x: 18, z: 19 } },
   { tick: 0, cmd: { t: 'fireAt', side: 0, ids: [4], x: 10, z: 10 } },
@@ -238,12 +241,12 @@ const LEGACY_SCRIPT = [
 group('compatibility', () => {
   for (const [tick, expected] of [[600, '34478c82'], [1200, '0c40171b']]) {
     const w = runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, tick);
-    assert.equal(hashWorld(w), expected, `independent seven-command legacy hash at ${tick}`);
+    assert.equal(legacyCombatHash(w), expected, `independent seven-command legacy combat hash at ${tick}`);
     assert.equal(w.smoke, undefined, 'legacy worlds need no smoke-state migration');
   }
   assert.deepEqual(SCRIPT.filter(e => e.cmd.ammo !== 'smoke'), LEGACY_SCRIPT, 'current SCRIPT preserves every legacy command');
-  assert.equal(hashWorld(runScript(SCRIPT_TICKS)), '79fc3ae3', 'existing smoke SCRIPT golden is unchanged by result-only fix');
-  console.log('  legacy 600/1200 = 34478c82/0c40171b; existing SCRIPT 1200 = 79fc3ae3');
+  assert.equal(legacyCombatHash(runScript(SCRIPT_TICKS)), '79fc3ae3', 'existing smoke SCRIPT combat baseline remains unchanged excluding new counterbattery memory');
+  console.log('  legacy 600/1200 = 34478c82/0c40171b; existing SCRIPT combat-only 1200 = 79fc3ae3');
 });
 assert(groups > 0, `unknown smoke-winner group ${only}`);
 console.log(`smoke-winner: ${groups} groups passed`);

@@ -23,6 +23,9 @@ const queue = (w, gun, x, z, kind = SHELL_SMOKE, T = 1) => { const shell = { id:
 const cloud = (w, x, z, extra = {}) => { w.smoke = { windX: 1, windZ: 0, clouds: [{ id: 90, side: 0, x, z, born: w.tick, expires: w.tick + SMOKE_LIFETIME, ...extra }] }; return w.smoke.clouds[0]; };
 
 // Independent, frozen seven-command fixture: never derive legacy commands from production SCRIPT.
+// R115 adds only counterbattery memory. Keep the historical combat hashes as independent anchors;
+// strip that one new informational field from a shallow copy, never from the tested world.
+const legacyCombatHash = w => { const old = { ...w }; delete old.counterbattery; return hashWorld(old); };
 const LEGACY_SCRIPT = [
   { tick: 0, cmd: { t: 'move', side: 0, ids: [1, 2, 3], x: 18, z: 19 } },
   { tick: 0, cmd: { t: 'fireAt', side: 0, ids: [4], x: 10, z: 10 } },
@@ -192,8 +195,8 @@ group('replay', () => {
 });
 
 group('legacy_script', () => {
-  assert.equal(LEGACY_SCRIPT.length, 7); assert.equal(hashWorld(runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, 600)), '34478c82', 'independent seven-command 600 baseline');
-  assert.equal(hashWorld(runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, 1200)), '0c40171b', 'independent seven-command 1200 baseline');
+  assert.equal(LEGACY_SCRIPT.length, 7); assert.equal(legacyCombatHash(runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, 600)), '34478c82', 'independent seven-command 600 baseline');
+  assert.equal(legacyCombatHash(runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, 1200)), '0c40171b', 'independent seven-command 1200 baseline');
   assert.deepEqual(SCRIPT.filter(e => e.cmd.ammo !== 'smoke'), LEGACY_SCRIPT, 'new script preserves every original command verbatim');
   assert(SCRIPT.some(e => e.tick === 500 && e.cmd.t === 'fireAt' && e.cmd.side === 0 && e.cmd.ids[0] === 4 && e.cmd.x === 24 && e.cmd.z === 24 && e.cmd.ammo === 'smoke'), 'late smoke scenario present');
   const w = runScript(600); assert(w.smoke?.clouds.some(c => c.expires > w.tick), 'existing CI 30-second snapshot actually includes persistent smoke'); console.log(`  legacy 34478c82/0c40171b; new 600 ${hashWorld(w)}, 1200 ${hashWorld(runScript(1200))}`);

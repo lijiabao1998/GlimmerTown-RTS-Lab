@@ -2,9 +2,11 @@
 import * as THREE from 'three';
 import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
+import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
+import { BattleAudio } from './render/audio.ts';
 import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
@@ -16,9 +18,11 @@ import { applyMap, MAP_RYE } from './sim/maps.ts';
 import { materialBuildDetail } from './ui/materials.ts';
 import { setFacades, setMaterials } from './render/buildings.ts';
 import { setStreets } from './render/battle.ts';
+import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
+import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
 
@@ -27,6 +31,7 @@ const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
 const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)) };
 // 逃生閥：?fx=off 或 window.__noFx＝true 時不產生爆炸、煙（AGENTS.md：新效果都要關得掉）
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
+const r117 = fxOn && q.get('noR117') !== '1';
 // R004 破壞的重量：倒塌、碎片、火與曳光。逃生閥 ?noR004=1＝舊效果（模擬雜湊不變）
 const r004 = q.get('noR004') !== '1';
 // R008 車輛有重量：車轍、揚塵、後座、砲塔轉向、受擊閃光。逃生閥 ?noR008=1
@@ -46,11 +51,19 @@ const r011 = q.get('noR011') !== '1';
 const r014 = q.get('noR014') !== '1';
 // R015 小地圖。逃生閥 ?noR015=1
 const r015 = q.get('noR015') !== '1';
+const r116 = q.get('noR116') !== '1';
+const r118 = q.get('noR118') !== '1'; // 只關戰壕選項與呈現；舊紀錄中的指令照常執行
+setVegetation(r116); // 只關模型與提示；新局地形仍由明確的 map 指令啟用
+const r115 = q.get('noR115') !== '1'; // 只關估計區與提示，不改情報模擬
 let minimap: Minimap | undefined;
 // R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
 const r016 = q.get('noR016') !== '1';
 const r104 = q.get('noR104') !== '1'; // 裝甲弧提示；只關畫面，不改模擬
 const r109 = q.get('noR109') !== '1';
+let lastRangeInfo = '';
+let lastVegetationInfo = '';
+let lastCounterbatteryInfo = '';
+let lastCounterbatteryWorld: World | undefined;
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
 const r107 = q.get('noR107') !== '1'; // 只關煙團畫面；煙幕指令與視線模擬保持啟用
@@ -81,24 +94,34 @@ const SPEEDS = [1, 2, 4];
 // ---- R006 布陣：開頁先停在第 0 步，玩家在我方半場蓋房子，按「開戰」才開打。逃生閥 ?noR006=1＝直接開打（R102 的流程）----
 const r006 = q.get('noR006') !== '1';
 let phase: 'build' | 'battle' = 'battle';
-let plan: BuildCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
+// R117：預設靜音。只有原生音效鍵會建立／解鎖 context；模擬與重播不碰它。
+const battleAudio = r117 ? new BattleAudio(() => hud?.update()) : undefined;
+let audioPageActive = true, audioHelpActive = false;
+function syncBattleAudio() {
+  battleAudio?.setActive(phase === 'battle' && !paused && !reportShown && !audioHelpActive && !document.hidden && audioPageActive);
+}
+type PlanCmd = BuildCmd | TrenchCmd;
+let plan: PlanCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
+let pickTrench = -1, trenchRot = 0;
+const TRENCH_LABEL = ['直段', '折線', '交通壕', '加固段'];
+const TRENCH_SHAPE = ['2格直線', '3格L形', '4格直線', '2格加固'];
 const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡' };
 const BUILD_WHY: Record<string, string> = {
   tick: '已經開戰，不能再蓋', map: '超出地圖', foreign: '那是敵方半場（紅色）；只能蓋在我方半場（藍色）',
-  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: '那裡已經有房子',
-  unit: '有單位站在那裡', blocked: '會堵死通路', gap: '太靠近別的房子（要隔一格）',
+  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: r118 ? '那裡已有房子或戰壕' : '那裡已經有房子',
+  trench: '那裡已經有戰壕', unit: '有單位站在那裡', blocked: '會堵死通路', gap: '太靠近別的房子（要隔一格）',
 };
 const BUILD_TIP = '布陣：點藍色地面蓋房子當掩體、擋視線；點蓋好的房子拿掉；蓋好按「開戰」';
 
-// 預覽＝真的世界的複本套上這次的布陣（同一支 applyBuild，規則只有一份）
+// 預覽＝真的世界的複本套上這次的布陣（同一支 applyBuild／applyTrench，規則只有一份）
 function previewWorld(): World {
   const pv = structuredClone(w);
-  for (const c of plan) applyBuild(pv, c);
+  for (const c of plan) { if (c.t === 'trench') applyTrench(pv, c); else applyBuild(pv, c); }
   pv.events = [];
   return pv;
 }
 function refreshPreview() { if (phase === 'build') view.setWorld(previewWorld(), SIDE_PLAYER); }
-const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + (buildKind(c.kind)?.cost ?? 0), 0);
+const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + ((c.t === 'trench' ? trenchKind(c.kind) : buildKind(c.kind))?.cost ?? 0), 0);
 
 // R018 電腦對手：開戰時送 ai 指令（記在指令紀錄裡，重播自動一致）。?ai=1|2|3 選難度；逃生閥 ?noR018=1＝敵人原地還擊
 const r018 = q.get('noR018') !== '1';
@@ -116,22 +139,25 @@ let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {
+function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true) {
   if (r109) clearGestureInput();
+  battleAudio?.reset();
   w = createWorld(s);
-  if (map) applyMap(w, MAP_RYE);   // R026：布陣預覽就要看到 Rye；同一條 map 指令記在紀錄第 0 步，重播時由 step 套（套過的不再套）
+  // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
+  if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, r104);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
-  if (map) issue({ t: 'map', id: MAP_RYE });
+  if (map || vegetation) issue({ t: 'map', id: map ? MAP_RYE : 0, ...(vegetation ? { vegetation: 1 } : {}) });
   if (build) { paused = true; refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(ecoCmd());
     if (ai) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   }
   ui();
+  syncBattleAudio();
 }
 function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); }
 
@@ -148,6 +174,7 @@ function startBattle() {
   view.setWorld(w, -1);
   tick();
   paused = false;
+  syncBattleAudio();
   ui();
 }
 
@@ -155,21 +182,28 @@ function placeAt(cx: number, cy: number) {
   // 點到已經放好的房子＝拿掉它（只認這次布陣的，地圖上原本的房子不算）
   const hitB = view.buildingAt(cx, cy, innerWidth, innerHeight);
   if (hitB) {
-    const k = plan.findIndex(c => { const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return hitB[0] >= c.x && hitB[1] >= c.z && hitB[0] < c.x + fw && hitB[1] < c.z + fd; });
+    const k = plan.findIndex(c => { if (c.t !== 'build') return false; const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return hitB[0] >= c.x && hitB[1] >= c.z && hitB[0] < c.x + fw && hitB[1] < c.z + fd; });
     if (k >= 0) { plan.splice(k, 1); buildHint = '拿掉了一棟'; refreshPreview(); ui(); return; }
   }
   const p = view.groundAt(cx, cy, innerWidth, innerHeight);
   if (!p) return;
   const gx = Math.floor(p.x), gz = Math.floor(p.z);
   if (gx < 0 || gz < 0 || gx >= N || gz >= N) return;
+  // 一段壕溝的任一實際格都能拿掉整段；L形空角不是戰壕。
+  const trenchIndex = plan.findIndex(c => c.t === 'trench' && trenchCells(c).some(([x, z]) => x === gx && z === gz));
+  if (trenchIndex >= 0) { plan.splice(trenchIndex, 1); buildHint = '拿掉了一段戰壕'; refreshPreview(); ui(); return; }
   const kd = buildKind(pickKind)!, rot = kd.w !== kd.d ? pickRot : 0;
-  const cmd: BuildCmd = { t: 'build', side: SIDE_PLAYER, kind: pickKind, x: gx, z: gz, ...(rot ? { rot } : {}) };
-  const err = buildError(previewWorld(), cmd);
+  const cmd: PlanCmd = pickTrench >= 0
+    ? { t: 'trench', side: SIDE_PLAYER, kind: pickTrench, x: gx, z: gz, rot: trenchRot }
+    : { t: 'build', side: SIDE_PLAYER, kind: pickKind, x: gx, z: gz, ...(rot ? { rot } : {}) };
+  const label = cmd.t === 'trench' ? TRENCH_LABEL[cmd.kind] : BUILD_LABEL[cmd.kind];
+  const cost = cmd.t === 'trench' ? trenchKind(cmd.kind)!.cost : kd.cost;
+  const pv = previewWorld(), err = cmd.t === 'trench' ? trenchError(pv, cmd) : buildError(pv, cmd);
   if (err) {
-    buildHint = err === 'points' ? `建材不夠（剩 ${pointsLeft()}，${BUILD_LABEL[pickKind]}要 ${kd.cost}）` : BUILD_WHY[err] ?? '這裡不能蓋';
+    buildHint = err === 'points' ? `建材不夠（剩 ${pointsLeft()}，${label}要 ${cost}）` : BUILD_WHY[err] ?? '這裡不能蓋';
     view.setMarker(gx + 0.5, gz + 0.5, simT(), true);
   } else {
-    plan.push(cmd); buildHint = `${BUILD_LABEL[pickKind]}蓋好了，剩建材 ${pointsLeft()}`;
+    plan.push(cmd); buildHint = `${label}蓋好了，剩建材 ${pointsLeft()}`;
     view.setMarker(gx + 0.5, gz + 0.5, simT(), false);
     refreshPreview();
   }
@@ -186,11 +220,11 @@ const simT = (alpha = 0) => (w.tick + alpha) / TICK_HZ;
 function tick() {
   view.snapshot();
   const now = pending; pending = [];
-  const priorWinner = w.winner;
+  const priorWinner = w.winner, priorMap = w.map;
   step(w, now);
   if (r109 && priorWinner < 0 && w.winner >= 0) clearGestureInput();
   view.onEvents(w.events, simT());
-  if (minimap && w.events.some(e => e.e === 'stage' || e.e === 'build' || (e.e === 'impact' && e.kind === SHELL_HE))) minimap.dirty();   // R015 地形變了才重畫底圖
+  if (minimap && (priorMap !== w.map || w.events.some(e => e.e === 'stage' || e.e === 'build' || e.e === 'trench' || (e.e === 'impact' && e.kind === SHELL_HE)))) minimap.dirty();   // R015 地形變了才重畫底圖
   statsStep(stats, w, w.events);
 }
 
@@ -354,7 +388,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; if (r012) view.zoomAt(f, e.clientX, e.clientY, innerWidth, innerHeight); else view.zoomBy(f); }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (r109) clearGestureInput(); selected.clear(); fireMode = false; ammo = 'he'; hud?.update(); }
-  if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
+  if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; syncBattleAudio(); hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
 });
 
 reset();
@@ -379,9 +413,14 @@ hud = initHud({
       mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
+      rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
+      counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115),
+      vegetationInfo: view.vegetationInfo,
+      audio: battleAudio?.status(),
     };
   },
-  togglePause: () => { if (phase === 'battle') paused = !paused; },
+  togglePause: () => { if (phase === 'battle') paused = !paused; syncBattleAudio(); },
+  toggleAudio: battleAudio ? () => { syncBattleAudio(); battleAudio.toggleFromGesture(); } : undefined,
   cycleSpeed: () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; },
   toggleFire: () => { fireMode = !fireMode; },
   toggleAmmo: () => { ammo = ammo === 'he' ? 'smoke' : 'he'; if (ammo === 'smoke') fireMode = true; },
@@ -403,22 +442,33 @@ prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_
 let pausedBeforeHelp = false;
 // R015 小地圖：點哪裡鏡頭滑過去（有 R012 就平滑）
 if (r015) minimap = initMinimap({
-  world: () => w,
+  counterbattery: r115,
+  vegetation: q.get('noR116') !== '1',
+  trenches: r118,
+  world: () => view.world,
   visible: u => view.visibleUnit(u),
   view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
   tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
-const help = initHelp({ open: () => { if (r109) clearGestureInput(); pausedBeforeHelp = paused; paused = true; hud?.update(); }, close: () => { paused = pausedBeforeHelp; hud?.update(); } }, r109);
+const help = initHelp({ open: () => { if (r109) clearGestureInput(); audioHelpActive = true; pausedBeforeHelp = paused; paused = true; syncBattleAudio(); hud?.update(); }, close: () => { audioHelpActive = false; paused = pausedBeforeHelp; syncBattleAudio(); hud?.update(); } }, r109);
 buildBar = initBuildBar(BUILD_KINDS_NOW.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
   state: () => {
     const kd = buildKind(pickKind)!;
-    return { visible: phase === 'build', kind: pickKind, rot: pickRot, rotatable: kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };
+    return { visible: phase === 'build', kind: pickKind, trench: pickTrench >= 0 ? pickTrench : undefined, rot: pickTrench >= 0 ? trenchRot : pickRot, rotatable: pickTrench >= 0 || kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };
   },
-  pick: kind => { pickKind = kind; buildHint = `${BUILD_LABEL[kind]}（建材 ${buildKind(kind)!.cost}）：點藍色地面放下`; hud?.update(); },
-  rotate: () => { pickRot = 1 - pickRot; hud?.update(); },
-  undo: () => { if (plan.pop()) { buildHint = '拿掉了最後一棟'; refreshPreview(); hud?.update(); } },
+  pick: kind => { pickTrench = -1; pickKind = kind; buildHint = `${BUILD_LABEL[kind]}（建材 ${buildKind(kind)!.cost}）：點藍色地面放下`; hud?.update(); },
+  pickTrench: kind => { pickTrench = kind; trenchRot = 0; buildHint = `${TRENCH_LABEL[kind]}（建材 ${trenchKind(kind)!.cost}）：點藍色地面放下；再點任一壕格整段移除`; hud?.update(); },
+  rotate: () => { if (pickTrench >= 0) trenchRot = (trenchRot + 1) % 4; else pickRot = 1 - pickRot; hud?.update(); },
+  undo: () => { if (plan.pop()) { buildHint = '拿掉了最後一項'; refreshPreview(); hud?.update(); } },
   start: () => startBattle(),
-});
+}, r118 ? TRENCH_KINDS.map(k => ({ kind: k.kind, label: TRENCH_LABEL[k.kind], cost: k.cost, detail: `${TRENCH_SHAPE[k.kind]} · 建材 ${k.cost} · 承傷 ${k.cover}%` })) : []);
+
+// R117：背景／離頁即清尾音；BFCache只暫停，真正離開才關閉context。
+if (battleAudio) {
+  document.addEventListener('visibilitychange', syncBattleAudio);
+  addEventListener('pagehide', e => { audioPageActive = false; syncBattleAudio(); if (!e.persisted) battleAudio.dispose(); });
+  addEventListener('pageshow', () => { audioPageActive = true; syncBattleAudio(); });
+}
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
@@ -435,8 +485,11 @@ renderer.setAnimationLoop(() => {
     view.zoom = endFrom.zoom + (Math.max(endFrom.zoom, 1.6) - endFrom.zoom) * e;
   }
   if (r010 && !reportShown && since >= SLOWMO_MS) { if (r109) clearGestureInput(); reportShown = true; reportView?.show(makeReport(w, stats)); hud?.update(); }
+  syncBattleAudio();
   let steps = 0;
-  while (acc >= 1 / TICK_HZ && steps < 8) { acc -= 1 / TICK_HZ; tick(); steps++; }
+  // 只在即時迴圈收新事件；所有同步stepN／playLog／SCRIPT都不會走這裡。
+  while (acc >= 1 / TICK_HZ && steps < 8) { acc -= 1 / TICK_HZ; tick(); battleAudio?.enqueue(w, w.events, view); steps++; }
+  battleAudio?.flush();
   if (steps === 8) acc = 0;   // 機器太慢：丟掉積欠的時間，不追
   const alpha = Math.min(1, acc * TICK_HZ);
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
@@ -448,7 +501,17 @@ renderer.setAnimationLoop(() => {
     if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= N || view.target.z >= N) fling.stop();
   }
   if (glide.active) { glide.at(t / 1000, camStep); view.target.x = camStep.x; view.target.z = camStep.z; }
-  view.update(alpha, simT(alpha), selected);
+  view.update(alpha, simT(alpha), selected, phase === 'battle');
+  // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
+  const rangeInfo = view.rangeInfo;
+  if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
+  const vegetationInfo = view.vegetationInfo;
+  if (vegetationInfo !== lastVegetationInfo) { lastVegetationInfo = vegetationInfo; hud?.update(); }
+  // 暫停／重播也檢查當前世界；同 tick 換世界不能沿用上一局的提示。
+  const counterbatteryInfo = counterbatteryHint(w, phase === 'battle' && r015 && r115);
+  if (w !== lastCounterbatteryWorld || counterbatteryInfo !== lastCounterbatteryInfo) {
+    lastCounterbatteryWorld = w; lastCounterbatteryInfo = counterbatteryInfo; hud?.update();
+  }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
   prodBar?.update();
@@ -461,17 +524,21 @@ const rts = {
   seed: () => w.seed,
   tick: () => w.tick,
   hash: () => hashWorld(w),
-  pause: (p: boolean) => { paused = p; hud?.update(); },
-  stepN: (n: number) => { for (let i = 0; i < n; i++) tick(); return w.tick; },
+  pause: (p: boolean) => { paused = p; syncBattleAudio(); hud?.update(); },
+  stepN: (n: number) => {
+    battleAudio?.silence();
+    try { for (let i = 0; i < n; i++) tick(); return w.tick; }
+    finally { battleAudio?.silence(); }
+  },
   issue: (cmd: Command) => issue(cmd),
   log: () => JSON.parse(JSON.stringify(log)) as LoggedCommand[],
   selected: () => [...selected],
   // 用跟 Node 一樣的路徑重跑腳本戰鬥，回傳雜湊；畫面換成腳本跑完的世界
   runScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false, false, false, false);
+    reset(SCRIPT_SEED, false, false, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, r104);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -484,10 +551,13 @@ const rts = {
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,
   dashes: () => view.dashes,
+  rangePreview: () => view.range113 ? { ...view.range113.solution, triangles: view.range113.mesh.geometry.drawRange.count / 3, shown: view.range113.mesh.visible } : null,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0 } : null),
   men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n }),
   map: () => w.map ?? 0,
+  vegetation: () => ({ version: w.vegetation?.version ?? 0, cells: w.vegetation ? [...w.vegetation.cells] : [],
+    shown: !!view.vegetation116.mesh, count: view.vegetation116.cells, triangles: view.vegetation116.triangles, builds: view.vegetation116.builds }),
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
@@ -498,7 +568,7 @@ const rts = {
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
   // 任意指令紀錄，從第 0 步一步一步跑（每一步都餵畫面與戰報統計）；回傳雜湊
   playLog: (s: number, lg: LoggedCommand[], ticks: number) => {
-    reset(s, false, false, false, false);
+    reset(s, false, false, false, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }
@@ -510,7 +580,7 @@ const rts = {
   paused: () => paused,
   report: () => ({ shown: !!reportView?.visible(), data: makeReport(w, stats) }),
   playScript: (ticks = SCRIPT_TICKS) => {
-    reset(SCRIPT_SEED, false, false, false, false);
+    reset(SCRIPT_SEED, false, false, false, false, false);
     let i = 0;
     while (w.tick < ticks) {
       while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) issue(SCRIPT[i].cmd); i++; }
@@ -520,7 +590,7 @@ const rts = {
   },
   cellOf: (p: number) => cellOf(p),
   phase: () => phase,
-  plan: () => JSON.parse(JSON.stringify(plan)) as BuildCmd[],
+  plan: () => JSON.parse(JSON.stringify(plan)) as PlanCmd[],
   startBattle: () => startBattle(),
 };
 (window as unknown as { __rts: typeof rts }).__rts = rts;

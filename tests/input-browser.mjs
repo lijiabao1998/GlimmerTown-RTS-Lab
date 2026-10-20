@@ -7,6 +7,14 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { withBrowser, sleep, shot, touchTap } from '../tools/cdp.mjs';
+import { runScript as nodeScript } from '../src/sim/script.ts';
+import { hashWorld } from '../src/sim/world.ts';
+// R115: the visual valve still compares the complete current world across Node and Chrome.
+const expectedReplay = { 600: hashWorld(nodeScript(600)), 1200: hashWorld(nodeScript(1200)) };
+// Retain the independent pre-R115 combat anchors as well as full-state Node/Chrome parity.
+const legacyCombatHash = ticks => { const w = nodeScript(ticks); delete w.counterbattery; return hashWorld(w); };
+assert.equal(legacyCombatHash(600), 'c1058cb1', 'original eight-command 600-tick combat anchor');
+assert.equal(legacyCombatHash(1200), '79fc3ae3', 'original eight-command 1200-tick combat anchor');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r109-input-'));
 const strictCI = process.env.GITHUB_ACTIONS === 'true' || !!process.env.GITHUB_RUN_ID || !!process.env.CI;
@@ -40,6 +48,7 @@ const plugin = {
 };
 const assertions = (condition, message) => assert.ok(condition, message);
 async function main() {
+  assert.equal(expectedReplay[1200], JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/golden.json'), 'utf8')).hash, 'fixture: current Node replay agrees with the checked-in golden');
   const started = Date.now();
   const baseline = path.join(temp, 'baseline'), broken = path.join(temp, 'broken');
   await build({ root: ROOT, logLevel: 'error', build: { outDir: baseline } });
@@ -262,7 +271,7 @@ async function main() {
         await sameDraws(phoneDraws,'phone resize round trip');
         assert.deepEqual((await state()).log,smokeLog,'productionLayout: viewport changes never issue commands');
         // Exercise ordinary selection and ammo controls with R109 genuinely disabled.
-        await fresh('noR109=1',[]); await check('noR109 short hint');
+        await fresh('noR109=1&noR116=1',[]); await check('noR109 short hint');
         assertions(await E('!document.getElementById("command-menu")'),'productionLayout: noR109 keeps the legacy interface');
         const legacyBefore=await state(),p=await gunPoint(); await touchTap(page,...p); await frames();
         assert.deepEqual((await state()).selected,[4],'productionLayout: noR109 ordinary touch selects the gun');
@@ -280,16 +289,18 @@ async function main() {
         assertions(await E('!document.getElementById("selection-box")&&!document.getElementById("command-menu")'),'valve: disabled feature creates no overlay');
         const p=await gunPoint(); await touch('touchStart',[[...p,1]]); await sleep(650); await touch('touchEnd',[]); await frames();
         assertions(!(await state()).open,'valve: old long touch does not open menu');
-        assert.equal(await E('__rts.runScript(600)'),'c1058cb1','valve: original 600-tick hash'); assert.equal(await E('__rts.runScript(1200)'),'79fc3ae3','valve: original 1200-tick hash');
+        assert.equal(await E('__rts.runScript(600)'),expectedReplay[600],'valve: current Node 600-tick replay hash'); assert.equal(await E('__rts.runScript(1200)'),expectedReplay[1200],'valve: current Node 1200-tick replay hash');
       },
     };
+    // R111's deliberately frozen content cache starts with its legacy short hint. Keep the new
+    // auto-battle foliage hint out of this fixture only; vegetation-browser covers that hint.
     for(const [name,run] of Object.entries(cases)) {
-      await fresh(name==='valve'?'noR109=1':'',name==='productionLayout'?[]:undefined); const errors=page.errors.length; try { await run(); } catch(error) { await shot(page,path.join(ROOT,`shots/r109-failure-${name}.png`)).catch(()=>{}); throw error; } assert.equal(page.errors.length,errors,`browser runtime errors in ${name}`); record(`OK real Chrome ${name}`);
+      await fresh(name==='valve'?'noR109=1':name==='productionLayout'?'noR116=1':'',name==='productionLayout'?[]:undefined); const errors=page.errors.length; try { await run(); } catch(error) { await shot(page,path.join(ROOT,`shots/r109-failure-${name}.png`)).catch(()=>{}); throw error; } assert.equal(page.errors.length,errors,`browser runtime errors in ${name}`); record(`OK real Chrome ${name}`);
     }
     // The same assertion must reject each isolated broken production bundle, not a startup error.
     overlay['index.html']=fs.readFileSync(path.join(broken,'index.html'));
     for(const [name,run] of Object.entries(cases)) {
-      await fresh(`__r109mutant=${name}${name==='valve'?'&noR109=1':''}`,name==='productionLayout'?[]:undefined); const errors=page.errors.length; let failure=null;
+      await fresh(`__r109mutant=${name}${name==='valve'?'&noR109=1':name==='productionLayout'?'&noR116=1':''}`,name==='productionLayout'?[]:undefined); const errors=page.errors.length; let failure=null;
       try { await run(); } catch(e) { failure=e; }
       if (name === 'hold' || name === 'cancel') await touch('touchCancel', []);
       assertions(failure instanceof assert.AssertionError && failure.message.startsWith(`${name}:`),`negative ${name}: expected semantic ${name} assertion, got ${failure?.stack??'no failure'}`);

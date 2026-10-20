@@ -26,7 +26,7 @@ const mutations = {
   geometry: { group: 'geometry', file: 'main', from: 'hud?.update(); prodBar?.update();\n    if (target) commandMenu?.open', to: 'hud?.update();\n    if (target) commandMenu?.open' },
   dispatch: { group: 'dispatch', file: 'main', from: 'if (gestures?.up(e))', to: 'if (false && gestures?.up(e))' },
   capture: { group: 'lifecycle', file: 'main', from: 'if (r109 && pointers.has(e.pointerId)) clearGestureInput();', to: 'if (r109) clearGestureInput();' },
-  reset: { group: 'reset', file: 'main', from: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {\n  if (r109) clearGestureInput();", to: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026) {" },
+  reset: { group: 'reset', file: 'main', from: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true) {\n  if (r109) clearGestureInput();", to: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true) {" },
   valve: { group: 'valve', file: 'main', from: 'const gestures = r109 ? new Gestures', to: 'const gestures = true ? new Gestures' },
 };
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
@@ -63,6 +63,7 @@ function mainFixture(enabled = true) {
     commandMenu: undefined, battleHint: undefined, document: { createElement: () => ({ id: '', hidden: false, style: {} }), body: { appendChild: el => elements.push(el) }, addEventListener: (t, f) => docEvents.set(t, f) },
     addEventListener: (t, f) => globalEvents.set(t, f), canvas, performance: { now: clock.now },
     view, w: createWorld(1944), selected: new Set(), phase: 'battle', fireMode: false, ammo: 'he', paused: false,
+    battleAudio: undefined, syncBattleAudio() {}, // Preserve the original gesture assertions without an audio engine.
     hud: { update() { layout.push('hud'); } }, prodBar: { update() { layout.push('production'); } }, help: { visible: () => helpVisible }, reportView: { visible: () => reportVisible, hide() {} },
     fling: { stop() { stops.push('fling'); }, start: (...a) => flings.push(a) }, glide: { stop() { stops.push('glide'); }, start: (...a) => glides.push(a) }, dragV: { vx: 0, vy: 0, t: 0 }, lastTap: { id: 0, t: -1e9 },
     innerWidth: 412, innerHeight: 860, SIDE_PLAYER, SIDE_ENEMY, SUB, routeBattleOrder, bombardCommand, bombardTarget, issue: cmd => issued.push(json(cmd)), simT: () => 0, placeAt() {},
@@ -204,9 +205,9 @@ const groups = {
   },
   reset() {
     const m = mainFixture();
-    Object.assign(m.c, { seed: 1944, r006: false, r018: false, r019: false, r026: false, createWorld, fxOn: true, r004: false, r008: false, r009: false, r011: false, r014: false, r016: false, r107: true, r104: true, q: new URLSearchParams(), newStats: () => ({}), ui() {}, BattleView: class { constructor() { return m.c.view; } } });
+    Object.assign(m.c, { seed: 1944, r006: false, r018: false, r019: false, r026: false, createWorld, fxOn: true, r004: false, r008: false, r009: false, r011: false, r014: false, r016: false, r107: true, r118: true, r104: true, q: new URLSearchParams(), newStats: () => ({}), ui() {}, BattleView: class { constructor() { return m.c.view; } } });
     vm.runInContext(extract('reset'), m.c);
-    for (const elapsed of [499, 500]) { m.send('pointerdown', touch()); m.clock.advance(elapsed); m.c.reset(1944, false, false, false, false); m.clock.advance(1000); m.send('pointerup', touch()); assert.equal(m.menu(), false, 'reset/replay clears pending and open gestures'); assert.equal(m.issued.length, 0); }
+    for (const elapsed of [499, 500]) { m.send('pointerdown', touch()); m.clock.advance(elapsed); m.c.reset(1944, false, false, false, false, false); m.clock.advance(1000); m.send('pointerup', touch()); assert.equal(m.menu(), false, 'reset/replay clears pending and open gestures'); assert.equal(m.issued.length, 0); }
     for (const name of ['runScript', 'playLog', 'playScript']) assert.match(plain.slice(plain.indexOf(`  ${name}:`), plain.indexOf(`  ${name}:`) + 200), /reset\(/, `${name} reuses reset cleanup`);
     assert.match(plain, /const help = initHelp\(\{ open: \(\) => \{ if \(r109\) clearGestureInput\(\)/);
     assert.match(plain, /if \(r109 && priorWinner < 0 && w\.winner >= 0\) clearGestureInput\(\)/);

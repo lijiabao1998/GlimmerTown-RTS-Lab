@@ -18,7 +18,7 @@ const mutations = {
   compatibility: { group: 'compatibility', file: 'route', from: "...(smoke ? { ammo:", to: "...(true ? { ammo:" },
   controller: { group: 'controller', file: 'main', from: 'routeBattleOrder(w, selected, fireMode, ammo,', to: "routeBattleOrder(w, selected, fireMode, 'he'," },
   reset: { group: 'lifecycle', file: 'main', from: "selected.clear(); fireMode = false; ammo = 'he';", to: "selected.clear(); fireMode = false;" },
-  valve: { group: 'lifecycle', file: 'main', from: 'r009, r011, r014, r016, r107, r104);', to: 'r009, r011, r014, r016, true, r104);' },
+  valve: { group: 'lifecycle', file: 'main', from: "r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);", to: "r009, r011, r014, r016, true, q.get('noR113') !== '1', r118, r104);" },
   hud: { group: 'hud', file: 'hud', from: "const smoke = s.ammo === 'smoke';", to: 'const smoke = false;' },
   layout: { group: 'layout', file: 'css', from: 'width: 44px; height: 44px; padding: 0;', to: 'width: 44px; height: 36px; padding: 0;' },
 };
@@ -55,7 +55,7 @@ function controller(visual = true) {
   const mockView = () => ({ dispose() {}, setWorld() {}, visibleUnit: () => true, buildingAt: () => null, groundAt: () => ({ x: 16.2, z: 15.8 }), setMarker(...p) { this.marker = p; } });
   const c = vm.createContext({
     createWorld, hashWorld, runLog, routeBattleOrder: route,
-    seed: 1944, r006: false, r018: false, r019: false, r026: false, r109: false, battleHint: undefined,
+    seed: 1944, r006: false, r018: false, r019: false, r026: false, r109: false, r015: true, r115: true, r118: true, counterbatteryHint: () => '', battleHint: undefined,
     r004: true, r008: true, r009: false, r010: false, r011: true, r012: false, r014: true, r016: true, r104: true, fxOn: true,
     SIDE_PLAYER, SIDE_ENEMY, UK_HOWITZER, UK_TANK, UK_OBSERVER, UK_INFANTRY, UK_ATGUN: 4, UK_MORTAR,
     UNIT_KINDS: {}, N, SUB, SCRIPT_SEED: 1944, SCRIPT_TICKS: 1200, SCRIPT: [],
@@ -65,6 +65,7 @@ function controller(visual = true) {
     innerWidth: 412, innerHeight: 860, issue: cmd => issued.push(cmd), simT: () => 0,
     pickUnit: () => 0, placeAt: (...p) => placements.push(p), performance: { now: () => 1000 }, lastTap: {},
     hud: { update() {} }, window: {},
+    battleAudio: undefined, syncBattleAudio() {}, // R117 is absent in this legacy controller fixture.
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },
   });
   vm.runInContext(plain.match(/const r107 = [^\n]+/)[0], c);
@@ -74,7 +75,7 @@ function controller(visual = true) {
   c.initHud = a => { c.actions = a; return c.hud; };
   const a0 = plain.indexOf('hud = initHud({'), a1 = plain.indexOf('\n});', a0) + 4;
   vm.runInContext(plain.slice(a0, a1), c);
-  c.reset(1944, false, false, false, false);
+  c.reset(1944, false, false, false, false, false);
   return { c, views, issued, placements };
 }
 
@@ -145,7 +146,7 @@ const groups = {
   lifecycle() {
     for (const visual of [true, false]) {
       const { c, views, issued } = controller(visual);
-      for (const action of [() => c.reset(1944, false, false, false, false), () => c.window.__rts.runScript(0), () => c.window.__rts.playLog(1944, [], 0), () => c.window.__rts.playScript(0)]) {
+      for (const action of [() => c.reset(1944, false, false, false, false, false), () => c.window.__rts.runScript(0), () => c.window.__rts.playLog(1944, [], 0), () => c.window.__rts.playScript(0)]) {
         c.ammo = 'smoke'; c.fireMode = true; c.selected.add(4); const old = views.length;
         action();
         assert.equal(c.ammo, 'he', 'fresh/reset/replay resets ammo'); assert.equal(c.fireMode, false); assert.equal(c.selected.size, 0);
@@ -182,11 +183,25 @@ const groups = {
     const rule = selector => { const matches = [...css.matchAll(new RegExp(`${esc(selector)}\\s*\\{([^}]+)\\}`, 'g'))]; assert.ok(matches.length, selector); return matches.map(m => m[1]); };
     const cell = rule('#hud .btns button')[0], bar = rule('#hud .bar')[0];
     const px = (s, key) => { const n = s.match(new RegExp(`(?:^|;)\\s*${key}:\\s*([\\d.]+)px`)); assert.ok(n, key); return Number(n[1]); };
-    const width = px(cell, 'width'), height = px(cell, 'height'), gap = px(bar, 'gap');
+    const width = px(cell, 'width'), height = px(cell, 'height'), gap = px(bar, 'gap'), audioGap = px(rule('#hud.has-audio .btns')[0], 'gap');
     assert.ok(width >= 44 && height >= 44, '44×44 CSS target'); assert.match(cell, /box-sizing:\s*border-box/); assert.match(cell, /flex:\s*0 0 44px/);
-    const n = [...sources.hud.matchAll(/<button id="b-/g)].length; assert.equal(n, 7);
+    assert.equal(gap, 6, 'legacy HUD keeps original 6px gap'); assert.equal(audioGap, 4, 'only optional audio HUD uses 4px gap');
     const padding = bar.match(/padding:\s*(\d+)px (\d+)px/).slice(1).map(Number);
-    const totalWidth = n * width + (n - 1) * gap + 2 * padding[1]; assert.ok(totalWidth + 16 <= 412, 'bar fits 412px with existing side insets');
+    const prior = globalThis.document; let rendered;
+    globalThis.document = { createElement: () => new Element(), body: { appendChild: el => { rendered = el; } } };
+    try {
+      for (const [audio, expectedCount, expectedWidth] of [[false, 7, 360], [true, 8, 396]]) {
+        initHud({ state: () => ({ tick: 0, paused: false, speed: 1, fireMode: false, winner: -1, mine: 1, theirs: 0, tanks: 0, guns: 0, observers: 0 }),
+          togglePause() {}, cycleSpeed() {}, toggleFire() {}, toggleAmmo() {}, selectAll() {}, restart() {}, ...(audio ? { toggleAudio() {} } : {}) });
+        const n = [...rendered.html.matchAll(/<button\b/g)].length;
+        assert.equal(n, expectedCount, `${audio ? 'optional audio' : 'legacy'} HUD actually renders its contracted button count`);
+        assert.equal(rendered.classList.contains('has-audio'), audio, 'compact spacing only exists with audio control');
+        const totalWidth = n * width + (n - 1) * (audio ? audioGap : gap) + 2 * padding[1];
+        assert.equal(totalWidth, expectedWidth, 'independent 7/8-button width contract');
+        assert.ok(totalWidth + 16 <= 412, 'bar fits 412px with existing side insets');
+        console.log(`CSS arithmetic only: 412×860; ${n} × ${width}×${height} targets; bar ${totalWidth}px`);
+      }
+    } finally { if (prior === undefined) delete globalThis.document; else globalThis.document = prior; }
     const titleRule = rule('#hud .top').at(-1), miniRule = rule('#minimap').at(-1);
     const offset = s => Number(s.match(/\+\s*(\d+)px/)[1]);
     const barBottom = 8 + height + 2 * padding[0], titleTop = 8 + offset(titleRule), titleBottom = titleTop + 12 * 1.4 + 2 * padding[0];
@@ -194,7 +209,7 @@ const groups = {
     assert.ok(8 + offset(miniRule) >= titleBottom + 2, 'mobile minimap clears title');
     assert.match(css, /#hud\.build #b-ammo\s*\{\s*display:\s*none/);
     assert.match(rule('#hud button.on')[0], /background:.*border-color:/, 'selected ammo has existing visible style');
-    console.log(`CSS arithmetic only: 412×860; ${n} × ${width}×${height} targets; bar ${totalWidth}px; bar bottom ${barBottom}, title top ${titleTop}, minimap top ${8 + offset(miniRule)}`);
+    console.log(`CSS arithmetic only: bar bottom ${barBottom}, title top ${titleTop}, minimap top ${8 + offset(miniRule)}`);
   },
 };
 for (const [name, test] of Object.entries(groups)) {
