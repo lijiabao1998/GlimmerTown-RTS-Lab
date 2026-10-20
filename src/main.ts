@@ -154,6 +154,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegeta
   if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
   view?.dispose();
   view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);
+  view.multiRangeEnabled = q.get('noR122') !== '1';
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
@@ -552,6 +553,7 @@ const rts = {
     runLog(w, SCRIPT, ticks);
     view.dispose();
     view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);
+  view.multiRangeEnabled = q.get('noR122') !== '1';
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -564,6 +566,7 @@ const rts = {
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,
   dashes: () => view.dashes,
+  multiRange: () => ({ ...view.multi122.solution, shown: view.multi122.mesh.visible, triangles: view.multi122.mesh.visible ? 2 : 0 }),
   rangePreview: () => view.range113 ? { ...view.range113.solution, triangles: view.range113.mesh.geometry.drawRange.count / 3, shown: view.range113.mesh.visible } : null,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0 } : null),

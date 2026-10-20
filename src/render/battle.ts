@@ -13,6 +13,7 @@ import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING, RISE_S } from './fx.ts'
 import { tankHull, tankTurret, howitzer, observer, soldier } from './unitArt.ts';
 import { Pipeline, type Style } from './post.ts';
 import { SmokeView } from './smoke.ts';
+import { MultiRangePreview } from './multiRange.ts';
 import { RangePreview } from './rangePreview.ts';
 import { VegetationView } from './vegetation.ts';
 import { TrenchRaster } from './trenches.ts';
@@ -175,14 +176,17 @@ export class BattleView {
   readonly trench118: TrenchRaster;
   readonly vegetation116: VegetationView;
   get vegetationInfo(): string { return this.vegetation116.hint; }
+  readonly multi122 = new MultiRangePreview();
+  multiRangeEnabled = true;
   readonly range113: RangePreview | null;
-  get rangeInfo(): string { return this.range113?.solution.legend ?? ''; }
+  get rangeInfo(): string { return this.multi122.solution.legend || this.range113?.solution.legend || ''; }
 
   constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true, r104 = true) {
     this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
     this.trench118 = new TrenchRaster(r118); this.trench118.sync(w);
     this.range113 = r113 ? new RangePreview() : null;
     if (this.range113) this.scene.add(this.range113.mesh);
+    this.scene.add(this.multi122.mesh);
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
     this.scene.add(new THREE.HemisphereLight(0xe4ecff, 0x5b5444, 1.35));
@@ -577,6 +581,7 @@ export class BattleView {
     if (this.r9) this.bars9(simT, selected);
     if (this.dash) this.orders11(selected);
     this.range113?.update(w, selected, showRanges);
+    this.multi122.update(w, selected, showRanges && this.multiRangeEnabled);
     nm = this.bodies21(nm);
     fin(this.men, nm);
     if (this.armorArcs) fin(this.armorArcs, na);
@@ -1221,6 +1226,7 @@ export class BattleView {
       const mat = m.material as THREE.Material | THREE.Material[] | undefined;
       if (Array.isArray(mat)) mat.forEach(x => x.dispose()); else mat?.dispose();
     });
+    this.multi122.texture.dispose();
     this.groundTex.dispose(); this.ramp.dispose(); this.pipe.dispose();
     this.scene.clear();
   }
