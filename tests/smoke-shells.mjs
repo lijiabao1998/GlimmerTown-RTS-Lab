@@ -195,10 +195,10 @@ group('replay', () => {
 });
 
 group('legacy_script', () => {
-  assert.equal(LEGACY_SCRIPT.length, 7); assert.equal(legacyCombatHash(runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, 600)), '14108ab2', 'independent seven-command 600 baseline');
-  assert.equal(legacyCombatHash(runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, 1200)), 'd22b1d45', 'independent seven-command 1200 baseline');
+  assert.equal(LEGACY_SCRIPT.length, 7); assert.equal(legacyCombatHash(runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, 600)), '34478c82', 'independent seven-command 600 baseline');
+  assert.equal(legacyCombatHash(runLog(createWorld(SCRIPT_SEED), LEGACY_SCRIPT, 1200)), '0c40171b', 'independent seven-command 1200 baseline');
   assert.deepEqual(SCRIPT.filter(e => e.cmd.ammo !== 'smoke'), LEGACY_SCRIPT, 'new script preserves every original command verbatim');
   assert(SCRIPT.some(e => e.tick === 500 && e.cmd.t === 'fireAt' && e.cmd.side === 0 && e.cmd.ids[0] === 4 && e.cmd.x === 24 && e.cmd.z === 24 && e.cmd.ammo === 'smoke'), 'late smoke scenario present');
-  const w = runScript(600); assert(w.smoke?.clouds.some(c => c.expires > w.tick), 'existing CI 30-second snapshot actually includes persistent smoke'); console.log(`  legacy 14108ab2/d22b1d45; new 600 ${hashWorld(w)}, 1200 ${hashWorld(runScript(1200))}`);
+  const w = runScript(600); assert(w.smoke?.clouds.some(c => c.expires > w.tick), 'existing CI 30-second snapshot actually includes persistent smoke'); console.log(`  legacy 34478c82/0c40171b; new 600 ${hashWorld(w)}, 1200 ${hashWorld(runScript(1200))}`);
 });
 assert(groups > 0, `unknown group ${only}`); console.log(`smoke-shells: ${groups} groups passed`);

@@ -71,7 +71,8 @@ function fixture() {
   for (const [t, level] of [[374, 1], [514, 2], [654, 3], [1253, 3]]) {
     const w = worlds.get(t), r = w.counterbattery?.filter(r => r.side === 0);
     assert.deepEqual(r, [{ side: 0, zone: 0, cell: 5, shots: level, last: t === 1253 ? 654 : t }], `fixture: fixed SCRIPT report at ${t}`);
-    assert(!spotted(w, 0, w.units[7].x, w.units[7].z), 'fixture: source is actually hidden');
+    // R036：R104 裝甲面向合入後，玩家的坦克活得比較久，第 800 步起看得到這門砲；1253 只驗報告還留著（到 1254 才過期），不再要求看不到
+    if (t !== 1253) assert(!spotted(w, 0, w.units[7].x, w.units[7].z), 'fixture: source is actually hidden');
   }
   assert(!worlds.get(1254).counterbattery?.some(r => r.side === 0), 'fixture: exact 600-tick expiry and no later enemy shot');
   assert(moving.units[7].x > 5 * SUB && !spotted(moving, 0, moving.units[7].x, moving.units[7].z), 'fixture: source really moved while hidden');

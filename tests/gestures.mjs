@@ -205,7 +205,7 @@ const groups = {
   },
   reset() {
     const m = mainFixture();
-    Object.assign(m.c, { seed: 1944, r006: false, r018: false, r019: false, r026: false, createWorld, fxOn: true, r004: false, r008: false, r009: false, r011: false, r014: false, r016: false, r107: true, r118: true, q: new URLSearchParams(), newStats: () => ({}), ui() {}, BattleView: class { constructor() { return m.c.view; } } });
+    Object.assign(m.c, { seed: 1944, r006: false, r018: false, r019: false, r026: false, createWorld, fxOn: true, r004: false, r008: false, r009: false, r011: false, r014: false, r016: false, r107: true, r118: true, r104: true, q: new URLSearchParams(), newStats: () => ({}), ui() {}, BattleView: class { constructor() { return m.c.view; } } });
     vm.runInContext(extract('reset'), m.c);
     for (const elapsed of [499, 500]) { m.send('pointerdown', touch()); m.clock.advance(elapsed); m.c.reset(1944, false, false, false, false, false); m.clock.advance(1000); m.send('pointerup', touch()); assert.equal(m.menu(), false, 'reset/replay clears pending and open gestures'); assert.equal(m.issued.length, 0); }
     for (const name of ['runScript', 'playLog', 'playScript']) assert.match(plain.slice(plain.indexOf(`  ${name}:`), plain.indexOf(`  ${name}:`) + 200), /reset\(/, `${name} reuses reset cleanup`);

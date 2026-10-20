@@ -118,7 +118,7 @@ function mainFixture() {
   const mockView = () => ({ dispose() {}, setWorld() {}, vegetation116: { mesh: null, cells: 0, triangles: 0, builds: 0 } });
   const c = vm.createContext({ ...sim, applyMap, MAP_RYE, runLog, SCRIPT, SCRIPT_SEED, SCRIPT_TICKS, seed: 1944,
     r006: false, r018: false, r019: false, r026: false, r109: false, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true,
-    r116: false, r118: true, fxOn: true, q: new URLSearchParams('noR116=1'),
+    r116: false, r118: true, r104: true, fxOn: true, q: new URLSearchParams('noR116=1'),
     w: undefined, view: mockView(), selected: new Set(), log: [], pending: [], paused: true, phase: 'battle', window: {},
     battleAudio: undefined, syncBattleAudio() {}, // Explicit absent optional audio for extracted replay/reset code.
     newStats() { return {}; }, reportView: undefined, ui() {}, refreshPreview() {},
@@ -286,8 +286,8 @@ const groups = {
   legacy_replay() {
     const c = mainFixture(); c.window.__rts.playLog(1944, [], 0);
     assert.equal(c.w.vegetation, undefined, 'legacy_replay: a legacy replay never gains vegetation state');
-    assert.equal(c.window.__rts.runScript(600), '29d7ef19', 'legacy_replay: original six-hundred-tick complete hash remains frozen');
-    assert.equal(c.window.__rts.playScript(600), '29d7ef19');
+    assert.equal(c.window.__rts.runScript(600), 'd7b3572f', 'legacy_replay: original six-hundred-tick complete hash remains frozen');
+    assert.equal(c.window.__rts.playScript(600), 'd7b3572f');
     c.window.__rts.playLog(1944, [{ tick: 0, cmd: { t: 'map', id: 0, vegetation: 1 } }], 1); assert(c.w.vegetation, 'legacy_replay: explicit new recorded option activates on replay');
   },
 };

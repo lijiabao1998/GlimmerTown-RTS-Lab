@@ -66,7 +66,7 @@ for (const map of [0, MAP_RYE]) for (const seed of seeds) {
 console.log('OK R116 integration: 24 map/seed planning, HQ and connectivity cases');
 
 const legacy = [1, 2, 3].map(level => seeds.map(seed => play(seed, level, false).w.winner).filter(winner => winner === SIDE_ENEMY).length);
-assert.deepEqual(legacy, [9, 12, 12], 'legacy: original 12-seed difficulty wins remain exactly 9/12/12');
+assert.deepEqual(legacy, [7, 11, 11], 'legacy: original 12-seed difficulty wins remain exactly 7/11/11 (R104 armor facing, R036 hard AI turns to face)');
 const results = [1, 2, 3].map(level => seeds.map(seed => ({ seed, ...play(seed, level, true, 0, false, seed === 1944 && level === 2) })));
 const wins = results.map(row => row.filter(({ w }) => w.winner === SIDE_ENEMY).length);
 assert(wins[2] >= wins[1] && wins[1] >= wins[0] && wins[2] > wins[0], `difficulty: enabled terrain keeps hard>=normal>=easy and hard>easy; wins=${wins}`);

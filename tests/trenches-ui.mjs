@@ -57,7 +57,7 @@ function controller(visual = true) {
     structuredClone, createWorld, hashWorld, buildKind, buildError, applyBuild, enemyPlan, TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, step, runLog, materialBuildDetail,
     BUILD_KINDS, BUILD_KINDS_24, BUILD_KINDS_NOW: BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
     w: emptyWorld(), view: mockView(), phase: 'build', plan: [], pickKind: BK_COTTAGE, pickRot: 0, pickTrench: -1, trenchRot: 0, buildHint: '', log: [], pending: [], selected: new Set(), acc: 0,
-    r118: visual, r105: true, r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true,
+    r118: visual, r105: true, r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true, r104: true,
     q: new URLSearchParams(visual ? '' : 'noR118=1'), seed: 1944, fxOn: true, battleAudio: undefined, stats: {}, reportView: undefined, minimap: undefined, startBanner() {}, syncBattleAudio() {},
     newStats: () => ({}), statsStep() {}, ecoCmd: () => ({ t: 'eco' }), aiLevel: 2, innerWidth: 412, innerHeight: 860, simT: () => 0, hud: { update() {} }, ui() { c.buildBar?.update(); },
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },
@@ -136,8 +136,8 @@ const groups = {
   valve() { for (const visual of [true, false]) using(visual, ({ c, root, views }) => {
     if (!visual) { assert.equal(root.querySelector('#bb-trench'), null, 'valve: disabled presentation has no trench choice or shape row'); assert.equal(root.querySelector('#bb-trenches'), null); assert.equal(root.html.includes('戰壕'), false, 'valve: old tooltips contain no new trench explanation'); }
     const cmds = [trench(0, 20, 20), cottage(18, 18)]; c.plan = structuredClone(cmds); c.startBattle(); const expected = emptyWorld(); runLog(expected, cmds.map(cmd => ({ tick: 0, cmd })), 1); assert.equal(hashWorld(c.w), hashWorld(expected), 'valve never filters recorded trench commands');
-    c.reset(1944, false, false, false, false, false); assert.equal(views.at(-1).at(-1), visual, 'reset forwards presentation valve');
-    const viewCalls = [...plain.matchAll(/new BattleView\([^;]+;/g)].map(m => m[0]); assert.equal(viewCalls.length, 2); assert.ok(viewCalls.every(call => /, r118\);$/.test(call)), 'script replacement also forwards valve');
+    c.reset(1944, false, false, false, false, false); assert.equal(views.at(-1).at(-2), visual, 'reset forwards presentation valve');   // R036：R104 的裝甲弧旗標排在最後，R118 是倒數第二
+    const viewCalls = [...plain.matchAll(/new BattleView\([^;]+;/g)].map(m => m[0]); assert.equal(viewCalls.length, 2); assert.ok(viewCalls.every(call => /, r118, r104\);$/.test(call)), 'script replacement also forwards valve');
     assert.match(plain, /trenches: r118,/); assert.match(plain, /const r118 = q.get\('noR118'\) !== '1'/);
   }); },
   dirty() { using(true, ({ c }) => {

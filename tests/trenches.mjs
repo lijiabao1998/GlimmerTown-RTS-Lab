@@ -11,6 +11,7 @@ import { startEco } from '../src/sim/eco.ts';
 import { step, runLog, spotted, firstBlock } from '../src/sim/step.ts';
 import { findPath } from '../src/sim/path.ts';
 import { SCRIPT, SCRIPT_SEED } from '../src/sim/script.ts';
+import { armorPct } from '../src/sim/armor.ts';
 const only = process.argv[2]; let groups = 0;
 const group = (name, fn) => { if (only && only !== name) return; groups++; fn(); console.log(`OK trenches/${name}`); };
 const seeds = [1944, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144];
@@ -21,7 +22,8 @@ const building = (w, kind, x = 10, z = 10, hp = 10000) => { const maxHp = bldMax
 const put = (w, kind = 0, x = 10, z = 10, side = 0, rot = 0) => { w.trenches = { version: 1, segments: [{ side, kind, x, z, rot }] }; };
 const queue = (w, g, t, kind = SHELL_AP, hitBld = 0) => w.shells.push({ id: w.nextShell++, side: g.side, kind, shooter: g.id, sx: g.x, sz: g.z, ex: t.x, ez: t.z, t: 0, T: 1, target: hitBld ? 0 : t.id, hitBld });
 const hit = (w, g, t, kind = SHELL_AP, hitBld = 0) => { const hp = t.hp; queue(w, g, t, kind, hitBld); step(w, []); return hp - t.hp; };
-const expected = (gun, target, pct, offset = 0, splash = false) => { const g = UNIT_KINDS[gun], t = UNIT_KINDS[target], falloff = splash ? Math.floor(g.dmgUnit * (g.splash - offset) / g.splash) : g.dmgUnit; return Math.floor(Math.floor(falloff * (t.armored ? g.pierce : g.soft) / 100) * t.armor * pct / 10000); };
+// R036：facing＝R104 的車體面向（穿甲彈打裝甲目標時正／側／背 75／100／125），沒給就是 100（沒有車體方向的目標）
+const expected = (gun, target, pct, offset = 0, splash = false, facing = 100) => { const g = UNIT_KINDS[gun], t = UNIT_KINDS[target], falloff = splash ? Math.floor(g.dmgUnit * (g.splash - offset) / g.splash) : Math.floor(g.dmgUnit * facing / 100); return Math.floor(Math.floor(falloff * (t.armored ? g.pierce : g.soft) / 100) * t.armor * pct / 10000); };
 const sorted = cells => cells.map(([x, z]) => `${x},${z}`).sort();
 // 手寫各方向的相對格；不呼叫受測旋轉來產生答案。
 const shapes = [
@@ -162,7 +164,7 @@ group('cells_movement', () => {
   for(const [x,z] of [[0,0],[30,0],[0,31],[30,31]]){const w=blank(),g=add(w,1,UK_TANK,3,3),t=add(w,0,UK_TANK,x,z);put(w,3,x,z);assert.equal(hit(w,g,t),expected(UK_TANK,UK_TANK,50),'cells_movement: edge footprint does not wrap');}
   for(const kind of [UK_TANK,UK_HOWITZER,UK_OBSERVER]){
     const w=blank(),g=add(w,1,UK_TANK,3,3),t=add(w,0,kind,9,10);put(w,3);step(w,[{t:'move',side:0,ids:[t.id],x:12,z:10}]);const cells=new Set();
-    for(let tick=0;tick<Math.ceil(5*SUB*100/(UNIT_KINDS[kind].speed*85))+20;tick++){const hp=t.hp;queue(w,g,t);step(w,[]);const x=cellOf(t.x);cells.add(x);assert.equal(hp-t.hp,expected(UK_TANK,kind,(x===10||x===11)?50:100),'cells_movement: cover follows movement with no sticky flag');if(x===12&&t.pathIdx>=t.path.length)break;}
+    for(let tick=0;tick<Math.ceil(5*SUB*100/(UNIT_KINDS[kind].speed*85))+20;tick++){const hp=t.hp;queue(w,g,t);step(w,[]);const x=cellOf(t.x);cells.add(x);assert.equal(hp-t.hp,expected(UK_TANK,kind,(x===10||x===11)?50:100,0,false,UNIT_KINDS[kind].armored?armorPct(t,g.x,g.z):100),'cells_movement: cover follows movement with no sticky flag');if(x===12&&t.pathIdx>=t.path.length)break;}
     assert([9,10,11,12].every(x=>cells.has(x)),'cells_movement: vehicle/gun/observer actually enter and leave trench');
   }
 });
@@ -190,14 +192,15 @@ group('replay_hash', () => {
 });
 
 // Frozen by evaluating repository 3654fb2, independently of this working tree.
+// R036：R104 裝甲面向合入後（坦克多了車體方向、穿甲彈分正側背）重新凍結，數字是合入後實際算出來的。
 group('legacy', () => {
-  const fixtures=[['script',SCRIPT,'93e6a5018876d9e0a65002c27a54e687576f170d446f4ffd6cbfb27bf0ddf06b',['29d7ef19','89aa0b92']],['rye',[{tick:0,cmd:{t:'map',id:1}},...SCRIPT],'2e2482bde8d3c62a34795e65339ebbbea063d7300619c018dc356459a1f097f7',['7259e57d','428fd56b']]];
+  const fixtures=[['script',SCRIPT,'2e4bcf04bc6870f8f4f3fd9a2049b7273e24797dcdc638d3c37093eb1ff53254',['d7b3572f','eea1d59b']],['rye',[{tick:0,cmd:{t:'map',id:1}},...SCRIPT],'475b3ca00a36bd18248d5eb1f6c843e8fdb0b9606cd95cd01de89befdd4b9c1f',['0a324ceb','204c47a5']]];
   const baseline = [
-    [0,'1dd341dd85ff705b4ec818c6b00699b9245312941da5a052264dc4ca7887b05a',['86a3cf75','9f63b33c'],[{t:'build',side:1,kind:0,x:9,z:9,rot:1},{t:'build',side:1,kind:2,x:11,z:8,rot:0},{t:'build',side:1,kind:1,x:8,z:7,rot:0},{t:'build',side:1,kind:0,x:10,z:12,rot:1}]],
-    [1,'a231d4deba636375d26842f98fc848ee55ce7d3977fb92b897f664be8c954c11',['145522d2','1cbdc75b'],[{t:'build',side:1,kind:0,x:8,z:7,rot:1},{t:'build',side:1,kind:2,x:9,z:12,rot:0},{t:'build',side:1,kind:1,x:6,z:9,rot:0},{t:'build',side:1,kind:0,x:10,z:5,rot:1}]],
+    [0,'cee6f177fcd3d6476f1c6984ee1053239223e9d47235f716337290c51d042f53',['dde837f9','7f983268'],[{t:'build',side:1,kind:0,x:9,z:9,rot:1},{t:'build',side:1,kind:2,x:11,z:8,rot:0},{t:'build',side:1,kind:1,x:8,z:7,rot:0},{t:'build',side:1,kind:0,x:10,z:12,rot:1}]],
+    [1,'e9cbe636cfe4c738d4bf200a77f750ca28ab4c97cefa76b7c13e06f6c9221c49',['4fe0da65','00a7d63e'],[{t:'build',side:1,kind:0,x:8,z:7,rot:1},{t:'build',side:1,kind:2,x:9,z:12,rot:0},{t:'build',side:1,kind:1,x:6,z:9,rot:0},{t:'build',side:1,kind:0,x:10,z:5,rot:1}]],
   ];
   for(const [map,digest,hashes,plan] of baseline){const w=createWorld(SCRIPT_SEED);applyMap(w,map,1);assert.deepEqual(enemyPlan(w,BUILD_KINDS_24),plan,'legacy: original pure-building enemy strategy and table unchanged');fixtures.push([`vegetation-build-eco-map${map}`,[{tick:0,cmd:{t:'map',id:map,vegetation:1}},...plan.map(cmd=>({tick:0,cmd})),{tick:0,cmd:{t:'eco',inf:1,guns:1,tanks:1}},...SCRIPT],digest,hashes]);}
-  assert.equal(hashWorld(createWorld(SCRIPT_SEED)),'2867b5fa','legacy: original initial SCRIPT hash');
+  assert.equal(hashWorld(createWorld(SCRIPT_SEED)),'62e00ebe','legacy: original initial SCRIPT hash');
   for(const [name,input,digestWanted,hashes] of fixtures){const w=createWorld(SCRIPT_SEED),digest=createHash('sha256'),log=JSON.parse(JSON.stringify(input));assert.equal(w.trenches,undefined,'legacy: createWorld has no trench state');for(let tick=0;tick<1200;tick++){step(w,log.filter(c=>c.tick===tick).map(c=>c.cmd));digest.update(`${hashWorld(w)}:${w.rng};`);assert.equal(w.trenches,undefined,'legacy: old commands never create trench state');if(w.tick===600||w.tick===1200)assert.equal(hashWorld(w),hashes[w.tick===600?0:1],'legacy: original SCRIPT checkpoints');}assert.equal(digest.digest('hex'),digestWanted,`legacy: ${name} every-tick main3654fb2 hash/RNG fingerprint`);}
 });
 assert(groups>0,`unknown group ${only}`);console.log(`trenches: ${groups} groups passed`);

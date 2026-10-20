@@ -1,6 +1,6 @@
 {
   "seed": 1944,
   "ticks": 1200,
-  "hash": "89aa0b92",
-  "note": "R115 反砲兵：SCRIPT與戰鬥數值不變；只新增量化砲聲情報(side/zone/cell/shots/last)進入hash。2026-10-19完整npm run unit實際輸出89aa0b92（114.2秒；新Chrome受本機socket限制、3支既有browser及golden因舊值紅）。同種子、JSON重播、600tick深拷貝一致；剝除新情報後原SCRIPT1200仍f3364bb6。"
+  "hash": "eea1d59b",
+  "note": "R104 裝甲面向（R036 整合，合入 R115 反砲兵之後）：車體整數方向進世界雜湊，穿甲彈正面／側面／背面 75%／100%／125%，腳本戰鬥結果因此改變；不含反砲兵記憶的戰鬥雜湊是 79fc3ae3。由 npm run unit 實際輸出更新。"
 }
