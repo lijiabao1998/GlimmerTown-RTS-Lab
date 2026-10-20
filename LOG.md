@@ -4,7 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
-| R120 | 2026-10-20 | GPT | 三種可破壞圍牆；合入R036裝甲／R037事件時間戳，獨立基準重算17個腳本凍結值 | main版lane、typecheck／build、四組完整逐tick差分、legacy與UI14組／18負控通過；完整unit351.3秒僅8支Chrome受限，其餘全過；latest-head CI及新圖待核實 | [#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) | 仍Draft卡住、未發布；原手機雙擊首紅與根因資料不足保留。整合首紅為舊數值及VM缺r104，修正不放寬語意；本機Chrome受限、Android未測 |
+| R120 | 2026-10-20 | GPT | 三種可破壞圍牆；整合R036裝甲／R037事件時間戳，獨立基準重算17個凍結值 | db48cafa CI39371516702 unit372.8秒／smoke169.4秒／lane綠；四標準圖＋18牆圖已看；滿額牆開局13／24680、戰鬥16／29138 | [#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) | 歷史首紅保留；未證實原雙擊原因，當前事件時間與舊行為負控已驗證。收尾head與發布待核實；本機8Chrome受限、Android未測 |
 | R037 | 2026-10-20 | Claude | 手勢計時看手指的時間：慣性 80 毫秒、拖曳初速、雙擊 350 毫秒改用 event.timeStamp（?noR037=1 關）；smoke 的快速拖曳、雙擊照時間表送（touchSeq）並印事件時間診斷；加畫面卡住兩項與負控制 | input-timing 5 組＋6 種改壞；本機 R012 段綠；CI 708bc80 unit／smoke 綠；golden 不變 | [#53](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/53) | 長按 500 毫秒仍用真計時器；其他計時項目沒動；#47、#52、main 雙擊紅的確切原因沒紀錄；Android 未測 |
 | R036 | 2026-10-20 | Claude | 裝甲面向整合：合入 GPT 的 R104（車體方向、穿甲正側背 75/100/125%、裝甲弧）；困難的電腦顧車頭（射程內車頭沒對著目標先朝目標開一格）；接上 R104 之後與 R112–R118 的測試（參數位置、main.ts 片段環境、凍結值）；方向檔卡住表清掉 4、16，鐵絲網／樹籬／石牆歸 GPT，R024b 只做龍牙、沙包 | tests/ai.mjs 不改：7/11/11（R104 卡住時 7/11/9）；armor-ai 5 條、3 種弄壞都紅；黃金 89aa0b92→eea1d59b；本機 typecheck、build 綠，unit 只剩乾淨 main 也紅的 3 支 | claude/r036-armor-ai | 種子 21 普通／困難仍超時（孤砲盲射重心）；簡單、普通不顧車頭；凍結值散在十幾支測試；卡住表 23 的雙擊診斷沒做 |
 | R118 | 2026-10-19 | GPT | 四種戰壕：共享8點、可穿行、最強掩護、程序刻紋與noR118 | Node53／Chrome6負控；264d24f unit398.1秒／smoke196.7秒與lane綠；四標準圖及網路圖已看；golden不變 | [#51](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/51) | 首輪VM依賴已修；桌面小地圖首紅未重現、根因未確立，精簡觀測latest-head待CI；本機Chrome受限、Android未測；未發布 |

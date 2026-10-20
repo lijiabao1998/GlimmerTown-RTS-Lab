@@ -35,20 +35,19 @@
 | 23 | 修補：手機說明面板的「知道了」完整可見、可直接點到 | 手機優先／不改壞 | 介面 | 不會 | R114／PR47草稿卡住：help四組／四負控通過，但既有手機雙擊smoke紅，待原路徑事件診斷；未發布 |
 | 16 | 鐵絲網：可布設、可破壞的障礙，形成繞行與清除的選擇 | 業主 2026-10-18「鐵絲網」 | 模擬＋渲染 | 會 | R036 協調好了：鐵絲網歸這一項，Claude 的 R024b 只做龍牙、沙包陣地。要「人過不去、車過得去」就自己在尋路加步兵的通行判斷，R024b 之後沿用 |
 | 17 | 電網防禦：先考據二戰適配與供電／斷電玩法，再決定實作範圍 | 業主 2026-10-18「電網」 | 考據／模擬＋渲染 | 待定 | 保持二戰題材；不是現代科幻護盾，研究適配前不直接施工 |
-| 18 | 圍牆：矮牆、石牆與混凝土圍牆，提供可打開的遮蔽線 | 業主 2026-10-18「圍牆」 | 模擬＋渲染 | 會 | 保留既有房屋破壞；與第 12 項樹籬／小樹林區分；Claude 路線圖 R027 的石牆讓給這一項（R036） |
 | 24 | 多選射界：呈現共同與各自射程，避免任挑單位誤導 | 坦克＋榴彈砲 | 介面 | 不會 | R113 已做單選與有效對地任務散布上界；本項另驗多選可讀性與固定預算 |
 
 ## 卡住／等業主看圖
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
-| 18 可連接圍牆 | R120已在本機合入R036／R037，最新head驗證中，仍草稿卡住 | 2026-10-20：獨立main58667af與整合版四組逐tick hash／RNG／完整世界摘要相同；依使用者指示更新17個舊凍結值，補測試VM的r104依賴，原驗收與首紅保留。main版lane、typecheck／build、legacy及UI負控通過；完整unit351.3秒僅8支Chrome啟動失敗，其餘守衛全過；CI／新圖待核實。本機Chrome受socket EPERM；未合併發布，不宣稱舊雙擊根因已證實 | R120／[#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) |
 | 23 手機說明關閉按鈕 | 卡住；Claude 的 R037（[#53](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/53)）已補，待 GPT 合 main 重跑 CI | R114 新 help Chrome4組／4負控與unit通過；CI39197550253雙擊選車[1]但鏡頭不動。R037：雙擊與快速拖曳改看事件時間戳（手指時間，?noR037=1 回到處理時間）；smoke 照時間表送，說明裡印事件時間、取消、失焦、最慢一幀。本機重現的是處理時間相隔 265–360 毫秒、跨過 350；CI 那一次沒有紀錄，不能確定是同一種。R120（#52）卡在同一項 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
 
 ## 已完成（最新在上）
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 三種可連接／可轟開圍牆，共享8點、防封閉與noR120 | R120 | [#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) | 2026-10-20（整合驗證完成，待合併發布） | db48cafa CI39371516702 unit372.8秒／smoke169.4秒／lane綠；四標準圖及18張圍牆樣張已看；本機8Chrome受限、Android未測。舊雙擊根因仍無原紀錄，R037當前整合與負控已驗證；收尾head及main CI／Pages仍須核實 |
 | 裝甲面向（GPT 實作；困難電腦顧車頭由 Claude 接） | R104＋R036 | [#44](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/44) | 2026-10-20 | 本機 Node 22／容器：unit 的 facades、materials-view、input-browser 與 smoke 的計時、手勢項目（乾淨 main 也紅），以 CI 為準；Android 實機未測 |
 | 四種可通行戰壕：共享8點、相連最強掩護 | R118 | [#51](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/51) | 2026-10-19（收尾待latest-head） | 264d24f完整CI／圖審通過；精簡診斷守衛待CI，首輪桌面小地圖像素差異根因未確立；本機Chrome受限、Android未測；未發布 |
 | 可見戰場程序音效：自願開啟砲聲／爆炸／倒塌 | R117 | [#50](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/50) | 2026-10-19（發布） | 本機Chrome受限；CI真實音訊圖／九負控／圖審通過；Android、喇叭實聽與真實BFCache未測；main3654fb2的CI39221216593／Pages成功，08:25公網build逐位核對 |
