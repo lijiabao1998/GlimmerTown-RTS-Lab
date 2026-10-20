@@ -96,7 +96,7 @@ async function main() {
     };
     const fresh = async (extra = '', mode = 'eco') => {
       // R122 owns multi-selection now; this suite retains the original R113 fallback contract.
-      await open('noR122=1&noR018=1&noR016=1&' + extra); await E('__rts.pause(true)');
+      await open('noR123=1&noR122=1&noR018=1&noR016=1&' + extra); await E('__rts.pause(true)');
       if (mode === 'eco') assert.equal(await E(`__rts.playLog(1944,${JSON.stringify(ecoLog)},1)`), expected.eco, 'fixture: exact eco replay');
       else if (mode === 'script') assert.equal(await E('__rts.runScript(1)'), expected.script, 'fixture: exact current Node script');
       await E('__rts.pause(true); __rts.focus(28,28,1)'); await frames();

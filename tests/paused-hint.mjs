@@ -1,3 +1,4 @@
+import { reloadStatus } from '../src/ui/reloadStatus.ts';
 // R110: actual main input handlers/state callback + actual initHud, with a small DOM API stub.
 // This is paused/controller evidence, not a browser/layout or physical-device test.
 // node tests/paused-hint.mjs --mutations checks isolated, in-memory production-source mutants.
@@ -91,9 +92,10 @@ function fixture({ hud = true, enabled = true } = {}) {
   let menuOpen = false;
   const menu = { isOpen: () => menuOpen, open() { menuOpen = true; }, close() { menuOpen = false; }, contains: target => target === menu };
   const c = vm.createContext({
+    q: new URLSearchParams('noR123=1'), // Isolate original paused-hint refresh guard.
     w, selected, battleHint: undefined, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he',
     battleAudio: undefined, syncBattleAudio() {}, // This guard exercises the original no-audio HUD/input path.
-    r109: enabled, r009: true, r010: false, r012: false, r018: false, r015: true, r115: true, counterbatteryHint: () => '', buildHint: '', BUILD_TIP: '布陣說明',
+    r109: enabled, r009: true, r010: false, r012: false, r018: false, r015: true, r115: true, reloadStatus, counterbatteryHint: () => '', buildHint: '', BUILD_TIP: '布陣說明',
     SIDE_PLAYER, SIDE_ENEMY, SUB, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UNIT_KINDS,
     routeBattleOrder, bombardCommand, bombardTarget, inSelectionRect, document, canvas,
     pointers: new Map(), dragged: false, pinchD: 0, dragV: { vx: 2, vy: 3, t: 4 }, lastTap: { id: 0, t: 0 },

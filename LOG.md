@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R123 | 2026-10-20 | GPT | 坦克與砲車裝填摘要，純讀既有狀態，明示裝填完成不代表可射擊 | 本機初步typecheck/build綠；獨立Node／Chrome守衛施工中 | gpt/reload-status-r123 | 尚未完成；最新headCI／圖審未跑，Android未測 |
 | R122 | 2026-10-20 | GPT | 多選各自名目環域／共同交集、固定單網格、noR122與無武裝提示；不改模擬 | Node9組／20負控；258ba006 CI39451022446 unit410.6秒／smoke169秒／lane綠，八圖覆核 | [#57](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/57) | 首紅GLSL保留字已修；本機Chrome受限、Android／512單位實機未測；收尾head與發布待核 |
 | R121 | 2026-10-20 | GPT | 待辦16鐵絲網：獨立障礙、徒步繞行／車輛通過、共用建材與HE破壞、低矮模型／noR121 | 本機typecheck/build；七組行為／十一負控／幾何守衛；golden eea1d59b不變 | 950cf927／#55 | CI39385380399 unit380秒／smoke169秒／lane及11圖覆核通過；手機13calls／22888tri；收尾head／main部署待核，本機Chrome受限、Android未測 |
 | R120 | 2026-10-20 | GPT | 三種可破壞圍牆；整合R036裝甲／R037事件時間戳，獨立基準重算17個凍結值 | db48cafa CI39371516702 unit372.8秒／smoke169.4秒／lane綠；四標準圖＋18牆圖已看；滿額牆開局13／24680、戰鬥16／29138 | [#52](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/52) | 歷史首紅保留；未證實原雙擊原因，當前事件時間與舊行為負控已驗證。收尾head與發布待核實；本機8Chrome受限、Android未測 |

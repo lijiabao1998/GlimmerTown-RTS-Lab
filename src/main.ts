@@ -1,3 +1,4 @@
+import { reloadStatus } from './ui/reloadStatus.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
 import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
@@ -68,6 +69,7 @@ const r016 = q.get('noR016') !== '1';
 const r104 = q.get('noR104') !== '1'; // 裝甲弧提示；只關畫面，不改模擬
 const r109 = q.get('noR109') !== '1';
 let lastRangeInfo = '';
+let lastReloadInfo = ''; // R123：同 tick 換選與清理也重算
 let lastVegetationInfo = '';
 let lastCounterbatteryInfo = '';
 let lastCounterbatteryWorld: World | undefined;
@@ -427,6 +429,7 @@ hud = initHud({
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
+      reloadInfo: reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1'),
       counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115),
       vegetationInfo: view.vegetationInfo,
       audio: battleAudio?.status(),
@@ -519,6 +522,8 @@ renderer.setAnimationLoop(() => {
   // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
   const rangeInfo = view.rangeInfo;
   if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
+  const reloadInfo = reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1');
+  if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
   const vegetationInfo = view.vegetationInfo;
   if (vegetationInfo !== lastVegetationInfo) { lastVegetationInfo = vegetationInfo; hud?.update(); }
   // 暫停／重播也檢查當前世界；同 tick 換世界不能沿用上一局的提示。

@@ -71,7 +71,7 @@ async function main() {
     const info=()=>E('({calls:__rts.info().calls,triangles:__rts.info().triangles})');
     const state=()=>E('({hash:__rts.hash(),log:__rts.log(),tick:__rts.tick()})');
     const viewport=async mobile=>{await page.send('Emulation.setDeviceMetricsOverride',{width:mobile?412:1280,height:mobile?860:800,deviceScaleFactor:1,mobile});await page.send('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:5});};
-    const fresh=async(q='')=>{await open('noR018=1&noR016=1&'+q);await E('__rts.pause(true)');assert.equal(await E(`__rts.playLog(1944,${JSON.stringify(log)},1)`),expected,'exact Node replay');await E('__rts.pause(true);__rts.focus(24,24,0.75)');await frames();};
+    const fresh=async(q='')=>{await open('noR123=1&noR018=1&noR016=1&'+q);await E('__rts.pause(true)');assert.equal(await E(`__rts.playLog(1944,${JSON.stringify(log)},1)`),expected,'exact Node replay');await E('__rts.pause(true);__rts.focus(24,24,0.75)');await frames();};
     const click=async(x,y,mobile)=>{if(mobile)await touchTap(page,x,y);else{await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',buttons:1,clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',buttons:0,clickCount:1});}await frames();};
     const button=async(id,mobile)=>{const p=await E(`(()=>{const e=document.getElementById('${id}'),r=e.getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2,e===document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)];})()`);assert(p[2],'fixture: ordinary control unobstructed');await click(p[0],p[1],mobile);};
     const selectAll=async mobile=>{
