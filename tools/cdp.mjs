@@ -1,6 +1,6 @@
 // 無頭 Chrome 骨架（零依賴；Node 22+ 內建 WebSocket）：靜態伺服 dist/ → 開 Chrome → CDP。
 // WebGL 走 SwiftShader 軟體渲染，所以雲端（GitHub Actions，沒有 GPU）也能跑。
-// 照搬 GlimmerTown3D-lab@bece722 tools/cdp.mjs（它沿用 2D 實驗線 harness.js）；改動：就緒條件換成 window.__rts、多找 Playwright 的 Chromium、加觸控輔助。
+// 照搬 GlimmerTown3D-lab@bece722 tools/cdp.mjs（它沿用 2D 實驗線 harness.js）；改動：就緒條件換成 window.__rts、多找 Playwright 的 Chromium、加觸控輔助（R037 加帶時間戳的 touchSeq）。
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -145,6 +145,21 @@ export async function touchTap(page, x, y) {
   await sleep(60);
   await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await sleep(120);
+}
+
+// R037：照時間表送觸控事件，每個事件帶明確的時間戳（CDP 的 timestamp）：手指的節奏固定，不跟著 CI 機器忙不忙變。
+// seq＝[{ type: 'touchStart'|'touchMove'|'touchEnd', x, y, at }]，at＝離 base 幾毫秒；實際也照表等到那個時刻才送（送晚了就不等）。
+// 同一個手勢分兩段送時傳同一個 base。回傳每個事件 Node 端送出、收到回應的時刻（離 base 幾毫秒，診斷用）。
+export async function touchSeq(page, seq, base = Date.now()) {
+  const sent = [];
+  for (const s of seq) {
+    const wait = base + s.at - Date.now();
+    if (wait > 0) await sleep(wait);
+    const t0 = Date.now();
+    await page.send('Input.dispatchTouchEvent', { type: s.type, touchPoints: s.type === 'touchEnd' ? [] : [{ x: s.x, y: s.y, id: 1 }], timestamp: (base + s.at) / 1000 });
+    sent.push({ type: s.type, at: s.at, send: t0 - base, ack: Date.now() - base });
+  }
+  return sent;
 }
 
 // 截圖存成 PNG 檔

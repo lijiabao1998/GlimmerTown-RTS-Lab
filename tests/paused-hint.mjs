@@ -16,7 +16,7 @@ const read = p => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const sources = { main: read('../src/main.ts'), hud: read('../src/ui/hud.ts') };
 const mutations = {
   order_refresh: { group: 'orders', file: 'main', from: 'function order(cx: number, cy: number) {\n  if (r109) clearBattleHint();', to: 'function order(cx: number, cy: number) {\n  if (r109) battleHint = undefined;' },
-  tap_refresh: { group: 'taps', file: 'main', from: 'function tap(cx: number, cy: number, additive: boolean) {\n  if (r109) clearBattleHint();', to: 'function tap(cx: number, cy: number, additive: boolean) {\n  if (r109) battleHint = undefined;' },
+  tap_refresh: { group: 'taps', file: 'main', from: 'function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {\n  if (r109) clearBattleHint();', to: 'function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {\n  if (r109) battleHint = undefined;' },
   clear_after_route: { group: 'early_returns', file: 'main', from: 'if (r109) clearBattleHint();\n  if (phase', to: 'if (r109 && selected.size && view.groundAt(cx, cy, innerWidth, innerHeight)) clearBattleHint();\n  if (phase' },
   gesture_refresh: { group: 'cancellation', file: 'main', from: 'dragV = { vx: 0, vy: 0, t: 0 }; clearBattleHint();', to: 'dragV = { vx: 0, vy: 0, t: 0 }; battleHint = undefined;' },
   blur_cleanup: { group: 'event_cleanup', file: 'main', from: "addEventListener('blur', clearGestureInput);", to: "addEventListener('blur', () => {});" },

@@ -42,6 +42,9 @@ const r009 = q.get('noR009') !== '1';
 const r010 = q.get('noR010') !== '1';
 // R012 鏡頭手感：縮放對準手指／游標、拖曳慣性、雙擊單位鏡頭跟過去。逃生閥 ?noR012=1
 const r012 = q.get('noR012') !== '1';
+// R037 手勢計時看事件自己的時間戳（手指真的動、真的放的時刻），不看程式處理到事件的時間：
+// 畫面卡一下（手機掉幀、CI 機器忙）時，快速拖曳放手照樣滑出去、雙擊照樣跟過去。逃生閥 ?noR037=1＝回到處理當下的時間
+const r037 = q.get('noR037') !== '1';
 const fling = new Fling(), glide = new Glide(), camStep = { x: 0, z: 0 };
 let dragV = { vx: 0, vy: 0, t: 0 }, lastTap = { id: 0, t: -1e9 };
 let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: number } | null = null, reportShown = false, reportView: ReportView | undefined;
@@ -263,13 +266,13 @@ function order(cx: number, cy: number) {
   view.setMarker(route.marker.x, route.marker.z, simT(), route.marker.hostile);
 }
 
-function tap(cx: number, cy: number, additive: boolean) {
+function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {
   if (r109) clearBattleHint();
   const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
-    const now = performance.now();
-    if (r012 && lastTap.id === u.id && now - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, now / 1000);   // 雙擊：鏡頭跟過去
-    lastTap = { id: u.id, t: now };
+    // 雙擊：鏡頭跟過去。兩次放手的間隔用事件時間量（R037）；滑過去的動畫照樣用現在的時間起算
+    if (r012 && lastTap.id === u.id && t - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, performance.now() / 1000);
+    lastTap = { id: u.id, t };
     if (!additive) selected.clear();
     if (additive && selected.has(u.id)) selected.delete(u.id); else selected.add(u.id);
     hud?.update();
@@ -341,13 +344,15 @@ if (r109) {
   addEventListener('resize', clearGestureInput);
 }
 
+// R037：慣性的 80 毫秒、雙擊的 350 毫秒用這個時間量。沒有時間戳的假事件（Node 守衛用的）退回處理當下的時間，不碰 r037。
+const eventT = (e: Event) => e.timeStamp > 0 && r037 ? e.timeStamp : performance.now();
 canvas.addEventListener('pointerdown', e => {
   const dismissOnly = !!commandMenu?.isOpen();
   if (dismissOnly) { commandMenu?.close(); battleHint = undefined; hud?.update(); }
   canvas.setPointerCapture(e.pointerId);
   gestures?.down(e, dismissOnly);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
-  fling.stop(); dragV = { vx: 0, vy: 0, t: performance.now() };   // R012：按下去慣性立刻停
+  fling.stop(); dragV = { vx: 0, vy: 0, t: eventT(e) };   // R012：按下去慣性立刻停
   if (pointers.size === 1) dragged = false;
   if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinchD = Math.hypot(a.x - b.x, a.y - b.y); dragged = true; }
 });
@@ -362,7 +367,7 @@ canvas.addEventListener('pointermove', e => {
     if (dragged) {
       view.pan(dx, dy, innerHeight); glide.stop();
       // R012：拖曳速度（CSS 像素／秒），平滑一下，放手時當慣性的初速
-      const now = performance.now(), dts = Math.max(1, now - dragV.t) / 1000, k = Math.min(1, dts / 0.05);
+      const now = eventT(e), dts = Math.max(1, now - dragV.t) / 1000, k = Math.min(1, dts / 0.05);
       dragV = { vx: dragV.vx + (dx / dts - dragV.vx) * k, vy: dragV.vy + (dy / dts - dragV.vy) * k, t: now };
     }
   } else if (pointers.size === 2) {
@@ -372,13 +377,13 @@ canvas.addEventListener('pointermove', e => {
   }
 });
 const up = (e: PointerEvent) => {
-  const p = pointers.get(e.pointerId);
+  const p = pointers.get(e.pointerId), t = eventT(e);
   pointers.delete(e.pointerId);
   if (gestures?.up(e)) { dragV = { vx: 0, vy: 0, t: 0 }; return; }
   // R012：單指拖曳放手（最後一次移動在 80 毫秒內）＝帶著速度滑出去
-  if (r012 && p && dragged && !pointers.size && performance.now() - dragV.t < 80) fling.start(dragV.vx, dragV.vy);
+  if (r012 && p && dragged && !pointers.size && t - dragV.t < 80) fling.start(dragV.vx, dragV.vy);
   if (!p || dragged || pointers.size) return;
-  if (e.button === 2) order(e.clientX, e.clientY); else tap(e.clientX, e.clientY, e.shiftKey);
+  if (e.button === 2) order(e.clientX, e.clientY); else tap(e.clientX, e.clientY, e.shiftKey, t);
 };
 canvas.addEventListener('pointerup', up);
 canvas.addEventListener('pointercancel', e => { if (r109) clearGestureInput(); else { pointers.delete(e.pointerId); dragged = true; } });

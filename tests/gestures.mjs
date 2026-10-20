@@ -22,7 +22,7 @@ const mutations = {
   resume: { group: 'resume', file: 'gestures', from: 'if (this.points.size === 1) this.consumed.delete(e.pointerId);', to: '' },
   cancel: { group: 'cancel', file: 'gestures', from: 'this.clearCandidate(); this.points.clear(); this.consumed.clear(); this.dismissOnly.clear(); this.actions.dismiss();', to: 'this.actions.dismiss();' },
   glide: { group: 'camera', file: 'main', from: 'fling.stop(); glide.stop();\n      selectionBox', to: 'fling.stop();\n      selectionBox' },
-  compatibility: { group: 'compatibility', file: 'main', from: 'else tap(e.clientX, e.clientY, e.shiftKey);', to: 'else tap(e.clientX, e.clientY, false);' },
+  compatibility: { group: 'compatibility', file: 'main', from: 'else tap(e.clientX, e.clientY, e.shiftKey, t);', to: 'else tap(e.clientX, e.clientY, false, t);' },
   geometry: { group: 'geometry', file: 'main', from: 'hud?.update(); prodBar?.update();\n    if (target) commandMenu?.open', to: 'hud?.update();\n    if (target) commandMenu?.open' },
   dispatch: { group: 'dispatch', file: 'main', from: 'if (gestures?.up(e))', to: 'if (false && gestures?.up(e))' },
   capture: { group: 'lifecycle', file: 'main', from: 'if (r109 && pointers.has(e.pointerId)) clearGestureInput();', to: 'if (r109) clearGestureInput();' },
