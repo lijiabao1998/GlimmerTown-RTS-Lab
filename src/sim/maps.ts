@@ -17,11 +17,13 @@ export function applyMap(w: World, id: number, vegetation?: number): void {
   if (w.tick !== 0 || (id !== 0 && id !== MAP_RYE)) return;
   // 已付費布陣不會被換底圖埋掉；正常 step 先套 map 才會套戰壕。
   if (w.trenches?.segments.length && (w.map ?? 0) !== id) return;
+  if (w.wires?.segments.length && (w.map ?? 0) !== id) return;
   const changed = id === MAP_RYE && !w.map;
   applyRye(w, id);
   if (changed && w.vegetation) delete w.vegetation; // 同 tick 換底圖時不留舊候選
   if (vegetation === 1 && (w.map ?? 0) === id) {
     generateVegetation(w);
+    for (const s of w.wires?.segments ?? []) clearVegetation(w, s.x, s.z, s.w, s.d);
     for (const s of w.trenches?.segments ?? []) for (const [x, z] of trenchCells(s)) clearVegetation(w, x, z, 1, 1);
   }
 }

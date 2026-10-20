@@ -9,6 +9,35 @@ import {
   bldMaterial, BM_WOOD, BM_BRICK, BM_STONE, BM_CONCRETE, type World, type Building,
 } from '../sim/world.ts';
 
+// R121：只控制表現，既有紀錄的障礙／通行不受URL閥影響。
+let wireDetail = true;
+export function setWireDetail(on: boolean): void { wireDetail = on; }
+export function wireGeo(g: Geo, b: Building): Geo {
+  const along = b.w >= b.d, length = Math.max(b.w, b.d), base = along ? b.x : b.z;
+  const cross = along ? b.z + b.d / 2 : b.x + b.w / 2;
+  const steel = new THREE.Color(0x777d73), stake = new THREE.Color(0x66513a);
+  const dead = b.hp <= 0, damaged = b.hp * 2 <= b.maxHp;
+  const box = (a: number, c: number, y: number, da: number, dc: number, dy: number, color: THREE.Color) => {
+    if (along) g.box(a, y, c, a + da, y + dy, c + dc, color);
+    else g.box(c, y, a, c + dc, y + dy, a + da, color);
+  };
+  for (let i = 0; i <= length * 2; i++) {
+    const a = base + 0.04 + (length - 0.08) * i / (length * 2);
+    box(a - 0.025, cross - 0.025, 0, 0.05, 0.05, dead ? 0.04 : damaged && i % 2 ? 0.14 : 0.33, stake);
+  }
+  const strands = wireDetail ? 3 : 1;
+  for (let row = 0; row < strands; row++) {
+    const y = dead ? 0.025 : damaged ? 0.06 + row * 0.045 : 0.08 + row * 0.09;
+    box(base, cross - 0.012, y, length, 0.024, 0.024, steel);
+    if (wireDetail) for (let i = 0; i < length * 5; i++) {
+      if (damaged && i % 3 === 1) continue;
+      const a = base + (i + 0.5) / 5;
+      box(a - 0.012, cross - 0.07, y, 0.024, 0.14, 0.024, steel);
+    }
+  }
+  return g;
+}
+
 export const FLOOR_H = 0.36;   // 一層樓高（格）；3D-lab blockArt.ts 的換算
 
 const C = (hex: number) => new THREE.Color(hex);
@@ -255,6 +284,7 @@ export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
 export function buildTown(w: World, skip?: (b: Building) => boolean): Geo {
   const g = new Geo();
   for (const b of w.blds) if (!skip || !skip(b)) buildingGeo(g, b, stageOf(b));
+  for (const b of w.wires?.segments ?? []) wireGeo(g, b);
   return g;
 }
 

@@ -12,7 +12,7 @@ import { applyMap } from './maps.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import {
-  N, SUB, HALF, idx, inMap, cellOf, center, blocks, bldAt, speedPct, stageOf,
+  N, SUB, HALF, idx, inMap, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
   UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building, type Shell,
 } from './world.ts';
@@ -59,9 +59,9 @@ export function applyCommand(w: World, cmd: Command): void {
       // 觀測員照舊不排隊形；R021 步兵點到房子時直接進去、點地面照隊形
       const garr = UNIT_KINDS[u.kind].garrison, intoBld = garr && blocks(w, gx, gz);
       const [ox, oz] = u.kind === UK_OBSERVER || intoBld ? [0, 0] : FORMATION[k % FORMATION.length];
-      if (inMap(gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz)) { gx += ox; gz += oz; }
+      if (inMap(gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz) && !wireBlocks(w, gx + ox, gz + oz, u.kind)) { gx += ox; gz += oz; }
       u.order = ORD_MOVE; u.tx = gx; u.tz = gz; u.target = 0;
-      u.path = findPath(w, ux, uz, gx, gz, garr ? (bldAt(w, gx, gz)?.id ?? 0) : 0, garr ? (bldAt(w, ux, uz)?.id ?? 0) : 0); u.pathIdx = 0;
+      u.path = findPath(w, ux, uz, gx, gz, garr ? (bldAt(w, gx, gz)?.id ?? 0) : 0, garr ? (bldAt(w, ux, uz)?.id ?? 0) : 0, u.kind); u.pathIdx = 0;
       if (!u.path.length) u.order = ORD_IDLE;
       return;
     }
@@ -71,7 +71,7 @@ export function applyCommand(w: World, cmd: Command): void {
       if (!t || !t.alive || t.side === u.side || tooClose(u, t.x, t.z)) return;
       delete u.fireAmmo;
       u.order = ORD_ATTACK; u.target = t.id; u.tx = t.x; u.tz = t.z;
-      u.path = inRange(u, t.x, t.z) ? [] : findPath(w, ux, uz, cellOf(t.x), cellOf(t.z)); u.pathIdx = 0;
+      u.path = inRange(u, t.x, t.z) ? [] : findPath(w, ux, uz, cellOf(t.x), cellOf(t.z), 0, 0, u.kind); u.pathIdx = 0;
       return;
     }
     // fireAt：對還站著的建築＝打到變瓦礫；對空地或瓦礫＝打 FIRE_AT_ROUNDS 發（只有間接射擊的砲接，坦克打空地沒有用）
@@ -89,7 +89,7 @@ export function applyCommand(w: World, cmd: Command): void {
     } else delete u.fireAmmo;
     u.order = ORD_FIRE_AT; u.tx = gx; u.tz = gz;
     u.target = smoke || !standing ? FIRE_AT_ROUNDS : 0;
-    u.path = inRange(u, center(gx), center(gz)) ? [] : findPath(w, ux, uz, gx, gz); u.pathIdx = 0;
+    u.path = inRange(u, center(gx), center(gz)) ? [] : findPath(w, ux, uz, gx, gz, 0, 0, u.kind); u.pathIdx = 0;
   });
 }
 
@@ -152,7 +152,7 @@ function moveUnit(w: World, u: Unit): void {
     // 舊指令可盲射最後座標；失去視野後不追蹤敵人的新位置。
     if (spotted(w, u.side, t.x, t.z)) { u.tx = t.x; u.tz = t.z; }
     if (inRange(u, u.tx, u.tz)) { u.path = []; u.pathIdx = 0; return; }
-    if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(u.tx), cellOf(u.tz)); u.pathIdx = 0; }
+    if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(u.tx), cellOf(u.tz), 0, 0, u.kind); u.pathIdx = 0; }
   }
   if (u.order === ORD_FIRE_AT && inRange(u, center(u.tx), center(u.tz))) { u.path = []; u.pathIdx = 0; }
   if (u.pathIdx >= u.path.length) {
@@ -187,7 +187,7 @@ function stepVehicle(w: World, u: Unit, nx: number, nz: number, spd: number): vo
     return;
   }
   const end = u.path[u.path.length - 1];
-  u.path = findPath(w, cellOf(u.x), cellOf(u.z), end % N, (end - (end % N)) / N); u.pathIdx = 0;
+  u.path = findPath(w, cellOf(u.x), cellOf(u.z), end % N, (end - (end % N)) / N, 0, 0, u.kind); u.pathIdx = 0;
 }
 
 // 車輛碰撞（R005）：全部單位移動之後，中心距離小於兩者半徑和的車輛沿連線推開。
@@ -365,6 +365,13 @@ function land(w: World, s: Shell): void {
     if (!b || hit.has(b.id) || dist(center(x), center(z), s.ex, s.ez) > R + HALF) continue;
     hit.add(b.id);
     damageBld(w, b, k.dmgBld);
+  }
+  // R121：同一高爆半徑／建築傷害，但獨立障礙不參加房屋駐守、倒塌傷人或AI候選。
+  for (const b of w.wires?.segments ?? []) {
+    if (b.hp <= 0) continue;
+    let reached = false;
+    for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) if (dist(center(x), center(z), s.ex, s.ez) <= R + HALF) reached = true;
+    if (reached) { b.hp = Math.max(0, b.hp - k.dmgBld); w.events.push({ e: 'wire' }); }
   }
   if (inMap(cx, cz) && !blocks(w, cx, cz)) { const i = idx(cx, cz); if (w.crater[i] < 3) w.crater[i]++; }
   w.events.push(R < UNIT_KINDS[UK_HOWITZER].splash ? { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0, r: R } : { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0 });

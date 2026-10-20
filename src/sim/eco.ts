@@ -2,9 +2,9 @@
 import { trenchAt } from './trenches.ts';
 import { clearVegetation } from './vegetation.ts';
 import { findPath } from './path.ts';
-import { stillConnected } from './build.ts';
+import { stillConnected, keepsFootPaths } from './build.ts';
 import {
-  N, SUB, idx, inMap, cellOf, center, blocks, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, BK_HQ, TER_ROAD,
+  N, SUB, idx, inMap, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, BK_HQ, TER_ROAD,
   ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, type World, type Building,
 } from './world.ts';
 
@@ -29,9 +29,10 @@ function hqSpot(w: World, side: number): [number, number] | null {
       if (!inMap(cx, cz)) { if (inner) ok = false; continue; }
       const i = idx(cx, cz);
       if (w.occ[i]) ok = false;
+      if (wireAt(w, cx, cz)) ok = false;
       if (inner && (w.ter[i] === TER_ROAD || unitCells.has(i) || trenchAt(w, cx, cz))) ok = false;
     }
-    if (ok && stillConnected(w, x, z, 2, 2)) return [x, z];
+    if (ok && stillConnected(w, x, z, 2, 2) && keepsFootPaths(w, x, z, 2, 2)) return [x, z];
   }
   return null;
 }
@@ -97,7 +98,7 @@ function spawnUnit(w: World, side: number, kind: number, hq: Building): void {
   w.units.push({ id, side, kind, x: center(spot[0]), z: center(spot[1]), hp: UNIT_KINDS[kind].hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB, ...(UNIT_KINDS[kind].armored ? { hullX: side === SIDE_PLAYER ? -SUB : SUB, hullZ: side === SIDE_PLAYER ? -SUB : SUB } : {}) });
   const u = w.units[id - 1], hx = hq.x + 1, hz = hq.z + 1, mid = N >> 1;
   const rx = Math.max(0, Math.min(N - 1, hx + Math.sign(mid - hx) * 4)), rz = Math.max(0, Math.min(N - 1, hz + Math.sign(mid - hz) * 4));
-  const p = findPath(w, spot[0], spot[1], rx, rz);
+  const p = findPath(w, spot[0], spot[1], rx, rz, 0, 0, kind);
   if (p.length) { u.order = ORD_MOVE; u.tx = rx; u.tz = rz; u.path = p; u.pathIdx = 0; }
 }
 
@@ -106,7 +107,7 @@ function spawnCell(w: World, hq: Building): [number, number] | null {
   let best: [number, number] | null = null, bd = 0;
   const mid = N >> 1;
   for (let z = hq.z - 1; z <= hq.z + hq.d; z++) for (let x = hq.x - 1; x <= hq.x + hq.w; x++) {
-    if (!inMap(x, z) || blocks(w, x, z) || w.occ[idx(x, z)]) continue;
+    if (!inMap(x, z) || blocks(w, x, z) || w.occ[idx(x, z)] || wireAt(w, x, z)) continue;
     if (w.units.some(u => u.alive && UNIT_KINDS[u.kind].radius > 0 && Math.abs(u.x - center(x)) < SUB && Math.abs(u.z - center(z)) < SUB)) continue;
     const d = Math.abs(x - mid) + Math.abs(z - mid);
     if (!best || d < bd) { best = [x, z]; bd = d; }

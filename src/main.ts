@@ -1,7 +1,7 @@
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
-import { BUILD_KINDS, BUILD_KINDS_24, WALL_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
+import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
+import { BUILD_KINDS, BUILD_KINDS_24, WIRE_KIND, WALL_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
 import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
@@ -16,7 +16,7 @@ import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
 import { applyMap, MAP_RYE } from './sim/maps.ts';
 import { materialBuildDetail } from './ui/materials.ts';
-import { setFacades, setMaterials, setWalls } from './render/buildings.ts';
+import { setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
 import { setStreets } from './render/battle.ts';
 import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
@@ -58,6 +58,8 @@ const r116 = q.get('noR116') !== '1';
 const r118 = q.get('noR118') !== '1'; // 只關戰壕選項與呈現；舊紀錄中的指令照常執行
 const r120 = q.get('noR120') !== '1'; // 只關圍牆選項與外形；紀錄中的牆仍是可見、可破壞建築
 setWalls(r120);
+const r121 = q.get('noR121') !== '1';
+setWireDetail(r121);
 setVegetation(r116); // 只關模型與提示；新局地形仍由明確的 map 指令啟用
 const r115 = q.get('noR115') !== '1'; // 只關估計區與提示，不改情報模擬
 let minimap: Minimap | undefined;
@@ -110,7 +112,7 @@ let plan: PlanCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
 let pickTrench = -1, trenchRot = 0;
 const TRENCH_LABEL = ['直段', '折線', '交通壕', '加固段'];
 const TRENCH_SHAPE = ['2格直線', '3格L形', '4格直線', '2格加固'];
-const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡', [BK_WALL_BRICK]: '矮磚牆', [BK_WALL_STONE]: '石牆', [BK_WALL_CONCRETE]: '混凝土牆' };
+const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡', [BK_WALL_BRICK]: '矮磚牆', [BK_WALL_STONE]: '石牆', [BK_WALL_CONCRETE]: '混凝土牆', [BK_WIRE]: '鐵絲網' };
 const BUILD_WHY: Record<string, string> = {
   tick: '已經開戰，不能再蓋', map: '超出地圖', foreign: '那是敵方半場（紅色）；只能蓋在我方半場（藍色）',
   neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: r118 ? '那裡已有房子或戰壕' : '那裡已經有房子',
@@ -195,8 +197,8 @@ function placeAt(cx: number, cy: number) {
   const gx = Math.floor(p.x), gz = Math.floor(p.z);
   if (gx < 0 || gz < 0 || gx >= N || gz >= N) return;
   // 圍牆模型窄於佔地：點任一佔地格仍能拿掉整段，不必精準命中薄牆表面。
-  const wallIndex = plan.findIndex(c => { if (c.t !== 'build' || !isWallKind(c.kind)) return false; const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return gx >= c.x && gz >= c.z && gx < c.x + fw && gz < c.z + fd; });
-  if (wallIndex >= 0) { plan.splice(wallIndex, 1); buildHint = '拿掉了一段圍牆'; refreshPreview(); ui(); return; }
+  const wallIndex = plan.findIndex(c => { if (c.t !== 'build' || !(isWallKind(c.kind) || c.kind === BK_WIRE)) return false; const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return gx >= c.x && gz >= c.z && gx < c.x + fw && gz < c.z + fd; });
+  if (wallIndex >= 0) { plan.splice(wallIndex, 1); buildHint = '拿掉了一段障礙'; refreshPreview(); ui(); return; }
   // 一段壕溝的任一實際格都能拿掉整段；L形空角不是戰壕。
   const trenchIndex = plan.findIndex(c => c.t === 'trench' && trenchCells(c).some(([x, z]) => x === gx && z === gz));
   if (trenchIndex >= 0) { plan.splice(trenchIndex, 1); buildHint = '拿掉了一段戰壕'; refreshPreview(); ui(); return; }
@@ -461,7 +463,7 @@ if (r015) minimap = initMinimap({
   tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
 const help = initHelp({ open: () => { if (r109) clearGestureInput(); audioHelpActive = true; pausedBeforeHelp = paused; paused = true; syncBattleAudio(); hud?.update(); }, close: () => { audioHelpActive = false; paused = pausedBeforeHelp; syncBattleAudio(); hud?.update(); } }, r109);
-buildBar = initBuildBar(BUILD_KINDS_NOW.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
+buildBar = initBuildBar([...(r121 ? [WIRE_KIND] : []), ...BUILD_KINDS_NOW].map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(k.kind === BK_WIRE ? { detail: `建材 ${k.cost} · 耐久 ${bldMaxHp(k.kind, k.w, k.d, k.floors)} · 徒步繞行／車輛通過 · 不擋射線、不提供掩護 · 榴彈砲可清除` } : r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
   state: () => {
     const kd = buildKind(pickKind)!;
     return { visible: phase === 'build', kind: pickKind, trench: pickTrench >= 0 ? pickTrench : undefined, rot: pickTrench >= 0 ? trenchRot : pickRot, rotatable: pickTrench >= 0 || kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };

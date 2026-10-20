@@ -27,6 +27,7 @@ export const BK_PILLBOX = 6;     // R024 Type 22 碉堡（混凝土；裡面的�
 export const BK_WALL_BRICK = 7; // R120：普通可破壞建築；沿用駐守、遮視線與倒塌規則
 export const BK_WALL_STONE = 8;
 export const BK_WALL_CONCRETE = 9;
+export const BK_WIRE = 10; // R121：build指令種類，獨立障礙，不進建築／AI駐守清單
 export const isWallKind = (kind: number): boolean => kind === BK_WALL_BRICK || kind === BK_WALL_STONE || kind === BK_WALL_CONCRETE;
 
 // R105 材質由種類推導，不往世界或指令加欄位；舊存檔保留已存的 hp／maxHp。
@@ -152,7 +153,8 @@ export type SimEvent =
   | { e: 'kill'; unit: number }
   | { e: 'stage'; bld: number; stage: number }
   | { e: 'build'; bld: number }
-  | { e: 'trench' };
+  | { e: 'trench' }
+  | { e: 'wire' };
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
@@ -183,6 +185,7 @@ export interface World extends RngState {
   ai?: AiState[];         // R018：哪一方由電腦指揮（ai 指令設定）
   eco?: EcoState;         // R019：補給、指揮部、生產佇列
   vegetation?: { version: number; cells: Uint8Array }; // R116：明確啟用才保存，0 空／1 樹籬／2 小樹林
+  wires?: { version: 1; segments: Building[] }; // R121：沿用耐久資料，不佔blds/occ、不冒充房屋
   trenches?: { version: 1; segments: TrenchSegment[] }; // R118：只有成功布陣才保存
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
   smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
@@ -216,6 +219,16 @@ export function blocks(w: World, x: number, z: number): boolean {
   return !!b && b.hp > 0;
 }
 
+// R121：障礙通行和射線分開；舊世界沒有wires時不改行為。
+export const onFoot = (kind: number): boolean => kind === UK_OBSERVER || kind === UK_INFANTRY || kind === UK_MORTAR;
+export function wireAt(w: World, x: number, z: number): Building | null {
+  if (!Number.isInteger(x) || !Number.isInteger(z) || !inMap(x, z)) return null;
+  return w.wires?.segments.find(s => x >= s.x && z >= s.z && x < s.x + s.w && z < s.z + s.d) ?? null;
+}
+export function wireBlocks(w: World, x: number, z: number, kind: number): boolean {
+  return onFoot(kind) && (wireAt(w, x, z)?.hp ?? 0) > 0;
+}
+
 // 地形速度倍率（百分比）：路最快，瓦礫、彈坑最慢
 export function speedPct(w: World, x: number, z: number): number {
   const i = idx(x, z);
@@ -226,6 +239,7 @@ export function speedPct(w: World, x: number, z: number): number {
 }
 
 export function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
+  if (kind === BK_WIRE) return 60;
   if (kind === BK_HQ) return 1200;
   if (kind === BK_PILLBOX) return 400;
   if (kind === BK_WALL_BRICK) return 130;
@@ -345,6 +359,10 @@ export function hashWorld(w: World): string {
   if (w.trenches) {
     f.int(0x5452).int(w.trenches.version).int(w.trenches.segments.length);
     for (const s of w.trenches.segments) f.int(s.side).int(s.kind).int(s.x).int(s.z).int(s.rot);
+  }
+  if (w.wires) {
+    f.int(0x5731).int(w.wires.version).int(w.wires.segments.length);
+    for (const s of w.wires.segments) f.int(s.id).int(s.kind).int(s.x).int(s.z).int(s.w).int(s.d).int(s.floors).int(s.hp).int(s.maxHp).int(s.builtBy ?? -1);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
   if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
