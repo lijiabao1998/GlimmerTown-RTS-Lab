@@ -44,7 +44,7 @@ const plugin = {
       replace('if (rangeInfo !== lastRangeInfo)', "if (q.get('__r122mutant') !== 'freshness' && rangeInfo !== lastRangeInfo)");
     }
     if (rel==='src/render/multiRange.ts') {
-      replace('common = common && d >= a.z && d <= a.w;', '${new URLSearchParams(location.search).get("__r122mutant") === "intersection" ? "common = common || (d >= a.z && d <= a.w);" : "common = common && d >= a.z && d <= a.w;"}');
+      replace('inAllRanges = inAllRanges && d >= a.z && d <= a.w;', '${new URLSearchParams(location.search).get("__r122mutant") === "intersection" ? "inAllRanges = inAllRanges || (d >= a.z && d <= a.w);" : "inAllRanges = inAllRanges && d >= a.z && d <= a.w;"}');
     }
     return code;
   },
@@ -56,12 +56,18 @@ async function main() {
   await build({root:ROOT,logLevel:'error',plugins:[plugin],build:{outDir:broken}});
   assert.equal(hit.size,4,'all semantic mutations applied');
   const overlay={};
-  await withBrowser({root:baseline,overlay,port:8442,width:412,height:860,mobile:true,chromeWaitMs:20000,readyMs:8000,settle:70},async({open,page})=>{
+  // Observation only: keep full shader diagnostics that the shared CDP logger abbreviates.
+  const preload = `window.__r122ConsoleErrors=[];const original=console.error.bind(console);console.error=(...args)=>{window.__r122ConsoleErrors.push(args.map(x=>typeof x==='string'?x:String(x)).join(' ').slice(0,12000));original(...args);};`;
+  await withBrowser({root:baseline,overlay,preload,port:8442,width:412,height:860,mobile:true,chromeWaitMs:20000,readyMs:8000,settle:70},async({open,page})=>{
     const bounded=async(p,label)=>{let timer;const left=Math.min(8000,112000-(Date.now()-started));if(left<=0)throw Error('R122 operational deadline exceeded');try{return await Promise.race([p,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(`CDP timeout: ${label}`)),left);})]);}finally{clearTimeout(timer);}};
     const send=page.send.bind(page),evaluate=page.evaluate.bind(page);page.send=(m,a)=>bounded(send(m,a),m);page.evaluate=e=>bounded(evaluate(e),'evaluate');
     const E=e=>page.evaluate(e),frames=()=>E('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
     const diag=()=>E('__rts.multiRange()'),hint=()=>E('document.getElementById("hint").textContent');
-    const pixels=()=>E('document.querySelector("body>canvas").toDataURL()');
+    const checkRuntime=async label=>{
+      const details=await E('(window.__r122ConsoleErrors||[]).join(" | ")');
+      assert(!page.errors.length&&!details,`${label}: runtime/shader errors: ${details||page.errors.join(' | ')}`);
+    };
+    const pixels=async()=>{await checkRuntime('before canvas pixels');return E('document.querySelector("body>canvas").toDataURL()');};
     const info=()=>E('({calls:__rts.info().calls,triangles:__rts.info().triangles})');
     const state=()=>E('({hash:__rts.hash(),log:__rts.log(),tick:__rts.tick()})');
     const viewport=async mobile=>{await page.send('Emulation.setDeviceMetricsOverride',{width:mobile?412:1280,height:mobile?860:800,deviceScaleFactor:1,mobile});await page.send('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:5});};
@@ -74,7 +80,7 @@ async function main() {
       assert.deepEqual((await E('__rts.selected()')).sort((a,b)=>a-b),[1,2,3,4,9],'ordinary full-group selection');
     };
     const shot=async name=>{const p=await page.send('Page.captureScreenshot',{format:'png'});fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots',name),Buffer.from(p.data,'base64'));};
-    const patches=()=>E(`(()=>{const c=document.querySelector('body>canvas'),a=document.createElement('canvas');a.width=c.width;a.height=c.height;const ctx=a.getContext('2d');ctx.drawImage(c,0,0);const take=(x,z,r=0)=>{const p=__rts.screenOfPoint(x,0.045,z);if(p[0]<8||p[1]<130||p[0]>innerWidth-8||p[1]>innerHeight-170)return null;return Array.from(ctx.getImageData(Math.round(p[0])-r,Math.round(p[1])-r,2*r+1,2*r+1).data);};return {fill:${JSON.stringify(samples)}.map(p=>take(p.x,p.z)),rings:${JSON.stringify(rings)}.map(r=>r.points.map(([x,z])=>take(x,z,2)))};})()`);
+    const patches=async()=>{await checkRuntime('before analytic pixel patches');return E(`(()=>{const c=document.querySelector('body>canvas'),a=document.createElement('canvas');a.width=c.width;a.height=c.height;const ctx=a.getContext('2d');ctx.drawImage(c,0,0);const take=(x,z,r=0)=>{const p=__rts.screenOfPoint(x,0.045,z);if(p[0]<8||p[1]<130||p[0]>innerWidth-8||p[1]>innerHeight-170)return null;return Array.from(ctx.getImageData(Math.round(p[0])-r,Math.round(p[1])-r,2*r+1,2*r+1).data);};return {fill:${JSON.stringify(samples)}.map(p=>take(p.x,p.z)),rings:${JSON.stringify(rings)}.map(r=>r.points.map(([x,z])=>take(x,z,2)))};})()`);};
     const coverage=async mutant=>{
       await viewport(false);await fresh('noR122=1');await selectAll(false);await E('__rts.focus(16,16,0.6)');await frames();const off=await patches();
       await fresh(mutant?'__r122mutant=intersection':'');await selectAll(false);await E('__rts.focus(16,16,0.6)');await frames();const on=await patches();
@@ -127,5 +133,5 @@ async function main() {
   });
 }
 try{await main();fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots/r122-browser.txt'),summary.join('\n')+'\n');if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`\n### R122 real multi-range guards\n${summary.map(x=>'- '+x).join('\n')}\n`);}
-catch(error){const message=String(error?.stack??error);if(/listen (?:EPERM|EACCES).*127\.0\.0\.1|socket\(\) failed: Operation not permitted|找不到 Chrome/.test(message)&&!strictCI){console.error('NOT RUN R122 real Chrome guards: local browser/socket unavailable; CI must execute them.');console.error(error.message);process.exitCode=77;}else{console.error(error);process.exitCode=1;}}
+catch(error){const message=String(error?.stack??error);if(/listen (?:EPERM|EACCES).*127\.0\.0\.1|socket\(\) failed: Operation not permitted|找不到 Chrome/.test(message)&&!strictCI){console.error('NOT RUN R122 real Chrome guards: local browser/socket unavailable; CI must execute them.');console.error(error.message);process.exitCode=77;}else{console.error(error);console.error(`R122 browser FAIL: ${String(error.message).replace(/\s+/g,' ').slice(0,2400)}`);process.exitCode=1;}}
 finally{fs.rmSync(temp,{recursive:true,force:true});}

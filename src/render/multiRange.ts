@@ -28,18 +28,18 @@ export class MultiRangePreview {
         uniform int armedCount;
         varying vec2 worldXZ;
         void main() {
-          bool common = true;
+          bool inAllRanges = true;
           bool outerRing = false;
           bool innerRing = false;
           for (int i = 0; i < ${MULTI_RANGE_CAP}; i++) {
             if (i >= armedCount) break;
             vec4 a = texture2D(ranges, vec2((float(i) + 0.5) / ${MULTI_RANGE_CAP}.0, 0.5));
             float d = length(worldXZ - a.xy);
-            common = common && d >= a.z && d <= a.w;
+            inAllRanges = inAllRanges && d >= a.z && d <= a.w;
             outerRing = outerRing || abs(d - a.w) <= 0.055;
             innerRing = innerRing || (a.z > 0.0 && abs(d - a.z) <= 0.055);
           }
-          if (armedCount == 0 || (!common && !outerRing && !innerRing)) discard;
+          if (armedCount == 0 || (!inAllRanges && !outerRing && !innerRing)) discard;
           // Transparent diagonal hatching distinguishes intersection from overlapping circles.
           float hatch = step(0.63, fract((worldXZ.x + worldXZ.y) * 2.0));
           vec3 tint = vec3(0.15, 0.85, 0.9);

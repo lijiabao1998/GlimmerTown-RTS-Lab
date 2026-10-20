@@ -9,6 +9,7 @@ import { createWorld, hashWorld, N, SUB, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_MO
 
 const url = new URL('../src/render/multiRange.ts', import.meta.url);
 const mutations = {
+  reserved_glsl: { group: 'shader_contract', from: 'bool inAllRanges = true;', to: 'bool common = true;', message: 'shader declarations avoid known GLSL reserved identifiers' },
   union_cpu: { group: 'centers', from: 'if (d2 < min * min || d2 > max * max) return false;', to: 'if (d2 >= min * min && d2 <= max * max) return true;', message: 'inside first circle alone is not common coverage' },
   omit_near: { group: 'annuli', from: 'if (d2 < min * min || d2 > max * max)', to: 'if (d2 > max * max)', message: 'common center is excluded by the near holes' },
   exclusive_near: { group: 'annuli', from: 'd2 < min * min', to: 'd2 <= min * min', message: 'exact near boundary is inclusive' },
@@ -26,8 +27,8 @@ const mutations = {
   enemy_filter: { group: 'lifecycle', from: 'u.side !== SIDE_PLAYER || ', to: '', message: 'enemy selections are excluded' },
   ignore_valve: { group: 'lifecycle', from: 'if (!enabled)', to: 'if (false)', message: 'disabled valve clears old multiselection' },
   stale_draw: { group: 'lifecycle', from: 'this.mesh.visible = false; this.mesh.geometry.setDrawRange(0, 0); this.mesh.material.uniforms.armedCount.value = 0;', to: 'this.mesh.visible = false; this.mesh.material.uniforms.armedCount.value = 0;', message: 'death removes old multiselection: zero draw range' },
-  shader_union: { group: 'shader_contract', from: 'common = common && d >= a.z && d <= a.w;', to: 'common = common || (d >= a.z && d <= a.w);', message: 'fragment shader intersects every complete armed annulus' },
-  shader_near: { group: 'shader_contract', from: 'common = common && d >= a.z && d <= a.w;', to: 'common = common && d <= a.w;', message: 'fragment shader intersects every complete armed annulus' },
+  shader_union: { group: 'shader_contract', from: 'inAllRanges = inAllRanges && d >= a.z && d <= a.w;', to: 'inAllRanges = inAllRanges || (d >= a.z && d <= a.w);', message: 'fragment shader intersects every complete armed annulus' },
+  shader_near: { group: 'shader_contract', from: 'inAllRanges = inAllRanges && d >= a.z && d <= a.w;', to: 'inAllRanges = inAllRanges && d <= a.w;', message: 'fragment shader intersects every complete armed annulus' },
 }; // Mutants exist only in isolated data-URL modules, never in production files.
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
 const selectedGroup = process.env.R122_GROUP;
@@ -154,7 +155,8 @@ group('capacity', () => {
 });
 group('shader_contract', () => {
   const v = new MultiRangePreview(), shader = v.mesh.material.fragmentShader.replace(/\s+/g, ' ');
-  assert.ok(shader.includes('common = common && d >= a.z && d <= a.w;'), 'fragment shader intersects every complete armed annulus');
+  assert.doesNotMatch(shader, /\b(?:bool|float|int|vec[234])\s+(?:common|partition|active)\b/, 'shader declarations avoid known GLSL reserved identifiers');
+  assert.ok(shader.includes('inAllRanges = inAllRanges && d >= a.z && d <= a.w;'), 'fragment shader intersects every complete armed annulus');
   assert.ok(shader.includes('length(worldXZ - a.xy)'), 'shader measures each actual center');
   assert.ok(shader.includes('if (i >= armedCount) break;'), 'shader processes only active armed slots');
   assert.ok(shader.includes('(float(i) + 0.5) / 512.0'), 'shader samples texel centers at the fixed capacity');
