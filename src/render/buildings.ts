@@ -5,7 +5,8 @@ import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
   stageOf, STAGE_INTACT, STAGE_ROOFLESS, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX,
-  bldMaterial, BM_WOOD, BM_BRICK, BM_STONE, type World, type Building,
+  BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind,
+  bldMaterial, BM_WOOD, BM_BRICK, BM_STONE, BM_CONCRETE, type World, type Building,
 } from '../sim/world.ts';
 
 export const FLOOR_H = 0.36;   // 一層樓高（格）；3D-lab blockArt.ts 的換算
@@ -19,6 +20,9 @@ const PAL: Record<number, { wall: THREE.Color; roof: THREE.Color; trim: THREE.Co
   [BK_CHURCH]: { wall: C(0xa9a596), roof: C(0x4a5058), trim: C(0x7d7a6e) },    // 灰石、石板
   [BK_SHOP]: { wall: C(0xd9c9a3), roof: C(0x9c4a33), trim: C(0x3f5a4a) },      // 米色灰泥、紅瓦、綠招牌
   [BK_HQ]: { wall: C(0xb8a67e), roof: C(0x5c6650), trim: C(0x6a5a40) },        // R019 指揮部：沙包、橄欖帆布、木料
+  [BK_WALL_BRICK]: { wall: C(0xa5644c), roof: C(0x824b39), trim: C(0xd2b397) },
+  [BK_WALL_STONE]: { wall: C(0xb2aea0), roof: C(0x898779), trim: C(0x716f63) },
+  [BK_WALL_CONCRETE]: { wall: C(0x9c998e), roof: C(0xb8b5a9), trim: C(0x74746e) },
 };
 const GLASS = C(0x2a3038), RUBBLE = [C(0x8a7d6e), C(0x6e6458), C(0x9b8f7f), C(0x5a4f45)], CHAR = C(0x2b2724), BEAM = C(0x4a3626);
 
@@ -30,13 +34,62 @@ const MATERIAL_RUBBLE = {
   [BM_WOOD]: [C(0x6b4a33), C(0x493728), C(0x94714e), C(0x332a22)],
   [BM_BRICK]: [C(0x9a5a44), C(0x724a39), C(0xb6795c), C(0x583e33)],
   [BM_STONE]: [C(0xa9a596), C(0x7d7a6e), C(0xc0baaa), C(0x625e55)],
+  [BM_CONCRETE]: [C(0x9c998e), C(0x74746e), C(0xb8b5a9), C(0x5e605b)],
 };
 const MATERIAL_PAL: typeof PAL = {};
 for (const kind of [BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP]) MATERIAL_PAL[kind] = { ...PAL[kind], wall: MATERIAL_WALL[bldMaterial(kind) as 0 | 1 | 2] };
-const palette = (kind: number) => materialsOn ? MATERIAL_PAL[kind] ?? PAL[kind] ?? PAL[BK_HOUSE] : PAL[kind] ?? PAL[BK_HOUSE];
-const rubbleColors = (kind: number) => materialsOn && kind !== BK_HQ && kind !== BK_PILLBOX ? MATERIAL_RUBBLE[bldMaterial(kind) as 0 | 1 | 2] : RUBBLE;
+// R120 只切換外形；紀錄裡的牆關閥後仍畫普通房屋，不改世界或留下隱形障礙。
+let wallsOn = true;
+export function setWalls(on: boolean): void { wallsOn = on; }
+export const wallShown = (b: Building): boolean => wallsOn && isWallKind(b.kind);
+const visibleKind = (kind: number) => !wallsOn && isWallKind(kind) ? BK_HOUSE : kind;
+const palette = (kind: number) => { kind = visibleKind(kind); return materialsOn ? MATERIAL_PAL[kind] ?? PAL[kind] ?? PAL[BK_HOUSE] : PAL[kind] ?? PAL[BK_HOUSE]; };
+const rubbleColors = (kind: number) => {
+  kind = visibleKind(kind);
+  return (materialsOn || isWallKind(kind)) && kind !== BK_HQ && kind !== BK_PILLBOX ? MATERIAL_RUBBLE[bldMaterial(kind) as 0 | 1 | 2 | 3] : RUBBLE;
+};
 
-export function wallHeight(b: Building): number { return b.floors * FLOOR_H + 0.1; }
+const WALL_HEIGHT: Record<number, number> = { [BK_WALL_BRICK]: 0.3, [BK_WALL_STONE]: 0.48, [BK_WALL_CONCRETE]: 0.56 };
+const WALL_THICK: Record<number, number> = { [BK_WALL_BRICK]: 0.28, [BK_WALL_STONE]: 0.38, [BK_WALL_CONCRETE]: 0.34 };
+export function wallHeight(b: Building): number { return wallShown(b) ? WALL_HEIGHT[b.kind] : b.floors * FLOOR_H + 0.1; }
+// 共用實際牆面：建模、彈痕與煙源都用同一條窄線；長邊到格界，直線相連沒有縫。
+export function wallBounds(b: Building): { x0: number; x1: number; z0: number; z1: number } {
+  if (!wallShown(b)) return { x0: b.x + 0.1, x1: b.x + b.w - 0.1, z0: b.z + 0.1 + (b.kind === BK_CHURCH ? 0.9 : 0), z1: b.z + b.d - 0.1 };
+  const t = WALL_THICK[b.kind] / 2, cx = b.x + b.w / 2, cz = b.z + b.d / 2;
+  return b.w >= b.d ? { x0: b.x, x1: b.x + b.w, z0: cz - t, z1: cz + t } : { x0: cx - t, x1: cx + t, z0: b.z, z1: b.z + b.d };
+}
+
+// 磚縫、較大的亂石分塊、混凝土模板接縫；全部寫入原本的 town Geo。
+function boundaryWall(g: Geo, b: Building, broken: boolean) {
+  const { x0, x1, z0, z1 } = wallBounds(b), p = palette(b.kind), h = wallHeight(b), alongX = b.w >= b.d;
+  const length = alongX ? x1 - x0 : z1 - z0, base = alongX ? x0 : z0;
+  const box = (a0: number, a1: number, y0: number, y1: number, color: THREE.Color) => {
+    if (alongX) g.box(a0, y0, z0, a1, y1, z1, color); else g.box(x0, y0, a0, x1, y1, a1, color);
+  };
+  const top = broken ? h * 0.72 * 0.7 : h - 0.035;
+  if (broken) {
+    for (let i = 0; i < 7; i++) box(base + length * i / 7, base + length * (i + 1) / 7, 0, h * 0.72 * (0.7 + 0.3 * hash2(b.id, i, 120)), p.wall);
+  } else { box(base, base + length, 0, top, p.wall); box(base, base + length, top, h, p.roof); }
+  const rows = b.kind === BK_WALL_BRICK ? 3 : b.kind === BK_WALL_STONE ? 2 : 1;
+  const cells = b.kind === BK_WALL_BRICK ? 8 : b.kind === BK_WALL_STONE ? 5 : 3;
+  const seam = (a0: number, a1: number, y0: number, y1: number) => {
+    if (alongX) {
+      g.quad([a0, y0, z0 - 0.001], [a1, y0, z0 - 0.001], [a1, y1, z0 - 0.001], [a0, y1, z0 - 0.001], [0, 0, -1], p.trim);
+      g.quad([a0, y0, z1 + 0.001], [a1, y0, z1 + 0.001], [a1, y1, z1 + 0.001], [a0, y1, z1 + 0.001], [0, 0, 1], p.trim);
+    } else {
+      g.quad([x0 - 0.001, y0, a0], [x0 - 0.001, y0, a1], [x0 - 0.001, y1, a1], [x0 - 0.001, y1, a0], [-1, 0, 0], p.trim);
+      g.quad([x1 + 0.001, y0, a0], [x1 + 0.001, y0, a1], [x1 + 0.001, y1, a1], [x1 + 0.001, y1, a0], [1, 0, 0], p.trim);
+    }
+  };
+  for (let row = 0; row < rows; row++) {
+    const y0 = top * row / rows, y1 = top * (row + 1) / rows;
+    if (row) seam(base, base + length, y0, y0 + 0.009);
+    for (let i = 1; i < cells; i++) {
+      const a = base + length * (i - (row % 2) * 0.5) / cells;
+      seam(a, a + 0.01, y0, y1);
+    }
+  }
+}
 
 function windows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: number, h: number) {
   const ww = 0.12, wh = 0.13, t = 0.012;
@@ -130,6 +183,7 @@ function pillbox(g: Geo, b: Building, broken: boolean) {
 }
 
 function intact(g: Geo, b: Building) {
+  if (wallShown(b)) { boundaryWall(g, b, false); return; }
   if (b.kind === BK_HQ) { hq(g, b); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, false); return; }
   const p = palette(b.kind), m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
@@ -158,6 +212,7 @@ function intact(g: Geo, b: Building) {
 
 // 沒屋頂：四面薄牆剩七成高，牆頂鋸齒，屋裡焦黑，幾根斷梁
 function roofless(g: Geo, b: Building) {
+  if (wallShown(b)) { boundaryWall(g, b, true); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, true); return; }
   const p = palette(b.kind), m = 0.1, t = 0.07, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   const h = wallHeight(b) * 0.72;
@@ -191,6 +246,7 @@ function rubble(g: Geo, b: Building) {
 
 // 一棟建築在指定損壞階段的模型（R004 倒塌殘影要畫「倒之前」那一段）
 export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
+  if (!wallsOn && isWallKind(b.kind)) b = { ...b, kind: BK_HOUSE };
   if (stage === STAGE_INTACT) intact(g, b); else if (stage === STAGE_ROOFLESS) roofless(g, b); else rubble(g, b);
   return g;
 }
@@ -205,7 +261,8 @@ export function buildTown(w: World, skip?: (b: Building) => boolean): Geo {
 // 效果用的顏色：碎片取自那棟房子的牆、屋頂與瓦礫（R004）
 export function bldColors(kind: number): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return palette(kind); }
 export const RUBBLE_COLORS = RUBBLE;
-export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22, [BK_HQ]: 0.16, [BK_PILLBOX]: 0.06 };
+export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22, [BK_HQ]: 0.16, [BK_PILLBOX]: 0.06, [BK_WALL_BRICK]: 0, [BK_WALL_STONE]: 0, [BK_WALL_CONCRETE]: 0 };
+export const roofRise = (kind: number): number => ROOF_RISE[visibleKind(kind)] ?? 0.32;
 
 // 冒煙點：沒屋頂的房子從屋裡冒煙（渲染端的效果用）
 export function smokeSources(w: World): [number, number, number][] {

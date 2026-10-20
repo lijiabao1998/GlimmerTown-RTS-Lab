@@ -1,5 +1,6 @@
 // R118: native mobile/desktop construction, real ground/minimap pixels and same-log simulation.
-// Observation and controlled semantic mutations exist only in isolated temporary Vite builds.
+// Observation, fixed-CPU minimap measurement and controlled mutations exist only in temporary builds.
+// Exact RGBA checks normalize the 2D raster backend; automatic backend transitions are not tested.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -125,6 +126,12 @@ function plugin(broken, hits) {
       replace('return s ? trenchKind(s.kind)!.cover : 100;', `return s && !(${is('cover')}) ? trenchKind(s.kind)!.cover : 100;`, 'cover');
     }
     if (rel === 'src/ui/minimap.ts') {
+      // Request the same readback-oriented raster path from each context's FIRST creation.
+      // This is measurement normalization, not a production change or a claimed game defect fix.
+      // No forced redraw, pixel tolerance, extra settling or successful-path pixel tracing.
+      replace("const ctx = base.getContext('2d')!;", "const ctx = base.getContext('2d', { willReadFrequently: true })!; (globalThis as any).__r118baseContextAttributes=ctx.getContextAttributes();", 'base-raster-fixture');
+      replace("const ctx = cvs.getContext('2d')!;", "const ctx = cvs.getContext('2d', { willReadFrequently: true })!; (globalThis as any).__r118screenContextAttributes=ctx.getContextAttributes();", 'screen-raster-fixture');
+      if (broken) replace('if (kind < 0 || w.occ[i]) continue;', `if (kind < 0 || w.occ[i] || (${is('minimap_pixels')})) continue;`, 'minimap-pixels');
       // One read-only last-painted marker; no per-draw wrappers or successful-path readback.
       replace('const poly = a.view();', "const poly = a.view(); (globalThis as any).__r118paintWorld=w; (globalThis as any).__r118paintMeta={time:t,tick:w.tick,poly:poly.map(p=>[...p]),width:cvs.width,height:cvs.height};", 'paint-observation');
     }
@@ -138,8 +145,9 @@ async function main() {
   const goodHits=new Set(),badHits=new Set();
   await build({root:ROOT,logLevel:'error',plugins:[plugin(false,goodHits)],build:{outDir:baseline}});
   await build({root:ROOT,logLevel:'error',plugins:[plugin(true,badHits)],build:{outDir:broken}});
-  assert.deepEqual([...goodHits].sort(),['observation','paint-observation'].sort(),'fixture: baseline only observes');
-  assert.equal(badHits.size,8,'fixture: six isolated semantic mutations and two observational hooks compile');
+  const fixtureHits=['observation','paint-observation','base-raster-fixture','screen-raster-fixture'];
+  assert.deepEqual([...goodHits].sort(),fixtureHits.sort(),'fixture: baseline only observes and normalizes minimap raster contexts');
+  assert.deepEqual([...badHits].sort(),[...fixtureHits,'valve','remove','rotation','record','replay','cover','minimap-pixels'].sort(),'fixture: seven isolated semantic mutations and four measurement hooks compile');
   record('R118 isolated baseline/mutant builds compiled; this is not a Chrome pass'); if(buildOnly)return;
   const overlay={};
   await withBrowser({root:baseline,overlay,port:8438,width:412,height:860,mobile:true,chromeWaitMs:20000,readyMs:8000,settle:60},async({open,page})=>{
@@ -150,7 +158,7 @@ async function main() {
     const settle=async()=>{await sleep(115);await frames();};
     const inspect=()=>E('__r118test.inspect()');
     const viewport=async mobile=>{await page.send('Emulation.setDeviceMetricsOverride',{width:mobile?412:1280,height:mobile?860:800,deviceScaleFactor:1,mobile});await page.send('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:5});};
-    const fresh=async(query='')=>{await open('seed=1944&noR018=1&noR016=1&'+query);await E('__rts.pause(true)');await settle();assert(await E('!!window.__r118test'),'fixture: production and isolated observation ready');};
+    const fresh=async(query='')=>{await open('seed=1944&noR018=1&noR016=1&'+query);await E('__rts.pause(true)');await settle();assert(await E('!!window.__r118test'),'fixture: production and isolated observation ready');assert.deepEqual(await E('[globalThis.__r118baseContextAttributes?.willReadFrequently,globalThis.__r118screenContextAttributes?.willReadFrequently]'),[true,true],'fixture: both minimap contexts retain the requested CPU-readback attributes');};
     const click=async(x,y,mobile)=>{if(mobile)await touchTap(page,x,y);else{await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',buttons:1,clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',buttons:0,clickCount:1});}await frames();};
     const button=async(id,mobile)=>{const p=await E(`(()=>{const b=document.getElementById(${JSON.stringify(id)});if(!b)return null;const r=b.getBoundingClientRect(),points=[[r.x+r.width/2,r.y+r.height/2],[r.left+5,r.top+5],[r.right-5,r.top+5],[r.left+5,r.bottom-5],[r.right-5,r.bottom-5]];return[r.x+r.width/2,r.y+r.height/2,r.width,r.height,!b.hidden&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&points.every(([x,y])=>b.contains(document.elementFromPoint(x,y)))]})()`);assert(p&&p[4]&&p[2]>=44&&p[3]>=44,`layout: ${id} is a visible unobstructed 44px native target`);await click(p[0],p[1],mobile);};
     const cell=async(x,z,mobile)=>{await E(`__rts.focus(${x+.5},${z+.5},1.25)`);await settle();const p=await E(`__rts.screenOfCell(${x},${z})`);assert(await E(`document.elementFromPoint(${p[0]},${p[1]})===document.querySelector('body>canvas')`),'fixture: native placement reaches unobstructed ground');await click(p[0],p[1],mobile);await settle();};
@@ -180,7 +188,7 @@ async function main() {
     const coverCheck=async()=>{await E("__r118test.fixture('cover')");const before=await inspect();await E('__rts.stepN(1)');const after=await inspect();assert.equal(before.units[1].hp-after.units[1].hp,expectedDamage,'cover: actual Chrome projectile uses independent reinforced damage');assert.equal(after.hash,hashWorld(hit),'cover: full Node/Chrome state agrees after impact');};
     const startedCheck=async expected=>{const s=await inspect();assert.deepEqual(s.log.filter(e=>e.cmd.t==='trench').map(e=>e.cmd),expected.filter(c=>c.t==='trench'),'record: native start records every trench in exact original order');return s;};
 
-    let recorded;
+    let recorded,nativeReference;
     for(const mobile of [true,false]){
       const label=mobile?'mobile':'desktop',errors=page.errors.length;await viewport(mobile);await fresh();await focus();const pristine=await sample();
       assert.equal(pristine.state.hash,hashWorld(opening),'fixture: ordinary opening matches Node');
@@ -195,7 +203,7 @@ async function main() {
       await pickerLayout();await focus();const mixed=await sample();budget(mixed,true,label+' mixed network');await shot(`r118-${label}-network.png`);
       await button('bb-undo',mobile);assert.equal((await inspect()).left,1,'undo: mixed last building refunds one point');await place(network[5],mobile);await planCheck(network);
       await button('bb-start',mobile);await E('__rts.pause(true)');await focus();const started=await startedCheck(network),native=await sample();budget(native,false,label+' battle');
-      recorded=started;
+      recorded=started;nativeReference=native;
       assert.equal(started.hash,hashWorld(runLog(createWorld(1944),started.log,started.tick)),'replay: native plan and battle match Node log');
       await E(`__rts.playLog(1944,${JSON.stringify(started.log)},${started.tick});__rts.pause(true)`);await focus(native.cam);const replay=await sample();assert.equal(replay.state.hash,started.hash,'replay: same log gives exact Chrome hash');equalPixels(replay,native,'replay: native start and replay');await shot(`r118-${label}-battle.png`);
       await button('b-restart',mobile);await focus();const reset=await sample();assert.equal(reset.state.hash,pristine.state.hash,'reset: new world excludes previous trenches');equalPixels(reset,pristine,'reset: no stale network');
@@ -222,6 +230,20 @@ async function main() {
     await fresh('noR118=1&__r118mutant=valve');let failure;try{assert(await E("!document.getElementById('bb-trench')&&!document.getElementById('bb-t0')"),'valve: noR118 removes all new construction choices');}catch(e){failure=e;}assert(failure instanceof assert.AssertionError&&failure.message.startsWith('valve: noR118 removes all new construction choices'),'negative valve: named first semantic red');assert.equal(page.errors.length,valveErrors,'negative valve: no unrelated runtime error');record('RED real Chrome valve: construction presentation disabled');
     const replayErrors=page.errors.length;
     await fresh('noR118=1&__r118mutant=replay');failure=undefined;try{assert.equal(await E(`__rts.playLog(1944,${JSON.stringify(recorded.log)},${recorded.tick})`),recorded.hash,'valve: actual native mixed recorded log retains its complete hash under noR118');}catch(e){failure=e;}assert(failure instanceof assert.AssertionError&&failure.message.startsWith('valve: actual native mixed recorded log retains its complete hash under noR118'),'negative replay: named first semantic red');assert.equal(page.errors.length,replayErrors,'negative replay: no unrelated runtime error');record('RED real Chrome replay: display-off recorded trench commands remain active');
+    // The original native desktop sample is the oracle. Only replay minimap marks disappear;
+    // world, camera, ground and the exact-byte comparison itself remain unchanged.
+    const pixelErrors=page.errors.length;
+    await viewport(false);await fresh();await mutation('minimap_pixels');
+    await E(`__rts.playLog(1944,${JSON.stringify(recorded.log)},${recorded.tick});__rts.pause(true)`);await focus(nativeReference.cam);
+    const missingPixels=await sample();
+    assert.equal(missingPixels.state.hash,nativeReference.state.hash,'negative minimap_pixels: omitted presentation preserves the complete simulation hash');
+    assert.deepEqual(missingPixels.cam,nativeReference.cam,'negative minimap_pixels: original native camera is preserved');
+    assert(missingPixels.state.paintWorldCurrent,'negative minimap_pixels: replay world has actually painted');
+    const pixelLabel='negative-minimap-pixels: native start and replay',pixelExpected=pixelLabel+': exact minimap pixels';
+    failure=undefined;try{equalPixels(missingPixels,nativeReference,pixelLabel);}catch(e){failure=e;}
+    assert(failure instanceof assert.AssertionError&&failure.message.startsWith(pixelExpected),`negative minimap_pixels: expected exact-pixel first red, got ${failure?.stack??'no failure'}`);
+    assert.equal(page.errors.length,pixelErrors,'negative minimap_pixels: no unrelated runtime error');
+    record('RED real Chrome minimap_pixels: '+pixelExpected);await mutation('');
     assert(page.requests.every(r=>r.startsWith('http://127.0.0.1:8438/')||r.startsWith('data:')||r==='about:blank'),'resources: no external images, models or fonts');
   });
   record(`R118 real Chrome complete in ${Date.now()-started}ms (120s child limit unchanged)`);
