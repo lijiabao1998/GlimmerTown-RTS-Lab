@@ -68,6 +68,8 @@ const plugin = mutant => ({
 (window as any).__r123Test = {
   world: () => JSON.stringify(w),
   units: () => w.units.map(u => ({ ...u, path: [...u.path] })),
+  // Read-only failure evidence; this does not change render visibility, timing or budgets.
+  render: () => ({ pools: view.pools, single: !!view.range113?.mesh.visible, multi: view.multi122.mesh.visible, active: view.scene.children.filter((m: any) => m.isMesh && m.visible && (m.count ?? 1) > 0 && m.geometry.drawRange.count !== 0).map((m: any) => ({ name: m.name || Object.entries(view).find(([,v]: [string,any]) => v === m || v?.mesh === m)?.[0] || m.type, n: m.count ?? 1, shadow: m.castShadow })) }),
   pick: (x: number, y: number) => ({ unit: pickUnit(x,y), building: view.buildingAt(x,y,innerWidth,innerHeight) }),
   // Deliberately synthetic same-tick eligibility transitions. They neither tick nor refresh HUD.
   transition: (id: number, mode: string) => { const u = w.units.find(u => u.id === id)!; if (mode === 'dead') { u.alive = false; u.hp = 0; } else if (mode === 'enemy') u.side = SIDE_ENEMY; else throw Error('unknown test transition'); },
@@ -189,7 +191,8 @@ async function main() {
     const selection=async(mobile,mutant)=>{
       const name=mobile?'mobile':'desktop'; await viewport(mobile);
       await fresh('noR123=1'); await mixedFire(mobile);
-      const old={hint:await hint(),state:await state(),pixels:await pixels(),info:await info(),ranges:await ranges(),buttons:await E('document.querySelectorAll("button").length')};
+      const old={hint:await hint(),state:await state(),pixels:await pixels(),info:await info(),ranges:await ranges(),render:await E('__r123Test.render()'),buttons:await E('document.querySelectorAll("button").length')};
+      if(!mutant)await shot(`r123-${name}-mixed-reload-off.png`);
       assert(!old.hint.includes('裝填完成'),'fixture: valve-off old HUD contains no reload status');
       await fresh(mutant?'__r123mutant=hidden':''); await mixedFire(mobile);
       const expected=expectedStatus(await units(),allIds);
@@ -200,9 +203,15 @@ async function main() {
       assert.equal(digest(await pixels()),digest(old.pixels),`${name}: WebGL pixels are identical with noR123`);
       assert.deepEqual(await ranges(),old.ranges,`${name}: R113 and R122 solutions are unchanged`);
       assert.equal(await E('document.querySelectorAll("button").length'),old.buttons,`${name}: no controls added`);
-      assert(now.calls<=22&&now.triangles<=80000,`${name}: unchanged combat closeup budget`);
+      const render=await E('__r123Test.render()');
+      const measurement={tick:old.state.tick,hash:old.state.hash,selected:await E('__rts.selected()'),cooldowns:(await units()).filter(u=>u.side===0&&u.alive).map(u=>[u.id,u.kind,u.cooldown]),off:old.info,on:now,pools:render.pools,single:render.single,multi:render.multi,active:render.active};
+      // Capture both paired states BEFORE the hard gate so CI retains useful evidence on failure.
+      // Keep the original tick, camera, selected group, all effects and <=22 / <=80000 gate.
+      if(!mutant)await shot(`r123-${name}-mixed-reload.png`);
+      record(`R123 ${name} combat measurement: ${JSON.stringify(measurement)}`);
+      assert(now.calls<=22&&now.triangles<=80000,`${name}: unchanged combat closeup budget; ${JSON.stringify(measurement)}`);
       assert.equal((await hint()).replace('。'+expected,''),old.hint,`${name}: valve restores exact legacy HUD rather than removing old information`);
-      await layout(name); if(!mutant)await shot(`r123-${name}-mixed-reload.png`);
+      await layout(name);
       const frozen=await state(), text=await hint(); await sleep(180); await frames();
       assert.deepEqual(await state(),frozen,`${name}: pause freezes complete simulation`); assert.equal(await hint(),text,`${name}: pause never counts down wall time`);
       for(const speed of [2,4,1]) { await button('b-speed',mobile); assert.equal(await E('document.getElementById("b-speed").textContent'),`${speed}×`); assert.equal(await hint(),text,`${name}: speed does not rescale remaining simulation seconds`); assert.deepEqual(await state(),frozen); }
@@ -217,7 +226,7 @@ async function main() {
       await assertStatus(`${name}: Escape clears old reload`,'');
       await selectUnit(gun.id,mobile); await button('b-restart',mobile);
       assert.equal(await E('__rts.phase()'),'build'); await assertStatus(`${name}: restart clears old reload`,'');
-      const opening=await info(); assert(opening.calls<=20&&opening.triangles<=80000,`${name}: opening budget`);
+      const opening=await info(); assert(opening.calls<=20&&opening.triangles<=80000,`${name}: opening budget; ${JSON.stringify(opening)}`);
       if(!mutant)record(`R123 ${name}: combat ${now.calls}/${now.triangles}, delta 0/0; opening ${opening.calls}/${opening.triangles}; real artillery + tank shots, pause/speed/switch/reset`);
     };
     const freshness=async mutant=>{
