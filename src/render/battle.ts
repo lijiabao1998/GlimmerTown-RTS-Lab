@@ -181,7 +181,7 @@ export class BattleView {
   readonly range113: RangePreview | null;
   get rangeInfo(): string { return this.multi122.solution.legend || this.range113?.solution.legend || ''; }
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true, r104 = true) {
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true, r104 = true, r123 = true) {
     this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
     this.trench118 = new TrenchRaster(r118); this.trench118.sync(w);
     this.range113 = r113 ? new RangePreview() : null;
@@ -252,8 +252,10 @@ export class BattleView {
       // 血條：一片從 x=0 往右長的四邊形；畫在所有東西上面（不測深度、不寫深度＝沒有描邊），朝著鏡頭
       const quad = new THREE.PlaneGeometry(1, 1).translate(0.5, 0, 0);
       const mat = (c: number) => new THREE.MeshBasicMaterial({ color: c, depthTest: false, depthWrite: false, toneMapped: false });
-      this.barBg = inst(quad, mat(0xffffff), MAX_UNITS + 64, false); this.barBg.renderOrder = 10;
-      this.barFill = inst(quad.clone(), mat(0xffffff), 2 * (MAX_UNITS + 64), false); this.barFill.renderOrder = 11;
+      // R123: preserve all backgrounds before every fill, but submit one mesh.
+      // The upper fixed-capacity segment stages fills until the background count is known.
+      this.barBg = inst(quad, mat(0xffffff), (r123 ? 3 : 1) * (MAX_UNITS + 64), false); this.barBg.renderOrder = 10;
+      if (!r123) { this.barFill = inst(quad.clone(), mat(0xffffff), 2 * (MAX_UNITS + 64), false); this.barFill.renderOrder = 11; }
       // 鏡頭角度固定（45°／30°），血條的朝向算一次就好
       const probe = new THREE.Object3D(), dir = new THREE.Vector3(Math.cos(ELEV) * Math.SQRT1_2, Math.sin(ELEV), Math.cos(ELEV) * Math.SQRT1_2);
       probe.position.copy(dir); probe.lookAt(0, 0, 0); probe.rotateY(Math.PI);
@@ -918,19 +920,28 @@ export class BattleView {
       const h = wallHeight(b) * (wallShown(b) && stageOf(b) === STAGE_ROOFLESS ? 0.72 : 1);
       this.bar9(-b.id, b.x + b.w / 2, h + roofRise(b.kind) + 0.35, b.z + b.d / 2, Math.min(1.2, 0.5 + 0.25 * Math.max(b.w, b.d)), frac, frac, this.barColor, 0.7);
     }
-    const bg = this.barBg!, fill = this.barFill!;
-    bg.count = this.nb9; fill.count = this.nf9;
-    bg.instanceMatrix.needsUpdate = true; fill.instanceMatrix.needsUpdate = true;
+    const bg = this.barBg!, fill = this.barFill;
+    if (fill) {
+      bg.count = this.nb9; fill.count = this.nf9;
+      fill.instanceMatrix.needsUpdate = true;
+      if (fill.instanceColor) fill.instanceColor.needsUpdate = true;
+    } else {
+      const offset = MAX_UNITS + 64;
+      // copyWithin handles overlap and allocates nothing; retain original fill ordering.
+      bg.instanceMatrix.array.copyWithin(this.nb9 * 16, offset * 16, (offset + this.nf9) * 16);
+      if (bg.instanceColor) bg.instanceColor.array.copyWithin(this.nb9 * 3, offset * 3, (offset + this.nf9) * 3);
+      bg.count = this.nb9 + this.nf9;
+    }
+    bg.instanceMatrix.needsUpdate = true;
     if (bg.instanceColor) bg.instanceColor.needsUpdate = true;
-    if (fill.instanceColor) fill.instanceColor.needsUpdate = true;
   }
   // 一條血條：底（黑框）、白色殘影、填色、門檻刻度；左端對齊、往鏡頭的右邊長
   private bar9(id: number, cx: number, y: number, cz: number, L: number, frac: number, ghost: number, col: THREE.Color, notch: number) {
-    const R = this.barRight, x0 = cx - R.x * L / 2, y0 = y - R.y * L / 2, z0 = cz - R.z * L / 2, capB = MAX_UNITS + 64, capF = 2 * capB, dbg = this.barDbg;
+    const R = this.barRight, x0 = cx - R.x * L / 2, y0 = y - R.y * L / 2, z0 = cz - R.z * L / 2, capB = MAX_UNITS + 64, capF = 2 * capB, dbg = this.barDbg, fill = this.barFill ?? this.barBg!, offset = this.barFill ? 0 : capB;
     if (this.nb9 < capB) this.put9(this.barBg!, this.nb9++, x0 - R.x * 0.02, y0 - R.y * 0.02, z0 - R.z * 0.02, L + 0.04, 0.085, C_BAR_BG);
-    if (ghost > frac && this.nf9 < capF) this.put9(this.barFill!, this.nf9++, x0, y0, z0, L * ghost, 0.05, C_WHITE);
-    if (frac > 0 && this.nf9 < capF) this.put9(this.barFill!, this.nf9++, x0, y0, z0, L * frac, 0.05, col);
-    if (notch > 0 && this.nf9 < capF) this.put9(this.barFill!, this.nf9++, x0 + R.x * L * notch, y0 + R.y * L * notch, z0 + R.z * L * notch, 0.025, 0.07, C_BAR_BG);
+    if (ghost > frac && this.nf9 < capF) this.put9(fill, offset + this.nf9++, x0, y0, z0, L * ghost, 0.05, C_WHITE);
+    if (frac > 0 && this.nf9 < capF) this.put9(fill, offset + this.nf9++, x0, y0, z0, L * frac, 0.05, col);
+    if (notch > 0 && this.nf9 < capF) this.put9(fill, offset + this.nf9++, x0 + R.x * L * notch, y0 + R.y * L * notch, z0 + R.z * L * notch, 0.025, 0.07, C_BAR_BG);
     if (dbg.n < dbg.id.length) { dbg.id[dbg.n] = id; dbg.frac[dbg.n] = frac; dbg.ghost[dbg.n] = ghost; dbg.r[dbg.n] = col.r; dbg.g[dbg.n] = col.g; dbg.n++; }
   }
   private put9(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, len: number, h: number, col: THREE.Color) {
@@ -944,7 +955,7 @@ export class BattleView {
     const k = (t - this.barHitT[id]) / 0.5, now = this.barHp[id];
     return k >= 1 || k < 0 ? now : now + (this.barFrom[id] - now) * (1 - k);
   }
-  get bars() { return this.r9 ? { bg: this.barBg!.count, fill: this.barFill!.count } : { bg: 0, fill: 0 }; }
+  get bars() { return this.r9 ? { bg: this.nb9, fill: this.nf9 } : { bg: 0, fill: 0 }; }
 
 
   // ======== R011 指令回饋 ========

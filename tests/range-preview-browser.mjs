@@ -50,9 +50,9 @@ const plugin = {
     };
     if (!changes[rel]) return;
     if (rel === 'src/main.ts') {
-      const from = "r016, r107, q.get('noR113') !== '1', r118, r104);";
+      const from = "r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');";
       assert.equal(code.split(from).length - 1, 2, 'both reset constructors retain the range valve');
-      code = code.replaceAll(from, "r016, r107, q.get('__r113mutant') === 'valve' || q.get('noR113') !== '1', r118, r104);");
+      code = code.replaceAll(from, "r016, r107, q.get('__r113mutant') === 'valve' || q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');");
       hit.add('constructor valve');
     }
     for (const [from, to] of changes[rel]) {
@@ -96,7 +96,7 @@ async function main() {
     };
     const fresh = async (extra = '', mode = 'eco') => {
       // R122 owns multi-selection now; this suite retains the original R113 fallback contract.
-      await open('noR122=1&noR018=1&noR016=1&' + extra); await E('__rts.pause(true)');
+      await open('noR123=1&noR122=1&noR018=1&noR016=1&' + extra); await E('__rts.pause(true)');
       if (mode === 'eco') assert.equal(await E(`__rts.playLog(1944,${JSON.stringify(ecoLog)},1)`), expected.eco, 'fixture: exact eco replay');
       else if (mode === 'script') assert.equal(await E('__rts.runScript(1)'), expected.script, 'fixture: exact current Node script');
       await E('__rts.pause(true); __rts.focus(28,28,1)'); await frames();
