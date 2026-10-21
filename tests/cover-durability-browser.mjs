@@ -193,7 +193,8 @@ async function main(){
       assert((await hint()).includes('選擇這一格')&&!(await hint()).includes('掩體目標'),'priority: command prompt overrides durability text');await button('cm-cancel',true);assert.equal(await hint(),text,'priority: cancel restores current target');assert.deepEqual(await state(),before,'priority: menu changes neither world nor orders');
     };
     const smoke=async mutant=>{
-      await viewport();await fresh(mutant?'__r124mutant=smoke':'');await select(gun.id,true);await button('b-ammo',true);await button('b-fire',true);
+      await viewport();await fresh(mutant?'__r124mutant=smoke':'');await select(gun.id,true);await button('b-ammo',true);
+      assert.equal(await E('document.getElementById("b-fire").getAttribute("aria-pressed")'),'true','fixture: selecting smoke already enables fire mode');
       assert.equal(await E('document.getElementById("b-ammo").textContent'),'煙幕','fixture: native ammo toggle selects smoke');
       const b=smokeTarget;await E(`__rts.focus(${b.x+b.w/2},${b.z+b.d/2},0.85)`);await frames();
       const target=await E(`(()=>{const b=${JSON.stringify(b)};for(let y=0;y<=3;y+=0.25)for(let z=b.z+0.25;z<b.z+b.d;z+=0.5)for(let x=b.x+0.25;x<b.x+b.w;x+=0.5){const p=__rts.screenOfPoint(x,y,z),hit=__r124Test.pick(...p),c=hit.building;if(!hit.unit&&c&&b.cells.some(v=>v[0]===c[0]&&v[1]===c[1])&&document.elementFromPoint(...p)===document.querySelector('body>canvas'))return {p,cell:c};}return null;})()`);
