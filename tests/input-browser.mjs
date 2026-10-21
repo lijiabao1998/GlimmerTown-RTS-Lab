@@ -18,6 +18,7 @@ assert.equal(legacyCombatHash(1200), '79fc3ae3', 'original eight-command 1200-ti
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r109-input-'));
 const strictCI = process.env.GITHUB_ACTIONS === 'true' || !!process.env.GITHUB_RUN_ID || !!process.env.CI;
+let holdDiagnostics;
 const summary = [];
 const record = text => { summary.push(text); console.log(text); };
 const MUTANTS = {
@@ -113,9 +114,10 @@ async function main() {
         const after=await state(); assert.deepEqual(after.cam,before.cam,'box: drag does not pan or fling'); assert.deepEqual(after.log,before.log,'box: selection never issues a command'); assert.equal(after.hash,before.hash,'box: selection does not alter simulation');
       },
       async hold() {
-        await viewport(true); const before=await state(); await hold(false);
+        await viewport(true); const before=await state(); await E(`window.__r127HoldEvents=[];for(const type of ['pointerdown','pointerup','pointercancel','lostpointercapture','click'])document.addEventListener(type,e=>window.__r127HoldEvents.push({type,target:e.target?.id||e.target?.tagName,x:e.clientX,y:e.clientY}),true);`); const heldPoint=await hold(false); const heldGeometry=await E(`(()=>{const box=e=>{const r=e?.getBoundingClientRect();return r&&[r.x,r.y,r.width,r.height];},menu=document.getElementById('command-menu');return {events:window.__r127HoldEvents,menu:box(menu),hidden:menu?.hidden,buttons:[...document.querySelectorAll('#command-menu button')].map(e=>[e.id,box(e)]),hint:document.getElementById('hint')?.textContent,log:__rts.log()};})()` );
         assertions((await state()).open,'hold: long press opens menu before release');
         await touch('touchEnd',[]); await frames(); const after=await state();
+        holdDiagnostics={heldPoint,heldGeometry,released:await E(`(()=>{const box=e=>{const r=e?.getBoundingClientRect();return r&&[r.x,r.y,r.width,r.height];},menu=document.getElementById('command-menu');return {events:window.__r127HoldEvents,menu:box(menu),hidden:menu?.hidden,buttons:[...document.querySelectorAll('#command-menu button')].map(e=>[e.id,box(e)]),hint:document.getElementById('hint')?.textContent,log:__rts.log()};})()` )};
         assertions(after.open,'hold: ordinary release keeps menu clickable'); assert.deepEqual(after.log,before.log,'hold: open/release never issues a command'); assert.deepEqual(after.selected,before.selected,'hold: release is not an extra tap');
         await button('#cm-cancel'); assertions(!(await state()).open,'hold: cancel closes'); assert.deepEqual((await state()).log,before.log,'hold: cancel never orders');
       },
@@ -316,5 +318,5 @@ try {
   const text=String(error?.stack??error);
   const blocked=/listen (?:EPERM|EACCES).*127\.0\.0\.1|socket\(\) failed: Operation not permitted/.test(text);
   if(blocked&&!strictCI) { console.error('NOT RUN R109 real Chrome guards: local socket permission restriction; CI must execute them.');console.error(error.message);process.exitCode=77; }
-  else { console.error(error);console.error(`R109 browser FAIL: ${String(error.message).split('\n')[0]}`);process.exitCode=1; }
+  else { console.error(error);console.error(`R109 browser FAIL: ${String(error.message).split('\n')[0]} R127_HOLD_TRACE=${JSON.stringify(holdDiagnostics)}`);process.exitCode=1; }
 } finally { fs.rmSync(temp,{recursive:true,force:true}); }
