@@ -47,8 +47,8 @@ if (${M('exit')} && e.queue[0].length && e.prog[0]>=UNIT_KINDS[e.queue[0][0]].bu
     replace('a.produce(it.kind);',`if (!(${M('commands')}) || !a.blockReason?.(it.kind)) a.produce(it.kind);`);
     replace('if (s.context !== feedbackContext)',`if (!(${M('identity')}) && s.context !== feedbackContext)`);
     replace("const reason = s.visible && feedbackKind !== undefined ? a.blockReason(feedbackKind) : '';",`const reason = (${M('hidden')} ? feedbackKind !== undefined : s.visible && feedbackKind !== undefined) ? (${M('hidden')} ? '過期' : a.blockReason(feedbackKind!)) : '';`);
-    replace("if (el.textContent !== text) el.textContent = text;\n      el.hidden = !text;\n      if (!reason)",`if (!(${M('freshness')} && el.textContent) && el.textContent !== text) el.textContent = text;
-      el.hidden = !text;
+    replace("if (reasonElement.textContent !== text) reasonElement.textContent = text;\n      reasonElement.hidden = !text;\n      if (!reason)",`if (!(${M('freshness')} && reasonElement.textContent) && reasonElement.textContent !== text) reasonElement.textContent = text;
+      reasonElement.hidden = !text;
       if (!reason)`);
     replace('root.hidden = !s.visible;',`root.hidden = !s.visible; if (${M('layout')}) root.style.width='2000px';`);
   }

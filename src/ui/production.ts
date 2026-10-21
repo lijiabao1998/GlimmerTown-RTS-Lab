@@ -39,9 +39,9 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
       const reason = s.visible && feedbackKind !== undefined ? a.blockReason(feedbackKind) : '';
       const item = items.find(it => it.kind === feedbackKind);
       const text = reason && item ? `${item.label}：${reason}` : '';
-      const el = $('pb-reason');
-      if (el.textContent !== text) el.textContent = text;
-      el.hidden = !text;
+      const reasonElement = $('pb-reason');
+      if (reasonElement.textContent !== text) reasonElement.textContent = text;
+      reasonElement.hidden = !text;
       if (!reason) feedbackKind = undefined;
     }
     root.hidden = !s.visible;
