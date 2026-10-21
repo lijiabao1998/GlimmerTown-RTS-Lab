@@ -1,3 +1,4 @@
+import { coverDurability } from './ui/coverDurability.ts';
 import { reloadStatus } from './ui/reloadStatus.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
@@ -69,6 +70,7 @@ const r016 = q.get('noR016') !== '1';
 const r104 = q.get('noR104') !== '1'; // 裝甲弧提示；只關畫面，不改模擬
 const r109 = q.get('noR109') !== '1';
 let lastRangeInfo = '';
+let lastCoverInfo = ''; // R124：同 tick 傷害／換選／重播也重算
 let lastReloadInfo = ''; // R123：同 tick 換選與清理也重算
 let lastVegetationInfo = '';
 let lastCounterbatteryInfo = '';
@@ -429,6 +431,7 @@ hud = initHud({
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
+      coverInfo: coverDurability(w, selected, phase === 'battle' && q.get('noR124') !== '1'),
       reloadInfo: reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1'),
       counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115),
       vegetationInfo: view.vegetationInfo,
@@ -522,6 +525,8 @@ renderer.setAnimationLoop(() => {
   // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
   const rangeInfo = view.rangeInfo;
   if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
+  const coverInfo = coverDurability(w, selected, phase === 'battle' && q.get('noR124') !== '1');
+  if (coverInfo !== lastCoverInfo) { lastCoverInfo = coverInfo; hud?.update(); }
   const reloadInfo = reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1');
   if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
   const vegetationInfo = view.vegetationInfo;

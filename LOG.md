@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R124 | 2026-10-21 | GPT | 選取中砲擊建築耐久／材質／階段，最低比例兩棟與未列數，noR124 | Node23組／23隔離負控、typecheck／build通過；實際Chrome與全CI待驗 | gpt/cover-durability-r124 | 本機Chrome socket EPERM；360px既有工具列風險待實測；未Ready、未發布 |
 | R123 | 2026-10-21 | GPT | 純讀坦克／砲車裝填摘要；業主批准血條合批，noR123還原舊兩批 | Node24組／34負控＋合批10組／10負控；8197f57e CI39537172339 unit634.4秒／smoke207.2秒／lane綠，11圖覆核 | [#58](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/58) | 本機Chrome受限，Android未測；收尾head與main發布待核 |
 | R122 | 2026-10-20 | GPT | 多選各自名目環域／共同交集、固定單網格、noR122與無武裝提示；不改模擬 | Node9組／20負控；258ba006 CI39451022446 unit410.6秒／smoke169秒／lane綠，八圖覆核 | [#57](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/57) | 首紅GLSL保留字已修；本機Chrome受限、Android／512單位實機未測；收尾head與發布待核 |
 | R121 | 2026-10-20 | GPT | 待辦16鐵絲網：獨立障礙、徒步繞行／車輛通過、共用建材與HE破壞、低矮模型／noR121 | 本機typecheck/build；七組行為／十一負控／幾何守衛；golden eea1d59b不變 | 950cf927／#55 | CI39385380399 unit380秒／smoke169秒／lane及11圖覆核通過；手機13calls／22888tri；收尾head／main部署待核，本機Chrome受限、Android未測 |
