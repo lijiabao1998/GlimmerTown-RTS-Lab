@@ -19,7 +19,7 @@ const mutations = {
   compatibility: { group: 'compatibility', file: 'route', from: "...(smoke ? { ammo:", to: "...(true ? { ammo:" },
   controller: { group: 'controller', file: 'main', from: 'routeBattleOrder(w, selected, fireMode, ammo,', to: "routeBattleOrder(w, selected, fireMode, 'he'," },
   reset: { group: 'lifecycle', file: 'main', from: "selected.clear(); fireMode = false; ammo = 'he';", to: "selected.clear(); fireMode = false;" },
-  valve: { group: 'lifecycle', file: 'main', from: "r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);", to: "r009, r011, r014, r016, true, q.get('noR113') !== '1', r118, r104);" },
+  valve: { group: 'lifecycle', file: 'main', from: "r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');", to: "r009, r011, r014, r016, true, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');" },
   hud: { group: 'hud', file: 'hud', from: "const smoke = s.ammo === 'smoke';", to: 'const smoke = false;' },
   layout: { group: 'layout', file: 'css', from: 'width: 44px; height: 44px; padding: 0;', to: 'width: 44px; height: 36px; padding: 0;' },
 };

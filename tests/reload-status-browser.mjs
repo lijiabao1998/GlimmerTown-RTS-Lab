@@ -75,7 +75,7 @@ const plugin = mutant => ({
   transition: (id: number, mode: string) => { const u = w.units.find(u => u.id === id)!; if (mode === 'dead') { u.alive = false; u.hp = 0; } else if (mode === 'enemy') u.side = SIDE_ENEMY; else throw Error('unknown test transition'); },
 };`);
       if (mutant) {
-        replace("q.get('noR123') !== '1'", "(q.get('__r123mutant') === 'valve' || q.get('noR123') !== '1')", 2);
+        replace("q.get('noR123') !== '1'", "(q.get('__r123mutant') === 'valve' || q.get('noR123') !== '1')", 4);
         replace('if (reloadInfo !== lastReloadInfo)', "if (q.get('__r123mutant') !== 'freshness' && reloadInfo !== lastReloadInfo)");
       }
     }
@@ -199,7 +199,8 @@ async function main() {
       assert(expected.includes('–'),'fixture: actual mixed tank/artillery shots have distinct remaining times');
       await assertStatus(`${name}: visible independent mixed reload`,expected);
       const now=await info(); assert.deepEqual(await state(),old.state,`${name}: UI preserves complete world, RNG, ticks and commands`);
-      assert.deepEqual(now,old.info,`${name}: reload status adds no WebGL draw calls or triangles`);
+      assert.equal(now.triangles,old.info.triangles,`${name}: batching preserves triangle count`);
+      assert.equal(now.calls,old.info.calls-1,`${name}: batching removes exactly one healthbar draw call`);
       assert.equal(digest(await pixels()),digest(old.pixels),`${name}: WebGL pixels are identical with noR123`);
       assert.deepEqual(await ranges(),old.ranges,`${name}: R113 and R122 solutions are unchanged`);
       assert.equal(await E('document.querySelectorAll("button").length'),old.buttons,`${name}: no controls added`);
@@ -227,7 +228,7 @@ async function main() {
       await selectUnit(gun.id,mobile); await button('b-restart',mobile);
       assert.equal(await E('__rts.phase()'),'build'); await assertStatus(`${name}: restart clears old reload`,'');
       const opening=await info(); assert(opening.calls<=20&&opening.triangles<=80000,`${name}: opening budget; ${JSON.stringify(opening)}`);
-      if(!mutant)record(`R123 ${name}: combat ${now.calls}/${now.triangles}, delta 0/0; opening ${opening.calls}/${opening.triangles}; real artillery + tank shots, pause/speed/switch/reset`);
+      if(!mutant)record(`R123 ${name}: combat ${now.calls}/${now.triangles}, delta -1/0; opening ${opening.calls}/${opening.triangles}; real artillery + tank shots, pause/speed/switch/reset`);
     };
     const freshness=async mutant=>{
       await viewport(true); await fresh('noR113=1&noR122=1&noR115=1&noR116=1'+(mutant?'&__r123mutant=freshness':'')); await fireGun(true);

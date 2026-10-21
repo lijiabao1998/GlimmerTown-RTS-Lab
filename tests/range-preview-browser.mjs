@@ -50,9 +50,9 @@ const plugin = {
     };
     if (!changes[rel]) return;
     if (rel === 'src/main.ts') {
-      const from = "r016, r107, q.get('noR113') !== '1', r118, r104);";
+      const from = "r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');";
       assert.equal(code.split(from).length - 1, 2, 'both reset constructors retain the range valve');
-      code = code.replaceAll(from, "r016, r107, q.get('__r113mutant') === 'valve' || q.get('noR113') !== '1', r118, r104);");
+      code = code.replaceAll(from, "r016, r107, q.get('__r113mutant') === 'valve' || q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');");
       hit.add('constructor valve');
     }
     for (const [from, to] of changes[rel]) {

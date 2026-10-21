@@ -155,7 +155,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegeta
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);
+  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
   view.multiRangeEnabled = q.get('noR122') !== '1';
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
@@ -557,7 +557,7 @@ const rts = {
     reset(SCRIPT_SEED, false, false, false, false, false);
     runLog(w, SCRIPT, ticks);
     view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104);
+    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
   view.multiRangeEnabled = q.get('noR122') !== '1';
     return hashWorld(w);
   },
