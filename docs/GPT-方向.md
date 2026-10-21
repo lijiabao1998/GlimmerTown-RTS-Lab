@@ -33,6 +33,9 @@
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
 | 23 | 修補：手機說明面板的「知道了」完整可見、可直接點到 | 手機優先／不改壞 | 介面 | 不會 | R114／PR47草稿卡住：R037手勢修復已在main，舊卡R114不大於main最大R120，待Claude處理受保護車道門檻；未發布 |
+| 28 | 生產不可用原因：補給差額／佇列滿／指揮部失效 | 手機操作回饋／自己的城與增援 | 介面 | 不會 | R126 施工；只讀現有購買規則，不改人口與部署 |
+| 29 | 我方指揮部受損狀態摘要 | 自己的城需要守得住 | 介面 | 不會 | 只讀我方 HQ 耐久，不改傷害或勝負 |
+| 30 | 選取坦克／砲車耐久摘要 | 坦克與榴彈砲對轟的存活判斷 | 介面 | 不會 | 不改單位數值與步兵分工 |
 
 ## 卡住／等業主看圖
 
@@ -45,7 +48,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
-| 生產佇列製造遊戲秒／等待部署／後續數，獨立 noR125 | R125 | [#60](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/60) | 2026-10-21（實作驗收完成，待合併發布） | 0ff68521 CI39568678641 unit733.3秒／smoke208秒／lane綠；Node27／35負控、Chrome6負控、11圖已看；本機13Chrome受限及既有counterbattery首紅（另跑通過但原因未確立）；Android與收尾head／main發布待核 |
+| 生產佇列製造遊戲秒／等待部署／後續數，獨立 noR125 | R125 | [#60](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/60) | 2026-10-21（發布） | main 07833f3e CI39583044281及Pages成功；最終head 2efa29f tree與已驗收版本一致；四標準圖＋七功能圖已看；公網712243bytes／SHA256 805c46258e24ee446427e70c5350a2793619ebb7d8aebb1138af0555ab389b0a；本機Chrome受限及counterbattery首紅保留，Android未測 |
 | 選取中建築砲擊目標耐久／材質／階段，獨立 noR124 | R124 | [#59](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/59) | 2026-10-21（發布） | main c0ac3cd7 CI39565973636與Pages成功；標準四圖＋十二特寫已看；公網711454bytes／SHA256 e925763f394fe1c525ef806f4b17cfffb2de414491a166a37314ad1ae639a1f5；本機Chrome受限、Android未測 |
 | 坦克與砲車裝填摘要、血條同畫面合批，獨立 noR123 | R123 | [#58](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/58) | 2026-10-21（發布） | main de49960d CI39542021148及Pages成功；11圖覆核、原預算不變；公網710178bytes／SHA256 d41b0b15cb37fa4a1ebb85cbbe0e853bc25124b071db4d637fb9aa543df875b7；本機Chrome受限、Android未測 |
 | 多選各自名目射程／近限與共同覆蓋，獨立 noR122 | R122 | [#57](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/57) | 2026-10-20（發布） | 71c551f3 CI39456640832與main fa5e520d CI39458583311／Pages綠；四標準圖＋多選圖覆核，公網build逐位一致；本機Chrome受限、Android與512單位實機未測 |
