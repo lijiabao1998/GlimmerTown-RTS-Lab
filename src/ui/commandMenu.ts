@@ -33,12 +33,14 @@ export function menuPosition(width: number, height: number, vw: number, vh: numb
   const xs = [cx - width / 2, cx + 16, cx - width - 16, margin, maxX];
   const ys = [cy + 20, cy - height - 20, margin, maxY];
   for (const r of obstacles) { xs.push(r.right + margin, r.left - width - margin); ys.push(r.bottom + margin, r.top - height - margin); }
-  let best = { left: clampX(xs[0]), top: clampY(ys[0]) }, bestOverlap = Infinity, bestDistance = Infinity;
+  let best = { left: clampX(xs[0]), top: clampY(ys[0]) }, bestOverlap = Infinity, bestFinger = Infinity, bestDistance = Infinity;
   for (const x of xs) for (const y of ys) {
     const left = clampX(x), top = clampY(y);
     const overlap = obstacles.reduce((area, r) => area + Math.max(0, Math.min(left + width + margin, r.right) - Math.max(left - margin, r.left)) * Math.max(0, Math.min(top + height + margin, r.bottom) - Math.max(top - margin, r.top)), 0);
+    // R127: equally clear placements must not catch the opening touch's compatibility click.
+    const finger = cx >= left - margin && cx <= left + width + margin && cy >= top - margin && cy <= top + height + margin ? 1 : 0;
     const distance = (left + width / 2 - cx) ** 2 + (top + height / 2 - cy) ** 2;
-    if (overlap < bestOverlap || (overlap === bestOverlap && distance < bestDistance)) { best = { left, top }; bestOverlap = overlap; bestDistance = distance; }
+    if (overlap < bestOverlap || (overlap === bestOverlap && (finger < bestFinger || (finger === bestFinger && distance < bestDistance)))) { best = { left, top }; bestFinger = finger; bestOverlap = overlap; bestDistance = distance; }
   }
   return best;
 }

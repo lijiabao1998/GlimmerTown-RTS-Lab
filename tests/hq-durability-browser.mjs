@@ -48,6 +48,9 @@ const state =`);
     replace('if (hqElement.textContent !== hqText)',`if (!(${M('freshness')} && hqElement.textContent) && hqElement.textContent !== hqText)`);
     replace('root.hidden = !s.visible;',`root.hidden = !s.visible; if (${M('layout')}) root.style.width='2000px';`);
   }
+  if(mutants&&rel==='src/ui/commandMenu.ts'){
+    replace('const finger =', `const finger = ${M('menuHold')} ? 0 :`);
+  }
   return code;
 }});
 async function main(){
@@ -96,7 +99,54 @@ async function main(){
       assert.equal(page.errors.length,errors,'native: no runtime errors');
     }
     const hidden=async label=>{assert.equal(await text(),'','hidden: '+label+' clears summary');assert(await E('document.getElementById("pb-hq").hidden && document.getElementById("prodbar").hidden'),'hidden: '+label+' hides summary and bar');};
+    const menuHold=async mutant=>{
+      for(const [width,height]of mutant?[[412,860]]:[[412,860],[860,412],[360,780],[1280,800]]){
+        // Keep the first viewport identical to the original R109 failing scenario.
+        // Desktop-sized viewport also enables touch so the initiating release is real.
+        await viewport(width,height,true);
+        await open('noR018=1&noR006=1&noR016=1&'+(mutant?'__r127mutant=menuHold':''));
+        await E('__rts.pause(true);__rts.runScript(0);__rts.issue({t:"eco",inf:1,guns:1,tanks:1});__rts.stepN(1);__rts.pause(true);__rts.focus(27,27,1);__rts.select([1,4,9]);');await frames();
+        const menuState=async()=>({...(await state()),selected:await E('__rts.selected()'),cam:await E('__rts.cam()')});
+        for(const action of ['cancel','he','smoke']){
+          let p=await E('__rts.screenOf(4)');
+          let gunPoint=await E(`document.elementFromPoint(${p[0]},${p[1]})?.tagName==='CANVAS'`);
+          if(!gunPoint&&width!==412){
+            // Landscape HUD may cover the gun projection. Use a measured free canvas
+            // point instead, without changing any HUD geometry or input event semantics.
+            p=await E(`(()=>{for(let y=80;y<innerHeight-8;y+=16)for(let x=innerWidth/2;x<innerWidth-8;x+=16){const g=__rts.groundAt(x,y);if(document.elementFromPoint(x,y)?.tagName==='CANVAS'&&g&&g[0]>=0&&g[0]<32&&g[1]>=0&&g[1]<32)return [x,y];}return null;})()`);
+          }
+          assert(p&&await E(`document.elementFromPoint(${p[0]},${p[1]})?.tagName==='CANVAS'`),'menu fixture: real hold starts on canvas');
+          const before=await menuState();
+          await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:p[0],y:p[1],id:1}]});await sleep(650);await frames();
+          const geometry=await E(`(()=>{const e=document.getElementById('command-menu'),r=e.getBoundingClientRect();return {open:!e.hidden,rect:r.toJSON(),label:document.getElementById('cm-target').textContent,buttons:[...e.querySelectorAll('button')].map(b=>{const q=b.getBoundingClientRect();return {id:b.id,rect:q.toJSON(),hit:document.elementFromPoint(q.x+q.width/2,q.y+q.height/2)===b}})};})()`);
+          assert(geometry.open,'menu fixture: actual hold opens menu before release');
+          record(`R127 hold ${width}x${height} ${action}: `+JSON.stringify({point:p,...geometry}));
+          if(!mutant&&action==='cancel')await shot(`r127-${width}x${height}-menu-held.png`);
+          const r=geometry.rect;
+          assert(p[0]<r.left||p[0]>r.right||p[1]<r.top||p[1]>r.bottom,'menuHold: menu excludes initiating release point');
+          assert(r.left>=0&&r.top>=0&&r.right<=width&&r.bottom<=height,'menuHold: menu remains inside viewport');
+          assert.deepEqual(await menuState(),before,'menuHold: opening does not change world log selection or camera');
+          await page.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await frames();
+          assert(await E('!document.getElementById("command-menu").hidden'),'menuHold: release leaves menu open');
+          assert.deepEqual(await menuState(),before,'menuHold: release causes no unintended action');
+          const b=geometry.buttons.find(b=>b.id==='cm-'+action);
+          assert(b.hit&&b.rect.width>=44&&b.rect.height>=44,'menuHold: later explicit target remains reachable and 44px');
+          await touchTap(page,b.rect.x+b.rect.width/2,b.rect.y+b.rect.height/2);await frames();
+          assert(await E('document.getElementById("command-menu").hidden'),'menuHold: explicit choice closes menu');
+          const after=await menuState();
+          if(action==='cancel')assert.deepEqual(after,before,'menuHold: explicit cancel preserves complete state');
+          else{
+            assert.deepEqual({...after,log:before.log},before,'menuHold: explicit choice only records command');
+            const coordinates=geometry.label.match(/砲擊格 (\d+) · (\d+)/);assert(coordinates,'menu fixture: frozen cell label present');
+            const target=gunPoint?{x:29,z:29}:{x:Number(coordinates[1])-1,z:Number(coordinates[2])-1};
+            assert.deepEqual(after.log,[...before.log,{tick:before.tick,cmd:{t:'fireAt',side:0,ids:[4],...target,...(action==='smoke'?{ammo:'smoke'}:{})}}],'menuHold: deliberate HE or smoke records one correct original command');
+            if(!mutant)await shot(`r127-${width}x${height}-menu-${action}.png`);
+          }
+        }
+      }
+    };
     const cases={
+      menuHold,
       commands:async mutant=>{await native(mutant);},
       stored:async mutant=>{await fresh(mutant?'__r127mutant=stored':'');await hp(777,777);assert.equal(await text(),'我方指揮部：777/777 · 完好','stored: exact saved durability');await hp(776,777);assert.equal(await text(),'我方指揮部：776/777 · 受損','stored: nonfull is damaged');},
       enemy:async mutant=>{await fresh(mutant?'__r127mutant=enemy':'');await hp(800);await hp(1,999,1);assert.equal(await text(),'我方指揮部：800/1000 · 受損','enemy: opponent never replaces own summary');},
@@ -117,7 +167,7 @@ async function main(){
         assert(g.buttons.every(b=>b.hit&&b.r.width>=44&&b.r.height>=44&&b.r.top>=0&&b.r.bottom<=g.height&&b.r.left>=0&&b.r.right<=g.width),'layout: original controls visible reachable and 44px');
       }}
     };
-    const targets={commands:'commands: each real click records exactly one original produce',stored:'stored: exact saved durability',enemy:'enemy: opponent never replaces own summary',stage:'stage: inclusive seventy percent boundary',zero:'zero: destroyed before simulation winner update',missing:'missing: invalid HQ has no fallback',freshness:'freshness: same-tick damage is current',hidden:'hidden: build phase clears summary',valve:'valve: no summary element when disabled',layout:'layout: complete production without overflow'};
+    const targets={menuHold:'menuHold: menu excludes initiating release point',commands:'commands: each real click records exactly one original produce',stored:'stored: exact saved durability',enemy:'enemy: opponent never replaces own summary',stage:'stage: inclusive seventy percent boundary',zero:'zero: destroyed before simulation winner update',missing:'missing: invalid HQ has no fallback',freshness:'freshness: same-tick damage is current',hidden:'hidden: build phase clears summary',valve:'valve: no summary element when disabled',layout:'layout: complete production without overflow'};
     for(const[name,run]of Object.entries(cases)){await viewport();const errors=page.errors.length;await run(false);assert.equal(page.errors.length,errors,name+': no runtime errors');record('OK Chrome '+name);}
     overlay['index.html']=fs.readFileSync(path.join(broken,'index.html'));
     for(const[name,run]of Object.entries(cases)){await viewport();const errors=page.errors.length;let fail;try{await run(true);}catch(e){fail=e;}assert(fail instanceof assert.AssertionError&&fail.message.startsWith(targets[name]),'negative '+name+': first failure must be target, got '+(fail?.stack??'no failure'));assert.equal(page.errors.length,errors,'negative '+name+': no runtime errors');record('RED Chrome '+name+': '+targets[name]);}

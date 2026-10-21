@@ -4,7 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
-| R127 | 2026-10-21 | GPT | 我方登記HQ耐久／狀態摘要，保存上限與既有70%階段，noR127；不改模擬 | CI39603552367新HQ Node22／Chrome10組與負控通過；原長按放手回歸仍紅，事件診斷中 | gpt/hq-durability-r127 | Android未測，本機限制與既有首紅保留，整體CI未過／未發布 |
+| R127 | 2026-10-21 | GPT | 我方登記HQ耐久／狀態摘要，保存上限與既有70%階段，noR127；不改模擬 | 兩輪CI新HQ Node22／Chrome10組通過；實測證實長按釋放誤按HE，最小定位修補，Node新增3負控通過；修補CI待驗 | gpt/hq-durability-r127 | Android未測，本機限制與既有首紅保留，整體CI未過／未發布 |
 | R126 | 2026-10-21 | GPT | 原生產按鈕的補給差額／佇列滿／HQ失效回饋；原指令／R125保留，獨立noR126 | CI39587104101 unit659.6秒／smoke185.5秒／lane綠；Node31組／32負控、Chrome13負控、12圖審通過 | [#61](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/61) | 首輪README／錨點遺漏已修；本機Chrome限制及trenches-negative退出碼null保留；Android未測；main2e1a6b6 CI39599403644／Pages綠，公網713458bytes逐位一致 |
 | R125 | 2026-10-21 | GPT | 我方製造剩餘遊戲秒／後續數，完成改為等待部署；獨立noR125 | CI39568678641 unit733.3秒／smoke208秒／lane綠；Node27／35負控、Chrome6負控、11圖覆核 | [#60](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/60) | 本機13Chrome受限、既有counterbattery首紅原因未確立（另跑通過）；Android未測；收尾head及發布待核 |
 | R124 | 2026-10-21 | GPT | 選取砲擊建築耐久／材質／階段、最低兩棟與未列數；noR124及窄版八鍵換行 | CI39560512868 unit705.5秒／smoke208.1秒／lane綠；Node23／23負控、Chrome11／11負控；16圖覆核 | [#59](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/59) | 首紅裁切與煙幕fixture已修；本機Chrome受限、Android未測；收尾head與發布待核 |
