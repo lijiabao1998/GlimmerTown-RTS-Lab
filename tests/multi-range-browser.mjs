@@ -41,6 +41,8 @@ const plugin = {
       replace('  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));', "  if (q.get('__r122mutant') === 'paint' && view.multi122) view.multi122.mesh.visible = false;\n  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));");
       // Source anchors are asserted so a refactor cannot silently disable a negative control.
       replace("q.get('noR122') !== '1'", "(q.get('__r122mutant') === 'valve' || q.get('noR122') !== '1')", 2);
+      // Isolate only the second (runScript) constructor's valve assignment.
+      replace("  view.multiRangeEnabled = (q.get('__r122mutant') === 'valve' || q.get('noR122') !== '1');\n    return hashWorld(w);", "  if (q.get('__r122mutant') !== 'replayValve') view.multiRangeEnabled = (q.get('__r122mutant') === 'valve' || q.get('noR122') !== '1');\n    return hashWorld(w);");
       replace('if (rangeInfo !== lastRangeInfo)', "if (q.get('__r122mutant') !== 'freshness' && rangeInfo !== lastRangeInfo)");
     }
     if (rel==='src/render/multiRange.ts') {
@@ -54,7 +56,8 @@ async function main() {
   const started=Date.now(), baseline=path.join(temp,'baseline'), broken=path.join(temp,'broken');
   await build({root:ROOT,logLevel:'error',build:{outDir:baseline}});
   await build({root:ROOT,logLevel:'error',plugins:[plugin],build:{outDir:broken}});
-  assert.equal(hit.size,4,'all semantic mutations applied');
+  assert.equal(hit.size,5,'all semantic mutations applied');
+  if(process.argv.includes('--prepare-only')){record('R122 baseline and isolated-mutant builds prepared');return;}
   const overlay={};
   // Observation only: keep full shader diagnostics that the shared CDP logger abbreviates.
   const preload = `window.__r122ConsoleErrors=[];const original=console.error.bind(console);console.error=(...args)=>{window.__r122ConsoleErrors.push(args.map(x=>typeof x==='string'?x:String(x)).join(' ').slice(0,12000));original(...args);};`;
@@ -114,8 +117,14 @@ async function main() {
     const valve=async mutant=>{
       await viewport(true);await fresh('noR122=1'+(mutant?'&__r122mutant=valve':''));await selectAll(true);assert(!(await diag()).shown&&(await diag()).reason==='disabled','valve: noR122 disables multi-range renderer');
       await E('__rts.select([4])');await frames();assert((await E('__rts.rangePreview()')).shown,'valve: noR122 leaves single R113 enabled');
-      const golden=hashWorld(runScript(1200));assert.equal(await E('__rts.runScript(1200)'),golden,'valve: reset preserves golden');assert(!(await diag()).shown&&(await diag()).reason==='disabled','valve: replay constructor retains noR122');
+      const golden=hashWorld(runScript(1200));assert.equal(await E('__rts.runScript(1200)'),golden,'valve: reset preserves golden');await frames();assert(!(await diag()).shown&&(await diag()).reason==='disabled','valve: replay constructor retains noR122');
       await fresh('noR113=1');await selectAll(true);assert((await diag()).shown,'valve: noR113 does not disable R122');
+    };
+    const replayValve=async mutant=>{
+      await viewport(true);await fresh('noR122=1'+(mutant?'&__r122mutant=replayValve':''));
+      const golden=hashWorld(runScript(1200));assert.equal(await E('__rts.runScript(1200)'),golden,'valve: reset preserves golden');
+      // runScript reconstructs the view; cached rendering diagnostics update on the next frame.
+      await frames();assert(!(await diag()).shown&&(await diag()).reason==='disabled','valve: replay constructor retains noR122');
     };
     const population=async()=>{
       const interval=UNIT_KINDS[UK_MORTAR].cost*ECO_INCOME_TICKS,spawnCount=ECO_POP-5;
@@ -125,11 +134,11 @@ async function main() {
       await viewport(true);let off;
       for(const enabled of [false,true]){await fresh(enabled?'':'noR122=1');assert.equal(await E(`__rts.playLog(1944,${JSON.stringify(production)},${ticks})`),hashWorld(expectedWorld),'population: exact Node replay');await E('__rts.pause(true);__rts.focus(26,26,0.75)');await frames();await button('b-all',true);assert.equal((await E('__rts.selected()')).length,ECO_POP);const now=await info();if(!enabled)off=now;else{assert((await diag()).shown&&(await diag()).armedCount===ECO_POP-1,'population: all armed units included');assert.equal(now.calls-off.calls,1,'population: fixed one-call renderer');assert.equal(now.triangles-off.triangles,2,'population: fixed two-triangle renderer');assert(now.calls<=22&&now.triangles<=80000,'population: mobile closeup budget');await shot('r122-mobile-population-cap.png');record(`R122 population ${ECO_POP}: ${now.calls}/${now.triangles}, delta +1/+2`);}}
     };
-    const cases={mobile:m=>selection(true,m),desktop:m=>selection(false,m),coverage,freshness,valve};
+    const cases={mobile:m=>selection(true,m),desktop:m=>selection(false,m),coverage,freshness,valve,replayValve};
     for(const [name,run]of Object.entries(cases)){const errors=page.errors.length;await run(false);assert.equal(page.errors.length,errors,`${name}: no runtime errors`);record(`OK real Chrome ${name}`);}
     await population();
     overlay['index.html']=fs.readFileSync(path.join(broken,'index.html'));
-    for(const [name,run]of Object.entries(cases)){const errors=page.errors.length;let failure;try{await run(true);}catch(e){failure=e;}const target=name==='mobile'||name==='desktop'?`${name}: actual selected overlay pixels differ from valve-off`:name==='coverage'?'intersection: no common fill outside any selected annulus':name==='freshness'?'freshness: same-tick group change refreshes visible legend':'valve: noR122 disables multi-range renderer';assert(failure instanceof assert.AssertionError&&failure.message.startsWith(target),`negative ${name}: expected targeted assertion, got ${failure?.stack??'no failure'}`);assert.equal(page.errors.length,errors,`negative ${name}: no unrelated runtime errors`);record(`RED real Chrome ${name}: ${target}`);}
+    for(const [name,run]of Object.entries(cases)){const errors=page.errors.length;let failure;try{await run(true);}catch(e){failure=e;}const target=name==='mobile'||name==='desktop'?`${name}: actual selected overlay pixels differ from valve-off`:name==='coverage'?'intersection: no common fill outside any selected annulus':name==='freshness'?'freshness: same-tick group change refreshes visible legend':name==='replayValve'?'valve: replay constructor retains noR122':'valve: noR122 disables multi-range renderer';assert(failure instanceof assert.AssertionError&&failure.message.startsWith(target),`negative ${name}: expected targeted assertion, got ${failure?.stack??'no failure'}`);assert.equal(page.errors.length,errors,`negative ${name}: no unrelated runtime errors`);record(`RED real Chrome ${name}: ${target}`);}
   });
 }
 try{await main();fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots/r122-browser.txt'),summary.join('\n')+'\n');if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`\n### R122 real multi-range guards\n${summary.map(x=>'- '+x).join('\n')}\n`);}

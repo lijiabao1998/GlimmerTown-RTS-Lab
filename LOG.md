@@ -4,7 +4,8 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
-| R126 | 2026-10-21 | GPT | 原生產按鈕的補給差額／佇列滿／HQ失效回饋；原指令／R125保留，獨立noR126 | CI39587104101 unit659.6秒／smoke185.5秒／lane綠；Node31組／32負控、Chrome13負控、12圖審通過 | [#61](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/61) | 首輪README／錨點遺漏已修；本機Chrome限制及trenches-negative退出碼null保留；Android未測，收尾head／發布待核 |
+| R127 | 2026-10-21 | GPT | 我方HQ耐久／狀態與noR127；修長按釋放誤按HE定位，不改模擬 | CI39614371641 unit726.4秒／smoke185.7秒／lane綠；HQ Node22／Chrome11、定位3負控；四標準及21功能圖核對 | [#62](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/62) | 本機1797.5秒Chrome限制／既有3項紅保留；Android未測，收尾head與發布待核 |
+| R126 | 2026-10-21 | GPT | 原生產按鈕的補給差額／佇列滿／HQ失效回饋；原指令／R125保留，獨立noR126 | CI39587104101 unit659.6秒／smoke185.5秒／lane綠；Node31組／32負控、Chrome13負控、12圖審通過 | [#61](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/61) | 首輪README／錨點遺漏已修；本機Chrome限制及trenches-negative退出碼null保留；Android未測；main2e1a6b6 CI39599403644／Pages綠，公網713458bytes逐位一致 |
 | R125 | 2026-10-21 | GPT | 我方製造剩餘遊戲秒／後續數，完成改為等待部署；獨立noR125 | CI39568678641 unit733.3秒／smoke208秒／lane綠；Node27／35負控、Chrome6負控、11圖覆核 | [#60](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/60) | 本機13Chrome受限、既有counterbattery首紅原因未確立（另跑通過）；Android未測；收尾head及發布待核 |
 | R124 | 2026-10-21 | GPT | 選取砲擊建築耐久／材質／階段、最低兩棟與未列數；noR124及窄版八鍵換行 | CI39560512868 unit705.5秒／smoke208.1秒／lane綠；Node23／23負控、Chrome11／11負控；16圖覆核 | [#59](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/59) | 首紅裁切與煙幕fixture已修；本機Chrome受限、Android未測；收尾head與發布待核 |
 | R123 | 2026-10-21 | GPT | 純讀坦克／砲車裝填摘要；業主批准血條合批，noR123還原舊兩批 | Node24組／34負控＋合批10組／10負控；8197f57e CI39537172339 unit634.4秒／smoke207.2秒／lane綠，11圖覆核 | [#58](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/58) | 本機Chrome受限，Android未測；收尾head與main發布待核 |

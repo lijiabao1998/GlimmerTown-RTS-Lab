@@ -15,6 +15,7 @@ import { runScript } from '../src/sim/script.ts';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r123-browser-'));
 const strictCI = process.env.GITHUB_ACTIONS === 'true' || !!process.env.GITHUB_RUN_ID || !!process.env.CI;
+let holdDiagnostics;
 const summary = [], record = line => { summary.push(line); console.log(line); };
 const digest = value => createHash('sha256').update(value).digest('hex');
 const SEED = 1944, ecoLog = [{ tick: 0, cmd: { t: 'eco', inf: 1, guns: 1, tanks: 1 } }];
@@ -272,8 +273,11 @@ async function main() {
     const priority=async mutant=>{
       await viewport(true); await fresh(mutant?'__r123mutant=priority':''); await fireGun(true);
       const before=await state(), text=await hint(), p=await E(`__rts.screenOf(${gun.id})`);
+      await E(`window.__r127HoldEvents=[];for(const type of ['pointerdown','pointerup','pointercancel','lostpointercapture','click'])document.addEventListener(type,e=>window.__r127HoldEvents.push({type,target:e.target?.id||e.target?.tagName,x:e.clientX,y:e.clientY}),true);`);
       await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:p[0],y:p[1],id:1}]}); await sleep(650); await frames();
+      const heldGeometry=await E(`(()=>{const box=e=>{const r=e?.getBoundingClientRect();return r&&[r.x,r.y,r.width,r.height];},menu=document.getElementById('command-menu');return {events:window.__r127HoldEvents,menu:box(menu),hidden:menu?.hidden,buttons:[...document.querySelectorAll('#command-menu button')].map(e=>[e.id,box(e)]),hint:document.getElementById('hint')?.textContent,log:__rts.log()};})()` );
       await page.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]}); await frames();
+      holdDiagnostics={heldPoint:p,heldGeometry,released:await E(`(()=>{const box=e=>{const r=e?.getBoundingClientRect();return r&&[r.x,r.y,r.width,r.height];},menu=document.getElementById('command-menu');return {events:window.__r127HoldEvents,menu:box(menu),hidden:menu?.hidden,buttons:[...document.querySelectorAll('#command-menu button')].map(e=>[e.id,box(e)]),hint:document.getElementById('hint')?.textContent,log:__rts.log()};})()` )};
       assert(await E('!!document.querySelector("#command-menu:not([hidden])")'),'fixture: native long press opens existing command menu');
       assert((await hint()).includes('選擇這一格')&&!(await hint()).includes('裝填完成'),'priority: temporary command prompt takes precedence over reload');
       await button('cm-cancel',true); assert.equal(await hint(),text,'priority: cancel restores current reload text'); assert.deepEqual(await state(),before,'priority: menu never changes world or orders');
@@ -306,5 +310,5 @@ try {
 } catch(error) {
   const message=String(error?.stack??error);
   if(/listen (?:EPERM|EACCES).*127\.0\.0\.1|socket\(\) failed: Operation not permitted|找不到 Chrome/.test(message)&&!strictCI){console.error('NOT RUN R123 real Chrome guards: local browser/socket unavailable; CI must execute them.');console.error(error.message);process.exitCode=77;}
-  else {console.error(error);console.error(`R123 browser FAIL: ${String(error.message).replace(/\s+/g,' ').slice(0,2400)}`);process.exitCode=1;}
+  else {console.error(error);console.error(`R123 browser FAIL: ${String(error.message).replace(/\s+/g,' ').slice(0,2400)} R127_HOLD_TRACE=${JSON.stringify(holdDiagnostics)}`);process.exitCode=1;}
 } finally {fs.rmSync(temp,{recursive:true,force:true});}
