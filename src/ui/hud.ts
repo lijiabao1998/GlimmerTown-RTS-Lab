@@ -8,6 +8,7 @@ export interface HudState {
   mine: number; theirs: number; tanks: number; guns: number; observers: number; infantry?: number;
   ai?: string;   // R018 電腦難度
   build?: boolean; hint?: string;   // R006 布陣：藏掉暫停／速度／砲擊，提示列換成布陣說明
+  coverEnabled?: boolean; // R124：窄螢幕工具列跟隨獨立閥
   coverInfo?: string; // R124：當前砲擊建築的只讀耐久摘要
   reloadInfo?: string; // R123：純讀坦克／砲車裝填，不表示能射擊
   rangeInfo?: string; // R113：當前單選武器的名目射程與散布上界
@@ -61,6 +62,7 @@ export function initHud(a: HudActions): Hud {
   function update() {
     const s = a.state();
     root.classList.toggle('build', !!s.build);
+    root.classList.toggle('cover-durability', !!s.coverEnabled);
     if (a.toggleAudio) {
       const audio = s.audio ?? { enabled: false, state: 'off' }, button = $('b-audio');
       const text = { off: '音效關', on: '音效開', paused: '音效停', pending: '待啟用', unavailable: '無音效' }[audio.state];

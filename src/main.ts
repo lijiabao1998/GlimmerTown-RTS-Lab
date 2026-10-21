@@ -431,6 +431,7 @@ hud = initHud({
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
+      coverEnabled: phase === 'battle' && q.get('noR124') !== '1',
       coverInfo: coverDurability(w, selected, phase === 'battle' && q.get('noR124') !== '1'),
       reloadInfo: reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1'),
       counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115),

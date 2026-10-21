@@ -73,11 +73,14 @@ const plugin=mutant=>({name:'r124-browser-observation',enforce:'pre',transform(c
   setCoverValve: (enabled: boolean) => { if(enabled)q.delete('noR124');else q.set('noR124','1');hud?.update(); },
 };`);
     if(mutant){
-      replace("q.get('noR124') !== '1'","(q.get('__r124mutant') === 'valve' || q.get('noR124') !== '1')",2);
+      replace("q.get('noR124') !== '1'","(q.get('__r124mutant') === 'valve' || q.get('noR124') !== '1')",3);
       replace('if (coverInfo !== lastCoverInfo)',"if (q.get('__r124mutant') !== 'freshness' && coverInfo !== lastCoverInfo)");
     }
   }
-  if(mutant&&rel==='src/ui/hud.ts')replace('if (s.hint === undefined && s.coverInfo)',"if (new URLSearchParams(location.search).get('__r124mutant') !== 'hidden' && (s.hint === undefined || new URLSearchParams(location.search).get('__r124mutant') === 'priority') && s.coverInfo)");
+  if(mutant&&rel==='src/ui/hud.ts'){
+    replace("root.classList.toggle('cover-durability', !!s.coverEnabled);","root.classList.toggle('cover-durability', !!s.coverEnabled && new URLSearchParams(location.search).get('__r124mutant') !== 'layout');");
+    replace('if (s.hint === undefined && s.coverInfo)',"if (new URLSearchParams(location.search).get('__r124mutant') !== 'hidden' && (s.hint === undefined || new URLSearchParams(location.search).get('__r124mutant') === 'priority') && s.coverInfo)");
+  }
   if(mutant&&rel==='src/ui/coverDurability.ts'){
     replace('!u.alive || u.side !== SIDE_PLAYER',"(!u.alive && new URLSearchParams(location.search).get('__r124mutant') !== 'dead') || (u.side !== SIDE_PLAYER && new URLSearchParams(location.search).get('__r124mutant') !== 'enemy')");
     replace('u.fireAmmo === SHELL_SMOKE && u.target > 0',"u.fireAmmo === SHELL_SMOKE && u.target > 0 && new URLSearchParams(location.search).get('__r124mutant') !== 'smoke'");
@@ -91,7 +94,7 @@ async function main(){
   const started=Date.now(),baseline=path.join(temp,'baseline'),broken=path.join(temp,'broken');
   await build({root:ROOT,logLevel:'error',plugins:[plugin(false)],build:{outDir:baseline}});
   await build({root:ROOT,logLevel:'error',plugins:[plugin(true)],build:{outDir:broken}});
-  assert.equal(hits.size,8,'all R124 observation and semantic mutant anchors applied');
+  assert.equal(hits.size,9,'all R124 observation and semantic mutant anchors applied');
   // Allows syntax/build validation in restricted executors without claiming Chrome was run.
   if(process.argv.includes('--prepare-only')){record('PREPARED R124 baseline and isolated mutant builds; browser not run');return;}
   const overlay={};
@@ -116,14 +119,15 @@ async function main(){
     const shot=async name=>{const s=await page.send('Page.captureScreenshot',{format:'png'});fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots',name),Buffer.from(s.data,'base64'));};
     let narrowBaseline=null;
     const layout=async(label,check=true)=>{
-      const g=await E(`(()=>{const h=document.getElementById('hint'),p=document.getElementById('prodbar'),r=h.getBoundingClientRect(),b=p.getBoundingClientRect();return {hint:r.toJSON(),prod:b.toJSON(),shown:!p.hidden,scrollH:h.scrollHeight,clientH:h.clientHeight,scrollW:h.scrollWidth,clientW:h.clientWidth,width:innerWidth,height:innerHeight,buttons:[...document.querySelectorAll('#prodbar button,#hud .btns button')].filter(e=>e.getBoundingClientRect().height).map(e=>{const q=e.getBoundingClientRect();return {id:e.id||e.textContent,w:q.width,h:q.height,left:q.left,right:q.right,top:q.top,bottom:q.bottom,hit:e.contains(document.elementFromPoint(q.x+q.width/2,q.y+q.height/2))}})};})()`);
+      const g=await E(`(()=>{const h=document.getElementById('hint'),p=document.getElementById('prodbar'),r=h.getBoundingClientRect(),b=p.getBoundingClientRect();const toolbar=document.querySelector('#hud .btns'),stats=document.querySelector('#hud .top'),mini=document.getElementById('minimap');return {toolbar:toolbar.getBoundingClientRect().toJSON(),stats:stats.getBoundingClientRect().toJSON(),statsOverflow:stats.scrollWidth-stats.clientWidth,mini:mini?.getBoundingClientRect().toJSON(),hint:r.toJSON(),prod:b.toJSON(),shown:!p.hidden,scrollH:h.scrollHeight,clientH:h.clientHeight,scrollW:h.scrollWidth,clientW:h.clientWidth,width:innerWidth,height:innerHeight,buttons:[...document.querySelectorAll('#prodbar button,#hud .btns button')].filter(e=>e.getBoundingClientRect().height).map(e=>{const q=e.getBoundingClientRect();return {id:e.id||e.textContent,w:q.width,h:q.height,left:q.left,right:q.right,top:q.top,bottom:q.bottom,hit:e.contains(document.elementFromPoint(q.x+q.width/2,q.y+q.height/2))}})};})()`);
       record(`R124 layout ${label}: ${JSON.stringify(g)}`);
       const invalid=b=>b.w<44||b.h<44||b.left<0||b.right>g.width||b.top<0||b.bottom>g.height||!b.hit;
-      const brief={size:[g.width,g.height],hint:[g.hint.left,g.hint.top,g.hint.right,g.hint.bottom],prod:[g.prod.top,g.prod.bottom],overflow:[g.scrollW-g.clientW,g.scrollH-g.clientH],invalidButtons:g.buttons.filter(invalid)};
+      const brief={size:[g.width,g.height],toolbar:[g.toolbar.left,g.toolbar.top,g.toolbar.right,g.toolbar.bottom],stats:[g.stats.left,g.stats.top,g.stats.right,g.stats.bottom,g.statsOverflow],mini:g.mini?[g.mini.left,g.mini.top,g.mini.right,g.mini.bottom]:null,hint:[g.hint.left,g.hint.top,g.hint.right,g.hint.bottom],prod:[g.prod.top,g.prod.bottom],overflow:[g.scrollW-g.clientW,g.scrollH-g.clientH],invalidButtons:g.buttons.filter(invalid)};
       if(!check){narrowBaseline=brief;return g;}
       const evidence=JSON.stringify({enabled:brief,...(label==='narrow-multi'?{baseline:narrowBaseline}:{})});
       assert(g.shown&&g.prod.bottom<=g.hint.top-6&&g.prod.top>=0&&g.hint.bottom<=g.height&&g.hint.top>=0&&g.hint.left>=0&&g.hint.right<=g.width&&g.scrollH<=g.clientH&&g.scrollW<=g.clientW,`${label}: complete durability hint and production row visible with clearance; ${evidence}`);
       assert(g.buttons.every(b=>b.w>=44&&b.h>=44&&b.left>=0&&b.right<=g.width&&b.top>=0&&b.bottom<=g.height&&b.hit),`${label}: existing 44px toolbar and production targets remain usable; ${evidence}`);
+      if(g.width<=411)assert(g.toolbar.bottom<=g.stats.top&&g.stats.left>=0&&g.stats.right<=g.width&&g.statsOverflow<=0&&g.mini&&g.stats.bottom<=g.mini.top&&g.mini.left>=0&&g.mini.right<=g.width&&g.mini.bottom<=g.prod.top,`${label}: narrow toolbar, full top stats, minimap and production do not overlap; ${evidence}`);
     };
     const fireTank=async mobile=>{
       await select(tank.id,mobile);const b=tankTarget;await E(`__rts.focus(${b.x+b.w/2},${b.z+b.d/2},0.85)`);await frames();
@@ -198,13 +202,19 @@ async function main(){
       await E('__rts.stepN(1)');await frames();const w=await world(),u=w.units.find(u=>u.id===gun.id);assert(u.fireAmmo===3&&u.target>0&&w.shells.some(s=>s.shooter===gun.id&&s.kind===3),'fixture: real smoke order has a positive rounds counter and launches smoke');
       await assertStatus('smoke: positive rounds counter still shows targeted building durability',await status());await assertNode('smoke bombardment');if(!mutant)await shot('r124-mobile-smoke-target.png');
     };
+    const narrow=async mutant=>{
+      await viewport(360,780);await fresh(mutant?'__r124mutant=layout':'');await button('b-all',true);
+      // Separate class-removal mutant: the first red must remain the original control gate,
+      // not an input fixture, screenshot, import, or a relaxed replacement threshold.
+      if(!mutant)await shot('r124-narrow-layout.png');await layout('narrow-fix');
+    };
     const valve=async mutant=>{
       await viewport();await fresh('noR124=1'+(mutant?'&__r124mutant=valve':''));await fireTank(true);await assertStatus('valve: noR124 removes complete durability status','');assert((await hint()).includes('裝填完成'),'valve: previous reload text preserved');assert((await ranges()).single.shown,'valve: previous range display preserved');
       assert.equal(await E('__rts.runScript(1200)'),hashWorld(runScript(1200)),'valve: golden simulation unchanged');
       await fresh('noR009=1&noR113=1&noR122=1&noR123=1');await fireTank(true);await assertStatus('valve: durability independent of other presentation valves',await status());if(!mutant)await shot('r124-mobile-independent-valve.png');
     };
-    const cases={mobile:m=>native(true,m),desktop:m=>native(false,m),freshness,multi,dead:m=>transition('dead',m),enemy:m=>transition('enemy',m),order:m=>transition('order',m),priority,smoke,valve};
-    const targets={mobile:'mobile: native target durability visible',desktop:'desktop: native target durability visible',freshness:'freshness: same-tick damage updates current hp and stage',multi:'multi: independent weakest two and distinct target count',dead:'dead: same-tick invalid order or shooter clears target',enemy:'enemy: same-tick invalid order or shooter clears target',order:'order: same-tick invalid order or shooter clears target',priority:'priority: command prompt overrides durability text',smoke:'smoke: positive rounds counter still shows targeted building durability',valve:'valve: noR124 removes complete durability status'};
+    const cases={mobile:m=>native(true,m),desktop:m=>native(false,m),freshness,multi,dead:m=>transition('dead',m),enemy:m=>transition('enemy',m),order:m=>transition('order',m),priority,smoke,narrow,valve};
+    const targets={mobile:'mobile: native target durability visible',desktop:'desktop: native target durability visible',freshness:'freshness: same-tick damage updates current hp and stage',multi:'multi: independent weakest two and distinct target count',dead:'dead: same-tick invalid order or shooter clears target',enemy:'enemy: same-tick invalid order or shooter clears target',order:'order: same-tick invalid order or shooter clears target',priority:'priority: command prompt overrides durability text',smoke:'smoke: positive rounds counter still shows targeted building durability',narrow:'narrow-fix: existing 44px toolbar and production targets remain usable',valve:'valve: noR124 removes complete durability status'};
     for(const[name,run]of Object.entries(cases)){const errors=page.errors.length;await run(false);assert.equal(page.errors.length,errors,`${name}: no runtime/shader errors`);record(`OK real Chrome ${name}`);}
     overlay['index.html']=fs.readFileSync(path.join(broken,'index.html'));
     for(const[name,run]of Object.entries(cases)){const errors=page.errors.length;let failure;try{await run(true);}catch(e){failure=e;}assert(failure instanceof assert.AssertionError&&failure.message.startsWith(targets[name]),`negative ${name}: first failure must be targeted assertion, got ${failure?.stack??'no failure'}`);assert.equal(page.errors.length,errors,`negative ${name}: no unrelated runtime/shader errors`);record(`RED real Chrome ${name}: ${targets[name]}`);}

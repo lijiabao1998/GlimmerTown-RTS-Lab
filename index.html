@@ -98,6 +98,13 @@
     @keyframes gtrts-start { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.8); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); } }
     @media (max-width: 640px) { #hud .top { gap: 8px; font-size: 12px; } #hud .title small { display: none; }
       #hud .top { top: calc(max(8px, env(safe-area-inset-top)) + 60px); } }
+    /* R124：360px 實測舊八鍵列裁掉暫停；只在新資訊啟用且不足 412px 時換行。
+       412px／桌機保持原樣，noR124 完整還原舊排版，44px 命中區不縮小。 */
+    @media (max-width: 411px) {
+      #hud.cover-durability .btns { left: max(8px, env(safe-area-inset-left)); flex-wrap: wrap; justify-content: flex-end; }
+      #hud.cover-durability .top { top: calc(max(8px, env(safe-area-inset-top)) + 108px); }
+      #hud.cover-durability #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 148px); }
+    }
   </style>
 </head>
 <body>
