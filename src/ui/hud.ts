@@ -8,6 +8,8 @@ export interface HudState {
   mine: number; theirs: number; tanks: number; guns: number; observers: number; infantry?: number;
   ai?: string;   // R018 電腦難度
   build?: boolean; hint?: string;   // R006 布陣：藏掉暫停／速度／砲擊，提示列換成布陣說明
+  coverEnabled?: boolean; // R124：窄螢幕工具列跟隨獨立閥
+  coverInfo?: string; // R124：當前砲擊建築的只讀耐久摘要
   reloadInfo?: string; // R123：純讀坦克／砲車裝填，不表示能射擊
   rangeInfo?: string; // R113：當前單選武器的名目射程與散布上界
   vegetationInfo?: string; // R116：閒置時的地形規則，讓操作／射程／聲測提示優先
@@ -60,6 +62,7 @@ export function initHud(a: HudActions): Hud {
   function update() {
     const s = a.state();
     root.classList.toggle('build', !!s.build);
+    root.classList.toggle('cover-durability', !!s.coverEnabled);
     if (a.toggleAudio) {
       const audio = s.audio ?? { enabled: false, state: 'off' }, button = $('b-audio');
       const text = { off: '音效關', on: '音效開', paused: '音效停', pending: '待啟用', unavailable: '無音效' }[audio.state];
@@ -87,6 +90,7 @@ export function initHud(a: HudActions): Hud {
       : sel
       ? `${s.info ? `${s.info}。` : ''}已選：${s.tanks ? `坦克 ${s.tanks}` : ''}${s.tanks && s.guns ? '、' : ''}${s.guns ? `砲 ${s.guns}` : ''}${s.infantry ? ` 步兵 ${s.infantry}` : ''}${s.observers ? ` 觀測員 ${s.observers}` : ''}${s.observers || s.infantry ? '（點房子進駐）' : ''}。點地面＝移動，點敵人＝攻擊，點房子＝轟它${s.fireMode ? '；砲擊模式：點地面＝對那一格開火' : ''}`
       : '點我方單位（藍圈）選取；拖曳平移，雙指或滾輪縮放';
+    if (s.hint === undefined && s.coverInfo) $('hint').textContent += `。${s.coverInfo}`;
     if (s.hint === undefined && s.reloadInfo) $('hint').textContent += `。${s.reloadInfo}`;
     if (s.hint === undefined && s.rangeInfo) $('hint').textContent += `。${s.rangeInfo}`;
     if (s.hint === undefined && s.counterbatteryInfo) $('hint').textContent += `。${s.counterbatteryInfo}`;
