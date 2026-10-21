@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R125 | 2026-10-21 | GPT | 我方生產製造剩餘遊戲秒／後續數，完成改為等待部署；獨立noR125 | 本機typecheck/build與既有production-layout、paused-hint、counterbattery-ui通過；其餘驗收進行中 | [#60](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/60) | Draft；本機Chrome受限，CI／圖審待完成；Android未測 |
 | R124 | 2026-10-21 | GPT | 選取砲擊建築耐久／材質／階段、最低兩棟與未列數；noR124及窄版八鍵換行 | CI39560512868 unit705.5秒／smoke208.1秒／lane綠；Node23／23負控、Chrome11／11負控；16圖覆核 | [#59](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/59) | 首紅裁切與煙幕fixture已修；本機Chrome受限、Android未測；收尾head與發布待核 |
 | R123 | 2026-10-21 | GPT | 純讀坦克／砲車裝填摘要；業主批准血條合批，noR123還原舊兩批 | Node24組／34負控＋合批10組／10負控；8197f57e CI39537172339 unit634.4秒／smoke207.2秒／lane綠，11圖覆核 | [#58](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/58) | 本機Chrome受限，Android未測；收尾head與main發布待核 |
 | R122 | 2026-10-20 | GPT | 多選各自名目環域／共同交集、固定單網格、noR122與無武裝提示；不改模擬 | Node9組／20負控；258ba006 CI39451022446 unit410.6秒／smoke169秒／lane綠，八圖覆核 | [#57](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/57) | 首紅GLSL保留字已修；本機Chrome受限、Android／512單位實機未測；收尾head與發布待核 |

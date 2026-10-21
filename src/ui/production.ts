@@ -1,13 +1,14 @@
 // R019 生產列（DOM）：補給、三種單位按鈕、佇列與目前那一台的進度。只顯示、只呼叫傳進來的動作。
 export interface ProdItem { kind: number; label: string; cost: number }
-export interface ProdState { visible: boolean; supply: number; queue: number[]; prog: number; progMax: number; queueMax: number }
+export interface ProdState { visible: boolean; supply: number; queue: number[]; prog: number; progMax: number; queueMax: number; countdown?: string }
 export interface ProdBar { update: () => void }
 
-export function initProduction(items: ProdItem[], a: { state: () => ProdState; produce: (kind: number) => void }): ProdBar {
+export function initProduction(items: ProdItem[], a: { state: () => ProdState; produce: (kind: number) => void; countdown?: boolean }): ProdBar {
   const root = document.createElement('div');
   root.id = 'prodbar'; root.className = 'bar';
+  root.classList.toggle('production-countdown', !!a.countdown);
   root.innerHTML = `${items.map(it => `<button id="pb-k${it.kind}" title="${it.label}：補給 ${it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}
-    <span class="info"><span id="pb-supply"></span><span id="pb-queue"></span><i id="pb-prog"><i></i></i></span>`;
+    <span class="info"><span id="pb-supply"></span><span id="pb-queue"></span><i id="pb-prog"><i></i></i></span>${a.countdown ? '<span id="pb-countdown" hidden></span>' : ''}`;
   (document.getElementById('hud') ?? document.body).appendChild(root);
   const $ = (id: string) => root.querySelector('#' + id) as HTMLElement;
   for (const it of items) $('pb-k' + it.kind).addEventListener('click', e => { e.stopPropagation(); a.produce(it.kind); update(); });
@@ -17,6 +18,12 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
   let lastWidth = -1, lastHeight = -1;
   function update() {
     const s = a.state();
+    if (a.countdown) {
+      const text = s.visible ? (s.countdown ?? '') : '';
+      const el = $('pb-countdown');
+      if (el.textContent !== text) el.textContent = text;
+      el.hidden = !text;
+    }
     root.hidden = !s.visible;
     if (!s.visible) { layoutValid = false; return; }
     const key = `${s.supply}|${s.queue.join(',')}|${s.prog}`;
