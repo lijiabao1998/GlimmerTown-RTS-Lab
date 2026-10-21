@@ -1,15 +1,15 @@
 // R019 生產列（DOM）：補給、三種單位按鈕、佇列與目前那一台的進度。只顯示、只呼叫傳進來的動作。
 export interface ProdItem { kind: number; label: string; cost: number }
-export interface ProdState { visible: boolean; supply: number; queue: number[]; prog: number; progMax: number; queueMax: number; countdown?: string; context?: object }
+export interface ProdState { visible: boolean; supply: number; queue: number[]; prog: number; progMax: number; queueMax: number; countdown?: string; hq?: string; context?: object }
 export interface ProdBar { update: () => void }
 
-export function initProduction(items: ProdItem[], a: { state: () => ProdState; produce: (kind: number) => void; countdown?: boolean; blockReason?: (kind: number) => string }): ProdBar {
+export function initProduction(items: ProdItem[], a: { state: () => ProdState; produce: (kind: number) => void; countdown?: boolean; hq?: boolean; blockReason?: (kind: number) => string }): ProdBar {
   const root = document.createElement('div');
   root.id = 'prodbar'; root.className = 'bar';
   root.classList.toggle('production-countdown', !!a.countdown);
   let feedbackKind: number | undefined, feedbackContext: object | undefined;
   root.innerHTML = `${items.map(it => `<button id="pb-k${it.kind}" title="${it.label}：補給 ${it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}
-    <span class="info"><span id="pb-supply"></span><span id="pb-queue"></span><i id="pb-prog"><i></i></i></span>${a.countdown ? '<span id="pb-countdown" hidden></span>' : ''}${a.blockReason ? '<span id="pb-reason" role="status" hidden></span>' : ''}`;
+    <span class="info"><span id="pb-supply"></span><span id="pb-queue"></span><i id="pb-prog"><i></i></i></span>${a.countdown ? '<span id="pb-countdown" hidden></span>' : ''}${a.blockReason ? '<span id="pb-reason" role="status" hidden></span>' : ''}${a.hq ? '<span id="pb-hq" hidden></span>' : ''}`;
   (document.getElementById('hud') ?? document.body).appendChild(root);
   const $ = (id: string) => root.querySelector('#' + id) as HTMLElement;
   for (const it of items) $('pb-k' + it.kind).addEventListener('click', e => { e.stopPropagation(); feedbackKind = it.kind; a.produce(it.kind); update(); });
@@ -19,6 +19,12 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
   let lastWidth = -1, lastHeight = -1;
   function update() {
     const s = a.state();
+    if (a.hq) {
+      const hqText = s.visible ? (s.hq ?? '') : '';
+      const hqElement = $('pb-hq');
+      if (hqElement.textContent !== hqText) hqElement.textContent = hqText;
+      hqElement.hidden = !hqText;
+    }
     if (a.countdown) {
       const text = s.visible ? (s.countdown ?? '') : '';
       const el = $('pb-countdown');

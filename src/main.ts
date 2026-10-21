@@ -1,3 +1,4 @@
+import { hqDurability } from './ui/hqDurability.ts';
 import { productionBlockReason } from './ui/productionBlockReason.ts';
 import { productionCountdown } from './ui/productionCountdown.ts';
 import { coverDurability } from './ui/coverDurability.ts';
@@ -456,9 +457,10 @@ prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_
   ...(r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : [])], {
   state: () => {
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
-    return { context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5, countdown: phase === 'battle' ? productionCountdown(w, q.get('noR125') !== '1') : '' };
+    return { hq: phase === 'battle' ? hqDurability(w, q.get('noR127') !== '1') : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5, countdown: phase === 'battle' ? productionCountdown(w, q.get('noR125') !== '1') : '' };
   },
   produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }),
+  hq: q.get('noR127') !== '1',
   countdown: q.get('noR125') !== '1',
   blockReason: q.get('noR126') !== '1' ? kind => productionBlockReason(w, kind, phase === 'battle') : undefined,
 });
