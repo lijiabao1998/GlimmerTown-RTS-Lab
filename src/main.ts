@@ -1,3 +1,4 @@
+import { productionCountdown } from './ui/productionCountdown.ts';
 import { coverDurability } from './ui/coverDurability.ts';
 import { reloadStatus } from './ui/reloadStatus.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
@@ -454,9 +455,10 @@ prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_
   ...(r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : [])], {
   state: () => {
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
-    return { visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5 };
+    return { visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5, countdown: phase === 'battle' ? productionCountdown(w, q.get('noR125') !== '1') : '' };
   },
   produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }),
+  countdown: q.get('noR125') !== '1',
 });
 // R013 說明面板：開著的時候暫停，關掉回到原來的暫停狀態
 let pausedBeforeHelp = false;
