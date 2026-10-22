@@ -190,6 +190,7 @@ export interface World extends RngState {
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
   smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
   counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
+  sandbox?: { version: 1; running: boolean; frame: number }; // R128：frame 是指令步序，tick 仍只計戰鬥時間
 }
 
 export const idx = (x: number, z: number) => z * N + x;
@@ -334,6 +335,7 @@ export function createWorld(seed: number): World {
 // 世界雜湊：所有跨 tick 的狀態都要折進來（events 只給渲染看，不算）
 export function hashWorld(w: World): string {
   const f = new Fnv();
+  if (w.sandbox) f.int(0x5342).int(w.sandbox.version).int(w.sandbox.running ? 1 : 0).int(w.sandbox.frame);
   f.int(w.seed).int(w.tick).int(w.rng).int(w.nextShell).int(w.winner);
   for (let i = 0; i < w.ter.length; i++) f.int(w.ter[i] | (w.crater[i] << 8)).int(w.occ[i]);
   f.int(w.blds.length);

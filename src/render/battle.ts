@@ -71,6 +71,7 @@ export class BattleView {
   fxOn: boolean;
 
   private w: World;
+  private readonly fresh: (world: World) => BattleView;
   private mapId: number | undefined;
   private fogOn: boolean;
   private ramp = toonRamp();
@@ -182,6 +183,7 @@ export class BattleView {
   get rangeInfo(): string { return this.multi122.solution.legend || this.range113?.solution.legend || ''; }
 
   constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true, r104 = true, r123 = true) {
+    this.fresh = world => new BattleView(world, fxOn, fogOn, observerDetails, r004, r008, r009, r011, r014, r016, r107, r113, r118, r104, r123);
     this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
     this.trench118 = new TrenchRaster(r118); this.trench118.sync(w);
     this.range113 = r113 ? new RangePreview() : null;
@@ -301,6 +303,12 @@ export class BattleView {
   }
 
   get world(): World { return this.w; }
+  // R128：重置視覺狀態時沿用同一組已解析的閥值，不另讀 URL 或複製設定規則。
+  recreate(w: World): BattleView {
+    const next = this.fresh(w);
+    next.target.copy(this.target); next.zoom = this.zoom; next.multiRangeEnabled = this.multiRangeEnabled;
+    return next;
+  }
   // R006：換一個世界來畫（布陣預覽世界 ↔ 真的世界）；重畫地面貼圖與房子，單位網格不動
   setWorld(w: World, territorySide = -1) {
     this.w = w; this.mapId = w.map; this.territory = territorySide; this.observerHeights.clear();

@@ -8,7 +8,9 @@ import * as THREE from 'three';
 import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, WIRE_KIND, WALL_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
-import { step, runLog, type Command, type LoggedCommand } from './sim/step.ts';
+import { step, runLog, commandTick, type Command, type LoggedCommand } from './sim/step.ts';
+import { createSandboxWorld, sandboxPlaceError, type SandboxCommand } from './sim/sandbox.ts';
+import { initSandbox, type SandboxBar } from './ui/sandbox.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
 import { BattleAudio } from './render/audio.ts';
@@ -72,6 +74,8 @@ let minimap: Minimap | undefined;
 const r016 = q.get('noR016') !== '1';
 const r104 = q.get('noR104') !== '1'; // 裝甲弧提示；只關畫面，不改模擬
 const r109 = q.get('noR109') !== '1';
+const r128 = q.get('noR128') !== '1';
+let sandboxBar: SandboxBar | undefined, sandboxTool: number | null = UK_TANK, sandboxSide = SIDE_PLAYER, sandboxHint = '';
 let lastRangeInfo = '';
 let lastCoverInfo = ''; // R124：同 tick 傷害／換選／重播也重算
 let lastReloadInfo = ''; // R123：同 tick 換選與清理也重算
@@ -153,18 +157,20 @@ let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true) {
+function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true, sandbox = false) {
   if (r109) clearGestureInput();
   battleAudio?.reset();
-  w = createWorld(s);
+  w = sandbox ? createSandboxWorld(s) : createWorld(s);
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
   view?.dispose();
-  view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
+  view = new BattleView(w, fxOn, !w.sandbox && q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
   view.multiRangeEnabled = q.get('noR122') !== '1';
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
+  battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
+  if (sandbox) paused = true;
   if (map || vegetation) issue({ t: 'map', id: map ? MAP_RYE : 0, ...(vegetation ? { vegetation: 1 } : {}) });
   if (build) { paused = true; refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
@@ -174,7 +180,32 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegeta
   ui();
   syncBattleAudio();
 }
-function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); }
+function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); }
+
+function sandboxAction(cmd: SandboxCommand) {
+  if (!w.sandbox || audioHelpActive) return;
+  issue(cmd);
+  // 運行中放兵排入下一個 20Hz step；暫停編輯、暫停及重置可即時處理，但不跑戰鬥。
+  if (paused || cmd.t !== 'sandboxPlace') {
+    tick(); acc = 0; paused = !w.sandbox.running;
+    syncBattleAudio(); ui();
+  }
+}
+function setPaused(value: boolean) {
+  if (w.sandbox) { if (w.sandbox.running === value) sandboxAction({ t: 'sandboxRun', running: !value }); }
+  else paused = value;
+  syncBattleAudio(); ui();
+}
+function sandboxPlaceAt(cx: number, cy: number) {
+  const p = view.groundAt(cx, cy, innerWidth, innerHeight);
+  if (!p || sandboxTool === null) return;
+  const cmd = { t: 'sandboxPlace' as const, side: sandboxSide, kind: sandboxTool, x: Math.floor(p.x), z: Math.floor(p.z) };
+  const err = sandboxPlaceError(w, cmd);
+  const why = { mode: '目前不是沙盒。', side: '請選我方或敵方。', kind: '僅能放置坦克或榴彈砲。', map: '超出地圖。', building: '有建築擋住這一格。', unit: '已有單位，請換一格。', capacity: '已達 32 輛上限（含殘骸）；請重置後再放置。' };
+  sandboxHint = err ? why[err] : '已下放置指令。';
+  if (!err) sandboxAction(cmd);
+  sandboxBar?.update();
+}
 
 // 開戰：我方布陣＋敵方布陣都寫進指令紀錄（第 0 步），馬上走第一步讓房子落地（中間不畫任何一幀，不會閃）
 function startBattle() {
@@ -229,7 +260,7 @@ function placeAt(cx: number, cy: number) {
 }
 
 function issue(cmd: Command) {
-  log.push({ tick: w.tick, cmd });
+  log.push({ tick: w.sandbox ? commandTick(w) : w.tick, cmd });
   pending.push(cmd);
 }
 
@@ -240,6 +271,16 @@ function tick() {
   const now = pending; pending = [];
   const priorWinner = w.winner, priorMap = w.map;
   step(w, now);
+  if (w.sandbox) {
+    if (now.some(c => c.t === 'sandboxReset')) {
+      const priorView = view;
+      priorView.dispose(); view = priorView.recreate(w);
+      selected.clear(); fireMode = false; ammo = 'he'; battleHint = undefined; sandboxHint = '已重置；沙盒暫停。';
+      stats = newStats(w); minimap?.dirty(); battleAudio?.reset();
+    }
+    if (!w.sandbox.running || now.some(c => c.t === 'sandboxPlace' || c.t === 'sandboxReset')) view.snapshot(); // 新 ID 不從 (0,0) 插值；運行時仍保留既有移動插值。
+    sandboxBar?.update();
+  }
   if (r109 && priorWinner < 0 && w.winner >= 0) clearGestureInput();
   view.onEvents(w.events, simT());
   if (minimap && (priorMap !== w.map || w.events.some(e => e.e === 'stage' || e.e === 'build' || e.e === 'trench' || (e.e === 'impact' && e.kind === SHELL_HE)))) minimap.dirty();   // R015 地形變了才重畫底圖
@@ -269,6 +310,7 @@ function clearBattleHint() {
 }
 
 function order(cx: number, cy: number) {
+  if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
   if (r109) clearBattleHint();
   if (phase === 'build') { placeAt(cx, cy); return; }
   const route = routeBattleOrder(w, selected, fireMode, ammo, {
@@ -282,6 +324,7 @@ function order(cx: number, cy: number) {
 }
 
 function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {
+  if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
   if (r109) clearBattleHint();
   const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
@@ -309,7 +352,7 @@ function selectInBox(rect: SelectionRect) {
 const selectionBox = r109 ? document.createElement('div') : null;
 if (selectionBox) { selectionBox.id = 'selection-box'; selectionBox.hidden = true; document.body.appendChild(selectionBox); }
 const gestures = r109 ? new Gestures({
-  enabled: () => phase === 'battle' && w.winner < 0 && !help.visible() && !reportView?.visible(),
+  enabled: () => phase === 'battle' && (!w.sandbox || sandboxTool === null) && w.winner < 0 && !help.visible() && !reportView?.visible(),
   box: rect => {
     if (!selectionBox) return;
     selectionBox.hidden = !rect;
@@ -408,7 +451,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; if (r012) view.zoomAt(f, e.clientX, e.clientY, innerWidth, innerHeight); else view.zoomBy(f); }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (r109) clearGestureInput(); selected.clear(); fireMode = false; ammo = 'he'; hud?.update(); }
-  if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') { paused = !paused; syncBattleAudio(); hud?.update(); } }   // 布陣中不能用空白鍵開打（要按「開戰」）   // 不讓空白鍵同時按到有焦點的 HUD 按鈕
+  if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') setPaused(!paused); }   // 布陣中不能用空白鍵開打（要按「開戰」）
 });
 
 reset();
@@ -442,13 +485,13 @@ hud = initHud({
       audio: battleAudio?.status(),
     };
   },
-  togglePause: () => { if (phase === 'battle') paused = !paused; syncBattleAudio(); },
+  togglePause: () => { if (phase === 'battle') setPaused(!paused); },
   toggleAudio: battleAudio ? () => { syncBattleAudio(); battleAudio.toggleFromGesture(); } : undefined,
   cycleSpeed: () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; },
   toggleFire: () => { fireMode = !fireMode; },
   toggleAmmo: () => { ammo = ammo === 'he' ? 'smoke' : 'he'; if (ammo === 'smoke') fireMode = true; },
   selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); },
-  restart: () => reset(),
+  restart: () => w.sandbox ? sandboxAction({ t: 'sandboxReset' }) : reset(),
   help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
@@ -496,6 +539,15 @@ if (battleAudio) {
   addEventListener('pagehide', e => { audioPageActive = false; syncBattleAudio(); if (!e.persisted) battleAudio.dispose(); });
   addEventListener('pageshow', () => { audioPageActive = true; syncBattleAudio(); });
 }
+
+if (r128) sandboxBar = initSandbox({
+  state: () => ({ active: !!w.sandbox, running: !!w.sandbox?.running, count: w.units.length, tool: sandboxTool, side: sandboxSide, hint: sandboxHint }),
+  enter: () => { sandboxTool = UK_TANK; sandboxSide = SIDE_PLAYER; speed = 1; reset(seed, false, false, false, false, false, true); },
+  exit: () => { sandboxTool = null; sandboxSide = SIDE_PLAYER; speed = 1; paused = false; reset(); },
+  run: () => setPaused(!paused), reset: () => sandboxAction({ t: 'sandboxReset' }),
+  pick: kind => { clearGestureInput(); sandboxTool = kind; sandboxHint = ''; selected.clear(); fireMode = false; ammo = 'he'; ui(); },
+  side: side => { sandboxSide = side; sandboxHint = ''; },
+});
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
@@ -555,7 +607,7 @@ const rts = {
   seed: () => w.seed,
   tick: () => w.tick,
   hash: () => hashWorld(w),
-  pause: (p: boolean) => { paused = p; syncBattleAudio(); hud?.update(); },
+  pause: (p: boolean) => setPaused(p),
   stepN: (n: number) => {
     battleAudio?.silence();
     try { for (let i = 0; i < n; i++) tick(); return w.tick; }
@@ -600,13 +652,21 @@ const rts = {
   select: (ids: number[]) => { selected.clear(); for (const id of ids) if (w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER) selected.add(id); hud?.update(); return [...selected]; },
   // 從第 0 步照腳本一步一步跑（指令照時間發、每一步都餵畫面）：車轍、揚塵這些「看著發生」的畫面才會出現。雜湊等於 runScript
   // 任意指令紀錄，從第 0 步一步一步跑（每一步都餵畫面與戰報統計）；回傳雜湊
-  playLog: (s: number, lg: LoggedCommand[], ticks: number) => {
-    reset(s, false, false, false, false, false);
+  playLog: (s: number, lg: LoggedCommand[], ticks: number, sandbox = false) => {
+    reset(s, false, false, false, false, false, sandbox);
     let i = 0;
-    while (w.tick < ticks) {
-      while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }
-      tick();
+    if (sandbox) {
+      while (commandTick(w) < ticks) {
+        while (i < lg.length && lg[i].tick <= commandTick(w)) { if (lg[i].tick === commandTick(w)) issue(lg[i].cmd); i++; }
+        tick();
+      }
+    } else {
+      while (w.tick < ticks) {
+        while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }
+        tick();
+      }
     }
+    if (w.sandbox) { paused = !w.sandbox.running; ui(); }
     return hashWorld(w);
   },
   winner: () => w.winner,
@@ -625,5 +685,6 @@ const rts = {
   phase: () => phase,
   plan: () => JSON.parse(JSON.stringify(plan)) as PlanCmd[],
   startBattle: () => startBattle(),
+  sandbox: () => w.sandbox ? { ...w.sandbox, count: w.units.length } : null,
 };
 (window as unknown as { __rts: typeof rts }).__rts = rts;
