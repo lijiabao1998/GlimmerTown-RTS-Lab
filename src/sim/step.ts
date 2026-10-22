@@ -11,6 +11,7 @@ import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { applyMap } from './maps.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
+import { applySandbox, type SandboxCommand } from './sandbox.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
   UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SIDE_PLAYER, SIDE_ENEMY,
@@ -18,6 +19,7 @@ import {
 } from './world.ts';
 
 export type Command =
+  | SandboxCommand
   | { t: 'move'; side: number; ids: number[]; x: number; z: number }
   | { t: 'attack'; side: number; ids: number[]; target: number }
   | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number; ammo?: 'smoke' }
@@ -30,6 +32,8 @@ export type Command =
   | { t: 'produce'; side: number; kind: number };   // R019：花補給排進生產佇列
 
 export interface LoggedCommand { tick: number; cmd: Command }
+// 舊紀錄的 tick 語意不變；沙盒以獨立步序記錄暫停中的編輯。
+export const commandTick = (w: World): number => w.sandbox?.frame ?? w.tick;
 
 export const FIRE_AT_ROUNDS = 4;      // 對空地射擊打幾發就停（對建築：打到變瓦礫為止）
 const AP_HIT_RADIUS = 180;            // 穿甲彈落點離目標多近算命中（位置單位）
@@ -39,6 +43,8 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 
 // 指令只認：屬於下指令那一方、還活著的單位；座標夾進地圖；攻擊目標要是活著的敵人
 export function applyCommand(w: World, cmd: Command): void {
+  if (cmd.t === 'sandboxPlace' || cmd.t === 'sandboxRun' || cmd.t === 'sandboxReset') { applySandbox(w, cmd); return; }
+  if (w.sandbox && cmd.t !== 'move' && cmd.t !== 'attack' && cmd.t !== 'fireAt' && cmd.t !== 'stop') return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map') return;   // 布陣、地圖（R026）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
   if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0); return; }
@@ -400,9 +406,15 @@ function checkWinner(w: World): void {
 
 export function step(w: World, cmds: Command[]): void {
   w.events = [];
+  if (w.sandbox) {
+    for (const c of cmds) applyCommand(w, c);
+    w.sandbox.frame++;
+    if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
+  } else {
   for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 ? c.vegetation : undefined);   // R026：地圖最先套
   for (const c of cmds) { if (c.t === 'build') applyBuild(w, c); else if (c.t === 'trench') applyTrench(w, c); }   // R118：布陣保留相對順序，全部先於移動與 HQ
   for (const c of cmds) if (c.t !== 'build' && c.t !== 'trench' && c.t !== 'map') applyCommand(w, c);
+  }
   ecoStep(w);   // R019：補給與生產（電腦想之前，剛出生的單位這一步就能被指揮）
   // R018：電腦在玩家指令之後、單位移動之前想（每隔 AI_THINK 步想一次），下的指令跟玩家的一樣套用
   if (w.ai) for (const st of w.ai) if (w.tick >= st.next) {
@@ -413,7 +425,7 @@ export function step(w: World, cmds: Command[]): void {
   separate(w);
   for (const u of w.units) if (u.alive) fireUnit(w, u);
   updateShells(w);
-  checkWinner(w);
+  if (!w.sandbox) checkWinner(w);
   w.tick++;
   advanceSmoke(w);
   updateCounterbattery(w);
@@ -422,9 +434,9 @@ export function step(w: World, cmds: Command[]): void {
 // 從指令紀錄跑到第 ticks 步（重播與守衛用）。紀錄要照 tick 排好。
 export function runLog(w: World, log: LoggedCommand[], ticks: number): World {
   let i = 0;
-  while (w.tick < ticks) {
+  while (commandTick(w) < ticks) {
     const now: Command[] = [];
-    while (i < log.length && log[i].tick <= w.tick) { if (log[i].tick === w.tick) now.push(log[i].cmd); i++; }
+    while (i < log.length && log[i].tick <= commandTick(w)) { if (log[i].tick === commandTick(w)) now.push(log[i].cmd); i++; }
     step(w, now);
   }
   return w;

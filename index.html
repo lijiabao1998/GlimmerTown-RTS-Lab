@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>微光小鎮·二戰 RTS 實驗線</title>
   <style>
+    /* R128：獨立模式入口與控制列；DOM 不增加 WebGL 呼叫。 */
+    #sb-enter, #sandbox-panel button { box-sizing: border-box; min-width: 44px; min-height: 44px; border: 1px solid #6c745f; border-radius: 5px; background: #3c4535; color: #f3eedf; font: inherit; padding: 6px 10px; touch-action: manipulation; cursor: pointer; }
+    #sb-enter { position: fixed; z-index: 6; left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 58px); }
+    #sandbox-panel { position: fixed; z-index: 6; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); box-sizing: border-box; padding: 8px; border: 1px solid #4f6f96; border-radius: 6px; background: rgba(24, 34, 48, .95); max-height: 45vh; overflow-y: auto; }
+    #sandbox-panel .sb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+    #sandbox-panel strong { flex: 1 1 100%; }
+    #sandbox-panel button[aria-pressed="true"] { background: #9a4a2e; border-color: #d0835f; }
+    #sb-enter[hidden], #sandbox-panel[hidden] { display: none; }
+    #sb-hint { font-size: 13px; overflow-wrap: anywhere; }
+    @media (max-width: 640px) { #sb-enter { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
+    @media (max-width: 411px) { #hud.cover-durability ~ #sb-enter { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #2a3329; color: #f3eedf;
       font: 14px/1.4 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
     canvas { display: block; touch-action: none; image-rendering: pixelated; }
