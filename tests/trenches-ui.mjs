@@ -63,7 +63,7 @@ function controller(visual = true) {
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },
     initBuildBar(items, actions, trenches, walls) { c.actions = actions; c.items = items; c.trenches = trenches; return initBuildBar(items, actions, trenches, walls); },
   });
-  for (const key of ['TRENCH_LABEL', 'TRENCH_SHAPE', 'BUILD_LABEL', 'BUILD_WHY', 'BUILD_TIP']) {
+  for (const key of ['TRENCH_LABEL', 'TRENCH_SHAPE', 'BUILD_LABEL', 'BUILD_WHY', 'BUILD_TIP', 'sandboxPlacementResults']) {
     const source = plain.match(new RegExp(`const ${key}\\s*= [^]*?;`))?.[0]; assert.ok(source, `${key} source`); vm.runInContext(source, c);
   }
   const start = plain.indexOf('buildBar = initBuildBar('), end = plain.indexOf('\n\n// R117', start);

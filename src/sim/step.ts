@@ -11,7 +11,7 @@ import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { applyMap } from './maps.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
-import { applySandbox, type SandboxCommand } from './sandbox.ts';
+import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.ts';
 import {
   N, SUB, HALF, idx, inMap, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
   UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SIDE_PLAYER, SIDE_ENEMY,
@@ -42,8 +42,8 @@ const FORMATION: [number, number][] = [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], 
 const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.units.length ? w.units[id - 1] : null);
 
 // 指令只認：屬於下指令那一方、還活著的單位；座標夾進地圖；攻擊目標要是活著的敵人
-export function applyCommand(w: World, cmd: Command): void {
-  if (cmd.t === 'sandboxPlace' || cmd.t === 'sandboxRun' || cmd.t === 'sandboxReset') { applySandbox(w, cmd); return; }
+export function applyCommand(w: World, cmd: Command): SandboxError | null | void {
+  if (cmd.t === 'sandboxPlace' || cmd.t === 'sandboxRun' || cmd.t === 'sandboxReset') return applySandbox(w, cmd);
   if (w.sandbox && cmd.t !== 'move' && cmd.t !== 'attack' && cmd.t !== 'fireAt' && cmd.t !== 'stop') return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map') return;   // 布陣、地圖（R026）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
@@ -404,10 +404,15 @@ function checkWinner(w: World): void {
   if (!a && !b) w.winner = 2; else if (!b) w.winner = SIDE_PLAYER; else if (!a) w.winner = SIDE_ENEMY;
 }
 
-export function step(w: World, cmds: Command[]): void {
+export function step(w: World, cmds: Command[], placementResults?: (SandboxError | null)[]): void {
   w.events = [];
   if (w.sandbox) {
-    for (const c of cmds) applyCommand(w, c);
+    for (const c of cmds) {
+      const result = applyCommand(w, c);
+      // Presentation feedback only: ordered results from the actual application,
+      // never stored in World or folded into replay/hash state.
+      if (c.t === 'sandboxPlace') placementResults?.push(typeof result === 'string' ? result : null);
+    }
     w.sandbox.frame++;
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {

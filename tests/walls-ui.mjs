@@ -73,7 +73,7 @@ function controller(query = '') {
   });
   const flag = plain.slice(plain.indexOf('const r120 ='), plain.indexOf('setWalls(', plain.indexOf('const r120 =')) + 'setWalls(r120);'.length);
   vm.runInContext(flag, c);
-  for (const key of ['TRENCH_LABEL', 'TRENCH_SHAPE', 'BUILD_LABEL', 'BUILD_WHY', 'BUILD_TIP', 'BUILD_KINDS_NOW']) vm.runInContext(constant(key), c);
+  for (const key of ['TRENCH_LABEL', 'TRENCH_SHAPE', 'BUILD_LABEL', 'BUILD_WHY', 'BUILD_TIP', 'BUILD_KINDS_NOW', 'sandboxPlacementResults']) vm.runInContext(constant(key), c);
   const start = plain.indexOf('buildBar = initBuildBar('), end = plain.indexOf('\n\n// R117', start);
   assert.ok(start >= 0 && end > start, 'actual main callbacks found');
   const points = plain.match(/const pointsLeft = [^]*?;\n/)?.[0], refresh = plain.match(/function refreshPreview\(\)[^\n]+/)?.[0]; assert.ok(points && refresh);

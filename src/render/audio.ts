@@ -59,6 +59,7 @@ export class BattleAudio {
   private suspending = false;
   private pending = new Uint8Array(CAPACITY);
   private pendingCount = 0;
+  private interactivePending = false;
   private voices: (Voice | null)[] = Array(CAPACITY).fill(null);
   private collapsed = new WeakSet<Building>();
   private contexts = 0;
@@ -108,7 +109,7 @@ export class BattleAudio {
         this.context = this.makeContext(); this.contexts++; this.tokenAt = this.context.currentTime;
         this.context.onstatechange = () => {
           if (this.context?.state === 'closed') this.fail();
-          else if (this.context?.state !== 'running') { this.ready = false; this.silence(); this.changed(); }
+          else if (this.context?.state !== 'running') { this.ready = false; this.silence(this.enabled && this.active); this.changed(); }
           else this.changed();
         };
         this.master = this.context.createGain(); this.master.gain.value = 0;
@@ -137,13 +138,27 @@ export class BattleAudio {
 
   reset(): void { this.silence(); this.collapsed = new WeakSet<Building>(); }
 
-  silence(): void {
-    this.pendingCount = 0; this.frameStarts = 0;
+  silence(keepInteraction = false): void {
+    if (!(keepInteraction && this.interactivePending)) { this.pendingCount = 0; this.interactivePending = false; }
+    this.frameStarts = 0;
     for (let i = 0; i < this.voices.length; i++) { const voice = this.voices[i]; if (voice) this.release(voice, true); }
   }
 
   enqueue(world: World, events: readonly SimEvent[], visibility: AudioVisibility): void {
     if (!this.canPlay()) return;
+    this.collect(world, events, visibility);
+  }
+
+  // Interactive start/resume is a real-time step, unlike silent replay/stepN.
+  // Classify while the event's world/visibility is current; retain only bounded
+  // sound kinds through asynchronous resume, using the existing eight-slot queue.
+  enqueueInteraction(world: World, events: readonly SimEvent[], visibility: AudioVisibility): void {
+    if (!this.enabled || !this.active || this.unavailable || this.disposed) return;
+    this.collect(world, events, visibility);
+    if (this.pendingCount) this.interactivePending = true;
+  }
+
+  private collect(world: World, events: readonly SimEvent[], visibility: AudioVisibility): void {
     for (const event of events) {
       let kind = -1;
       if (event.e === 'fire') {
@@ -181,12 +196,16 @@ export class BattleAudio {
   // discarded here, never drained in later frames or made faster at 2x/4x simulation.
   flush(): void {
     this.frameStarts = 0;
-    if (!this.canPlay()) { this.pendingCount = 0; return; }
+    if (!this.canPlay()) {
+      if (!(this.interactivePending && this.enabled && this.active && !this.unavailable && !this.disposed)) { this.pendingCount = 0; this.interactivePending = false; }
+      return;
+    }
     const now = this.context!.currentTime;
     if (Number.isFinite(now) && now > this.tokenAt) {
       this.tokens = Math.min(CAPACITY, this.tokens + (now - this.tokenAt) * REFILL_PER_SECOND); this.tokenAt = now;
     }
     const count = this.pendingCount; this.pendingCount = 0;
+    this.interactivePending = false;
     for (let i = 0; i < count; i++) {
       if (this.frameStarts >= STARTS_PER_FRAME || this.voiceCount() >= CAPACITY || this.tokens < 1) { this.dropped++; continue; }
       this.start(this.pending[i]);
