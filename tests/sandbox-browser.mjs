@@ -15,6 +15,9 @@ delete process.env.R128_IMPORT_ONLY;
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'r128-browser-'));
 const strictCI=process.env.GITHUB_ACTIONS==='true'||!!process.env.GITHUB_RUN_ID||!!process.env.CI;
 const summary=[],record=s=>{summary.push(s);console.log(s);};
+// Reference mode keeps the previous cold-page/settle setup for interleaved measurements.
+const coldFixtures=process.argv.includes('--cold-fixtures'),fixtureStarted=Date.now();
+const fixtureCost={navigations:0,nativeReturns:0,frameSettles:0};
 const M=name=>`new URLSearchParams(location.search).get('__r128mutant') === '${name}'`;
 const M129=name=>`new URLSearchParams(location.search).get('__r129mutant') === '${name}'`;
 const preload129=`(()=>{
@@ -62,7 +65,16 @@ async function repairChecks({open,page},{viewport,layout}){
  const tap=async(x,y)=>{if(mobile){await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{id:1,x,y}]});await sleep(10);await page.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})}else{await page.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x,y});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x,y})}await frames()};
  const click=async id=>{const p=await E(`(()=>{const e=document.getElementById('${id}'),r=e.getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2,r.width,r.height,document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===e]})()`);assert(p[2]>=44&&p[3]>=44&&p[4],'r129: reachable native button '+id);await tap(p[0],p[1])};
  const at=async(x,z)=>{const p=await E(`__rts.screenOfCell(${x},${z})`);assert.equal(await E(`document.elementFromPoint(${p[0]},${p[1]})?.tagName`),'CANVAS','r129: native placement reaches canvas');await tap(...p)};
- const fresh=async(mutant='',query='')=>{await open(query+(mutant?'&__r129mutant='+mutant:''));await click('sb-enter');await E('__rts.focus(25.5,26.5,1.5)');await frames()};
+ let baseline=false;
+ const fresh=async(mutant='',query='',reuse=false)=>{
+  if(!coldFixtures&&reuse&&baseline&&!mutant&&!query&&await E('!!__rts.sandbox()')){
+   await E('__r129Audio.release();__r129Gate.release()');
+   if((await E('__r128.audio()'))?.enabled)await click('b-audio');
+   await click('sb-exit');fixtureCost.nativeReturns++;
+  }else{await open(query+(mutant?'&__r129mutant='+mutant:''));fixtureCost.navigations++}
+  baseline=!mutant&&!query;
+  await click('sb-enter');await E('__rts.focus(25.5,26.5,1.5)');await frames();
+ };
  const image=name=>shot(page,path.join(ROOT,'shots','r129-'+name+'.png'));
  const checkReplay=async()=>{const s=await E('({world:JSON.parse(__r128.world()),log:__rts.log(),hash:__rts.hash()})');assert.equal(hashWorld(runLog(createSandboxWorld(s.world.seed),JSON.parse(JSON.stringify(s.log)),s.world.sandbox.frame)),s.hash,'r129: observed Node/Chrome JSON replay')};
  const audioCase=async(mode='start',mutant='',shots=false)=>{
@@ -97,7 +109,7 @@ async function repairChecks({open,page},{viewport,layout}){
   assert.deepEqual((await E('__r128.audio()')).played,prior.played,'r129 audio: replay and stepN stay silent');assert.equal((await E('__r128.audio()')).pending,0,'r129 audio: replay leaves no deferred cue');
  };
  const placementCase=async(type='overlap',mutant='',shots=false,mode='batch',w=412,h=860,touch=true)=>{
-  await size(w,h,touch);await fresh(mutant);
+  await size(w,h,touch);await fresh(mutant,'',!mutant);
   if(type==='capacity'){const base=createSandboxWorld(1944),cmds=[];for(let z=0;z<32&&cmds.length<31;z++)for(let x=0;x<32&&cmds.length<31;x++)if(!base.occ[z*32+x])cmds.push({t:'sandboxPlace',side:0,kind:0,x,z});await E(`for(const c of ${JSON.stringify(cmds)})__rts.issue(c);__rts.stepN(1)`);await frames();assert.equal((await world()).units.length,31,'r129 placement: 31-unit fixture')}
   if(mode!=='paused')await click('sb-run');
   if(mode==='batch'){await E('__r129Gate.freeze()');await frames();assert(await E('__r129Gate.held()')>0,'r129 placement: real animation callback held')}
@@ -132,19 +144,26 @@ async function main(){
  await build({root:ROOT,logLevel:'silent',plugins:[plugin],build:{outDir:out,emptyOutDir:true}});
  await withBrowser({root:out,width:412,height:860,mobile:true,port:33401,settle:100,preload:preload129},async({open,page})=>{
   const E=s=>page.evaluate(s),frames=()=>E('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+  // The same 60ms native press is followed by the caller's two RAFs, not an extra 120ms sleep.
+  const tap=async(x,y)=>{if(coldFixtures){await touchTap(page,x,y);return;}await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1}]});await sleep(60);await page.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});fixtureCost.frameSettles++;};
   let mobile=true;
   const viewport=async(w=412,h=860,touch=true)=>{mobile=touch;await page.send('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:touch});await page.send('Emulation.setTouchEmulationEnabled',{enabled:touch,maxTouchPoints:5});};
   const click=async id=>{
    const b=await E(`(()=>{const e=document.getElementById(${JSON.stringify(id)}),r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===e};})()`);
    assert(b.w>=44&&b.h>=44&&b.hit,'ui: native target is reachable and 44px '+id);
-   if(mobile)await touchTap(page,b.x,b.y);else{await page.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:b.x,y:b.y});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:b.x,y:b.y});}
+   if(mobile)await tap(b.x,b.y);else{await page.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:b.x,y:b.y});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:b.x,y:b.y});}
    await frames();
   };
   const image=name=>shot(page,path.join(ROOT,'shots',`r128-${name}.png`));
   const world=async()=>JSON.parse(await E('__r128.world()'));
-  const fresh=async(mutant='',query='')=>{await open(query+(mutant?'&__r128mutant='+mutant:''));await frames();};
+  let baseline=false;
+  const fresh=async(mutant='',query='')=>{
+   if(!coldFixtures&&baseline&&!mutant&&!query&&await E('!!__rts.sandbox()')){await click('sb-exit');fixtureCost.nativeReturns++;}
+   else{await open(query+(mutant?'&__r128mutant='+mutant:''));fixtureCost.navigations++;}
+   baseline=!mutant&&!query;await frames();
+  };
   const enter=async(mutant='')=>{await fresh(mutant);await click('sb-enter');assert.equal(await E('!!__rts.sandbox()'),true,'ui: entry creates explicit sandbox');const w=await world();assert.equal(w.units.length,0,'ui: entry army empty');assert.equal(w.tick,0,'ui: entry battle time zero');assert.equal(w.ai,undefined,'ui: no AI');assert.equal(w.eco,undefined,'ui: no economy');assert.equal(w.sandbox.running,false,'ui: entry paused');};
-  const at=async(x,z)=>{await E(`__rts.focus(${x+.5},${z+.5},1.5)`);await frames();const p=await E(`__rts.screenOfCell(${x},${z})`);assert.equal(await E(`document.elementFromPoint(${p[0]},${p[1]})?.tagName`),'CANVAS','ui: cell is on canvas');if(mobile)await touchTap(page,...p);else{await page.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:p[0],y:p[1]});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:p[0],y:p[1]});}await frames();};
+  const at=async(x,z)=>{await E(`__rts.focus(${x+.5},${z+.5},1.5)`);await frames();const p=await E(`__rts.screenOfCell(${x},${z})`);assert.equal(await E(`document.elementFromPoint(${p[0]},${p[1]})?.tagName`),'CANVAS','ui: cell is on canvas');if(mobile)await tap(...p);else{await page.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:p[0],y:p[1]});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:p[0],y:p[1]});}await frames();};
   const layout=async()=>{
    const bad=await E(`(()=>{const els=[...document.querySelectorAll('#sandbox-panel button,#sandbox-panel,#sb-hint')];return els.map(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return {id:e.id,left:r.left,right:r.right,top:r.top,bottom:r.bottom,w:r.width,h:r.height,scroll:e.scrollWidth,client:e.clientWidth};}).filter(r=>r.left<0||r.right>innerWidth||r.top<0||r.bottom>innerHeight||r.scroll>r.client+1);})()`);
    assert.deepEqual(bad,[],'ui: controls fit viewport');
@@ -204,7 +223,7 @@ async function main(){
   await placement();await E('__rts.focus(25,26,1.3)');await frames();await image('mobile-placed');
   // 真實選取／移動仍走舊指令；暫停下令後沒有位置變動，開始後才動。
   await click('sb-command');await E('__rts.focus(24.5,26.5,1.5)');await frames();
-  const pos=await E('__rts.screenOf(1)');await touchTap(page,...pos);await frames();assert.deepEqual(await E('__rts.selected()'),[1],'ui: original unit selection');
+  const pos=await E('__rts.screenOf(1)');await tap(...pos);await frames();assert.deepEqual(await E('__rts.selected()'),[1],'ui: original unit selection');
   await at(23,26);const command=(await E('__rts.log()')).at(-1);assert.equal(command.cmd.t,'move','ui: original move command');
   const beforeRun=(await world()).units[0];await click('sb-run');await sleep(200);await click('sb-run');await frames();
   assert(await E('__rts.tick()')>0,'ui: native start advances combat');assert.equal(await E('__rts.paused()'),true,'ui: native pause');assert.notEqual((await world()).units[0].x,beforeRun.x,'ui: started movement occurs');await image('mobile-paused');
@@ -234,4 +253,4 @@ async function main(){
  });
 }
 try{await main();}catch(error){const msg=String(error?.stack??error);record('FAIL '+msg);if(/listen (?:EPERM|EACCES).*127\.0\.0\.1|socket\(\) failed: Operation not permitted|找不到 Chrome/.test(msg)&&!strictCI){console.error('NOT RUN R128 Chrome: local browser/socket unavailable; CI required.');process.exitCode=77;}else{console.error(error);process.exitCode=1;}}
-finally{fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots/r128-browser.txt'),summary.join('\n')+'\n');assert.equal(path.resolve(temp,'..'),path.resolve(os.tmpdir()),'cleanup: temporary directory stays inside OS temp');fs.rmSync(temp,{recursive:true,force:true});}
+finally{record('MEASURE sandbox fixtures '+JSON.stringify({mode:coldFixtures?'cold-reference':'native-return',...fixtureCost,elapsedMs:Date.now()-fixtureStarted}));fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots/r128-browser.txt'),summary.join('\n')+'\n');if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'\n### R129 sandbox browser\n'+summary.map(s=>'- '+s).join('\n')+'\n');assert.equal(path.resolve(temp,'..'),path.resolve(os.tmpdir()),'cleanup: temporary directory stays inside OS temp');fs.rmSync(temp,{recursive:true,force:true});}

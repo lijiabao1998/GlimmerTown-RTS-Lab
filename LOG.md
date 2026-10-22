@@ -4,7 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
-| R129 | 2026-10-22 | GPT | 沙盒開始／恢復首同步tick送入原有界音效佇列；同step放置回報實際接受／拒絕數與原因，不改World／容量 | 新Node6組／7負控、Chrome5負控及舊沙盒9負控；typecheck/build、smoke204秒綠，18本地圖；main lane與精確head CI依Draft Checks | gpt/sandbox-feedback-r129（首卡e79e57b先推） | 完整check910.7秒78/89首敗保留；兩VM fixture補齊後戰壕正負控通過、圍牆回原CRLF紅；音效CDP單項38.2秒通過，三逾時根因未定；Windows原八紅、Android／喇叭／真BFCache未測；僅Draft無Ready／合併／部署 |
+| R129 | 2026-10-22 | GPT | 沙盒開始／恢復首同步tick送入原有界音效佇列；同step放置回報實際接受／拒絕數與原因，不改World／容量；續修僅減少瀏覽器測試重複初始化 | 新Node6組／7負控、Chrome5＋舊9負控；typecheck/build、續修獨立smoke264.3秒綠，產品產物逐位不變；18圖；首CI39735125849雖89/89與smoke204.3秒綠，整體20分鐘cancelled；續修交錯舊120秒到時／新112.9秒完整／舊120秒到時，91斷言不變；新head CI依Draft Checks | Draft #64／gpt/sandbox-feedback-r129（首卡e79e57b先推） | 原完整check910.7秒78/89與各首敗保留；續修完整check1147.8秒80/89、27核心與golden／JSON／clone通過，原Windows八紅加沙盒子程序120秒超時；另一候選D超時未採用；Android／喇叭／真BFCache未測；交付即停止RTS，不開R130、不Ready／合併／部署 |
 | R128 | 2026-10-22 | GPT | 32×32沙盒：雙方坦克／榴彈砲，32輛上限，開始／暫停／重置／返回；指令步序凍結戰鬥 | Node6組／20負控、Chrome9負控，smoke250.9秒綠；四標準＋14功能圖 | [#63](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/63) | 本機8項Windows既有紅已對main；Android未測；僅Draft，無發布；大圖／畫質／載入動畫未做 |
 | R127 | 2026-10-21 | GPT | 我方HQ耐久／狀態與noR127；修長按釋放誤按HE定位，不改模擬 | CI39614371641 unit726.4秒／smoke185.7秒／lane綠；HQ Node22／Chrome11、定位3負控；四標準及21功能圖核對 | [#62](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/62) | 本機1797.5秒Chrome限制／既有3項紅保留；Android未測，收尾head與發布待核 |
 | R126 | 2026-10-21 | GPT | 原生產按鈕的補給差額／佇列滿／HQ失效回饋；原指令／R125保留，獨立noR126 | CI39587104101 unit659.6秒／smoke185.5秒／lane綠；Node31組／32負控、Chrome13負控、12圖審通過 | [#61](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/61) | 首輪README／錨點遺漏已修；本機Chrome限制及trenches-negative退出碼null保留；Android未測；main2e1a6b6 CI39599403644／Pages綠，公網713458bytes逐位一致 |
