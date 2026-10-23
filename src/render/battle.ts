@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
   N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
-  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
+  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
@@ -32,15 +32,15 @@ const MEN_CAP = 1600, BODY_CAP = 300;   // R021 小兵實例上限、倒下的�
 // R023 坦克的網格縮放（輕坦克小一號、重坦克大一號；中坦克原樣）
 const TANK_SCALE23: Record<number, number> = { [UK_LIGHT]: 0.8, [UK_HEAVY]: 1.18 };
 // R044 三種新車也畫進同一組車體、砲塔網格（不加繪製呼叫），只換各軸縮放與砲塔位置：
-// hull＝車體（長、高、寬）、top＝砲塔／戰鬥室（長、高、寬；砲管跟著長度伸縮）、fwd＝砲塔沿車頭前移（格）、casemate＝固定戰鬥室（平常朝車頭，停下來開火時才對準）
-// 裝甲車：長窄低、小砲塔；驅逐戰車：低車體、壓扁的戰鬥室、長砲管；突擊砲：寬低車體、寬扁戰鬥室、短粗砲管
+// hull＝車體（長、高、寬）、top＝砲塔／戰鬥室（長、高、寬；砲管跟著長度伸縮）、fwd＝砲塔沿車頭前移（格）、casemate＝固定戰鬥室（平常朝車頭，正在打時才對準）
+// 裝甲車：長、矮、窄，小砲塔；驅逐戰車：低車體、壓扁的戰鬥室、長砲管；突擊砲：寬低車體、寬扁戰鬥室、短粗砲管
 type Art44 = { hull: [number, number, number]; top: [number, number, number]; fwd: number; casemate: boolean };
 const ART44: Record<number, Art44> = {
-  [UK_ARMORED_CAR]: { hull: [0.86, 0.8, 0.66], top: [0.6, 0.75, 0.6], fwd: 0, casemate: false },
+  [UK_ARMORED_CAR]: { hull: [0.92, 0.56, 0.58], top: [0.5, 0.7, 0.5], fwd: 0, casemate: false },   // 比輕坦克（0.8／0.68／0.8）長、矮、窄
   [UK_DESTROYER]: { hull: [1.05, 0.72, 0.95], top: [1.45, 0.55, 1.2], fwd: 0.04, casemate: true },
   [UK_ASSAULT]: { hull: [1.0, 0.7, 1.15], top: [0.78, 0.62, 1.4], fwd: 0.07, casemate: true },
 };
-const CASEMATE_HOLD = 3;              // R044 戰鬥室開火後幾秒內還對著目標（之後轉回車頭）
+const CASEMATE_HOLD = 1;              // R044 戰鬥室開火後還對著目標的秒數＝裝填時間＋這麼多（兩發之間不轉回車頭）
 // 車的整體大小（裝甲弧、車轍間距用）；槍口離車中心多遠（槍口火光用）
 const vehSize = (kind: number) => ART44[kind] ? Math.max(ART44[kind].hull[0], ART44[kind].hull[2]) : TANK_SCALE23[kind] ?? 1;
 const muzzleL = (kind: number) => ART44[kind] ? 0.42 * ART44[kind].top[0] + ART44[kind].fwd : 0.44 * (TANK_SCALE23[kind] ?? 1);
@@ -926,9 +926,12 @@ export class BattleView {
 
 
   // ======== R044 固定戰鬥室 ========
-  // 停著、而且正在打（攻擊／射擊指令，或剛開過火）才對著目標；行進中、沒在打就朝車頭。模擬照舊瞄準，這裡只決定畫成什麼方向
+  // 正在打才對著目標：停著的攻擊／射擊指令，或一個裝填時間（＋CASEMATE_HOLD）內開過火——兩發之間不轉回車頭，下一發出膛時戰鬥室已經對準。
+  // （模擬只在冷卻歸零、目標進射程的那一步才開第一發，所以第一發跟一般砲塔一樣來不及轉。）邊走邊打的突擊砲照樣轉；要停下來才能開火的驅逐戰車在走就朝車頭。
+  // 模擬照舊瞄準，這裡只決定畫成什麼方向
   private engaged44(u: Unit, t: number): boolean {
-    return u.alive && u.pathIdx >= u.path.length && (u.order === ORD_ATTACK || u.order === ORD_FIRE_AT || t - this.fire44[u.id] < CASEMATE_HOLD);
+    const k = UNIT_KINDS[u.kind], still = u.pathIdx >= u.path.length;
+    return u.alive && (still || !k.setup) && ((still && (u.order === ORD_ATTACK || u.order === ORD_FIRE_AT)) || t - this.fire44[u.id] < k.reload / TICK_HZ + CASEMATE_HOLD);
   }
   private casemate44(u: Unit, aim: number, t: number): number {
     if (this.r8 && u.alive) return this.turretYaw[u.id];   // R008 開著：turn8 已經平滑轉向（目標或車頭）

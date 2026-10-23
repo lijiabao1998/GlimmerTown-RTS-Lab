@@ -160,6 +160,7 @@ const r024 = q.get('noR024') !== '1';   // R024 碉堡（關掉＝布陣列沒�
 const BUILD_KINDS_NOW = r024 ? BUILD_KINDS_24 : BUILD_KINDS;
 const r023 = q.get('noR023') !== '1';   // R023 輕坦克、重坦克（關掉＝eco 不帶 tanks：生產列沒有、電腦不出）
 const r044 = q.get('noR044') !== '1';   // R044 裝甲車、驅逐戰車、突擊砲（關掉＝eco 不帶 armor2：生產列沒有、電腦不出）
+document.body.classList.toggle('r044', r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
 const ecoCmd = (): Command => ({ t: 'eco', ...(r021 ? { inf: 1 } : {}), ...(r022 ? { guns: 1 } : {}), ...(r023 ? { tanks: 1 } : {}), ...(r044 ? { armor2: 1 } : {}) });
 let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));

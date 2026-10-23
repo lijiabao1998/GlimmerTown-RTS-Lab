@@ -84,11 +84,12 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
       // R023 坦克以 armored 算（輕、中、重一起）；有 tanks 時普通以上各保持一台輕、重坦克，其餘出中坦克
       const tankN = mine.filter(u => UNIT_KINDS[u.kind].armored).length + q.filter(k => UNIT_KINDS[k].armored).length;
       const tank23 = e.tanks && lv >= 2 ? (has(UK_LIGHT) < 1 ? UK_LIGHT : has(UK_HEAVY) < 1 ? UK_HEAVY : UK_TANK) : UK_TANK;
-      // R044 有 armor2 時普通以上：看到敵方裝甲先補一台驅逐戰車（最多兩台）；平常保持一台裝甲車偵察、一台突擊砲跟著坦克
+      // R044 有 armor2 時普通以上：榴彈砲之後，看過敵方裝甲補一台驅逐戰車、再保持一台裝甲車偵察（排在步兵前面時補給幾乎全拿去補驅逐戰車；
+      // 裝甲車放在坦克那一格時，坦克那一格一局只輪到一兩次，全被一直陣亡的裝甲車吃掉）；坦克那一格先保持一台突擊砲跟著坦克、看過敵方裝甲再補第二台驅逐戰車，其餘照 R023
       const a2 = !!e.armor2 && lv >= 2, armor44 = a2 && st.armor !== undefined && w.tick - st.armor <= ARMOR_MEMORY;
-      const tankPick = a2 && has(UK_ARMORED_CAR) < 1 ? UK_ARMORED_CAR : armor44 && has(UK_DESTROYER) < 2 ? UK_DESTROYER : a2 && has(UK_ASSAULT) < 1 ? UK_ASSAULT : tank23;
-      const want = has(UK_OBSERVER) < 1 ? UK_OBSERVER : guns && foeArmor && has(UK_ATGUN) < 1 ? UK_ATGUN : armor44 && has(UK_DESTROYER) < 1 ? UK_DESTROYER : e.inf && has(UK_INFANTRY) < (lv >= 2 ? 2 : 1) ? UK_INFANTRY
-        : has(UK_HOWITZER) < (lv >= 2 ? 2 : 1) && tankN >= 2 ? UK_HOWITZER : guns && has(UK_MORTAR) < 1 ? UK_MORTAR : guns && has(UK_ATGUN) < 1 ? UK_ATGUN : tankPick;
+      const tankPick = a2 && has(UK_ASSAULT) < 1 ? UK_ASSAULT : armor44 && has(UK_DESTROYER) < 2 ? UK_DESTROYER : tank23;
+      const want = has(UK_OBSERVER) < 1 ? UK_OBSERVER : guns && foeArmor && has(UK_ATGUN) < 1 ? UK_ATGUN : e.inf && has(UK_INFANTRY) < (lv >= 2 ? 2 : 1) ? UK_INFANTRY
+        : has(UK_HOWITZER) < (lv >= 2 ? 2 : 1) && tankN >= 2 ? UK_HOWITZER : armor44 && has(UK_DESTROYER) < 1 ? UK_DESTROYER : a2 && has(UK_ARMORED_CAR) < 1 ? UK_ARMORED_CAR : guns && has(UK_MORTAR) < 1 ? UK_MORTAR : guns && has(UK_ATGUN) < 1 ? UK_ATGUN : tankPick;
       if (e.supply[side] >= UNIT_KINDS[want].cost) out.push({ t: 'produce', side, kind: want });
     }
   }
@@ -106,8 +107,9 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
 
   // ---- 坦克 ----
   // 遊戲裡沒有維修，撤退等於放棄（第一版試過：受重傷的撤回老家就再也不出來，整局僵住），所以受傷的也一起打
-  // R044：突擊砲跟著坦克組；裝甲車（偵察）、驅逐戰車（要停下來才能開火）各有自己的行為，不算在組裡（沒有這兩種時就是原本的坦克組）
-  const fit = tanks.filter(u => u.kind !== UK_ARMORED_CAR && u.kind !== UK_DESTROYER);
+  // R044：突擊砲跟著坦克組；裝甲車（偵察）、驅逐戰車（要停下來才能開火）各有自己的行為，不算在組裡（沒有這兩種時就是原本的坦克組）。
+  // 組裡一台坦克、突擊砲都沒有時，裝甲車與驅逐戰車就當組往前推（不然只剩它們時整局僵住）
+  const line = tanks.filter(u => u.kind !== UK_ARMORED_CAR && u.kind !== UK_DESTROYER), fit = line.length ? line : tanks;
   if (fit.length) {
     if (seen.length) {
       // 普通以上集火：先打快死的（血量比例最低），再打離組重心最近的；簡單各打各的最近
@@ -188,27 +190,25 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
     else if (foeHq && order(a) === ORD_IDLE && dist(a.x, a.z, st.ox, st.oz) <= k.range) out.push({ t: 'fireAt', side, ids: [a.id], x: foeHq.x, z: foeHq.z });
   }
 
-  // ---- R044 驅逐戰車：先打射程內看得到的裝甲；沒有就跟到坦克組（沒有坦克就自己人）重心附近停著（停著才能開火、也會自己打射程內的東西） ----
-  for (const d of mine.filter(u => u.kind === UK_DESTROYER)) {
+  // ---- R044 驅逐戰車：先打射程內看得到的裝甲；沒有就跟到坦克組重心附近停著（停著才能開火、也會自己打射程內的東西）。
+  // 不轟指揮部（打建築弱，走過去的路上又停不下來打身邊的目標）；組裡沒有坦克、突擊砲時它在組裡，照組的規矩走 ----
+  for (const d of line.length ? mine.filter(u => u.kind === UK_DESTROYER) : []) {
     const k = UNIT_KINDS[d.kind], cur = order(d) === ORD_ATTACK ? w.units[d.target - 1] : null;
     if (cur?.alive && UNIT_KINDS[cur.kind].armored) continue;
     const ok = seen.filter(t => UNIT_KINDS[t.kind].armored && dist(d.x, d.z, t.x, t.z) <= k.range)
       .sort((p, q) => dist(d.x, d.z, p.x, p.z) - dist(d.x, d.z, q.x, q.z) || p.id - q.id);
     if (ok.length) { out.push({ t: 'attack', side, ids: [d.id], target: ok[0].id }); continue; }
     if (d.pathIdx < d.path.length) continue;
-    const ref = fit.length ? fit : mine.filter(u => u.kind !== UK_DESTROYER && u.kind !== UK_OBSERVER && u.kind !== UK_ARMORED_CAR);
-    if (!ref.length) continue;
-    const gx = Math.trunc(ref.reduce((s, u) => s + u.x, 0) / ref.length), gz = Math.trunc(ref.reduce((s, u) => s + u.z, 0) / ref.length);
+    const gx = Math.trunc(line.reduce((s, u) => s + u.x, 0) / line.length), gz = Math.trunc(line.reduce((s, u) => s + u.z, 0) / line.length);
     if (dist(d.x, d.z, gx, gz) > 3 * SUB) out.push({ t: 'move', side, ids: [d.id], x: cellOf(gx), z: cellOf(gz) });
-    else if (foeHq && order(d) === ORD_IDLE && dist(d.x, d.z, st.ox, st.oz) <= k.range) out.push({ t: 'fireAt', side, ids: [d.id], x: foeHq.x, z: foeHq.z });
   }
 
-  // ---- R044 裝甲車：在坦克組前面幾格偵察（視野遠，替坦克與砲兵找目標）；追打看得到的軟目標；敵方裝甲靠近就退回組的重心 ----
-  for (const c of mine.filter(u => u.kind === UK_ARMORED_CAR)) {
-    const k = UNIT_KINDS[c.kind], ref = fit.length ? fit : mine.filter(u => u.kind !== UK_ARMORED_CAR && u.kind !== UK_OBSERVER);
-    const gx = ref.length ? Math.trunc(ref.reduce((s, u) => s + u.x, 0) / ref.length) : c.x, gz = ref.length ? Math.trunc(ref.reduce((s, u) => s + u.z, 0) / ref.length) : c.z;
+  // ---- R044 裝甲車：在坦克組前面幾格偵察（視野遠，替坦克與砲兵找目標）；追打看得到的軟目標；敵方裝甲靠近就退回組的重心（組裡沒有坦克時它在組裡） ----
+  for (const c of line.length ? mine.filter(u => u.kind === UK_ARMORED_CAR) : []) {
+    const k = UNIT_KINDS[c.kind];
+    const gx = Math.trunc(line.reduce((s, u) => s + u.x, 0) / line.length), gz = Math.trunc(line.reduce((s, u) => s + u.z, 0) / line.length);
     if (seen.some(t => UNIT_KINDS[t.kind].armored && dist(c.x, c.z, t.x, t.z) <= UNIT_KINDS[t.kind].range + 2 * SUB)) {
-      if (ref.length && dist(c.x, c.z, gx, gz) > 2 * SUB) { const at = freeNear(w, cellOf(gx), cellOf(gz)); if (at) out.push({ t: 'move', side, ids: [c.id], x: at[0], z: at[1] }); }
+      if (dist(c.x, c.z, gx, gz) > 2 * SUB) { const at = freeNear(w, cellOf(gx), cellOf(gz)); if (at) out.push({ t: 'move', side, ids: [c.id], x: at[0], z: at[1] }); }
       continue;
     }
     if (order(c) === ORD_ATTACK && w.units[c.target - 1]?.alive) continue;

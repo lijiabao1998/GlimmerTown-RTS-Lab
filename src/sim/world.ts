@@ -93,7 +93,7 @@ export const UNIT_KINDS: UnitKind[] = [
   { name: 'heavy', hp: 160, speed: 13, range: 9 * SUB, minRange: 0, reload: 70, indirect: false, dmgUnit: 40, dmgBld: 30, splash: 0, sight: 9 * SUB, armor: 70, radius: 88, cost: 65, buildTicks: 480, garrison: false, armored: true, pierce: 100, men: 0, soft: 100, setup: false },
   // R044 只往後加（id 8–10）；倍數與理由見 docs/tasks/R044-更多坦克.md
   { name: 'armoredcar', hp: 55, speed: 32, range: 7 * SUB, minRange: 0, reload: 30, indirect: false, dmgUnit: 14, dmgBld: 6, splash: 0, sight: 13 * SUB, armor: 100, radius: 64, cost: 25, buildTicks: 160, garrison: false, armored: true, pierce: 35, men: 0, soft: 100, setup: false },
-  { name: 'destroyer', hp: 85, speed: 17, range: 12 * SUB, minRange: 0, reload: 75, indirect: false, dmgUnit: 58, dmgBld: 18, splash: 0, sight: 9 * SUB, armor: 100, radius: 80, cost: 50, buildTicks: 360, garrison: false, armored: true, pierce: 100, men: 0, soft: 55, setup: true, openTop: true },
+  { name: 'destroyer', hp: 85, speed: 17, range: 12 * SUB, minRange: 0, reload: 75, indirect: false, dmgUnit: 78, dmgBld: 18, splash: 0, sight: 12 * SUB, armor: 100, radius: 80, cost: 40, buildTicks: 360, garrison: false, armored: true, pierce: 100, men: 0, soft: 40, setup: true, openTop: true },
   { name: 'assault', hp: 130, speed: 14, range: 8 * SUB, minRange: 0, reload: 80, indirect: false, dmgUnit: 40, dmgBld: 60, splash: 0, sight: 8 * SUB, armor: 75, radius: 84, cost: 55, buildTicks: 420, garrison: false, armored: true, pierce: 75, men: 0, soft: 100, setup: false },
 ];
 
