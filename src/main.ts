@@ -24,6 +24,8 @@ import { Fling, Glide } from './ui/camera.ts';
 import { applyMap, MAP_RYE } from './sim/maps.ts';
 import { MAP_LARGE } from './sim/largeMap.ts';
 import { initMapPick, type MapPick } from './ui/mapPick.ts';
+import { startZombies } from './sim/zombies.ts';
+import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
 import { materialBuildDetail } from './ui/materials.ts';
 import { setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
 import { setStreets } from './render/battle.ts';
@@ -96,7 +98,7 @@ setStreets(q.get('noR027') !== '1');   // R027 人行道與燈火管制路緣；
 const r041 = q.get('noR041') !== '1';
 function startOrder() {
   // 開戰這一刻 eco／ai 指令還在佇列裡沒套用：看同一組開關（r019 指揮部、r018 電腦），不看世界
-  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, r019, r018 ? AI_NAME[aiLevel] : undefined));
+  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, r019, r018 ? AI_NAME[aiLevel] : undefined, !!w.zombies));
 }
 function startBanner() {
   const el = document.createElement('div');
@@ -163,6 +165,8 @@ const r043 = q.get('noR043') !== '1';
 let large = r043 && q.get('map') === '64';
 document.body.classList.toggle('r043', r043);   // 說明面板的大地圖那一句只在開著時出現（index.html 的 body.r043）
 let mapPick: MapPick | undefined;
+let zombiesPick: ZombiesPick | undefined;
+document.body.classList.toggle('r045', q.get('noR045') !== '1');
 const r024 = q.get('noR024') !== '1';   // R024 碉堡（關掉＝布陣列沒有碉堡、敵方布陣也不蓋）
 const BUILD_KINDS_NOW = r024 ? BUILD_KINDS_24 : BUILD_KINDS;
 const r023 = q.get('noR023') !== '1';   // R023 輕坦克、重坦克（關掉＝eco 不帶 tanks：生產列沒有、電腦不出）
@@ -181,6 +185,8 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || larg
   // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
   const mapId = map ? (large ? MAP_LARGE : MAP_RYE) : 0;
   if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
+  const zombies = !sandbox && (map || vegetation) && q.get('noR045') !== '1' && q.get('mode') === 'zombies';
+  if (zombies) startZombies(w);
   view?.dispose();
   view = new BattleView(w, fxOn, !w.sandbox && q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
   view.multiRangeEnabled = q.get('noR122') !== '1';
@@ -191,15 +197,16 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || larg
   battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
   if (sandbox) paused = true;
   if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}) });
+  if (zombies) issue({ t: 'zombies' });
   if (build) { paused = true; refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(ecoCmd());
-    if (ai) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
+    if (ai && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   }
   ui();
   syncBattleAudio();
 }
-function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); mapPick?.update(); }
+function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); mapPick?.update(); zombiesPick?.update(); }
 
 function sandboxAction(cmd: SandboxCommand) {
   if (!w.sandbox || audioHelpActive) return;
@@ -229,11 +236,11 @@ function sandboxPlaceAt(cx: number, cy: number) {
 // 開戰：我方布陣＋敵方布陣都寫進指令紀錄（第 0 步），馬上走第一步讓房子落地（中間不畫任何一幀，不會閃）
 function startBattle() {
   if (phase !== 'build') return;
-  const pv = previewWorld(), enemy = enemyPlan(pv, BUILD_KINDS_NOW);
+  const pv = previewWorld(), enemy = w.zombies ? [] : enemyPlan(pv, BUILD_KINDS_NOW);
   for (const c of plan) issue(c);
   for (const c of enemy) issue(c);
   if (r019) issue(ecoCmd());
-  if (r018) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
+  if (r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   phase = 'battle'; plan = []; buildHint = '';
   if (r016) { if (r041) startOrder(); else startBanner(); }
   view.setWorld(w, -1);
@@ -493,6 +500,7 @@ hud = initHud({
       tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: r010,
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : battleHint,
       mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
+      mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
@@ -571,6 +579,10 @@ if (r128) sandboxBar = initSandbox({
 if (r043) mapPick = initMapPick({
   state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: r026 }),
   toggle: () => { large = !large; reset(); },
+});
+if (q.get('noR045') !== '1') zombiesPick = initZombiesPick({
+  state: () => ({ show: phase === 'build' && !w.sandbox, active: !!w.zombies }),
+  toggle: () => { if (w.zombies) q.delete('mode'); else q.set('mode', 'zombies'); reset(); },
 });
 
 // ---- 迴圈 ----

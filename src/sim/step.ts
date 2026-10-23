@@ -12,14 +12,16 @@ import { applyMap } from './maps.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import { applySandbox, type SandboxCommand } from './sandbox.ts';
+import { startZombies, zombiesStep, finishZombiesStep, zombieAim } from './zombies.ts';
 import {
   SUB, HALF, cellIdx, inGrid, gridLimit, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
-  UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SIDE_PLAYER, SIDE_ENEMY,
+  UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, UK_ZOMBIE, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SHELL_MELEE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building, type Shell,
 } from './world.ts';
 
 export type Command =
   | SandboxCommand
+  | { t: 'zombies' }
   | { t: 'move'; side: number; ids: number[]; x: number; z: number }
   | { t: 'attack'; side: number; ids: number[]; target: number }
   | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number; ammo?: 'smoke' }
@@ -45,6 +47,8 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 export function applyCommand(w: World, cmd: Command): void {
   if (cmd.t === 'sandboxPlace' || cmd.t === 'sandboxRun' || cmd.t === 'sandboxReset') { applySandbox(w, cmd); return; }
   if (w.sandbox && cmd.t !== 'move' && cmd.t !== 'attack' && cmd.t !== 'fireAt' && cmd.t !== 'stop') return;
+  if (cmd.t === 'zombies') return; // 地圖後、eco 前在 step() 開頭套。
+  if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map') return;   // 布陣、地圖（R026）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
   if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0); return; }
@@ -278,7 +282,27 @@ function syncRanging(w: World, u: Unit, aim: { x: number; z: number; unit: Unit 
   }
 }
 
+function zombieVision(w: World, u: Unit, target: Unit): boolean {
+  if (dist(u.x, u.z, target.x, target.z) > UNIT_KINDS[UK_ZOMBIE].sight || !spotted(w, SIDE_PLAYER, u.x, u.z) || smokeBlocks(w, u.x, u.z, target.x, target.z)) return false;
+  const ray = lineCells(cellOf(u.x), cellOf(u.z), cellOf(target.x), cellOf(target.z), w.n);
+  if (w.vegetation && vegetationBlocks(w, ray)) return false;
+  const block = firstBlockCells(w, ray);
+  return block < 0 || block === cellIdx(w, cellOf(target.x), cellOf(target.z));
+}
+
 function fireUnit(w: World, u: Unit): void {
+  if (u.kind === UK_ZOMBIE) {
+    if (u.cooldown > 0) u.cooldown--;
+    const aim = zombieAim(w, u, (a, b) => zombieVision(w, a, b));
+    if (!aim || u.cooldown > 0) return;
+    u.cooldown = UNIT_KINDS[UK_ZOMBIE].reload; u.aimX = aim.x - u.x; u.aimZ = aim.z - u.z;
+    w.events.push({ e: 'fire', unit: u.id, x: u.x, z: u.z });
+    if (aim.unit) damageUnit(w, aim.unit, pierced(UNIT_KINDS[UK_ZOMBIE], aim.unit, UNIT_KINDS[UK_ZOMBIE].dmgUnit));
+    else if (aim.bld && aim.wire) { aim.bld.hp = Math.max(0, aim.bld.hp - UNIT_KINDS[UK_ZOMBIE].dmgBld); w.events.push({ e: 'wire' }); }
+    else if (aim.bld) damageBld(w, aim.bld, UNIT_KINDS[UK_ZOMBIE].dmgBld);
+    w.events.push({ e: 'impact', kind: SHELL_MELEE, x: aim.x, z: aim.z, bld: aim.bld?.id ?? 0 });
+    return;
+  }
   if (UNIT_KINDS[u.kind].range === 0) return;   // 觀測員沒有武裝
   if (u.cooldown > 0) u.cooldown--;
   const k = UNIT_KINDS[u.kind];
@@ -395,6 +419,11 @@ function updateShells(w: World): void {
 }
 
 function checkWinner(w: World): void {
+  if (w.zombies) {
+    const hq = w.eco?.hq[SIDE_PLAYER] ?? 0;
+    if (w.winner < 0 && (hq ? !hqAlive(w, SIDE_PLAYER) : !w.units.some(u => u.alive && u.side === SIDE_PLAYER))) w.winner = SIDE_ENEMY;
+    return; // 沒有喪屍不算贏；指揮部失守立即結束。
+  }
   if (w.winner >= 0 || w.shells.some(s => s.kind !== SHELL_SMOKE)) return; // 只等可能改變結局的砲彈；無傷害煙幕不拖延戰報
   if (w.eco) {   // R019：有指揮部時，指揮部塌了才輸（全軍覆沒但指揮部還在可以再出兵）
     const a = !!hqAlive(w, SIDE_PLAYER), b = !!hqAlive(w, SIDE_ENEMY);
@@ -414,10 +443,13 @@ export function step(w: World, cmds: Command[]): void {
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {
   for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 ? c.vegetation : undefined);   // R026：地圖最先套（R043 id 2＝大地圖）
+  for (const c of cmds) if (c.t === 'zombies') startZombies(w);
+  if (w.zombies) cmds = cmds.filter(c => !('side' in c) || c.side === SIDE_PLAYER); // 布陣也走同一個敵方命令禁令。
   for (const c of cmds) { if (c.t === 'build') applyBuild(w, c); else if (c.t === 'trench') applyTrench(w, c); }   // R118：布陣保留相對順序，全部先於移動與 HQ
   for (const c of cmds) if (c.t !== 'build' && c.t !== 'trench' && c.t !== 'map') applyCommand(w, c);
   }
   ecoStep(w);   // R019：補給與生產（電腦想之前，剛出生的單位這一步就能被指揮）
+  if (w.zombies) zombiesStep(w, (a, b) => zombieVision(w, a, b));
   // R018：電腦在玩家指令之後、單位移動之前想（每隔 AI_THINK 步想一次），下的指令跟玩家的一樣套用
   if (w.ai) for (const st of w.ai) if (w.tick >= st.next) {
     for (const c of aiThink(w, st, spotted)) applyCommand(w, c);
@@ -427,6 +459,7 @@ export function step(w: World, cmds: Command[]): void {
   separate(w);
   for (const u of w.units) if (u.alive) fireUnit(w, u);
   updateShells(w);
+  if (w.zombies) finishZombiesStep(w);
   if (!w.sandbox) checkWinner(w);
   w.tick++;
   advanceSmoke(w);

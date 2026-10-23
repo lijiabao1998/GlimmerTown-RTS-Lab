@@ -18,6 +18,13 @@
     #sb-enter:not([hidden]) ~ #map-pick { left: calc(max(8px, env(safe-area-inset-left)) + 92px); }
     #map-pick[aria-pressed="true"] { border-color: #b9a46a; }
     #map-pick[hidden] { display: none; }
+    #zombies-pick { position: fixed; z-index: 6; left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 58px); box-sizing: border-box; min-width: 44px; min-height: 44px; padding: 6px 10px; border: 1px solid #6c745f; border-radius: 5px; background: #3c4535; color: #f3eedf; font: inherit; cursor: pointer; touch-action: manipulation; }
+    #sb-enter:not([hidden]) ~ #zombies-pick { left: calc(max(8px, env(safe-area-inset-left)) + 92px); }
+    #map-pick:not([hidden]) ~ #zombies-pick { left: calc(max(8px, env(safe-area-inset-left)) + 232px); }
+    #zombies-pick[aria-pressed="true"] { border-color: #b9a46a; }
+    #zombies-pick[hidden] { display: none; }
+    @media (max-width: 640px) { #zombies-pick { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } body:has(#zombies-pick:not([hidden])) #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 156px); } }
+    #help li.r045 { display: none; } body.r045 #help li.r045 { display: list-item; }
     #sb-hint { font-size: 13px; overflow-wrap: anywhere; }
     @media (max-width: 640px) { #sb-enter, #map-pick { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
     @media (max-width: 411px) { #hud.cover-durability ~ #sb-enter, #hud.cover-durability ~ #map-pick { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
