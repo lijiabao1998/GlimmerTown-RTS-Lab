@@ -66,7 +66,7 @@ export class BattleView {
   scene = new THREE.Scene();
   cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   pipe = new Pipeline();
-  target = new THREE.Vector3();   // 建構時照世界大小放到 0.62 處
+  target = new THREE.Vector3();   // 建構與換大小時照世界大小放到 0.62 處（sizeTo）
   zoom = 1;
   fxOn: boolean;
 
@@ -206,7 +206,6 @@ export class BattleView {
     // 地面：一張四邊形＋每格 8×8 的資料貼圖（彈坑、瓦礫地直接畫進貼圖，不加繪製呼叫）
     const ground = this.ground = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial());
     ground.receiveShadow = true;
-    this.target.set(w.n * 0.62, 0, w.n * 0.62);
     this.sizeTo(w.n);
     for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
     this.groundTex.needsUpdate = true;
@@ -291,7 +290,7 @@ export class BattleView {
     this.visStamp = new Int32Array(n * n); this.visVal = new Uint8Array(n * n);
     this.tracks = new Uint8Array(W * W); this.trackLast.fill(-1);
     this.dirtyStamp = new Int32Array(n * n); this.dirtyList = new Int32Array(n * n); this.dirtyN = 0;
-    this.target.x = Math.min(n, this.target.x); this.target.z = Math.min(n, this.target.z);
+    this.target.set(n * 0.62, 0, n * 0.62);   // 預設鏡頭：換了大小，舊位置在新地圖上沒有意義，回到我方那一側
     // 太陽（左上方）與陰影相機蓋住整張地圖
     const sun = this.sun, sc = sun.shadow.camera as THREE.OrthographicCamera;
     sun.position.set(n / 2 - 0.35 * n, 1.25 * n, n / 2 + 1.0 * n);
