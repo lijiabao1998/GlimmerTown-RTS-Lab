@@ -60,7 +60,7 @@ group('activation', () => {
     const w = createWorld(1944); applyMap(w, map, value); assert.equal(w.vegetation, undefined, 'activation: only numeric one enables');
     const command = createWorld(1944); step(command, [{ t: 'map', id: map, vegetation: value }]); assert.equal(command.vegetation, undefined, 'activation: command validates exact optional value');
   }
-  for (const id of [-1, 2, 1.5, NaN, '1', null]) {
+  for (const id of [-1, 3, 1.5, NaN, '1', null]) {
     const w = createWorld(1944); applyMap(w, id, 1); assert.equal(w.vegetation, undefined, 'activation: helper rejects invalid map id');
     step(w, [{ t: 'map', id, vegetation: 1 }]); assert.equal(w.vegetation, undefined, 'activation: command cannot coerce invalid id into enabled terrain');
   }

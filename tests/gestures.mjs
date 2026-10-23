@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { stripTypeScriptTypes } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +27,7 @@ const mutations = {
   geometry: { group: 'geometry', file: 'main', from: 'hud?.update(); prodBar?.update();\n    if (target) commandMenu?.open', to: 'hud?.update();\n    if (target) commandMenu?.open' },
   dispatch: { group: 'dispatch', file: 'main', from: 'if (gestures?.up(e))', to: 'if (false && gestures?.up(e))' },
   capture: { group: 'lifecycle', file: 'main', from: 'if (r109 && pointers.has(e.pointerId)) clearGestureInput();', to: 'if (r109) clearGestureInput();' },
-  reset: { group: 'reset', file: 'main', from: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true, sandbox = false) {\n  if (r109) clearGestureInput();", to: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true, sandbox = false) {" },
+  reset: { group: 'reset', file: 'main', from: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {\n  if (r109) clearGestureInput();", to: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {" },
   valve: { group: 'valve', file: 'main', from: 'const gestures = r109 ? new Gestures', to: 'const gestures = true ? new Gestures' },
 };
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
@@ -59,6 +60,7 @@ function mainFixture(enabled = true) {
     pan: (x, y) => { pans.push([x, y]); view.target.x += x / 10; view.target.z += y / 10; }, zoomAt: (...a) => zooms.push(a), zoomBy: (...a) => zooms.push(a), setMarker() {}, dispose() {}, setWorld() {},
   };
   const c = vm.createContext({
+    MAP_LARGE, large: false, // This fixture exercises the existing small-map controller.
     r109: enabled, r012: true, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
     commandMenu: undefined, battleHint: undefined, document: { createElement: () => ({ id: '', hidden: false, style: {} }), body: { appendChild: el => elements.push(el) }, addEventListener: (t, f) => docEvents.set(t, f) },
     addEventListener: (t, f) => globalEvents.set(t, f), canvas, performance: { now: clock.now },

@@ -22,6 +22,8 @@ import { initCommandMenu, bombardCommand, bombardTarget, type CommandMenu } from
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
 import { applyMap, MAP_RYE } from './sim/maps.ts';
+import { MAP_LARGE } from './sim/largeMap.ts';
+import { initMapPick, type MapPick } from './ui/mapPick.ts';
 import { materialBuildDetail } from './ui/materials.ts';
 import { setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
 import { setStreets } from './render/battle.ts';
@@ -156,6 +158,11 @@ const r019 = q.get('noR019') !== '1';
 const r021 = q.get('noR021') !== '1';
 const r022 = q.get('noR022') !== '1';   // R022 反戰車砲、迫擊砲（關掉＝eco 不帶 guns：生產列沒有、電腦不出）
 const r026 = q.get('noR026') !== '1';   // R026 Rye 1940 手排地圖（關掉＝亂數村莊）
+// R043 大地圖：布陣時左上「地圖」鍵在萊伊 32×32 與鄉間 64×64 之間換；?map=64 直接開。逃生閥 ?noR043=1＝沒有這顆鍵、不認 ?map=64
+const r043 = q.get('noR043') !== '1';
+let large = r043 && q.get('map') === '64';
+document.body.classList.toggle('r043', r043);   // 說明面板的大地圖那一句只在開著時出現（index.html 的 body.r043）
+let mapPick: MapPick | undefined;
 const r024 = q.get('noR024') !== '1';   // R024 碉堡（關掉＝布陣列沒有碉堡、敵方布陣也不蓋）
 const BUILD_KINDS_NOW = r024 ? BUILD_KINDS_24 : BUILD_KINDS;
 const r023 = q.get('noR023') !== '1';   // R023 輕坦克、重坦克（關掉＝eco 不帶 tanks：生產列沒有、電腦不出）
@@ -166,21 +173,24 @@ let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true, sandbox = false) {
+function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {
   if (r109) clearGestureInput();
   battleAudio?.reset();
   w = sandbox ? createSandboxWorld(s) : createWorld(s);
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
-  if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
+  // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
+  const mapId = map ? (large ? MAP_LARGE : MAP_RYE) : 0;
+  if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
   view?.dispose();
   view = new BattleView(w, fxOn, !w.sandbox && q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
   view.multiRangeEnabled = q.get('noR122') !== '1';
+  if (w.map === MAP_LARGE) view.target.set(55, 0, 55);   // R043：大地圖開局鏡頭對準我方裝甲連（右下角落）
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
   if (sandbox) paused = true;
-  if (map || vegetation) issue({ t: 'map', id: map ? MAP_RYE : 0, ...(vegetation ? { vegetation: 1 } : {}) });
+  if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}) });
   if (build) { paused = true; refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(ecoCmd());
@@ -189,7 +199,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegeta
   ui();
   syncBattleAudio();
 }
-function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); }
+function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); mapPick?.update(); }
 
 function sandboxAction(cmd: SandboxCommand) {
   if (!w.sandbox || audioHelpActive) return;
@@ -558,6 +568,10 @@ if (r128) sandboxBar = initSandbox({
   pick: kind => { clearGestureInput(); sandboxTool = kind; sandboxHint = ''; selected.clear(); fireMode = false; ammo = 'he'; ui(); },
   side: side => { sandboxSide = side; sandboxHint = ''; },
 });
+if (r043) mapPick = initMapPick({
+  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: r026 }),
+  toggle: () => { large = !large; reset(); },
+});
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
@@ -655,6 +669,7 @@ const rts = {
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0, armor2: w.eco.armor2 ?? 0 } : null),
   men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n }),
   map: () => w.map ?? 0,
+  mapSize: () => w.n,   // R043：地圖邊長（萊伊 32、鄉間大地圖 64）
   vegetation: () => ({ version: w.vegetation?.version ?? 0, cells: w.vegetation ? [...w.vegetation.cells] : [],
     shown: !!view.vegetation116.mesh, count: view.vegetation116.cells, triangles: view.vegetation116.triangles, builds: view.vegetation116.builds }),
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),

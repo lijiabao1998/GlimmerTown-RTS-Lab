@@ -23,7 +23,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451, loader: 9471, loaderDesk: 9491, loaderFail: 9511, noR040: 9531, noR041: 9551, armor2: 9701, armor2Desk: 9721, noR044: 9741 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451, loader: 9471, loaderDesk: 9491, loaderFail: 9511, noR040: 9531, noR041: 9551, armor2: 9701, armor2Desk: 9721, noR044: 9741, large: 9761, largeDesk: 9781, noR043: 9801 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -868,6 +868,68 @@ await withBrowser({ width: 1280, height: 800, port: PORTS.streets + 2 }, async (
   log(page.errors.length === 0, '人行道特寫（桌機）零頁面錯誤', page.errors.join(' | '));
 });
 
+// ---- R043 大地圖 64×64：?map=64 手機開局預算；地圖鍵（真觸控）換到萊伊再換回來、不擋沙盒鍵與小地圖；開戰命令條寫大地圖；
+// 開戰 30 秒特寫（手機、桌機）預算與瀏覽器＝Node 重播；市鎮特寫與拉到最遠的全景樣張；?noR043=1 沒有鍵、不認 ?map=64 ----
+{
+  const rectOf = (page, sel) => page.evaluate(`(() => { const e = document.querySelector('${sel}'); if (!e || e.hidden) return null; const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; })()`);
+  const overlap = (a, b) => !!a && !!b && a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const battle30 = async (page, name) => {
+    const t = await page.evaluate('__rts.stepN(600)'), lg = await page.evaluate('__rts.log()'), hb = await page.evaluate('__rts.hash()');
+    const hn = hashWorld(runLog(createWorld(await page.evaluate('__rts.seed()')), lg, t));
+    await page.evaluate('__rts.focus(31, 31, 1.3); 0'); await sleep(500);
+    const info = await page.evaluate('__rts.info()');
+    await shot(page, path.join(SHOTS, `r043-${name}-town.png`));
+    log(info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles && hb === hn && page.errors.length === 0, `R043 大地圖開戰 30 秒、市鎮特寫（${name === 'phone' ? '手機' : '桌機'}）：繪製呼叫 ≤ 22、三角形 ≤ 80,000；瀏覽器雜湊＝Node 重播；零頁面錯誤`,
+      `第 ${t} 步；${JSON.stringify({ calls: info.calls, triangles: info.triangles, townTris: info.townTris })}；${hb} / ${hn}`);
+  };
+  await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.large }, async ({ open, page }) => {
+    await open('map=64');
+    const info = await page.evaluate('__rts.info()'), m0 = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()')];
+    const pick = await rectOf(page, '#map-pick'), sb = await rectOf(page, '#sb-enter'), mini = await rectOf(page, '#minimap'), label0 = await page.evaluate("document.getElementById('map-pick').textContent");
+    await shot(page, path.join(SHOTS, 'r043-phone-start.png'));
+    log(m0.join() === '2,64' && info.calls <= BUDGET.calls && info.triangles <= BUDGET.triangles && label0 === '地圖：鄉間大圖', 'R043 ?map=64 手機開局：64×64 鄉間、繪製呼叫 ≤ 20、三角形 ≤ 80,000；地圖鍵寫「鄉間大圖」',
+      `地圖 ${m0}；${JSON.stringify({ calls: info.calls, triangles: info.triangles, townTris: info.townTris })}；鍵「${label0}」`);
+    // 真觸控：按地圖鍵 → 萊伊 32×32 的布陣第 0 步；再按一次回到大地圖
+    const tapPick = async () => { const r = await rectOf(page, '#map-pick'); await touchTap(page, (r[0] + r[2]) / 2, (r[1] + r[3]) / 2); await sleep(300); };
+    await tapPick();
+    const m1 = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()'), await page.evaluate('__rts.tick()')], label1 = await page.evaluate("document.getElementById('map-pick').textContent");
+    await tapPick();
+    const m2 = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()'), await page.evaluate('__rts.tick()')];
+    log(!!pick && pick[2] - pick[0] >= 44 && pick[3] - pick[1] >= 44 && !overlap(pick, sb) && !overlap(pick, mini) && m1.join() === '1,32,0' && label1 === '地圖：萊伊' && m2.join() === '2,64,0',
+      'R043 真觸控按「地圖」鍵：換到萊伊 32×32（布陣第 0 步），再按回到鄉間 64×64；鍵 ≥ 44 像素、不擋沙盒鍵與小地圖',
+      `鍵 ${pick?.map(v => v.toFixed(0))}、沙盒鍵 ${sb?.map(v => v.toFixed(0))}、小地圖 ${mini?.map(v => v.toFixed(0))}；換一次 ${m1}「${label1}」、換回 ${m2}`);
+    await page.evaluate('__rts.startBattle(); __rts.pause(true); 0');
+    const order = await page.evaluate("document.querySelector('#start-order .so-place')?.textContent ?? ''"), hidden = await page.evaluate("document.getElementById('map-pick').hidden");
+    log(order.includes('英格蘭東南鄉間（64×64）') && hidden, 'R043 開戰：命令條寫「英格蘭東南鄉間（64×64）」；開戰後地圖鍵收起', `命令條「${order}」；鍵收起 ${hidden}`);
+    await battle30(page, 'phone');
+  });
+  await withBrowser({ width: 1280, height: 800, port: PORTS.largeDesk }, async ({ open, page }) => {
+    await open('map=64');
+    await shot(page, path.join(SHOTS, 'r043-desktop-start.png'));
+    await page.evaluate('__rts.startBattle(); __rts.pause(true); 0');
+    await battle30(page, 'desktop');
+    await page.evaluate('__rts.focus(32, 32, 0.55); 0'); await sleep(500);
+    await shot(page, path.join(SHOTS, 'r043-desktop-whole.png'));
+  });
+  await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR043 }, async ({ open, page }) => {
+    await open('noR043=1&map=64');
+    const m = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()')], btn = await page.evaluate("!!document.getElementById('map-pick')");
+    const help = await page.evaluate("(() => { const li = document.querySelector('#help li.r043'); return li ? getComputedStyle(li).display : ''; })()"), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+    log(m.join() === '1,32' && !btn && help === 'none' && h === nodeHash && page.errors.length === 0, '?noR043=1：沒有地圖鍵、?map=64 不生效（仍是萊伊 32×32）、說明沒有大地圖那一句、腳本雜湊不變、零頁面錯誤',
+      `地圖 ${m}；鍵 ${btn}；說明那一句 ${help}；${h}`);
+    await open('noR026=1&map=64');
+    const large = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()')];
+    const pick = await rectOf(page, '#map-pick'), x = (pick[0] + pick[2]) / 2, y = (pick[1] + pick[3]) / 2;
+    await touchTap(page, x, y);
+    const small = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()')];
+    const label = await page.evaluate("document.getElementById('map-pick').textContent");
+    await touchTap(page, x, y);
+    const again = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()')];
+    const script = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+    log(large.join() === '2,64' && small.join() === '0,32' && label === '地圖：村莊' && again.join() === '2,64' && script === nodeHash && page.errors.length === 0,
+      'R043 ?noR026=1：網址仍開大圖、真觸控切回村莊再回大圖、腳本重播不受選圖影響', `${large} → ${small}（${label}）→ ${again}；${script}`);
+  });
+}
 // ---- R040 載入畫面：拿掉 module 腳本的頁面＝停在載入畫面（特寫兩張）；module 腳本丟錯＝寫出「載入失敗」；
 //      正常打開時「準備好了」那一刻已經沒有載入畫面；?noR040=1 沒有載入畫面、雜湊不變 ----
 {

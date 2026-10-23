@@ -19,7 +19,7 @@ const mutants=[
   ['free_trench','budget_order','trenches.ts',"  if (pointsUsed(w, cmd.side) + k.cost > BUILD_POINTS) return 'points';",'','budget_order: buildings consume trench budget'],
   ['free_build','budget_order','build.ts','  return p + trenchPointsUsed(w, side);','  return p;','budget_order: shared total includes buildings and trenches'],
   ['reorder_commands','budget_order','step.ts',"for (const c of cmds) { if (c.t === 'build') applyBuild(w, c); else if (c.t === 'trench') applyTrench(w, c); }","for (const c of cmds) if (c.t === 'build') applyBuild(w, c); for (const c of cmds) if (c.t === 'trench') applyTrench(w, c);",'budget_order: earlier trench wins mixed overlap'],
-  ['map_order','budget_order','step.ts',"  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 ? c.vegetation : undefined);",'','budget_order: maps precede mixed construction regardless of log order'],
+  ['map_order','budget_order','step.ts',"  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 ? c.vegetation : undefined);",'','budget_order: maps precede mixed construction regardless of log order'],
   ['building_overlap','budget_order','build.ts',"w.occ[cellIdx(w, x, z)] || trenchAt(w, x, z)","w.occ[cellIdx(w, x, z)]",'budget_order: later building cannot cover trench'],
   ['hq_overlap','maps_hq','eco.ts',' || trenchAt(w, cx, cz)','','maps_hq: headquarters never cover paid trench cells'],
   ['map_overwrite','maps_hq','maps.ts','  if (w.trenches?.segments.length && (w.map ?? 0) !== id) return;','','maps_hq: changing base map after successful trench is an atomic rejection'],
@@ -38,7 +38,7 @@ try{
     const path=join(dir,'src/sim',file),source=readFileSync(path,'utf8');assert.equal(source.split(from).length,2,`${name}: unique mutation anchor`);writeFileSync(path,source.replace(from,to));
     const r=spawnSync(process.execPath,[join(dir,'tests/trenches.mjs'),group],{encoding:'utf8',timeout:120000}),output=`${r.stdout}\n${r.stderr}`;
     assert.equal(r.error,undefined,`${name}: child starts and completes`);assert.equal(r.signal,null,`${name}: no timeout or signal`);assert.notEqual(r.status,0,`${name}: mutation must fail`);
-    const first=/AssertionError \[ERR_ASSERTION\]: ([^\n]+)/.exec(output)?.[1];assert.equal(first,wanted,`${name}: intended assertion must fail first, got ${output.slice(-2000)}`);console.log(`OK trenches-negative/${name}: ${first}`);
+    const first=/AssertionError \[ERR_ASSERTION\]: ([^\r\n]+)/.exec(output)?.[1];assert.equal(first,wanted,`${name}: intended assertion must fail first, got ${output.slice(-2000)}`);console.log(`OK trenches-negative/${name}: ${first}`);
   }
 }finally{rmSync(temp,{recursive:true,force:true});}
 console.log(`trenches-negative: ${mutants.length} isolated semantic mutants rejected`);
