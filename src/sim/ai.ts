@@ -4,7 +4,7 @@ import { dist } from './math.ts';
 import { hqAlive } from './eco.ts';
 import { armorPct, ARMOR_FRONT } from './armor.ts';
 import {
-  N, SUB, center, cellOf, inMap, idx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY,
+  SUB, center, cellOf, inGrid, cellIdx, blocks, bldAt, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY,
   UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, ORD_IDLE, ORD_ATTACK, SIDE_PLAYER, type World, type Unit, type AiState,
 } from './world.ts';
 
@@ -24,7 +24,7 @@ const ARMOR_MEMORY = 1200;                          // R044 看到敵方裝甲�
 export function setAi(w: World, side: number, level: number): void {
   if ((side !== 0 && side !== 1) || !(level >= 1 && level <= 3) || (level | 0) !== level) return;
   if (!w.ai) w.ai = [];
-  const corner = side === SIDE_PLAYER ? 5 : 26;     // 對方的出生角落（開局就知道的地圖情報）
+  const corner = side === SIDE_PLAYER ? 5 : w.n - 6;     // 對方的出生角落（開局就知道的地圖情報；32×32 是 26）
   const old = w.ai.find(a => a.side === side);
   if (old) { old.level = level; return; }
   w.ai.push({ side, level, next: w.tick, ox: center(corner), oz: center(corner), seen: 0, wp: 0 });
@@ -46,7 +46,7 @@ function freeNear(w: World, x: number, z: number): [number, number] | null {
   for (let r = 0; r <= 2; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
     const cx = x + dx, cz = z + dz;
-    if (inMap(cx, cz) && !blocks(w, cx, cz)) return [cx, cz];
+    if (inGrid(w, cx, cz) && !blocks(w, cx, cz)) return [cx, cz];
   }
   return null;
 }
@@ -58,7 +58,7 @@ function turnStep(w: World, u: Unit, t: Unit): [number, number] | null {
   if (dist(u.x, u.z, t.x, t.z) > UNIT_KINDS[u.kind].range || armorPct(u, t.x, t.z) <= ARMOR_FRONT) return null;
   const cx = cellOf(u.x), cz = cellOf(u.z), sx = Math.sign(cellOf(t.x) - cx), sz = Math.sign(cellOf(t.z) - cz);
   const x = cx + sx, z = cz + sz;
-  if ((!sx && !sz) || !inMap(x, z) || blocks(w, x, z)) return null;
+  if ((!sx && !sz) || !inGrid(w, x, z) || blocks(w, x, z)) return null;
   return [x, z];
 }
 
@@ -98,7 +98,7 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
   if (!seen.length && ref0.length) {
     const cx = Math.trunc(ref0.reduce((s, u) => s + u.x, 0) / ref0.length), cz = Math.trunc(ref0.reduce((s, u) => s + u.z, 0) / ref0.length);
     if (!foeHq && dist(cx, cz, st.ox, st.oz) < 3 * SUB) {
-      const far = side === SIDE_PLAYER ? 5 : 26, near = 31 - far, pts = [[far, far], [16, 16], [far, near], [near, far]];
+      const far = side === SIDE_PLAYER ? 5 : w.n - 6, near = w.n - 1 - far, mid = w.n >> 1, pts = [[far, far], [mid, mid], [far, near], [near, far]];   // 32×32：26、31−far、16
       st.wp = (st.wp + 1) % pts.length; st.ox = center(pts[st.wp][0]); st.oz = center(pts[st.wp][1]);
     }
   }
@@ -144,11 +144,12 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
       let best = -1, bestScore = 0;
       for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
         const x = tx + dx, z = tz + dz;
-        if (!inMap(x, z) || blocks(w, x, z)) continue;
+        if (!inGrid(w, x, z) || blocks(w, x, z)) continue;
         const score = (Math.abs(dx) + Math.abs(dz)) * 10 - cover(w, x, z) * 12 + ((x * 7 + z * 13 + w.tick) % 5);
-        if (best < 0 || score < bestScore) { best = idx(x, z); bestScore = score; }
+        if (best < 0 || score < bestScore) { best = cellIdx(w, x, z); bestScore = score; }
       }
-      if (best >= 0 && (cellOf(gx) !== best % N || cellOf(gz) !== (best - (best % N)) / N)) out.push({ t: 'move', side, ids: fit.map(u => u.id), x: best % N, z: (best - (best % N)) / N });
+      const n = w.n;
+      if (best >= 0 && (cellOf(gx) !== best % n || cellOf(gz) !== (best - (best % n)) / n)) out.push({ t: 'move', side, ids: fit.map(u => u.id), x: best % n, z: (best - (best % n)) / n });
     }
   }
 

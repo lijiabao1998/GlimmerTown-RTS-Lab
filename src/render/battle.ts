@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
+  SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -80,7 +80,7 @@ export class BattleView {
   scene = new THREE.Scene();
   cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   pipe = new Pipeline();
-  target = new THREE.Vector3(N * 0.62, 0, N * 0.62);
+  target = new THREE.Vector3();   // 建構與換大小時照世界大小放到 0.62 處（sizeTo）
   zoom = 1;
   fxOn: boolean;
 
@@ -89,8 +89,12 @@ export class BattleView {
   private mapId: number | undefined;
   private fogOn: boolean;
   private ramp = toonRamp();
-  private groundTex: THREE.DataTexture;
-  private groundPx: Uint8Array;
+  // R042：跟地圖邊長有關的東西都照世界的 w.n 配置（sizeTo）；n 是目前配好的邊長
+  private n = 0;
+  private sun: THREE.DirectionalLight;
+  private ground: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>;
+  private groundTex!: THREE.DataTexture;
+  private groundPx!: Uint8Array;
   private town: THREE.Mesh;
   private hull: THREE.InstancedMesh;
   private turret: THREE.InstancedMesh;
@@ -134,17 +138,17 @@ export class BattleView {
   private shakeAmp = 0;
   private lastT = 0;
   private frameNo = 0;
-  private visStamp = new Int32Array(N * N);
-  private visVal = new Uint8Array(N * N);
+  private visStamp = new Int32Array(0);
+  private visVal = new Uint8Array(0);
   private mA = new THREE.Matrix4();
   private mB = new THREE.Matrix4();
 
   // ---- R008 車輛有重量（?noR008=1 時全部不做）----
   private r8 = false;
-  private tracks = new Uint8Array(N * PX * N * PX);       // 每個地面像素被車輪壓過幾次（0–6）
+  private tracks = new Uint8Array(0);       // 每個地面像素被車輪壓過幾次（0–6）
   private trackLast = new Int32Array((MAX_UNITS + 1) * 2).fill(-1);   // 每台車左右兩條車轍上一次壓到的像素
-  private dirtyStamp = new Int32Array(N * N);
-  private dirtyList = new Int32Array(N * N);
+  private dirtyStamp = new Int32Array(0);
+  private dirtyList = new Int32Array(0);
   private dirtyN = 0;
   private stepNo = 0;
   private recoilT0 = new Float64Array(MAX_UNITS + 1).fill(-99);
@@ -207,30 +211,19 @@ export class BattleView {
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
     this.scene.add(new THREE.HemisphereLight(0xe4ecff, 0x5b5444, 1.35));
-    const sun = new THREE.DirectionalLight(0xfff1d6, 2.1);
-    sun.position.set(N / 2 - 0.35 * N, 1.25 * N, N / 2 + 1.0 * N);
-    sun.target.position.set(N / 2, 0, N / 2);
+    // 位置與陰影範圍跟著地圖大小，在 sizeTo 裡放（R042）
+    const sun = this.sun = new THREE.DirectionalLight(0xfff1d6, 2.1);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    const sc = sun.shadow.camera as THREE.OrthographicCamera;
-    sc.left = sc.bottom = -N * 0.8; sc.right = sc.top = N * 0.8; sc.near = 1; sc.far = N * 4;
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
     this.scene.add(sun, sun.target);
 
     // 地面：一張四邊形＋每格 8×8 的資料貼圖（彈坑、瓦礫地直接畫進貼圖，不加繪製呼叫）
-    this.groundPx = new Uint8Array(N * PX * N * PX * 4);
-    this.groundTex = new THREE.DataTexture(this.groundPx, N * PX, N * PX);
-    this.groundTex.magFilter = this.groundTex.minFilter = THREE.NearestFilter;
-    this.groundTex.colorSpace = THREE.SRGBColorSpace;
-    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
-    this.groundTex.needsUpdate = true;
-    const gg = new THREE.BufferGeometry();
-    gg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, N, 0, 0, N, 0, N, 0, 0, N], 3));
-    gg.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-    gg.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
-    gg.setIndex([0, 3, 2, 0, 2, 1]);
-    const ground = new THREE.Mesh(gg, new THREE.MeshLambertMaterial({ map: this.groundTex }));
+    const ground = this.ground = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial());
     ground.receiveShadow = true;
+    this.sizeTo(w.n);
+    for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
+    this.groundTex.needsUpdate = true;
     this.scene.add(ground);
 
     const toon = (o: THREE.MeshToonMaterialParameters = {}) => new THREE.MeshToonMaterial({ gradientMap: this.ramp, ...o });
@@ -303,9 +296,39 @@ export class BattleView {
     }
   }
 
+  // R042：照地圖邊長 n 配置地面貼圖與四邊形、車轍、可見度快取、髒格表、光與陰影範圍。
+  // 只在建構與換到不同大小的世界時配置；同大小直接返回，每幀不配置。
+  private sizeTo(n: number): void {
+    if (n === this.n) return;
+    this.n = n;
+    const W = n * PX;
+    this.visStamp = new Int32Array(n * n); this.visVal = new Uint8Array(n * n);
+    this.tracks = new Uint8Array(W * W); this.trackLast.fill(-1);
+    this.dirtyStamp = new Int32Array(n * n); this.dirtyList = new Int32Array(n * n); this.dirtyN = 0;
+    this.target.set(n * 0.62, 0, n * 0.62);   // 預設鏡頭：換了大小，舊位置在新地圖上沒有意義，回到我方那一側
+    // 太陽（左上方）與陰影相機蓋住整張地圖
+    const sun = this.sun, sc = sun.shadow.camera as THREE.OrthographicCamera;
+    sun.position.set(n / 2 - 0.35 * n, 1.25 * n, n / 2 + 1.0 * n);
+    sun.target.position.set(n / 2, 0, n / 2);
+    sc.left = sc.bottom = -n * 0.8; sc.right = sc.top = n * 0.8; sc.near = 1; sc.far = n * 4;
+    sc.updateProjectionMatrix();
+    this.groundTex?.dispose();
+    this.groundPx = new Uint8Array(W * W * 4);
+    this.groundTex = new THREE.DataTexture(this.groundPx, W, W);
+    this.groundTex.magFilter = this.groundTex.minFilter = THREE.NearestFilter;
+    this.groundTex.colorSpace = THREE.SRGBColorSpace;
+    this.ground.material.map = this.groundTex;
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, n, 0, 0, n, 0, n, 0, 0, n], 3));
+    gg.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+    gg.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+    gg.setIndex([0, 3, 2, 0, 2, 1]);
+    this.ground.geometry.dispose(); this.ground.geometry = gg;
+  }
+
   unitHeight(u: Unit): number {
     if (!UNIT_KINDS[u.kind].garrison) return 0;   // 觀測員、步兵可以站在屋頂上
-    const id = this.w.occ[idx(Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
+    const id = this.w.occ[cellIdx(this.w, Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
     const b = id ? this.w.blds[id - 1] : null;
     if (!b || b.hp <= 0) return 0;
     const cached = this.observerHeights.get(u.id);
@@ -325,10 +348,12 @@ export class BattleView {
     return next;
   }
   // R006：換一個世界來畫（布陣預覽世界 ↔ 真的世界）；重畫地面貼圖與房子，單位網格不動
+  // R042：大小不同的世界先照新的 w.n 重配所有跟大小有關的緩衝，不沿用舊大小
   setWorld(w: World, territorySide = -1) {
     this.w = w; this.mapId = w.map; this.territory = territorySide; this.observerHeights.clear();
+    this.sizeTo(w.n);
     this.trench118.sync(w, true);
-    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
+    for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
     this.groundTex.needsUpdate = true;
     this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry();
     this.vegetation116.sync(w);
@@ -344,9 +369,9 @@ export class BattleView {
 
   // ---- 地面貼圖 ----
   private paintCell(x: number, z: number) {
-    const w = this.w, i = idx(x, z), ter = w.ter[i], dep = w.crater[i];
+    const w = this.w, i = cellIdx(w, x, z), ter = w.ter[i], dep = w.crater[i];
     const b = w.occ[i] ? w.blds[w.occ[i] - 1] : null, rubble = !!b && stageOf(b) === STAGE_RUBBLE;
-    const W = N * PX;
+    const W = this.n * PX;
     for (let py = 0; py < PX; py++) for (let px = 0; px < PX; px++) {
       const gx = x * PX + px, gz = z * PX + py, n = hash2(gx, gz, 3);
       let r: number, g: number, bl: number;
@@ -359,7 +384,7 @@ export class BattleView {
           const sides = [[-1, 0, px, py], [1, 0, PX - 1 - px, py], [0, -1, py, px], [0, 1, PX - 1 - py, px]];
           for (const [dx, dz, d, along] of sides) {
             const nx = x + dx, nz = z + dz;
-            if (!inMap(nx, nz) || !w.occ[idx(nx, nz)] || d > 2) continue;
+            if (!inGrid(w, nx, nz) || !w.occ[cellIdx(w, nx, nz)] || d > 2) continue;
             if (d <= 1) { const j = (along + (dx ? gz : gx)) % 3 === 0; r = 170 + n * 10 - (j ? 22 : 0); g = 166 + n * 10 - (j ? 22 : 0); bl = 154 + n * 8 - (j ? 20 : 0); }
             else { const white = ((dx ? gz : gx) >> 1) % 2 === 0; r = g = bl = white ? 226 + n * 12 : 38 + n * 8; }
             break;
@@ -385,11 +410,11 @@ export class BattleView {
       if (b) { r = 112 + n * 16; g = 102 + n * 14; bl = 86 + n * 12; if (rubble) { r += 18; g += 16; bl += 14; } }
       else if (this.territory >= 0 && ter !== TER_ROAD) {
         // 布陣：我方可蓋的半場偏藍、對方半場偏紅，交界畫一條亮線；無人帶與路保持原色
-        const mine = territory(this.territory, x, z), theirs = territory(1 - this.territory, x, z);
+        const mine = territory(this.territory, x, z, w.n), theirs = territory(1 - this.territory, x, z, w.n);
         if (mine) { r = r * 0.62 + 26; g = g * 0.72 + 44; bl = bl * 0.55 + 104; }
         else if (theirs) { r = r * 0.8 + 38; g = g * 0.8 + 6; bl = bl * 0.8 + 4; }
-        const edge = mine && (!territory(this.territory, x - 1, z) && px === 0 || !territory(this.territory, x, z - 1) && py === 0
-          || !territory(this.territory, x + 1, z) && px === PX - 1 || !territory(this.territory, x, z + 1) && py === PX - 1);
+        const edge = mine && (!territory(this.territory, x - 1, z, w.n) && px === 0 || !territory(this.territory, x, z - 1, w.n) && py === 0
+          || !territory(this.territory, x + 1, z, w.n) && px === PX - 1 || !territory(this.territory, x, z + 1, w.n) && py === PX - 1);
         if (edge) { r = 196; g = 226; bl = 255; }
       }
       if (dep) {
@@ -417,6 +442,7 @@ export class BattleView {
 
   onEvents(events: SimEvent[], simT: number) {
     if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory); // tick0 的 map 重播要同步城鎮與地面。
+    if (this.n !== this.w.n) this.setWorld(this.w, this.territory);   // R042：同一個世界在 tick0 換了大小，緩衝照新的 w.n 重配
     if (this.holeMesh) this.holes14(events);
     for (const e of events) if (e.e === 'fire') this.fire44[e.unit] = simT;
     if (this.r8) this.vehicles8(events, simT);
@@ -426,7 +452,7 @@ export class BattleView {
     if (trenchEvent) vegetationDirty = true;   // noR118 只隱藏壕溝，仍同步模擬已清除的植被。
     if (this.trench118.sync(this.w, trenchEvent)) {
       // 只在布陣狀態改變時整圖重刻，包含新接線的舊鄰格與取消後的空格。
-      for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
+      for (let z = 0; z < this.n; z++) for (let x = 0; x < this.n; x++) this.paintCell(x, z);
       groundDirty = true; vegetationDirty = true;
     }
     for (const e of events) {
@@ -442,7 +468,7 @@ export class BattleView {
         const b = this.w.blds[e.bld - 1];
         if (b) {
           // R027 路緣讀鄰格 occ；新房屋落地也重畫一格邊緣，與整圖重播一致。
-          for (let z = Math.max(0, b.z - 1); z < Math.min(N, b.z + b.d + 1); z++) for (let x = Math.max(0, b.x - 1); x < Math.min(N, b.x + b.w + 1); x++) this.paintCell(x, z);
+          for (let z = Math.max(0, b.z - 1); z < Math.min(this.n, b.z + b.d + 1); z++) for (let x = Math.max(0, b.x - 1); x < Math.min(this.n, b.x + b.w + 1); x++) this.paintCell(x, z);
           groundDirty = true;
         }
       } else if (e.e === 'impact') {
@@ -450,7 +476,7 @@ export class BattleView {
         const x = e.x / SUB, z = e.z / SUB;
         if (e.kind === SHELL_HE) {
           const cx = Math.floor(x), cz = Math.floor(z);
-          if (cx >= 0 && cz >= 0 && cx < N && cz < N) { this.paintCell(cx, cz); groundDirty = true; }
+          if (inGrid(this.w, cx, cz)) { this.paintCell(cx, cz); groundDirty = true; }
           if (this.fxOn && !this.r4) this.burst(x, 0.1, z, 0.55, simT, 5, false);
         } else if (this.fxOn && !this.r4) this.burst(x, e.bld ? 0.35 : 0.12, z, 0.22, simT, 2, !!e.bld);
       } else if (e.e === 'fire' && this.fxOn && !this.r4 && this.visibleUnit(this.w.units[e.unit - 1])) {
@@ -629,9 +655,9 @@ export class BattleView {
   // 射擊線索（開火、彈著、擊毀）照 R100：看不到的地方不畫；建築的損壞本來就看得到，它的煙火照畫。
   private vis = (x: number, z: number): boolean => {
     if (!this.fogOn) return true;
-    const cx = Math.floor(x), cz = Math.floor(z);
-    if (cx < 0 || cz < 0 || cx >= N || cz >= N) return false;
-    const i = cz * N + cx;
+    const cx = Math.floor(x), cz = Math.floor(z), n = this.n;
+    if (cx < 0 || cz < 0 || cx >= n || cz >= n) return false;
+    const i = cz * n + cx;
     if (this.visStamp[i] !== this.frameNo) { this.visStamp[i] = this.frameNo; this.visVal[i] = spotted(this.w, SIDE_PLAYER, (cx + 0.5) * SUB, (cz + 0.5) * SUB) ? 1 : 0; }
     return this.visVal[i] === 1;
   };
@@ -869,7 +895,7 @@ export class BattleView {
   private vehicles8(events: SimEvent[], t: number) {
     this.stepNo++;
     for (const e of events) if (e.e === 'fire') this.recoilT0[e.unit] = t;
-    const W = N * PX;
+    const n = this.n, W = n * PX;
     for (const u of this.w.units) {
       if (u.hp < this.lastHp[u.id]) this.flashT0[u.id] = t;
       this.lastHp[u.id] = u.hp;
@@ -889,13 +915,13 @@ export class BattleView {
           if (this.trackLast[slot] === pi) continue;
           this.trackLast[slot] = pi;
           if (this.tracks[pi] < 6) this.tracks[pi]++;
-          const ci = Math.floor(gz / PX) * N + Math.floor(gx / PX);
+          const ci = Math.floor(gz / PX) * n + Math.floor(gx / PX);
           if (this.dirtyStamp[ci] !== this.stepNo) { this.dirtyStamp[ci] = this.stepNo; this.dirtyList[this.dirtyN++] = ci; }
         }
       }
       // 行進揚塵：車尾，草地農田每步、路上每三步一朵（R004 的煙塵池；?fx=off 時沒有池＝不揚塵）
       if (this.puff) {
-        const cx = Math.floor(u.x / SUB), cz = Math.floor(u.z / SUB), road = this.w.ter[idx(cx, cz)] === TER_ROAD;
+        const cx = Math.floor(u.x / SUB), cz = Math.floor(u.z / SUB), road = this.w.ter[cellIdx(this.w, cx, cz)] === TER_ROAD;
         if (!road || (this.stepNo + u.id) % 3 === 0) {
           const h = hash2(u.id, this.stepNo, 41), bx = u.x / SUB - (dx / len) * 0.3, bz = u.z / SUB - (dz / len) * 0.3;
           this.puff.spawn({ x: bx + (h - 0.5) * 0.2, y: 0.05, z: bz + (hash2(u.id, this.stepNo, 42) - 0.5) * 0.2, vx: -(dx / len) * 0.3, vz: -(dz / len) * 0.3, drag: 2, vy: 0.18,
@@ -904,7 +930,7 @@ export class BattleView {
       }
     }
     if (this.dirtyN) {
-      for (let i = 0; i < this.dirtyN; i++) { const c = this.dirtyList[i]; this.paintCell(c % N, (c - (c % N)) / N); }
+      for (let i = 0; i < this.dirtyN; i++) { const c = this.dirtyList[i]; this.paintCell(c % n, (c - (c % n)) / n); }
       this.dirtyN = 0;
       this.groundTex.needsUpdate = true;   // 一步最多上傳一次
     }
@@ -958,7 +984,7 @@ export class BattleView {
     // 我方正在砲擊的建築（同一棟只畫一次）
     for (const u of w.units) {
       if (!u.alive || u.side !== SIDE_PLAYER || u.order !== ORD_FIRE_AT || u.target > 0) continue;
-      const id = w.occ[idx(u.tx, u.tz)], b = id ? w.blds[id - 1] : null;
+      const id = w.occ[cellIdx(w, u.tx, u.tz)], b = id ? w.blds[id - 1] : null;
       if (!b || b.hp <= 0) continue;
       let dup = false;
       for (let i = 0; i < dbg.n; i++) if (dbg.id[i] === -b.id) dup = true;
@@ -1019,7 +1045,7 @@ export class BattleView {
       // 剩下的路：沿折線每 0.3 格一段
       let px = x, pz = z, walked = 0, ex = x, ez = z;
       for (let i = u.pathIdx; i < u.path.length && this.nd11 < DASH_CAP; i++) {
-        const c = u.path[i], cx = (c % N) + 0.5, cz = (c - (c % N)) / N + 0.5;
+        const c = u.path[i], cx = (c % w.n) + 0.5, cz = (c - (c % w.n)) / w.n + 0.5;
         walked = this.dashes11(u.id, DK_PATH, px, pz, cx, cz, col, walked);
         px = cx; pz = cz; ex = cx; ez = cz;
       }
@@ -1217,7 +1243,7 @@ export class BattleView {
     const wpp = (2 * BASE_HALF_H / this.zoom) / cssH;   // 每個 CSS 像素幾格（垂直方向）
     const right = new THREE.Vector3(1, 0, -1).normalize(), fwd = new THREE.Vector3(-1, 0, -1).normalize();
     this.target.addScaledVector(right, -dxCss * wpp).addScaledVector(fwd, dyCss * wpp / Math.sin(ELEV));
-    this.target.x = Math.max(0, Math.min(N, this.target.x)); this.target.z = Math.max(0, Math.min(N, this.target.z));
+    this.target.x = Math.max(0, Math.min(this.n, this.target.x)); this.target.z = Math.max(0, Math.min(this.n, this.target.z));
   }
   zoomBy(f: number) { this.zoom = Math.max(0.55, Math.min(3, this.zoom * f)); }
   // R012：縮放時 (cssX,cssY) 底下的地面點不動（正交鏡頭、方向固定：縮放後把焦點平移回來）
@@ -1226,8 +1252,8 @@ export class BattleView {
     this.zoomBy(f);
     const b = this.groundAt(cssX, cssY, cssW, cssH);
     if (!a || !b) return;
-    this.target.x = Math.max(0, Math.min(N, this.target.x + a.x - b.x));
-    this.target.z = Math.max(0, Math.min(N, this.target.z + a.z - b.z));
+    this.target.x = Math.max(0, Math.min(this.n, this.target.x + a.x - b.x));
+    this.target.z = Math.max(0, Math.min(this.n, this.target.z + a.z - b.z));
   }
 
   // 螢幕點 → 點到的建築格（先打建築的網格：點屋頂、牆面都算那棟；瓦礫不算）
@@ -1239,8 +1265,8 @@ export class BattleView {
       // 沿著視線往內推一點再取格，避免剛好落在牆面外緣的格線上
       const p = hit.point.clone().addScaledVector(ray.ray.direction, 0.02);
       const x = Math.floor(p.x), z = Math.floor(p.z);
-      if (x < 0 || z < 0 || x >= N || z >= N) continue;
-      const id = this.w.occ[idx(x, z)];
+      if (!inGrid(this.w, x, z)) continue;
+      const id = this.w.occ[cellIdx(this.w, x, z)];
       if (id && this.w.blds[id - 1].hp > 0) return [x, z];
     }
     return null;

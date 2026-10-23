@@ -1,7 +1,7 @@
 // 世界狀態：純資料，只用整數。模擬不 import three、不碰 DOM、不用現實時間（AGENTS.md 規則 2、3）。
 import { Fnv, nextU32, randInt, type RngState } from './rng.ts';
 
-export const N = 32;            // 地圖邊長（格）
+export const N = 32;            // 舊的固定地圖邊長（格）；R042 起 src/ 只看 w.n，N／idx／inMap 只留給 32×32 的舊守衛
 export const SUB = 256;         // 1 格＝256 個位置單位
 export const HALF = SUB >> 1;
 export const TICK_HZ = 20;      // 每秒 20 步
@@ -201,8 +201,13 @@ export interface World extends RngState {
   sandbox?: { version: 1; running: boolean; frame: number }; // R128：frame 是指令步序，tick 仍只計戰鬥時間
 }
 
+// 舊守衛專用（32×32）：src/ 不再用，改用下面看世界的 cellIdx／inGrid／gridLimit（R042，tests/map-size.mjs 掃描）
 export const idx = (x: number, z: number) => z * N + x;
 export const inMap = (x: number, z: number) => x >= 0 && z >= 0 && x < N && z < N;
+// R042 地圖大小是世界自己的欄位 w.n：格索引、在不在圖內、位置座標的上限
+export const cellIdx = (w: World, x: number, z: number) => z * w.n + x;
+export const inGrid = (w: World, x: number, z: number) => x >= 0 && z >= 0 && x < w.n && z < w.n;
+export const gridLimit = (w: World) => w.n * SUB - 1;
 export const cellOf = (p: number) => Math.floor(p / SUB);
 export const center = (c: number) => c * SUB + HALF;
 
@@ -217,8 +222,8 @@ export function stageOf(b: Building): number {
 }
 
 export function bldAt(w: World, x: number, z: number): Building | null {
-  if (!inMap(x, z)) return null;
-  const id = w.occ[idx(x, z)];
+  if (!inGrid(w, x, z)) return null;
+  const id = w.occ[cellIdx(w, x, z)];
   return id ? w.blds[id - 1] : null;
 }
 
@@ -231,7 +236,7 @@ export function blocks(w: World, x: number, z: number): boolean {
 // R121：障礙通行和射線分開；舊世界沒有wires時不改行為。
 export const onFoot = (kind: number): boolean => kind === UK_OBSERVER || kind === UK_INFANTRY || kind === UK_MORTAR;
 export function wireAt(w: World, x: number, z: number): Building | null {
-  if (!Number.isInteger(x) || !Number.isInteger(z) || !inMap(x, z)) return null;
+  if (!Number.isInteger(x) || !Number.isInteger(z) || !inGrid(w, x, z)) return null;
   return w.wires?.segments.find(s => x >= s.x && z >= s.z && x < s.x + s.w && z < s.z + s.d) ?? null;
 }
 export function wireBlocks(w: World, x: number, z: number, kind: number): boolean {
@@ -240,7 +245,7 @@ export function wireBlocks(w: World, x: number, z: number, kind: number): boolea
 
 // 地形速度倍率（百分比）：路最快，瓦礫、彈坑最慢
 export function speedPct(w: World, x: number, z: number): number {
-  const i = idx(x, z);
+  const i = cellIdx(w, x, z);
   let p = w.ter[i] === TER_ROAD ? 100 : w.ter[i] === TER_FIELD ? 70 : w.ter[i] === TER_MUD ? 40 : 85;
   if (w.occ[i]) p = 45;                      // 走得進來的建築格一定是瓦礫
   if (w.crater[i]) p = Math.min(p, 75 - w.crater[i] * 10);
@@ -269,20 +274,21 @@ export function createWorld(seed: number): World {
     blds: [], units: [], shells: [], nextShell: 1, winner: -1, events: [],
   };
   nextU32(w);   // 讓種子 0 也有像樣的開頭
+  const n = w.n;   // 這支產生器只產 32×32 的村莊；預設大小只寫在上面那兩行
 
   // 道路：東西向大路（z=15,16）、南北向大路（x=15,16）、斜向小路
   const roadZ = 14 + randInt(w, 3), roadX = 14 + randInt(w, 3);
-  for (let i = 0; i < N; i++) {
-    w.ter[idx(i, roadZ)] = TER_ROAD; w.ter[idx(i, roadZ + 1)] = TER_ROAD;
-    w.ter[idx(roadX, i)] = TER_ROAD; w.ter[idx(roadX + 1, i)] = TER_ROAD;
+  for (let i = 0; i < n; i++) {
+    w.ter[cellIdx(w, i, roadZ)] = TER_ROAD; w.ter[cellIdx(w, i, roadZ + 1)] = TER_ROAD;
+    w.ter[cellIdx(w, roadX, i)] = TER_ROAD; w.ter[cellIdx(w, roadX + 1, i)] = TER_ROAD;
   }
-  for (let x = roadX + 2, z = roadZ - 1; x < N && z >= 0; x += 1, z -= 1) {   // 小路：往右上斜出去
-    w.ter[idx(x, z)] = TER_ROAD;
-    if (x + 1 < N) w.ter[idx(x + 1, z)] = TER_ROAD;
+  for (let x = roadX + 2, z = roadZ - 1; x < n && z >= 0; x += 1, z -= 1) {   // 小路：往右上斜出去
+    w.ter[cellIdx(w, x, z)] = TER_ROAD;
+    if (x + 1 < n) w.ter[cellIdx(w, x + 1, z)] = TER_ROAD;
   }
   // 農田：左下、右上兩塊
-  for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
-    const i = idx(x, z);
+  for (let z = 0; z < n; z++) for (let x = 0; x < n; x++) {
+    const i = cellIdx(w, x, z);
     if (w.ter[i] !== TER_GRASS) continue;
     if ((x < 9 && z > 19 && z < 26) || (x > 22 && z > 8 && z < 13)) w.ter[i] = TER_FIELD;
   }
@@ -291,23 +297,23 @@ export function createWorld(seed: number): World {
   const free = (x: number, z: number, bw: number, bd: number) => {
     for (let dz = -1; dz <= bd; dz++) for (let dx = -1; dx <= bw; dx++) {
       const cx = x + dx, cz = z + dz, inner = dx >= 0 && dz >= 0 && dx < bw && dz < bd;
-      if (!inMap(cx, cz)) { if (inner) return false; continue; }
-      if (inner && (w.ter[idx(cx, cz)] === TER_ROAD || reserved(cx, cz))) return false;
-      if (w.occ[idx(cx, cz)]) return false;     // 建築之間至少隔一格（巷子）
+      if (!inGrid(w, cx, cz)) { if (inner) return false; continue; }
+      if (inner && (w.ter[cellIdx(w, cx, cz)] === TER_ROAD || reserved(cx, cz))) return false;
+      if (w.occ[cellIdx(w, cx, cz)]) return false;     // 建築之間至少隔一格（巷子）
     }
     return true;
   };
   const place = (kind: number, x: number, z: number, bw: number, bd: number, floors: number) => {
     const id = w.blds.length + 1, maxHp = bldMaxHp(kind, bw, bd, floors);
     w.blds.push({ id, kind, x, z, w: bw, d: bd, floors, hp: maxHp, maxHp });
-    for (let dz = 0; dz < bd; dz++) for (let dx = 0; dx < bw; dx++) w.occ[idx(x + dx, z + dz)] = id;
+    for (let dz = 0; dz < bd; dz++) for (let dx = 0; dx < bw; dx++) w.occ[cellIdx(w, x + dx, z + dz)] = id;
   };
 
   // 教堂：路口西北角
   if (free(roadX - 4, roadZ - 4, 3, 3)) place(BK_CHURCH, roadX - 4, roadZ - 4, 3, 3, 2);
   // 沿路的房子：從路邊往外一格開始試
   const tries: [number, number][] = [];
-  for (let i = 1; i < N - 1; i++) {
+  for (let i = 1; i < n - 1; i++) {
     tries.push([i, roadZ - 2], [i, roadZ + 2], [roadX - 2, i], [roadX + 2, i]);
   }
   for (const [x, z] of tries) {
@@ -321,7 +327,7 @@ export function createWorld(seed: number): World {
   }
   // 零散農舍
   for (let k = 0; k < 6; k++) {
-    const x = 2 + randInt(w, N - 4), z = 2 + randInt(w, N - 4);
+    const x = 2 + randInt(w, n - 4), z = 2 + randInt(w, n - 4);
     if (free(x, z, 2, 2)) place(k % 2 ? BK_BARN : BK_COTTAGE, x, z, 2, 2, 1);
   }
 

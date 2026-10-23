@@ -1,6 +1,6 @@
 // R117: optional presentation-only audio. Nothing is created until a native HUD gesture.
 // Three finite mono buffers, one master gain and at most eight source/gain pairs.
-import { N, SUB, SHELL_AP, SHELL_HE, SHELL_SMOKE, STAGE_RUBBLE,
+import { SUB, SHELL_AP, SHELL_HE, SHELL_SMOKE, STAGE_RUBBLE,
   UK_TANK, UK_HOWITZER, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT,
   type World, type Unit, type Building, type SimEvent } from '../sim/world.ts';
 
@@ -41,7 +41,7 @@ export function makeBattlePCM(kind: BattleSound): Float32Array<ArrayBuffer> {
 }
 
 interface Voice { source: AudioBufferSourceNode; gain: GainNode; connected: number; released: boolean }
-const positionOK = (x: number, z: number) => Number.isInteger(x) && Number.isInteger(z) && x >= 0 && z >= 0 && x < N * SUB && z < N * SUB;
+const positionOK = (w: World, x: number, z: number) => Number.isInteger(x) && Number.isInteger(z) && x >= 0 && z >= 0 && x < w.n * SUB && z < w.n * SUB;
 const artillery = (kind: number) => kind === UK_TANK || kind === UK_HOWITZER || kind === UK_ATGUN || kind === UK_MORTAR || kind === UK_LIGHT || kind === UK_HEAVY || kind === UK_ARMORED_CAR || kind === UK_DESTROYER || kind === UK_ASSAULT;   // R044 三種新車也是砲聲
 
 export class BattleAudio {
@@ -149,13 +149,13 @@ export class BattleAudio {
       if (event.e === 'fire') {
         const u = world.units[event.unit - 1];
         if (!Number.isInteger(event.unit) || !u || u.id !== event.unit || !u.alive || u.hp <= 0 || !artillery(u.kind)
-          || u.fireAmmo === SHELL_SMOKE || !positionOK(event.x, event.z) || event.x !== u.x || event.z !== u.z || !visibility.visibleUnit(u)) continue;
+          || u.fireAmmo === SHELL_SMOKE || !positionOK(world, event.x, event.z) || event.x !== u.x || event.z !== u.z || !visibility.visibleUnit(u)) continue;
         // The final smoke order clears u.fireAmmo in step(); its newly emitted shell
         // is still present at t=1. Match the launch, not an older in-flight shell.
         if (world.shells.some(s => s.shooter === u.id && s.sx === event.x && s.sz === event.z && s.t === 1 && s.kind === SHELL_SMOKE)) continue;
         kind = 0;
       } else if (event.e === 'impact') {
-        if ((event.kind !== SHELL_AP && event.kind !== SHELL_HE) || !positionOK(event.x, event.z)
+        if ((event.kind !== SHELL_AP && event.kind !== SHELL_HE) || !positionOK(world, event.x, event.z)
           || !Number.isInteger(event.bld) || event.bld < 0 || (event.bld > 0 && world.blds[event.bld - 1]?.id !== event.bld)
           || !visibility.visibleAt(event.x, event.z)) continue;
         kind = 1;
@@ -163,7 +163,7 @@ export class BattleAudio {
         const b = world.blds[event.bld - 1];
         if (!Number.isInteger(event.bld) || !b || b.id !== event.bld || event.stage !== STAGE_RUBBLE || b.hp > 0 || this.collapsed.has(b)
           || !Number.isInteger(b.x) || !Number.isInteger(b.z) || !Number.isInteger(b.w) || !Number.isInteger(b.d)
-          || b.w <= 0 || b.d <= 0 || b.x < 0 || b.z < 0 || b.x + b.w > N || b.z + b.d > N) continue;
+          || b.w <= 0 || b.d <= 0 || b.x < 0 || b.z < 0 || b.x + b.w > world.n || b.z + b.d > world.n) continue;
         // Mark all valid collapses immediately: a later visibility change cannot replay
         // a collapse that occurred out of sight or was dropped due to the voice budget.
         this.collapsed.add(b);

@@ -1,5 +1,5 @@
 // R107：持續煙幕只存在 World，沒有模組快取。查視線不抽亂數、不動世界。
-import { N, SUB, cellOf, inMap, type World, type Shell } from './world.ts';
+import { SUB, cellOf, inGrid, gridLimit, type World, type Shell } from './world.ts';
 import { randInt } from './rng.ts';
 
 export const SMOKE_RADIUS = 2 * SUB;
@@ -22,7 +22,7 @@ export function smokeBlocks(w: World, ax: number, az: number, bx: number, bz: nu
 
 // 只由 step() 的實際落地呼叫；未落地、地圖外的彈不選風向。id 沿用砲彈的整局唯一 id。
 export function spawnSmoke(w: World, s: Shell): void {
-  if (!inMap(cellOf(s.ex), cellOf(s.ez))) return;
+  if (!inGrid(w, cellOf(s.ex), cellOf(s.ez))) return;
   if (!w.smoke) {
     const wind = randInt(w, 4);
     w.smoke = { windX: wind === 0 ? 1 : wind === 1 ? -1 : 0, windZ: wind === 2 ? 1 : wind === 3 ? -1 : 0, clouds: [] };
@@ -36,7 +36,7 @@ export function spawnSmoke(w: World, s: Shell): void {
 // 每次 step 尾端、tick 遞增後呼叫一次。新落地也隨這一步漂移；邊界夾住而非環繞。
 export function advanceSmoke(w: World): void {
   if (!w.smoke) return;
-  const s = w.smoke, limit = N * SUB - 1;
+  const s = w.smoke, limit = gridLimit(w);
   s.clouds = s.clouds.filter(c => c.expires > w.tick);
   for (const c of s.clouds) {
     c.x = Math.max(0, Math.min(limit, c.x + s.windX));

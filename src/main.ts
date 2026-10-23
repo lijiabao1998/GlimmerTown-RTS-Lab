@@ -5,7 +5,7 @@ import { coverDurability } from './ui/coverDurability.ts';
 import { reloadStatus } from './ui/reloadStatus.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UNIT_KINDS, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UNIT_KINDS, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, WIRE_KIND, WALL_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
 import { step, runLog, commandTick, type Command, type LoggedCommand } from './sim/step.ts';
@@ -243,7 +243,7 @@ function placeAt(cx: number, cy: number) {
   const p = view.groundAt(cx, cy, innerWidth, innerHeight);
   if (!p) return;
   const gx = Math.floor(p.x), gz = Math.floor(p.z);
-  if (gx < 0 || gz < 0 || gx >= N || gz >= N) return;
+  if (gx < 0 || gz < 0 || gx >= w.n || gz >= w.n) return;
   // 圍牆模型窄於佔地：點任一佔地格仍能拿掉整段，不必精準命中薄牆表面。
   const wallIndex = plan.findIndex(c => { if (c.t !== 'build' || !(isWallKind(c.kind) || c.kind === BK_WIRE)) return false; const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return gx >= c.x && gz >= c.z && gx < c.x + fw && gz < c.z + fd; });
   if (wallIndex >= 0) { plan.splice(wallIndex, 1); buildHint = '拿掉了一段障礙'; refreshPreview(); ui(); return; }
@@ -587,7 +587,7 @@ renderer.setAnimationLoop(() => {
     fling.step(dt, camStep);
     const bx = view.target.x, bz = view.target.z;
     view.pan(camStep.x, camStep.z, innerHeight);
-    if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= N || view.target.z >= N) fling.stop();
+    if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= view.world.n || view.target.z >= view.world.n) fling.stop();
   }
   if (glide.active) { glide.at(t / 1000, camStep); view.target.x = camStep.x; view.target.z = camStep.z; }
   view.update(alpha, simT(alpha), selected, phase === 'battle');

@@ -3,6 +3,7 @@ export interface Help { open: () => void; close: () => void; visible: () => bool
 
 const HTML = `
   <div class="panel" role="dialog" aria-label="怎麼玩">
+    <div class="help-copy">
     <h2>怎麼玩</h2>
     <ol>
       <li><b>布陣</b>：開局先停著。點藍色的我方半場蓋房子（農舍 1、磚房 2、穀倉 3，建材共 8）。房子擋子彈、也擋敵人的視線；點蓋好的房子可以拿掉。</li>
@@ -20,6 +21,7 @@ const HTML = `
       <li>車會互相擠開；瓦礫可以走、不擋射線。</li>
       <li class="r044">剋制：<b>驅逐戰車</b>射程遠、專打坦克，但要停下來才能開火、車頂開放，怕步兵貼近；<b>突擊砲</b>拆房子最快；<b>裝甲車</b>跑得快、看得遠，拿來偵察、追打步兵與砲，碰到坦克就退。</li>
     </ul>
+    </div>
     <div class="acts"><button id="help-ok">知道了</button></div>
   </div>`;
 

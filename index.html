@@ -83,12 +83,12 @@
     /* R013 說明面板 */
     #help { z-index: 30; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: rgba(10, 12, 9, 0.5); }
     #help[hidden] { display: none; }
-    #help .panel { box-sizing: border-box; width: min(92vw, 520px); max-height: 84vh; overflow: auto; padding: 14px 18px; background: rgba(24, 28, 22, 0.95); border: 2px solid #6c8fb8; border-radius: 10px; font-size: 14px; line-height: 1.55; }
+    #help .panel { box-sizing: border-box; display: flex; flex-direction: column; width: min(92vw, 520px); max-height: 84vh; overflow: hidden; padding: 14px 18px; background: rgba(24, 28, 22, 0.95); border: 2px solid #6c8fb8; border-radius: 10px; font-size: 14px; line-height: 1.55; }
+    #help .help-copy { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
     #help h2 { margin: 0 0 6px; font-size: 22px; text-align: center; letter-spacing: 0.15em; }
     #help h3 { margin: 10px 0 4px; font-size: 15px; color: #c8d8ee; }
     #help ol, #help ul { margin: 4px 0; padding-left: 1.3em; } #help li { margin: 3px 0; } #help p { margin: 4px 0; }
-    #help .acts { display: flex; justify-content: center; margin-top: 10px; }
-    body.r044 #help .acts { position: sticky; bottom: -14px; margin-bottom: -14px; padding: 6px 0 14px; background: #181c16; box-shadow: 0 -6px 8px -4px #181c16; }   /* R044 說明變長：「知道了」黏在面板底部，手機上不用捲也點得到 */
+    #help .acts { display: flex; flex-shrink: 0; justify-content: center; margin-top: 10px; }
     #help li.r044 { display: none; } body.r044 #help li.r044 { display: list-item; }   /* R044 剋制那一句：?noR044=1 時不出現 */
     #help .acts button { min-height: 44px; min-width: 120px; font-weight: 700; background: #2f5f9a; border-color: #9cc6ff; }
     /* R015 小地圖：右上、按鈕列下面（手機在標題列下面） */

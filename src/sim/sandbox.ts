@@ -1,5 +1,5 @@
 // R128：只供明確選擇的沙盒世界；普通世界不會由指令升格為沙盒。
-import { createWorld, blocks, inMap, center, UNIT_KINDS, UK_TANK, UK_HOWITZER, SIDE_PLAYER, SIDE_ENEMY, SUB, ORD_IDLE, type World } from './world.ts';
+import { createWorld, blocks, inGrid, center, UNIT_KINDS, UK_TANK, UK_HOWITZER, SIDE_PLAYER, SIDE_ENEMY, SUB, ORD_IDLE, type World } from './world.ts';
 import { dist } from './math.ts';
 
 export const SANDBOX_CAP = 32; // 包含殘骸；ID 永不重用，重置才清空。
@@ -19,7 +19,7 @@ export function sandboxPlaceError(w: World, c: SandboxPlace): SandboxError | nul
   if (!w.sandbox) return 'mode';
   if (c.side !== SIDE_PLAYER && c.side !== SIDE_ENEMY) return 'side';
   if (c.kind !== UK_TANK && c.kind !== UK_HOWITZER) return 'kind';
-  if (!Number.isInteger(c.x) || !Number.isInteger(c.z) || !inMap(c.x, c.z)) return 'map';
+  if (!Number.isInteger(c.x) || !Number.isInteger(c.z) || !inGrid(w, c.x, c.z)) return 'map';
   if (w.units.length >= SANDBOX_CAP) return 'capacity';
   if (blocks(w, c.x, c.z)) return 'building';
   const x = center(c.x), z = center(c.z), radius = UNIT_KINDS[c.kind].radius;
