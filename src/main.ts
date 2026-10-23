@@ -32,6 +32,7 @@ import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
+import { showStartOrder, startOrderText } from './ui/startOrder.ts';
 
 const q = new URLSearchParams(location.search);
 const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
@@ -89,6 +90,12 @@ const r105 = q.get('noR105') !== '1';
 setMaterials(r105); // R105 材質視覺提示；只關畫面，模擬不變
 setFacades(q.get('noR028') !== '1');
 setStreets(q.get('noR027') !== '1');   // R027 人行道與燈火管制路緣；逃生閥 ?noR027=1   // R028 外牆細節（木構、掛瓦、護牆板）；逃生閥 ?noR028=1＝全部紅磚原樣
+// R041 開戰命令條（取代上面的發光大字）。逃生閥 ?noR041=1＝回到 R016 的「開戰！」
+const r041 = q.get('noR041') !== '1';
+function startOrder() {
+  // 開戰這一刻 eco／ai 指令還在佇列裡沒套用：看同一組開關（r019 指揮部、r018 電腦），不看世界
+  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, r019, r018 ? AI_NAME[aiLevel] : undefined));
+}
 function startBanner() {
   const el = document.createElement('div');
   el.id = 'start-banner'; el.textContent = '開戰！';
@@ -216,7 +223,7 @@ function startBattle() {
   if (r019) issue(ecoCmd());
   if (r018) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   phase = 'battle'; plan = []; buildHint = '';
-  if (r016) startBanner();
+  if (r016) { if (r041) startOrder(); else startBanner(); }
   view.setWorld(w, -1);
   tick();
   paused = false;
@@ -601,6 +608,10 @@ renderer.setAnimationLoop(() => {
   minimap?.frame(t);
 });
 
+// R040：初始化做完才拿掉載入畫面，跟下面設好 __rts（守衛等的「準備好了」）在同一個同步步驟裡：準備好的那一刻畫面上已經沒有它。
+// 放在守衛掛勾之前：幾支守衛會把守衛掛勾那個物件以後的原文抽到沒有 DOM 的沙箱裡跑。
+document.getElementById('loader')?.remove();
+
 // ---- 守衛掛勾（tools/smoke.mjs 用）----
 const rts = {
   ready: true,
@@ -646,7 +657,7 @@ const rts = {
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
-  rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner') }),
+  rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner'), order: !!document.getElementById('start-order') }),
   cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }),
   groundAt: (cx: number, cy: number) => { const p = view.groundAt(cx, cy, innerWidth, innerHeight); return p ? [p.x, p.z] : null; },
   select: (ids: number[]) => { selected.clear(); for (const id of ids) if (w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER) selected.add(id); hud?.update(); return [...selected]; },
