@@ -56,6 +56,8 @@ export const UK_ARMORED_CAR = 8; // R044 裝甲車（快、看得遠、皮薄、
 export const UK_DESTROYER = 9;   // R044 驅逐戰車（射程遠、打車痛、要停下來才能開火、開頂怕步兵）
 export const UK_ASSAULT = 10;    // R044 突擊砲（打建築強、承傷七成五、慢、射程稍短）
 
+export const UK_ZOMBIE = 11;   // R045：六隻一群，只在可選防守模式出現，不能生產
+
 export interface UnitKind {
   name: string;
   hp: number;
@@ -95,6 +97,7 @@ export const UNIT_KINDS: UnitKind[] = [
   { name: 'armoredcar', hp: 55, speed: 32, range: 7 * SUB, minRange: 0, reload: 30, indirect: false, dmgUnit: 14, dmgBld: 6, splash: 0, sight: 13 * SUB, armor: 100, radius: 64, cost: 25, buildTicks: 160, garrison: false, armored: true, pierce: 35, men: 0, soft: 100, setup: false },
   { name: 'destroyer', hp: 85, speed: 17, range: 12 * SUB, minRange: 0, reload: 75, indirect: false, dmgUnit: 78, dmgBld: 18, splash: 0, sight: 12 * SUB, armor: 100, radius: 80, cost: 40, buildTicks: 360, garrison: false, armored: true, pierce: 100, men: 0, soft: 40, setup: true, openTop: true },
   { name: 'assault', hp: 130, speed: 14, range: 8 * SUB, minRange: 0, reload: 80, indirect: false, dmgUnit: 40, dmgBld: 60, splash: 0, sight: 8 * SUB, armor: 75, radius: 84, cost: 55, buildTicks: 420, garrison: false, armored: true, pierce: 75, men: 0, soft: 100, setup: false },
+  { name: 'zombie', hp: 60, speed: 9, range: SUB, minRange: 0, reload: 20, indirect: false, dmgUnit: 20, dmgBld: 45, splash: 0, sight: 7 * SUB, armor: 20, radius: 0, cost: 0, buildTicks: 0, garrison: false, armored: false, pierce: 10, men: 6, soft: 100, setup: false },
 ];
 
 export const ORD_IDLE = 0;
@@ -140,6 +143,7 @@ export const SHELL_AP = 0;      // 穿甲彈（直射）
 export const SHELL_HE = 1;      // 高爆彈（榴彈砲）
 export const SHELL_SMALL = 2;   // R021 步槍子彈（只打一個目標、幾乎不傷房子）
 export const SHELL_SMOKE = 3;   // R107 煙幕彈：只遮視線，不傷害或挖坑
+export const SHELL_MELEE = 4;   // R045 近身：當步結算，沒有飛行或曳光
 
 export interface Shell {
   id: number;
@@ -162,7 +166,8 @@ export type SimEvent =
   | { e: 'stage'; bld: number; stage: number }
   | { e: 'build'; bld: number }
   | { e: 'trench' }
-  | { e: 'wire' };
+  | { e: 'wire' }
+  | { e: 'spawn'; unit: number; x: number; z: number }; // R045：新群的畫面從實際出生位置開始
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
@@ -199,6 +204,7 @@ export interface World extends RngState {
   smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
   counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
   sandbox?: { version: 1; running: boolean; frame: number }; // R128：frame 是指令步序，tick 仍只計戰鬥時間
+  zombies?: { version: 1; wave: number; next: number; pending: number; spawned: number; killed: number; lost: number };
 }
 
 // 舊守衛專用（32×32）：src/ 不再用，改用下面看世界的 cellIdx／inGrid／gridLimit（R042，tests/map-size.mjs 掃描）
@@ -234,7 +240,7 @@ export function blocks(w: World, x: number, z: number): boolean {
 }
 
 // R121：障礙通行和射線分開；舊世界沒有wires時不改行為。
-export const onFoot = (kind: number): boolean => kind === UK_OBSERVER || kind === UK_INFANTRY || kind === UK_MORTAR;
+export const onFoot = (kind: number): boolean => kind === UK_OBSERVER || kind === UK_INFANTRY || kind === UK_MORTAR || kind === UK_ZOMBIE;
 export function wireAt(w: World, x: number, z: number): Building | null {
   if (!Number.isInteger(x) || !Number.isInteger(z) || !inGrid(w, x, z)) return null;
   return w.wires?.segments.find(s => x >= s.x && z >= s.z && x < s.x + s.w && z < s.z + s.d) ?? null;
@@ -350,6 +356,7 @@ export function createWorld(seed: number): World {
 export function hashWorld(w: World): string {
   const f = new Fnv();
   if (w.sandbox) f.int(0x5342).int(w.sandbox.version).int(w.sandbox.running ? 1 : 0).int(w.sandbox.frame);
+  if (w.zombies) { const z = w.zombies; f.int(0x5a4d).int(z.version).int(z.wave).int(z.next).int(z.pending).int(z.spawned).int(z.killed).int(z.lost); }
   f.int(w.seed).int(w.tick).int(w.rng).int(w.nextShell).int(w.winner);
   for (let i = 0; i < w.ter.length; i++) f.int(w.ter[i] | (w.crater[i] << 8)).int(w.occ[i]);
   f.int(w.blds.length);

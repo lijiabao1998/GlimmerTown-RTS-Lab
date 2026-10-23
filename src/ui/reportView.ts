@@ -1,5 +1,6 @@
 // R010 戰報畫面（DOM）：只顯示傳進來的戰報、只呼叫傳進來的動作。
 import type { Report } from './report.ts';
+import { zombiesBest } from './zombiesMode.ts';
 
 export interface ReportView { show: (r: Report) => void; hide: () => void; visible: () => boolean }
 
@@ -14,13 +15,15 @@ export function initReportView(actions: { again: () => void }): ReportView {
   const units = (c: number[]) => `坦克 ${c[0]}・砲 ${c[1]}・觀測 ${c[2]}${c[3] ? `・步兵 ${c[3]}` : ''}`;
   function show(r: Report) {
     last = r;
-    const title = r.winner === 0 ? '勝利' : r.winner === 1 ? '戰敗' : '同歸於盡';
+    const title = r.zombies ? '防線失守' : r.winner === 0 ? '勝利' : r.winner === 1 ? '戰敗' : '同歸於盡';
+    const survival = r.zombies ? `<p class="survival">撐到第 ${r.zombies.wave} 波 · 擊倒 ${r.zombies.killed} 隻 · 我方損失 ${r.zombies.lost}<br>最佳：第 ${zombiesBest(r.zombies.wave)} 波</p>` : '';
     root.className = r.winner === 0 ? 'win' : r.winner === 1 ? 'lose' : 'draw';
     root.innerHTML = `
       <div class="panel">
         <h2>${title}</h2>
-        <p class="time">戰鬥 ${Math.floor(r.seconds / 60)}:${String(r.seconds % 60).padStart(2, '0')}　擊毀 ${r.kills}　損失 ${r.lost}</p>
-        <table>
+        ${survival}
+        <p class="time">戰鬥 ${Math.floor(r.seconds / 60)}:${String(r.seconds % 60).padStart(2, '0')}${r.zombies ? '' : `　擊毀 ${r.kills}　損失 ${r.lost}`}</p>
+        <table ${r.zombies ? 'hidden' : ''}>
           <tr><th></th><td>我方</td><td>敵方</td></tr>
           ${row('開局', units(r.start[0]), units(r.start[1]))}
           ${row('剩下', units(r.left[0]), units(r.left[1]))}

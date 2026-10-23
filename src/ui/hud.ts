@@ -7,6 +7,7 @@ export interface HudState {
   tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;
   mine: number; theirs: number; tanks: number; guns: number; observers: number; infantry?: number;
   ai?: string;   // R018 電腦難度
+  mode?: string; // R045：波次與擊倒數，僅顯示模擬結果
   build?: boolean; hint?: string;   // R006 布陣：藏掉暫停／速度／砲擊，提示列換成布陣說明
   coverEnabled?: boolean; // R124：窄螢幕工具列跟隨獨立閥
   coverInfo?: string; // R124：當前砲擊建築的只讀耐久摘要
@@ -83,7 +84,7 @@ export function initHud(a: HudActions): Hud {
     $('b-ammo').setAttribute('aria-pressed', String(smoke));
     $('b-ammo').setAttribute('aria-label', smoke ? '彈種：煙幕；點按切換高爆' : '彈種：高爆；點按切換煙幕');
     ($('b-ammo') as HTMLButtonElement).disabled = !!s.build;
-    $('count').textContent = `我方 ${s.mine}　可見敵 ${s.theirs}${s.ai ? `　電腦：${s.ai}` : ''}`;
+    $('count').textContent = `我方 ${s.mine}　可見敵 ${s.theirs}${s.mode ? `　${s.mode}` : s.ai ? `　電腦：${s.ai}` : ''}`;
     const sel = s.tanks + s.guns + s.observers + (s.infantry ?? 0);
     $('hint').textContent = s.hint !== undefined ? s.hint : s.fireMode && smoke
       ? `${s.howitzers ? `已選榴彈砲 ${s.howitzers}：點地面、敵人或房子布煙；混選的其他單位不動。` : '煙幕只供榴彈砲：先點我方榴彈砲選取。'}煙幕無傷害，遮住雙方視線；按「砲擊」恢復移動／攻擊。`

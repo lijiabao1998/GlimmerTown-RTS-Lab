@@ -4,6 +4,7 @@ import { UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK
 const KINDS = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY];   // R021 加步兵
 export interface BattleStats { start: number[][]; fires: number[]; lastKill: { x: number; z: number; tick: number } | null; endTick: number }
 export interface Report {
+  zombies?: { wave: number; killed: number; lost: number };
   winner: number; endTick: number; seconds: number;
   start: number[][]; left: number[][];          // [陣營][坦克、榴彈砲、觀測員]
   kills: number; lost: number;                   // 擊毀敵方、我方損失（台）
@@ -34,6 +35,7 @@ export function makeReport(w: World, st: BattleStats): Report {
   const sum = (a: number[]) => a.reduce((p, x) => p + x, 0);
   const endTick = st.endTick >= 0 ? st.endTick : w.tick;
   return {
+    ...(w.zombies ? { zombies: { wave: w.zombies.wave, killed: w.zombies.killed, lost: w.zombies.lost } } : {}),
     winner: w.winner, endTick, seconds: Math.floor(endTick / 20),
     start: st.start.map(a => a.slice()), left,
     kills: sum(st.start[SIDE_ENEMY]) - sum(left[SIDE_ENEMY]), lost: sum(st.start[SIDE_PLAYER]) - sum(left[SIDE_PLAYER]),

@@ -43,7 +43,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
 export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0): void {
   if (w.eco || w.tick !== 0) return;
   const hq = [0, 0];
-  for (const side of [SIDE_PLAYER, SIDE_ENEMY]) {
+  for (const side of (w.zombies ? [SIDE_PLAYER] : [SIDE_PLAYER, SIDE_ENEMY])) {
     const at = hqSpot(w, side);
     if (!at) continue;
     const id = w.blds.length + 1, maxHp = bldMaxHp(BK_HQ, 2, 2, 1);
@@ -54,7 +54,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0): vo
     w.events.push({ e: 'build', bld: id });
     hq[side] = id;
   }
-  w.eco = { supply: [ECO_START, ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}), ...(w.map === MAP_LARGE ? { pop: LARGE_POP } : {}) };
+  w.eco = { supply: [ECO_START, w.zombies ? 0 : ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}), ...(w.map === MAP_LARGE ? { pop: LARGE_POP } : {}) };
   if (inf) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_INFANTRY, b); }   // R021：雙方各一班步兵
 }
 
