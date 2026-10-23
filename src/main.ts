@@ -687,4 +687,6 @@ const rts = {
   startBattle: () => startBattle(),
   sandbox: () => w.sandbox ? { ...w.sandbox, count: w.units.length } : null,
 };
+// R040：初始化做完才拿掉載入畫面，而且跟設好 __rts（守衛等的「準備好了」）在同一步：準備好的那一刻畫面上已經沒有它
+document.getElementById('loader')?.remove();
 (window as unknown as { __rts: typeof rts }).__rts = rts;

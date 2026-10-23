@@ -23,7 +23,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451, loader: 9471, loaderDesk: 9491, loaderFail: 9511, noR040: 9531 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -781,6 +781,40 @@ await withBrowser({ width: 1280, height: 800, port: PORTS.streets + 2 }, async (
   await shot(page, path.join(SHOTS, 'desktop-streets.png'));
   log(page.errors.length === 0, '人行道特寫（桌機）零頁面錯誤', page.errors.join(' | '));
 });
+
+// ---- R040 載入畫面：拿掉 module 腳本的頁面＝停在載入畫面（特寫兩張）；module 腳本丟錯＝寫出「載入失敗」；
+//      正常打開時「準備好了」那一刻已經沒有載入畫面；?noR040=1 沒有載入畫面、雜湊不變 ----
+{
+  const built = fs.readFileSync(path.join(ROOT, 'dist', 'index.html'), 'utf8');
+  const a = built.indexOf('<script type="module"'), z = built.indexOf('</script>', a) + '</script>'.length;
+  const stalled = built.slice(0, a) + built.slice(z), failing = built.slice(0, a) + '<script type="module">throw new Error("R040 測試用的初始化錯誤")</script>' + built.slice(z);
+  const loaderState = "(() => { const el = document.getElementById('loader'); if (!el) return null; const r = el.querySelector('.ld-scene').getBoundingClientRect(); return { fail: el.classList.contains('fail'), msg: el.querySelector('.ld-msg').textContent, title: el.querySelector('.ld-title').textContent, anim: document.getAnimations().filter(x => x.playState === 'running').length, cx: r.x + r.width / 2, cy: r.y + r.height / 2 }; })()";
+  for (const [mobile, w, h, port, name] of [[true, 412, 860, PORTS.loader, 'phone'], [false, 1280, 800, PORTS.loaderDesk, 'desk']]) {
+    await withBrowser({ width: w, height: h, mobile, port, overlay: { 'index.html': stalled }, ready: "!!document.getElementById('loader')", readyMs: 5000, settle: 400 }, async ({ open, page }) => {
+      await open('');
+      const st = await page.evaluate(loaderState);
+      await shot(page, path.join(SHOTS, `loader-${name}.png`));
+      log(!!st && !st.fail && st.title === '微光小鎮' && st.anim >= 3 && Math.abs(st.cx - w / 2) < 2 && external(page.requests).length === 0 && page.errors.length === 0,
+        `R040 載入畫面特寫（${mobile ? '手機' : '桌機'}）：坦克在動、置中、零外部請求、零頁面錯誤`, JSON.stringify(st));
+    });
+  }
+  await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.loaderFail, overlay: { 'index.html': failing }, ready: "!!document.querySelector('#loader.fail')", readyMs: 5000, settle: 200 }, async ({ open, page }) => {
+    await open('');
+    const st = await page.evaluate(loaderState);
+    await shot(page, path.join(SHOTS, 'loader-fail-phone.png'));
+    log(!!st && st.fail && st.msg.includes('載入失敗') && st.msg.includes('R040 測試用的初始化錯誤'), 'R040 程式準備好之前出錯：載入畫面寫出「載入失敗」與原因', JSON.stringify(st));
+  });
+  // 頁面任何腳本之前先掛一個 __rts 的 setter：記下「設好 __rts 的那一刻」載入畫面還在不在
+  const atReady = "Object.defineProperty(window, '__rts', { configurable: true, get() { return undefined; }, set(v) { window.__r040AtReady = { loader: !!document.getElementById('loader'), ready: !!(v && v.ready) }; Object.defineProperty(window, '__rts', { value: v, writable: true, configurable: true }); } });";
+  await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR040, preload: atReady }, async ({ open, page }) => {
+    await open('');
+    const at = await page.evaluate('window.__r040AtReady ?? null'), gone = await page.evaluate("document.getElementById('loader') === null");
+    log(!!at && at.ready && !at.loader && gone && page.errors.length === 0, 'R040 正常打開：設好 __rts（準備好了）的那一刻載入畫面已經不在、零頁面錯誤', JSON.stringify(at));
+    await open('noR040=1');
+    const none = await page.evaluate("document.getElementById('loader') === null"), hh = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+    log(none && hh === nodeHash && page.errors.length === 0, '?noR040=1：沒有載入畫面、雜湊不變、零頁面錯誤', hh);
+  });
+}
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
 if (fails.length) { console.log(`\nNG 紅燈（${sec}s）：${fails.join('、')}`); process.exit(1); }
