@@ -53,6 +53,21 @@ export function zombieAim(w: World, u: Unit, sees: ZombieVision): ZombieAim | nu
   return best;
 }
 
+// R059 終點是房子（指揮部、駐軍的屋子）時，A* 准走進那一棟、再切掉屋內那一段：終點可達，搜尋提早結束，
+// 不必把整張圖翻一遍（大地圖每次約 4.8ms → 0.7ms）。停在貼著外牆的格子；斜角進屋就補一步到牆邊，近身才夠得到。
+function approach(w: World, u: Unit, gx: number, gz: number): number[] {
+  const into = blocks(w, gx, gz) ? w.occ[cellIdx(w, gx, gz)] : 0, from = cellIdx(w, cellOf(u.x), cellOf(u.z));
+  const path = findPath(w, cellOf(u.x), cellOf(u.z), gx, gz, into, 0, UK_ZOMBIE);
+  const k = into ? path.findIndex(p => w.occ[p] === into) : -1;
+  if (k < 0) return path;
+  const inside = path[k], last = k ? path[k - 1] : from, n = w.n;
+  path.length = k;
+  const lx = last % n, lz = (last - lx) / n, fx = inside % n, fz = (inside - fx) / n;
+  const a = cellIdx(w, fx, lz), b = cellIdx(w, lx, fz);
+  if (lx !== fx && lz !== fz && w.occ[a] !== into && w.occ[b] !== into) path.push(a);
+  return path;
+}
+
 export function zombiesStep(w: World, sees: ZombieVision): void {
   const state = w.zombies;
   if (!state || w.winner >= 0) return;
@@ -82,7 +97,7 @@ export function zombiesStep(w: World, sees: ZombieVision): void {
     const aim = zombieAim(w, u, sees);
     if (aim) { u.order = aim.bld ? ORD_MOVE : ORD_IDLE; u.path = []; u.pathIdx = 0; continue; }
     u.order = ORD_MOVE; u.tx = cellOf(gx); u.tz = cellOf(gz);
-    u.path = findPath(w, cellOf(u.x), cellOf(u.z), u.tx, u.tz, 0, 0, UK_ZOMBIE); u.pathIdx = 0;
+    u.path = approach(w, u, u.tx, u.tz); u.pathIdx = 0;
     // A* 已在最近可達格也可能尚未走到格心；先走完，否則會停在近身距離外幾個位置單位。
     if (!u.path.length && (u.x !== center(cellOf(u.x)) || u.z !== center(cellOf(u.z)))) u.path = [cellIdx(w, cellOf(u.x), cellOf(u.z))];
   }

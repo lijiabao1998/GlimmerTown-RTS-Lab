@@ -90,6 +90,12 @@ group('combat', () => {
   const off = unit(edge, 1, UK_ZOMBIE, hq.x - 1, hq.z); off.x -= 20;
   const hp = hq.hp; for (let i = 0; i < 100; i++) step(edge, []);
   assert(hq.hp < hp, 'combat: finishes last cell center to reach headquarters');
+  // R059：朝房子走的路線准穿進那一棟再切掉（A* 不必翻整張圖）；切完不能留屋內格，斜角貼著也要補一步到牆邊。
+  const ring = blank(); step(ring, [{ t: 'eco' }]); const base = ring.blds[ring.eco.hq[0] - 1];
+  const walker = unit(ring, 1, UK_ZOMBIE, 2, 2), diag = unit(ring, 1, UK_ZOMBIE, base.x - 1, base.z - 1); step(ring, []);
+  assert(walker.path.length > 0 && walker.path.every(p => ring.occ[p] !== base.id), 'combat: approach path stops outside the building');
+  const full = base.hp; for (let i = 0; i < 100; i++) step(ring, []);
+  assert(base.hp < full && diag.alive && Math.abs(cellOf(diag.x) - base.x) + Math.abs(cellOf(diag.z) - base.z) === 1, 'combat: diagonal corner steps beside the wall and bites');
 });
 
 group('replay', () => {

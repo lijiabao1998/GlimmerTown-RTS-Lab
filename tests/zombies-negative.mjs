@@ -13,6 +13,8 @@ const cases = [
   ['clock', 'src/sim/zombies.ts', 'ZOMBIE_PERIOD = 900', 'ZOMBIE_PERIOD = 899', 'waves', 'waves: no first wave before tick 900'],
   ['garrison', 'src/sim/zombies.ts', 'if (home && home.hp > 0)', 'if (false && home && home.hp > 0)', 'combat', 'combat: cannot bite garrison through intact wall'],
   ['center', 'src/sim/zombies.ts', 'if (!u.path.length && (u.x !==', 'if (false && !u.path.length && (u.x !==', 'combat', 'combat: finishes last cell center to reach headquarters'],
+  ['inside', 'src/sim/zombies.ts', '  path.length = k;', '  void k;', 'combat', 'combat: approach path stops outside the building'],
+  ['corner', 'src/sim/zombies.ts', 'w.occ[b] !== into) path.push(a);', 'w.occ[b] !== into) void a;', 'combat', 'combat: diagonal corner steps beside the wall and bites'],
   ['construction', 'src/sim/step.ts', "if (w.zombies) cmds = cmds.filter", "if (false && w.zombies) cmds = cmds.filter", 'activation', 'activation: enemy construction is rejected'],
 ];
 try {
