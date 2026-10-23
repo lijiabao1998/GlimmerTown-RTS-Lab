@@ -1,6 +1,6 @@
 // R122: read-only nominal multi-selection ranges. One fixed quad, analytical annuli per fragment.
 import * as THREE from 'three';
-import { N, SUB, SIDE_PLAYER, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SUB, SIDE_PLAYER, UNIT_KINDS, type World } from '../sim/world.ts';
 
 export const MULTI_RANGE_CAP = 512; // Same capacity as the existing battle unit renderer.
 export class MultiRangePreview {
@@ -8,11 +8,12 @@ export class MultiRangePreview {
   readonly texture = new THREE.DataTexture(this.data, MULTI_RANGE_CAP, 1, THREE.RGBAFormat, THREE.FloatType);
   readonly mesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   readonly solution = { legend: '', reason: 'empty', selectedCount: 0, armedCount: 0, excludedCount: 0 };
+  private size = 0;   // 平面目前蓋住幾格見方（R042：跟著世界的 w.n，換大小才重建）
 
   constructor() {
     this.texture.minFilter = this.texture.magFilter = THREE.NearestFilter;
     this.texture.generateMipmaps = false;
-    const geometry = new THREE.PlaneGeometry(N, N).rotateX(-Math.PI / 2).translate(N / 2, 0.048, N / 2);
+    const geometry = new THREE.BufferGeometry();   // 第一次 update 照世界大小換成真的平面
     geometry.setDrawRange(0, 0);
     const material = new THREE.ShaderMaterial({
       uniforms: { ranges: { value: this.texture }, armedCount: { value: 0 } },
@@ -58,7 +59,16 @@ export class MultiRangePreview {
     this.mesh.renderOrder = 2;
   }
 
+  // 整張地圖一片平面；只在地圖邊長變了才換幾何（不是每幀）
+  private resize(n: number): void {
+    if (n === this.size) return;
+    this.size = n;
+    this.mesh.geometry.dispose();
+    this.mesh.geometry = new THREE.PlaneGeometry(n, n).rotateX(-Math.PI / 2).translate(n / 2, 0.048, n / 2);
+  }
+
   update(w: World, selected: ReadonlySet<number>, enabled = true): Readonly<typeof this.solution> {
+    this.resize(w.n);
     const s = this.solution;
     s.legend = ''; s.reason = 'empty'; s.selectedCount = s.armedCount = s.excludedCount = 0;
     this.mesh.visible = false; this.mesh.geometry.setDrawRange(0, 0); this.mesh.material.uniforms.armedCount.value = 0;
@@ -90,7 +100,7 @@ export class MultiRangePreview {
 
   // Diagnostic predicate mirrors the analytical contract; tests use independent expected points.
   contains(x: number, z: number): boolean {
-    if (!this.mesh.visible || x < 0 || z < 0 || x > N || z > N) return false;
+    if (!this.mesh.visible || x < 0 || z < 0 || x > this.size || z > this.size) return false;
     for (let i = 0; i < this.solution.armedCount; i++) {
       const at = i * 4, dx = x - this.data[at], dz = z - this.data[at + 1];
       const d2 = dx * dx + dz * dz, min = this.data[at + 2], max = this.data[at + 3];

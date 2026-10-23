@@ -1,8 +1,8 @@
 // R113：只讀目前已套用的單選射擊解。圈線共用自己的固定網格，不占既有選取／路線／效果池。
 import * as THREE from 'three';
 import {
-  N, SUB, SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, SHELL_HE, SHELL_SMOKE,
-  bldAt, center, inMap, type Unit, type World,
+  SUB, SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, SHELL_HE, SHELL_SMOKE,
+  bldAt, center, inGrid, type Unit, type World,
 } from '../sim/world.ts';
 import { dist } from '../sim/math.ts';
 import { spotted } from '../sim/step.ts';
@@ -64,7 +64,7 @@ export class RangePreview {
     geometry.setIndex(new THREE.BufferAttribute(indices, 1)); geometry.setDrawRange(0, 0);
     // 只裁這個材質的片段。不把圓周頂點夾到邊界，避免在地圖邊緣生成假的直線弦。
     const material = new THREE.ShaderMaterial({
-      uniforms: { mapSize: { value: N } }, vertexColors: true, side: THREE.DoubleSide,
+      uniforms: { mapSize: { value: 0 } }, vertexColors: true, side: THREE.DoubleSide,
       transparent: true, depthWrite: false, toneMapped: false,
       vertexShader: `
         varying vec2 worldXZ;
@@ -100,6 +100,7 @@ export class RangePreview {
     s.range = s.minRange = s.scatterRadius = s.offset = 0;
     s.x = s.z = s.aimX = s.aimZ = 0; s.blind = false; s.ammo = SHELL_HE;
     this.mesh.visible = false; this.mesh.geometry.setDrawRange(0, 0);
+    this.mesh.material.uniforms.mapSize.value = w.n;   // R042：裁到這個世界的邊長
     if (!enabled) { s.reason = 'disabled'; return s; }
     let unit: Unit | undefined, count = 0;
     for (const u of w.units) {
@@ -123,7 +124,7 @@ export class RangePreview {
     const smoke = unit.fireAmmo === SHELL_SMOKE;
     s.ammo = smoke ? SHELL_SMOKE : SHELL_HE;
     const bld = !smoke && unit.target <= 0 ? bldAt(w, unit.tx, unit.tz) : null;
-    if (!inMap(unit.tx, unit.tz) || (unit.target <= 0 && (!bld || bld.hp <= 0))) return this.finish('invalid-target', '砲擊任務已失效');
+    if (!inGrid(w, unit.tx, unit.tz) || (unit.target <= 0 && (!bld || bld.hp <= 0))) return this.finish('invalid-target', '砲擊任務已失效');
     const ax = center(unit.tx), az = center(unit.tz), d = dist(unit.x, unit.z, ax, az);
     if (d < k.minRange) return this.finish('too-near', '目標過近：不預測散布');
     if (d > k.range) return this.finish('too-far', '目標過遠：不預測散布');

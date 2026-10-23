@@ -1,10 +1,12 @@
 // R109：只讀世界的砲擊快捷選單。選單保存格子，按下彈種時才檢查目前選取。
-import { N, SUB, SIDE_PLAYER, UK_HOWITZER, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SUB, SIDE_PLAYER, UK_HOWITZER, UNIT_KINDS, type World } from '../sim/world.ts';
 import type { Command } from '../sim/step.ts';
 import type { AmmoMode, OrderHit } from './smoke.ts';
 
 export interface BombardTarget { x: number; z: number }
-const validTarget = (p: BombardTarget) => Number.isInteger(p.x) && Number.isInteger(p.z) && p.x >= 0 && p.z >= 0 && p.x < N && p.z < N;
+// 上界看世界的 w.n（R042）；選單本身沒有世界，只擋形狀，上界由 bombardTarget／bombardCommand 對當下的世界檢查
+const validShape = (p: BombardTarget) => Number.isInteger(p.x) && Number.isInteger(p.z) && p.x >= 0 && p.z >= 0;
+const validTarget = (w: World, p: BombardTarget) => validShape(p) && p.x < w.n && p.z < w.n;
 
 export function bombardTarget(w: World, hit: OrderHit): BombardTarget | null {
   const unit = hit.unit ? w.units[hit.unit - 1] : undefined;
@@ -12,11 +14,11 @@ export function bombardTarget(w: World, hit: OrderHit): BombardTarget | null {
     : hit.building ?? (hit.ground ? [Math.floor(hit.ground.x), Math.floor(hit.ground.z)] : null);
   if (!cell) return null;
   const p = { x: cell[0], z: cell[1] };
-  return validTarget(p) ? p : null;
+  return validTarget(w, p) ? p : null;
 }
 
 export function bombardCommand(w: World, selected: Iterable<number>, target: BombardTarget, ammo: AmmoMode): Command | null {
-  if (!validTarget(target)) return null;
+  if (!validTarget(w, target)) return null;
   const ids = [...new Set(selected)].filter(id => {
     const u = w.units[id - 1];
     return u?.alive && u.side === SIDE_PLAYER && (ammo === 'smoke' ? u.kind === UK_HOWITZER : UNIT_KINDS[u.kind].indirect);
@@ -69,7 +71,7 @@ export function initCommandMenu(on: { choose: (ammo: AmmoMode, target: BombardTa
   root.querySelector('#cm-cancel')!.addEventListener('click', () => { if (!aim) return; close(); on.cancel(); });
   return {
     open(target, cx, cy) {
-      if (!validTarget(target)) { close(); return; }
+      if (!validShape(target)) { close(); return; }
       aim = { ...target }; root.querySelector('#cm-target')!.textContent = `砲擊格 ${target.x + 1} · ${target.z + 1}`;
       root.hidden = false;
       const rect = root.getBoundingClientRect();

@@ -13,7 +13,7 @@ import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import { applySandbox, type SandboxCommand } from './sandbox.ts';
 import {
-  N, SUB, HALF, idx, inMap, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
+  SUB, HALF, cellIdx, inGrid, gridLimit, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
   UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building, type Shell,
 } from './world.ts';
@@ -55,7 +55,7 @@ export function applyCommand(w: World, cmd: Command): void {
     if (u && u.alive && u.side === cmd.side && !seen.has(u.id)) { seen.add(u.id); us.push(u); }
   }
   us.sort((a, b) => a.id - b.id);
-  const cx = (v: number) => Math.max(0, Math.min(N - 1, v | 0));
+  const cx = (v: number) => Math.max(0, Math.min(w.n - 1, v | 0));
   us.forEach((u, k) => {
     const ux = cellOf(u.x), uz = cellOf(u.z);
     if (cmd.t === 'stop') { delete u.fireAmmo; u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
@@ -65,7 +65,7 @@ export function applyCommand(w: World, cmd: Command): void {
       // 觀測員照舊不排隊形；R021 步兵點到房子時直接進去、點地面照隊形
       const garr = UNIT_KINDS[u.kind].garrison, intoBld = garr && blocks(w, gx, gz);
       const [ox, oz] = u.kind === UK_OBSERVER || intoBld ? [0, 0] : FORMATION[k % FORMATION.length];
-      if (inMap(gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz) && !wireBlocks(w, gx + ox, gz + oz, u.kind)) { gx += ox; gz += oz; }
+      if (inGrid(w, gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz) && !wireBlocks(w, gx + ox, gz + oz, u.kind)) { gx += ox; gz += oz; }
       u.order = ORD_MOVE; u.tx = gx; u.tz = gz; u.target = 0;
       u.path = findPath(w, ux, uz, gx, gz, garr ? (bldAt(w, gx, gz)?.id ?? 0) : 0, garr ? (bldAt(w, ux, uz)?.id ?? 0) : 0, u.kind); u.pathIdx = 0;
       if (!u.path.length) u.order = ORD_IDLE;
@@ -109,17 +109,18 @@ function inRange(u: Unit, x: number, z: number): boolean {
 }
 
 // 兩格之間的直線（Bresenham）。一律從格索引小的那一端畫，需要時再反轉：A→B 與 B→A 經過同一組格，視線才對稱
-export function lineCells(x0: number, z0: number, x1: number, z1: number): number[] {
-  const flip = idx(x0, z0) > idx(x1, z1);
+// n＝地圖邊長（格索引＝z*n+x）；src/ 一律傳 w.n，預設 32 只給舊守衛的四參數呼叫（R042）
+export function lineCells(x0: number, z0: number, x1: number, z1: number, n = 32): number[] {
+  const flip = z0 * n + x0 > z1 * n + x1;
   if (flip) { const tx = x0, tz = z0; x0 = x1; z0 = z1; x1 = tx; z1 = tz; }
   const dx = Math.abs(x1 - x0), dz = -Math.abs(z1 - z0), sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1;
-  const out = [idx(x0, z0)];
+  const out = [z0 * n + x0];
   let x = x0, z = z0, err = dx + dz;
   while (x !== x1 || z !== z1) {
     const e2 = 2 * err;
     if (e2 >= dz) { err += dz; x += sx; }
     if (e2 <= dx) { err += dx; z += sz; }
-    out.push(idx(x, z));
+    out.push(z * n + x);
   }
   if (flip) out.reverse();
   return out;
@@ -127,7 +128,7 @@ export function lineCells(x0: number, z0: number, x1: number, z1: number): numbe
 
 // 從 (ax,az) 到 (bx,bz)（位置單位），回傳第一個擋住的建築格（不含起點格）；沒有擋就回傳 -1
 export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number, ignoreBuilding = 0): number {
-  return firstBlockCells(w, lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz)), ignoreBuilding);
+  return firstBlockCells(w, lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz), w.n), ignoreBuilding);
 }
 
 // LOS 與實體彈道共用原建築掃描；spotted 已有射線時不再配置第二份格陣列。
@@ -138,15 +139,15 @@ function firstBlockCells(w: World, cells: readonly number[], ignoreBuilding = 0)
 
 // 每 tick 查當前世界，不保留快取。阻擋建築本身可見，後方不可見；瓦礫不擋。
 export function spotted(w: World, side: number, x: number, z: number, ignoreSmokeId = 0): boolean {
-  if (!inMap(cellOf(x), cellOf(z))) return false;
+  if (!inGrid(w, cellOf(x), cellOf(z))) return false;
   for (const u of w.units) {
     if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight) continue;
     if (smokeBlocks(w, u.x, u.z, x, z, ignoreSmokeId)) continue;
-    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z));
+    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z), w.n);
     if (w.vegetation && vegetationBlocks(w, cells)) continue;
     const home = UNIT_KINDS[u.kind].garrison ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
     const block = firstBlockCells(w, cells, home?.id ?? 0);
-    if (block < 0 || block === idx(cellOf(x), cellOf(z))) return true;
+    if (block < 0 || block === cellIdx(w, cellOf(x), cellOf(z))) return true;
   }
   return false;
 }
@@ -167,7 +168,7 @@ function moveUnit(w: World, u: Unit): void {
     return;
   }
   const oldX = u.x, oldZ = u.z;
-  const c = u.path[u.pathIdx], gx = center(c % N), gz = center((c - (c % N)) / N);
+  const c = u.path[u.pathIdx], n = w.n, gx = center(c % n), gz = center((c - (c % n)) / n);
   const k = UNIT_KINDS[u.kind];
   const spd = Math.max(1, Math.floor((k.speed * speedPct(w, cellOf(u.x), cellOf(u.z))) / 100));
   const dx = gx - u.x, dz = gz - u.z, d = isqrt(dx * dx + dz * dz);
@@ -193,7 +194,7 @@ function stepVehicle(w: World, u: Unit, nx: number, nz: number, spd: number): vo
     return;
   }
   const end = u.path[u.path.length - 1];
-  u.path = findPath(w, cellOf(u.x), cellOf(u.z), end % N, (end - (end % N)) / N, 0, 0, u.kind); u.pathIdx = 0;
+  u.path = findPath(w, cellOf(u.x), cellOf(u.z), end % w.n, (end - (end % w.n)) / w.n, 0, 0, u.kind); u.pathIdx = 0;
 }
 
 // 車輛碰撞（R005）：全部單位移動之後，中心距離小於兩者半徑和的車輛沿連線推開。
@@ -224,7 +225,7 @@ function separate(w: World): void {
     px[i] -= Math.trunc((dx * sa) / len); pz[i] -= Math.trunc((dz * sa) / len);
     px[j] += Math.trunc((dx * sb) / len); pz[j] += Math.trunc((dz * sb) / len);
   }
-  const lim = (v: number) => Math.max(0, Math.min(N * SUB - 1, v));
+  const top = gridLimit(w), lim = (v: number) => Math.max(0, Math.min(top, v));
   vs.forEach((u, i) => {
     let qx = px[i], qz = pz[i];
     if (!qx && !qz) return;
@@ -297,7 +298,7 @@ function fireUnit(w: World, u: Unit): void {
   const sh: Shell = { id: w.nextShell++, side: u.side, kind: smoke ? SHELL_SMOKE : k.indirect ? SHELL_HE : k.men ? SHELL_SMALL : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
   if (!k.indirect) {
     const blockCell = firstBlock(w, u.x, u.z, aim.x, aim.z, homeOf(w, u));   // R021：從自己待的房子往外打
-    if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % N); sh.ez = center((blockCell - (blockCell % N)) / N); sh.target = 0; }
+    if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % w.n); sh.ez = center((blockCell - (blockCell % w.n)) / w.n); sh.target = 0; }
     sh.T = sh.kind === SHELL_SMALL ? Math.max(1, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / (3 * SUB))) : Math.max(2, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / SUB));
   } else {
     let r = Math.floor(d / 12);
@@ -306,8 +307,8 @@ function fireUnit(w: World, u: Unit): void {
       sh.rangingEpoch = u.ranging?.epoch;
     }
     if (!spotted(w, u.side, aim.x, aim.z)) r *= 2;               // 沒有友軍看得到：盲射，散布加倍
-    sh.ex = Math.max(0, Math.min(N * SUB - 1, aim.x + randSym(w, r)));
-    sh.ez = Math.max(0, Math.min(N * SUB - 1, aim.z + randSym(w, r)));
+    sh.ex = Math.max(0, Math.min(gridLimit(w), aim.x + randSym(w, r)));
+    sh.ez = Math.max(0, Math.min(gridLimit(w), aim.z + randSym(w, r)));
     sh.T = 20 + 2 * Math.floor(d / SUB);
   }
   w.shells.push(sh);
@@ -324,7 +325,7 @@ function damageUnit(w: World, u: Unit, dmg: number, allowGroundCover = true): vo
   const x = cellOf(u.x), z = cellOf(u.z);
   const home = UNIT_KINDS[u.kind].garrison && blocks(w, x, z) ? bldAt(w, x, z) : null;
   // R106：只用命中前已有的彈坑；建築掩護更強，不疊乘。倒塌傷害不吃地形掩護。
-  const terrain = !allowGroundCover ? 100 : vegetationAt(w, x, z) ? 50 : inMap(x, z) && w.crater[idx(x, z)] > 0 ? 75 : 100;
+  const terrain = !allowGroundCover ? 100 : vegetationAt(w, x, z) ? 50 : inGrid(w, x, z) && w.crater[cellIdx(w, x, z)] > 0 ? 75 : 100;
   const ground = Math.min(terrain, allowGroundCover ? trenchCover(w, x, z) : 100);
   const cover = !home ? ground : Math.min(ground, home.kind === BK_PILLBOX ? 25 : 50);   // R024 碉堡裡只吃四分之一
   u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor * cover) / 10000);
@@ -379,7 +380,7 @@ function land(w: World, s: Shell): void {
     for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) if (dist(center(x), center(z), s.ex, s.ez) <= R + HALF) reached = true;
     if (reached) { b.hp = Math.max(0, b.hp - k.dmgBld); w.events.push({ e: 'wire' }); }
   }
-  if (inMap(cx, cz) && !blocks(w, cx, cz)) { const i = idx(cx, cz); if (w.crater[i] < 3) w.crater[i]++; }
+  if (inGrid(w, cx, cz) && !blocks(w, cx, cz)) { const i = cellIdx(w, cx, cz); if (w.crater[i] < 3) w.crater[i]++; }
   w.events.push(R < UNIT_KINDS[UK_HOWITZER].splash ? { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0, r: R } : { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0 });
 }
 

@@ -1,5 +1,5 @@
 // 格子 A*：八方向、不准切過擋路格的角；成本全是整數，平手時照格索引排，結果決定性。
-import { N, idx, inMap, blocks, wireBlocks, UK_TANK, speedPct, type World } from './world.ts';
+import { cellIdx, inGrid, blocks, wireBlocks, UK_TANK, speedPct, type World } from './world.ts';
 
 const DX = [1, -1, 0, 0, 1, 1, -1, -1];
 const DZ = [0, 0, 1, -1, 1, -1, 1, -1];
@@ -13,8 +13,7 @@ function heur(x: number, z: number, gx: number, gz: number): number {
   return 10 * (dx + dz) - 6 * Math.min(dx, dz);
 }
 
-// 最小堆：鍵＝f*K+格索引（K＝N*N），同 f 時小索引先出
-const K = N * N;
+// 最小堆：鍵＝f*K+格索引（K＝這個世界的格數 n*n，見 findPath），同 f 時小索引先出
 class Heap {
   a: number[] = [];
   push(v: number) {
@@ -44,11 +43,12 @@ class Heap {
 
 // 回傳從起點下一格到終點的格索引；終點走不到時，走到離終點最近（啟發值最小）的可達格。
 export function findPath(w: World, sx: number, sz: number, gx: number, gz: number, enterBuilding = 0, exitBuilding = 0, unitKind = UK_TANK): number[] {
-  if (!inMap(sx, sz) || !inMap(gx, gz)) return [];
-  const blocked = (x: number, z: number) => wireBlocks(w, x, z, unitKind) || (blocks(w, x, z) && w.occ[idx(x, z)] !== enterBuilding && w.occ[idx(x, z)] !== exitBuilding);
-  const start = idx(sx, sz), goal = idx(gx, gz);
+  if (!inGrid(w, sx, sz) || !inGrid(w, gx, gz)) return [];
+  const blocked = (x: number, z: number) => wireBlocks(w, x, z, unitKind) || (blocks(w, x, z) && w.occ[cellIdx(w, x, z)] !== enterBuilding && w.occ[cellIdx(w, x, z)] !== exitBuilding);
+  const start = cellIdx(w, sx, sz), goal = cellIdx(w, gx, gz);
   if (start === goal) return [];
-  const g = new Int32Array(N * N).fill(-1), came = new Int32Array(N * N).fill(-1), done = new Uint8Array(N * N);
+  const n = w.n, K = n * n;
+  const g = new Int32Array(K).fill(-1), came = new Int32Array(K).fill(-1), done = new Uint8Array(K);
   const open = new Heap();
   g[start] = 0;
   open.push(heur(sx, sz, gx, gz) * K + start);
@@ -57,16 +57,16 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
     const cur = open.pop() % K;
     if (done[cur]) continue;
     done[cur] = 1;
-    const cx = cur % N, cz = (cur - cx) / N;
+    const cx = cur % n, cz = (cur - cx) / n;
     const h = heur(cx, cz, gx, gz);
     if (h < bestH || (h === bestH && g[cur] < g[best])) { best = cur; bestH = h; }
     if (cur === goal) break;
     for (let k = 0; k < 8; k++) {
       const nx = cx + DX[k], nz = cz + DZ[k];
-      if (!inMap(nx, nz) || blocked(nx, nz)) continue;
+      if (!inGrid(w, nx, nz) || blocked(nx, nz)) continue;
       const diag = k >= 4;
       if (diag && (blocked(cx + DX[k], cz) || blocked(cx, cz + DZ[k]))) continue;   // 不切角
-      const ni = idx(nx, nz), ng = g[cur] + stepCost(w, nx, nz, diag);
+      const ni = cellIdx(w, nx, nz), ng = g[cur] + stepCost(w, nx, nz, diag);
       if (done[ni] || (g[ni] >= 0 && g[ni] <= ng)) continue;
       g[ni] = ng; came[ni] = cur;
       open.push((ng + heur(nx, nz, gx, gz)) * K + ni);

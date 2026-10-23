@@ -13,7 +13,7 @@ const mutants=[
  ['side','placement','sandbox.ts',"if (c.side !== SIDE_PLAYER && c.side !== SIDE_ENEMY)","if (false && c.side !== SIDE_PLAYER && c.side !== SIDE_ENEMY)",'placement: invalid input has reason'],
  ['kind','placement','sandbox.ts',"if (c.kind !== UK_TANK && c.kind !== UK_HOWITZER)","if (false && c.kind !== UK_TANK && c.kind !== UK_HOWITZER)",'placement: invalid input has reason'],
  ['integer','placement','sandbox.ts','!Number.isInteger(c.x) || !Number.isInteger(c.z) || ','','placement: invalid input has reason'],
- ['bounds','placement','sandbox.ts','!inMap(c.x, c.z)','false','placement: invalid input has reason'],
+ ['bounds','placement','sandbox.ts','!inGrid(w, c.x, c.z)','false','placement: invalid input has reason'],
  ['building','placement','sandbox.ts','if (blocks(w, c.x, c.z))','if (false && blocks(w, c.x, c.z))','placement: invalid input has reason'],
  ['overlap','placement','sandbox.ts','if (w.units.some(','if (false && w.units.some(','placement: invalid input has reason'],
  ['values','placement','sandbox.ts','hp: k.hp, alive: true','hp: k.hp - 1, alive: true','placement: independent unit values'],

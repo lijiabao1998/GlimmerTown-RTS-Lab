@@ -1,5 +1,5 @@
 // R116 通用、可穿行的植被。只在明確的新 map 指令啟用；不消耗 World.rng。
-import { N, idx, inMap, cellOf, TER_ROAD, TER_MUD, type World } from './world.ts';
+import { cellIdx, inGrid, cellOf, TER_ROAD, TER_MUD, type World } from './world.ts';
 
 export const VEG_NONE = 0;
 export const VEG_HEDGE = 1;
@@ -9,8 +9,8 @@ export const VEGETATION_MAX = 64;
 
 // 參數是格座標。未知版本／種類當作無植被，缺欄位的舊世界不用遷移。
 export function vegetationAt(w: World, x: number, z: number): number {
-  if (!Number.isInteger(x) || !Number.isInteger(z) || !inMap(x, z) || w.vegetation?.version !== VEGETATION_VERSION) return VEG_NONE;
-  const v = w.vegetation.cells[idx(x, z)];
+  if (!Number.isInteger(x) || !Number.isInteger(z) || !inGrid(w, x, z) || w.vegetation?.version !== VEGETATION_VERSION) return VEG_NONE;
+  const v = w.vegetation.cells[cellIdx(w, x, z)];
   return v === VEG_HEDGE || v === VEG_WOOD ? v : VEG_NONE;
 }
 
@@ -28,7 +28,7 @@ export function vegetationBlocks(w: World, cells: readonly number[]): boolean {
 export function clearVegetation(w: World, x: number, z: number, width: number, depth: number): void {
   if (!w.vegetation) return;
   for (let dz = 0; dz < depth; dz++) for (let dx = 0; dx < width; dx++) {
-    if (inMap(x + dx, z + dz)) w.vegetation.cells[idx(x + dx, z + dz)] = VEG_NONE;
+    if (inGrid(w, x + dx, z + dz)) w.vegetation.cells[cellIdx(w, x + dx, z + dz)] = VEG_NONE;
   }
 }
 
@@ -36,11 +36,11 @@ export function clearVegetation(w: World, x: number, z: number, width: number, d
 // 不抽額外亂數、不改地形／occ／速度；只過濾道路、泥灘、建築與出生單位格。
 export function generateVegetation(w: World): void {
   if (w.tick !== 0 || w.vegetation) return;
-  const cells = new Uint8Array(N * N), units = new Set(w.units.map(u => idx(cellOf(u.x), cellOf(u.z))));
+  const cells = new Uint8Array(w.n * w.n), units = new Set(w.units.map(u => cellIdx(w, cellOf(u.x), cellOf(u.z))));
   let count = 0;
   const put = (x: number, z: number, kind: number) => {
-    const c = idx(x, z);
-    if (count >= VEGETATION_MAX || !inMap(x, z) || cells[c] || w.occ[c] || units.has(c) || w.ter[c] === TER_ROAD || w.ter[c] === TER_MUD) return;
+    const c = cellIdx(w, x, z);
+    if (count >= VEGETATION_MAX || !inGrid(w, x, z) || cells[c] || w.occ[c] || units.has(c) || w.ter[c] === TER_ROAD || w.ter[c] === TER_MUD) return;
     cells[c] = kind; count++;
   };
   for (let k = 0; k < 4; k++) {
