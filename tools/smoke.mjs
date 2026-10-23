@@ -366,8 +366,9 @@ const camAt = page => page.evaluate('__rts.cam()');
 async function flingCase(page, stall = 0) {
   await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
   await page.evaluate(TRACE_ON);
-  if (stall) await stallAfter(page, 'pointermove', stall, 'e => e.clientY <= 420.5');
-  const s0 = await camAt(page), sent = await touchDrag(page, 200, 620, 420);
+  // R044 生產列變高（412×860 頂端 641→623）：Chrome 的觸控校正會把 3 像素外的按下判給生產列的鍵、手指一動就 pointercancel。拖曳改從 580 拉到 380（同樣 200 像素、同樣節奏），起點離生產列 40 像素
+  if (stall) await stallAfter(page, 'pointermove', stall, 'e => e.clientY <= 380.5');
+  const s0 = await camAt(page), sent = await touchDrag(page, 200, 580, 380);
   const c0 = await camAt(page); await sleep(300); const c1 = await camAt(page); await sleep(900); const c2 = await camAt(page); await sleep(300); const c3 = await camAt(page);
   const dragDir = [c0.x - s0.x, c0.z - s0.z], glideDir = [c1.x - c0.x, c1.z - c0.z];
   return {
@@ -420,7 +421,7 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.camMobile
 await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR012 }, async ({ open, page }) => {
   await open('noR006=1&noR012=1');
   await page.evaluate('__rts.pause(true); __rts.focus(16, 16, 1); 0'); await sleep(200);
-  await touchDrag(page, 200, 620, 420);
+  await touchDrag(page, 200, 580, 380);   // 跟 flingCase 同一段（R044 生產列變高）
   const c0 = await camAt(page); await sleep(300); const c1 = await camAt(page);
   const h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(c0.x === c1.x && c0.z === c1.z && h === nodeHash && page.errors.length === 0, '?noR012=1：放手立刻停、雜湊不變、零頁面錯誤', `${c0.x.toFixed(2)},${c0.z.toFixed(2)} → ${c1.x.toFixed(2)},${c1.z.toFixed(2)}；${h}`);
