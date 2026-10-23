@@ -4,7 +4,7 @@ import { clearVegetation } from './vegetation.ts';
 import { findPath } from './path.ts';
 import { stillConnected, keepsFootPaths } from './build.ts';
 import {
-  SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, BK_HQ, TER_ROAD,
+  SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, BK_HQ, TER_ROAD,
   ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, type World, type Building,
 } from './world.ts';
 
@@ -12,7 +12,8 @@ export const ECO_START = 60;          // 開局補給
 export const ECO_INCOME_TICKS = 20;   // 每 20 步（1 秒）+1
 export const ECO_QUEUE = 5;           // 佇列最多幾個
 export const ECO_POP = 16;            // 每方同時活著最多幾台
-export const PRODUCIBLE = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY];
+export const PRODUCIBLE = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT];
+export const ARMOR2 = [UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT];   // R044：eco 帶 armor2 才能出
 
 const corner = (w: World, side: number) => (side === SIDE_PLAYER ? w.n - 1 : 0);
 
@@ -38,7 +39,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
 }
 
 // eco 指令：只在第 0 步有效；雙方各放一座指揮部、開始累積補給
-export function startEco(w: World, inf = 0, guns = 0, tanks = 0): void {
+export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0): void {
   if (w.eco || w.tick !== 0) return;
   const hq = [0, 0];
   for (const side of [SIDE_PLAYER, SIDE_ENEMY]) {
@@ -52,7 +53,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0): void {
     w.events.push({ e: 'build', bld: id });
     hq[side] = id;
   }
-  w.eco = { supply: [ECO_START, ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}) };
+  w.eco = { supply: [ECO_START, ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}) };
   if (inf) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_INFANTRY, b); }   // R021：雙方各一班步兵
 }
 
@@ -64,7 +65,7 @@ export const hqAlive = (w: World, side: number): Building | null => {
 // produce 指令：補給夠、佇列沒滿、指揮部還在才接
 export function produce(w: World, side: number, kind: number): void {
   const e = w.eco;
-  if (!e || (side !== 0 && side !== 1) || !PRODUCIBLE.includes(kind) || !hqAlive(w, side) || (kind === UK_INFANTRY && !e.inf) || ((kind === UK_ATGUN || kind === UK_MORTAR) && !e.guns) || ((kind === UK_LIGHT || kind === UK_HEAVY) && !e.tanks)) return;
+  if (!e || (side !== 0 && side !== 1) || !PRODUCIBLE.includes(kind) || !hqAlive(w, side) || (kind === UK_INFANTRY && !e.inf) || ((kind === UK_ATGUN || kind === UK_MORTAR) && !e.guns) || ((kind === UK_LIGHT || kind === UK_HEAVY) && !e.tanks) || (ARMOR2.includes(kind) && !e.armor2)) return;
   const cost = UNIT_KINDS[kind].cost;
   if (e.supply[side] < cost || e.queue[side].length >= ECO_QUEUE) return;
   e.supply[side] -= cost; e.queue[side].push(kind);

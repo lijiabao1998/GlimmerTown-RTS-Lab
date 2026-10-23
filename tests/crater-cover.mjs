@@ -11,7 +11,7 @@ const blank=()=>{const w=createWorld(1944);w.ter.fill(0);w.occ.fill(0);w.crater.
 const add=(w,side,kind,x,z)=>{const u={id:w.units.length+1,side,kind,x:center(x),z:center(z),hp:1000000,alive:true,order:ORD_IDLE,target:0,tx:0,tz:0,path:[],pathIdx:0,cooldown:1000000,aimX:SUB,aimZ:0};w.units.push(u);return u;};
 const queue=(w,g,t,kind=SHELL_AP,hitBld=0)=>w.shells.push({id:w.nextShell++,side:g.side,kind,shooter:g.id,sx:g.x,sz:g.z,ex:t.x,ez:t.z,t:0,T:1,target:hitBld?0:t.id,hitBld});
 const hit=(w,g,t,kind=SHELL_AP,hitBld=0)=>{const hp=t.hp;queue(w,g,t,kind,hitBld);step(w,[]);return hp-t.hp;};
-const expected=(gun,target,pct)=>{const k=UNIT_KINDS[gun],t=UNIT_KINDS[target];const pierced=Math.floor(k.dmgUnit*(t.armored?k.pierce:k.soft)/100);return Math.floor(pierced*t.armor*pct/10000);};
+const expected=(gun,target,pct)=>{const k=UNIT_KINDS[gun],t=UNIT_KINDS[target];const pierced=Math.floor(k.dmgUnit*(t.armored&&!(t.openTop&&k.men>0)?k.pierce:k.soft)/100);return Math.floor(pierced*t.armor*pct/10000);}; // R044：開頂車被步兵打照軟目標算
 const building=(w,kind,hp)=>{const maxHp=bldMaxHp(kind,1,1,1),b={id:1,kind,x:10,z:10,w:1,d:1,floors:1,hp:hp??maxHp,maxHp};w.blds=[b];w.occ[idx(10,10)]=1;return b;};
 
 group('projectiles',()=>{

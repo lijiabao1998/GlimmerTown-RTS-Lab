@@ -89,6 +89,7 @@
     #help h3 { margin: 10px 0 4px; font-size: 15px; color: #c8d8ee; }
     #help ol, #help ul { margin: 4px 0; padding-left: 1.3em; } #help li { margin: 3px 0; } #help p { margin: 4px 0; }
     #help .acts { display: flex; flex-shrink: 0; justify-content: center; margin-top: 10px; }
+    #help li.r044 { display: none; } body.r044 #help li.r044 { display: list-item; }   /* R044 剋制那一句：?noR044=1 時不出現 */
     #help .acts button { min-height: 44px; min-width: 120px; font-weight: 700; background: #2f5f9a; border-color: #9cc6ff; }
     /* R015 小地圖：右上、按鈕列下面（手機在標題列下面） */
     #minimap { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 58px); pointer-events: auto;
@@ -100,6 +101,10 @@
     #prodbar button b { margin-left: 4px; color: #ffd36a; font-weight: 800; }
     #prodbar button.dim { opacity: 0.45; }
     @media (max-width: 560px) { #prodbar button { min-width: 0; padding: 0 7px; font-size: 13px; } }   /* R022 七顆按鈕：手機上排緊一點 */
+    /* R044 十一顆（body.r044：?noR044=1 時不套，回到舊樣）：間距、內距再縮（命中區照樣 44 高），橫放手機也排緊、字 12；窄手機（≤ 360 寬）字 12、內距 4 */
+    @media (max-width: 560px), (max-height: 500px) { body.r044 #hud #prodbar { gap: 4px; } body.r044 #prodbar button { min-width: 0; padding: 0 5px; font-size: 13px; } }
+    @media (max-height: 500px) { body.r044 #prodbar button { font-size: 12px; } }
+    @media (max-width: 360px) { body.r044 #prodbar button { padding: 0 3px; font-size: 12px; } body.r044 #prodbar button b { margin-left: 3px; } }
     #prodbar .info { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; margin-left: auto; }
     #prodbar.production-countdown #pb-countdown { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; color: #d9e8bf; }
     #prodbar #pb-countdown[hidden] { display: none; }

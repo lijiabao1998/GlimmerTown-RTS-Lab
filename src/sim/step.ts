@@ -28,7 +28,7 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）
   | { t: 'map'; id: number; vegetation?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number };   // R019：花補給排進生產佇列
 
 export interface LoggedCommand { tick: number; cmd: Command }
@@ -47,7 +47,7 @@ export function applyCommand(w: World, cmd: Command): void {
   if (w.sandbox && cmd.t !== 'move' && cmd.t !== 'attack' && cmd.t !== 'fireAt' && cmd.t !== 'stop') return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map') return;   // 布陣、地圖（R026）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -316,7 +316,8 @@ function fireUnit(w: World, u: Unit): void {
 }
 
 // R021：打裝甲目標時只剩穿甲率那一部分（坦克、榴彈砲的穿甲率是 100＝跟以前一樣）；R022：打非裝甲目標剩 soft（既有兵種是 100＝不變）
-function pierced(k: { pierce: number; soft: number }, t: Unit, dmg: number): number { return Math.floor((dmg * (UNIT_KINDS[t.kind].armored ? k.pierce : k.soft)) / 100); }
+// R044：開頂的車（驅逐戰車）被步兵打時照「打非裝甲目標」算（既有兵種沒有 openTop＝不變）
+function pierced(k: { pierce: number; soft: number; men: number }, t: Unit, dmg: number): number { const tk = UNIT_KINDS[t.kind]; return Math.floor((dmg * (tk.armored && !(tk.openTop && k.men > 0) ? k.pierce : k.soft)) / 100); }
 // R021：能進駐的單位待在還站著的房子裡時，射線不算自己這棟
 function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) return 0; const b = bldAt(w, cellOf(u.x), cellOf(u.z)); return b && b.hp > 0 ? b.id : 0; }
 

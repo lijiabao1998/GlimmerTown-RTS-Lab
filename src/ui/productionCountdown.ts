@@ -1,7 +1,7 @@
 import { SIDE_PLAYER, TICK_HZ, UNIT_KINDS, type World } from '../sim/world.ts';
 import { hqAlive } from '../sim/eco.ts';
 
-const labels = ['坦克', '榴彈砲', '觀測員', '步兵', '反戰車砲', '迫擊砲', '輕坦克', '重坦克'];
+const labels = ['坦克', '榴彈砲', '觀測員', '步兵', '反戰車砲', '迫擊砲', '輕坦克', '重坦克', '裝甲車', '驅逐戰車', '突擊砲'];
 // R125: manufacturing time only, not an arrival promise. Completed work can wait indefinitely.
 export function productionCountdown(w: World, enabled = true): string {
   if (!enabled || w.winner >= 0 || !w.eco || !hqAlive(w, SIDE_PLAYER)) return '';

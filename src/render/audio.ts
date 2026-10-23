@@ -1,7 +1,7 @@
 // R117: optional presentation-only audio. Nothing is created until a native HUD gesture.
 // Three finite mono buffers, one master gain and at most eight source/gain pairs.
 import { SUB, SHELL_AP, SHELL_HE, SHELL_SMOKE, STAGE_RUBBLE,
-  UK_TANK, UK_HOWITZER, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY,
+  UK_TANK, UK_HOWITZER, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT,
   type World, type Unit, type Building, type SimEvent } from '../sim/world.ts';
 
 export type BattleSound = 'fire' | 'impact' | 'collapse';
@@ -42,7 +42,7 @@ export function makeBattlePCM(kind: BattleSound): Float32Array<ArrayBuffer> {
 
 interface Voice { source: AudioBufferSourceNode; gain: GainNode; connected: number; released: boolean }
 const positionOK = (w: World, x: number, z: number) => Number.isInteger(x) && Number.isInteger(z) && x >= 0 && z >= 0 && x < w.n * SUB && z < w.n * SUB;
-const artillery = (kind: number) => kind === UK_TANK || kind === UK_HOWITZER || kind === UK_ATGUN || kind === UK_MORTAR || kind === UK_LIGHT || kind === UK_HEAVY;
+const artillery = (kind: number) => kind === UK_TANK || kind === UK_HOWITZER || kind === UK_ATGUN || kind === UK_MORTAR || kind === UK_LIGHT || kind === UK_HEAVY || kind === UK_ARMORED_CAR || kind === UK_DESTROYER || kind === UK_ASSAULT;   // R044 三種新車也是砲聲
 
 export class BattleAudio {
   private context: AudioContext | null = null;
