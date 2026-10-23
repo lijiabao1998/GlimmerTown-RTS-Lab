@@ -32,8 +32,8 @@ const SHARD = (() => {
   if (!m || n < 1 || k < 1 || k > n) { console.log(`NG  UNIT_SHARD=${raw} 寫錯：要寫成 k/n，而且 1 ≤ k ≤ n`); process.exit(1); }
   return { k, n };
 })();
-const BUILTINS = !SHARD || SHARD.k === 1;
 const LIST_ONLY = process.env.UNIT_LIST_ONLY === '1';
+const BUILTINS = (!SHARD || SHARD.k === 1) && !LIST_ONLY;   // 只列清單（乾跑）時連內建各節也不跑：分法驗證不受內建守衛的時間或紅燈影響
 function shardOf(files, dir, k, n) {
   const heavy = f => f.endsWith('-browser.mjs') || /withBrowser|tools\/cdp\.mjs/.test(fs.readFileSync(path.join(dir, f), 'utf8'));
   const order = [...files.filter(heavy), ...files.filter(f => !heavy(f))];
