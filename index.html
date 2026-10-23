@@ -113,6 +113,17 @@
     #start-banner { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); pointer-events: none; white-space: nowrap; font-size: clamp(44px, 14vw, 72px); font-weight: 900; letter-spacing: 0.25em;
       color: #f6dc8c; text-shadow: 0 0 18px rgba(255, 150, 40, 0.75), 0 3px 0 #5a2a12; animation: gtrts-start 1.25s ease-out forwards; }
     @keyframes gtrts-start { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.8); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); } }
+    /* R041 開戰命令條：取代上面的發光大字（?noR041=1 才用舊的）。沒有光暈、陰影字、漸層；不吃點擊；約 2.8 秒（src/ui/startOrder.ts） */
+    #start-order { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); box-sizing: border-box; width: min(86vw, 340px); padding: 10px 14px 11px;
+      pointer-events: none; background: rgba(22, 25, 20, 0.9); border: 1px solid #6c745f; border-left: 3px solid #9a4a2e; border-radius: 4px; color: #f3eedf;
+      animation: gtrts-order 2.8s ease-out forwards; }
+    #start-order p { margin: 0; }
+    #start-order .so-place { font-size: 12px; color: #b9b29e; }
+    #start-order .so-title { margin-top: 3px; font-size: 18px; font-weight: 700; }
+    #start-order .so-goal { margin-top: 2px; font-size: 13px; color: #ded4c0; }
+    @keyframes gtrts-order { 0% { opacity: 0; transform: translate(-50%, -6px); } 7% { opacity: 1; transform: translate(-50%, 0); } 86% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
+    @keyframes gtrts-order-still { 0% { opacity: 0; } 7% { opacity: 1; } 86% { opacity: 1; } 100% { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { #start-order { animation-name: gtrts-order-still; } }
     @media (max-width: 640px) { #hud .top { gap: 8px; font-size: 12px; } #hud .title small { display: none; }
       #hud .top { top: calc(max(8px, env(safe-area-inset-top)) + 60px); } }
     /* R124：360px 實測舊八鍵列裁掉暫停；只在新資訊啟用且不足 412px 時換行。
