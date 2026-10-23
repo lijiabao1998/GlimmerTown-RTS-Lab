@@ -133,9 +133,63 @@
       #hud.cover-durability .top { top: calc(max(8px, env(safe-area-inset-top)) + 108px); }
       #hud.cover-durability #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 148px); }
     }
+    /* R040 載入畫面：排在程式碼前面先畫（vite.config.ts 把 module 腳本搬到 body 尾巴）。
+       動畫只動 transform／opacity：主執行緒忙著解析程式時照樣動。不吃點擊；初始化做完由 main.ts 拿掉。 */
+    #loader { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+      background: #2a3329; color: #e9e2cf; pointer-events: none; text-align: center; padding: 0 16px; }
+    #loader .ld-scene { position: relative; width: 220px; height: 64px; overflow: hidden; margin-bottom: 10px; }
+    #loader .ld-road { position: absolute; left: 0; bottom: 6px; width: 440px; height: 4px; background: repeating-linear-gradient(90deg, #6b5440 0 12px, transparent 12px 20px); animation: ld-road .5s linear infinite; }
+    #loader .ld-tank { position: absolute; left: 62px; bottom: 10px; width: 96px; height: 48px; image-rendering: pixelated; shape-rendering: crispEdges; animation: ld-bob .36s steps(2) infinite; }
+    #loader .ld-puff { position: absolute; left: 60px; bottom: 30px; width: 6px; height: 6px; background: #8f8b85; opacity: 0; animation: ld-puff 1.2s linear infinite; }
+    #loader .ld-puff:nth-of-type(2) { animation-delay: .4s; }
+    #loader .ld-puff:nth-of-type(3) { animation-delay: .8s; }
+    #loader .ld-title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: .06em; }
+    #loader .ld-sub { margin: 0; font-size: 12px; color: #b9b29e; }
+    #loader .ld-msg { margin: 6px 0 0; font-size: 13px; color: #d9d2bd; max-width: 360px; overflow-wrap: anywhere; }
+    #loader.fail .ld-msg { color: #f0a483; }
+    #loader.fail .ld-scene * { animation: none; }
+    @keyframes ld-road { to { transform: translateX(-20px); } }
+    @keyframes ld-bob { 50% { transform: translateY(-1px); } }
+    @keyframes ld-puff { 0% { opacity: .75; transform: translate(0, 0) scale(1); } 100% { opacity: 0; transform: translate(-28px, -14px) scale(2.2); } }
+    @media (prefers-reduced-motion: reduce) { #loader .ld-scene * { animation: none; } }
   </style>
 </head>
 <body>
+  <div id="loader" role="status" aria-live="polite">
+    <div class="ld-scene" aria-hidden="true">
+      <div class="ld-road"></div>
+      <span class="ld-puff"></span><span class="ld-puff"></span><span class="ld-puff"></span>
+      <svg class="ld-tank" viewBox="0 0 32 16">
+        <rect x="21" y="4" width="10" height="2" fill="#3c4526"/>
+        <rect x="11" y="3" width="10" height="4" fill="#6b7a44"/>
+        <rect x="13" y="2" width="4" height="1" fill="#4a5530"/>
+        <rect x="5" y="7" width="22" height="3" fill="#5d6b3a"/>
+        <rect x="5" y="7" width="22" height="1" fill="#77824a"/>
+        <rect x="3" y="10" width="26" height="4" fill="#2c2a26"/>
+        <rect x="5" y="11" width="2" height="2" fill="#8a8f78"/><rect x="9" y="11" width="2" height="2" fill="#8a8f78"/>
+        <rect x="13" y="11" width="2" height="2" fill="#8a8f78"/><rect x="17" y="11" width="2" height="2" fill="#8a8f78"/>
+        <rect x="21" y="11" width="2" height="2" fill="#8a8f78"/><rect x="25" y="11" width="2" height="2" fill="#8a8f78"/>
+      </svg>
+    </div>
+    <p class="ld-title">微光小鎮</p>
+    <p class="ld-sub">二戰戰術 · 1940</p>
+    <p class="ld-msg">正在整備戰場</p>
+  </div>
+  <script>
+    // R040：?noR040=1＝不顯示載入畫面；程式準備好之前出錯（例如沒有 WebGL），把原因寫在載入畫面上，不留一片空白。
+    (function () {
+      var el = document.getElementById('loader');
+      if (!el) return;
+      if (/[?&]noR040=1(&|$)/.test(location.search)) { el.remove(); return; }
+      var fail = function (why) {
+        if (!document.getElementById('loader')) return;
+        el.classList.add('fail');
+        el.querySelector('.ld-msg').textContent = '載入失敗：' + (why || '未知錯誤') + '。請重新整理，或換一個支援 WebGL 的瀏覽器。';
+      };
+      addEventListener('error', function (e) { fail(e.message); });
+      addEventListener('unhandledrejection', function (e) { fail(e.reason && e.reason.message); });
+    })();
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

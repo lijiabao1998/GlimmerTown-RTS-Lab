@@ -608,6 +608,10 @@ renderer.setAnimationLoop(() => {
   minimap?.frame(t);
 });
 
+// R040：初始化做完才拿掉載入畫面，跟下面設好 __rts（守衛等的「準備好了」）在同一個同步步驟裡：準備好的那一刻畫面上已經沒有它。
+// 放在守衛掛勾之前：幾支守衛會把守衛掛勾那個物件以後的原文抽到沒有 DOM 的沙箱裡跑。
+document.getElementById('loader')?.remove();
+
 // ---- 守衛掛勾（tools/smoke.mjs 用）----
 const rts = {
   ready: true,
