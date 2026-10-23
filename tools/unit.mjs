@@ -22,6 +22,24 @@ function log(ok, name, detail = '') {
   if (!ok) fails.push(name);
 }
 
+// ---- R039 分片：UNIT_SHARD=k/n 時只跑分給第 k 份的 tests/*.mjs；內建各節（純度、零外部素材、模擬行為、黃金雜湊）只在第 1 份跑。
+// 沒設＝全部照原本的順序跑（本機 npm run unit 不變）。UNIT_LIST_ONLY=1：只列出這一份要跑哪些守衛、不執行（驗分法用）。
+// 分法固定、跟機器無關：開瀏覽器的守衛（檔名 -browser.mjs，或 import tools/cdp.mjs 的 withBrowser）最慢，照檔名排序先輪流分；其他守衛接著輪流分。
+const SHARD = (() => {
+  const raw = process.env.UNIT_SHARD ?? '';
+  if (raw === '') return null;
+  const m = /^(\d+)\/(\d+)$/.exec(raw), k = m ? Number(m[1]) : 0, n = m ? Number(m[2]) : 0;
+  if (!m || n < 1 || k < 1 || k > n) { console.log(`NG  UNIT_SHARD=${raw} 寫錯：要寫成 k/n，而且 1 ≤ k ≤ n`); process.exit(1); }
+  return { k, n };
+})();
+const BUILTINS = !SHARD || SHARD.k === 1;
+const LIST_ONLY = process.env.UNIT_LIST_ONLY === '1';
+function shardOf(files, dir, k, n) {
+  const heavy = f => f.endsWith('-browser.mjs') || /withBrowser|tools\/cdp\.mjs/.test(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const order = [...files.filter(heavy), ...files.filter(f => !heavy(f))];
+  return order.filter((_, i) => i % n === k - 1).sort();
+}
+
 // ---- 1. 模擬層純度（AGENTS.md 規則 2、3）----
 // 詞法掃描照搬 GlimmerTown3D-lab@bece722 tools/unit.mjs:588-647；本線更嚴：
 // Math 只准整數安全的幾個函式（白名單）、不准 ** 次方、import 只准同資料夾的 ./x.ts、不准碰行程與全域物件。
@@ -75,7 +93,7 @@ function purityViolations(source) {
   }
   return violations;
 }
-{
+if (BUILTINS) {
   const bad = [];
   const check = dir => { for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
     const p = `${dir}/${e.name}`;
@@ -99,7 +117,7 @@ function purityViolations(source) {
 }
 
 // ---- 2. 零外部素材：src 沒有圖片／字型／模型／音效檔，程式與 index.html 不引用外部網址 ----
-{
+if (BUILTINS) {
   const assets = [], urls = [];
   const walk = d => { for (const e of fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })) { const p = `${d}/${e.name}`; if (e.isDirectory()) walk(p); else if (/\.(png|jpe?g|gif|webp|svg|glb|gltf|obj|fbx|ttf|otf|woff2?|mp3|ogg|wav|m4a)$/i.test(e.name)) assets.push(p); else if (/\.(ts|html|css|json)$/.test(e.name)) read(p).split('\n').forEach((l, i) => { if (/https?:\/\//.test(l.replace(/\/\/ .*$|^\s*\*.*$/, ''))) urls.push(`${p}:${i + 1}`); }); } };
   walk('src');
@@ -131,7 +149,7 @@ function addUnit(w, side, kind, cx, cz) {
 }
 const run = (w, n) => { for (let i = 0; i < n; i++) step(w, []); return w; };
 
-{ // A*：繞過完好的牆、牆倒成瓦礫後直接穿過
+if (BUILTINS) { // A*：繞過完好的牆、牆倒成瓦礫後直接穿過
   const w = blank(), wall = addBld(w, 10, 6, 1, 9);
   const p1 = findPath(w, 8, 10, 12, 10);
   const throughWall = p1.some(c => w.occ[c]);
@@ -141,14 +159,14 @@ const run = (w, n) => { for (let i = 0; i < n; i++) step(w, []); return w; };
   const p2 = findPath(w, 8, 10, 12, 10);
   log(p2.length === 4 && p2.some(c => w.occ[c]), 'A* 穿過瓦礫', `${p2.length} 步`);
 }
-{ // 坦克瞄準房子後面的敵人：砲彈打在房子上
+if (BUILTINS) { // 坦克瞄準房子後面的敵人：砲彈打在房子上
   const w = blank(), house = addBld(w, 10, 10, 1, 1), me = addUnit(w, 0, UK_TANK, 8, 10), foe = addUnit(w, 1, UK_TANK, 12, 10);
   foe.hp = 1000; foe.alive = true;
   step(w, [{ t: 'attack', side: 0, ids: [me.id], target: foe.id }]);
   run(w, 30);
   log(house.hp < house.maxHp && foe.hp === 1000, '坦克被房子擋住時，砲彈打在房子上', `房子 ${house.hp}/${house.maxHp}，敵人 ${foe.hp}`);
 }
-{ // 損壞三段門檻（3D-lab：dmg≥0.3 沒屋頂、dmg≥1 瓦礫）；瓦礫不擋路、不擋射線
+if (BUILTINS) { // 損壞三段門檻（3D-lab：dmg≥0.3 沒屋頂、dmg≥1 瓦礫）；瓦礫不擋路、不擋射線
   const w = blank(), b = addBld(w, 5, 5, 1, 1, 100);
   const at = hp => { b.hp = hp; return stageOf(b); };
   const ok = at(100) === STAGE_INTACT && at(71) === STAGE_INTACT && at(70) === STAGE_ROOFLESS && at(1) === STAGE_ROOFLESS && at(0) === STAGE_RUBBLE;
@@ -162,7 +180,7 @@ const run = (w, n) => { for (let i = 0; i < n; i++) step(w, []); return w; };
 const MINR = Math.floor(UNIT_KINDS[UK_HOWITZER].minRange / SUB), INSIDE = Math.max(1, MINR - 1);
 const runUntil = (w, cond, cap = 20000) => { let n = 0; while (!cond() && n < cap) { step(w, []); n++; } return n; };
 const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w, []); c += w.events.filter(e => e.e === 'fire' && e.unit === id).length; } return c; };
-{ // 榴彈砲不接最小射程內的目標：射擊指令、攻擊指令、自己找目標都一樣
+if (BUILTINS) { // 榴彈砲不接最小射程內的目標：射擊指令、攻擊指令、自己找目標都一樣
   if (MINR < 2) log(true, '榴彈砲最小射程（< 2 格，略過）');
   else {
     const w = blank(), gun = addUnit(w, 0, UK_HOWITZER, 5, 5);
@@ -191,7 +209,7 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
     log(before === 2 && g3.order === ORD_IDLE, '攻擊目標鑽進最小射程：榴彈砲放棄這個指令', `之前 order ${before}，之後 ${g3.order}`);
   }
 }
-{ // 坦克不接對空地的射擊指令（打空地沒有用）；榴彈砲可以對瓦礫格開火
+if (BUILTINS) { // 坦克不接對空地的射擊指令（打空地沒有用）；榴彈砲可以對瓦礫格開火
   const w = blank(), tank = addUnit(w, 0, UK_TANK, 5, 5);
   addUnit(w, 1, UK_TANK, 30, 30);
   step(w, [{ t: 'fireAt', side: 0, ids: [tank.id], x: 8, z: 5 }]);
@@ -203,7 +221,7 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   const gShots = firesOf(w2, 300, gun.id);
   log(tank.order === ORD_IDLE && tShots === 0 && gShots >= 2, '坦克不接對空地開火；榴彈砲對瓦礫格照樣開火', `坦克 order ${tank.order} 開火 ${tShots}；榴彈砲 300 tick 開火 ${gShots}`);
 }
-{ // 視線對稱：A 看得到 B 等於 B 看得到 A（種子 1944，九格內所有空地對）
+if (BUILTINS) { // 視線對稱：A 看得到 B 等於 B 看得到 A（種子 1944，九格內所有空地對）
   const w = createWorld(SCRIPT_SEED);
   let pairs = 0, bad = 0;
   for (let a = 0; a < N * N; a++) {
@@ -219,7 +237,7 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   }
   log(bad === 0 && pairs > 10000, '視線對稱：九格內所有空地對，A→B 與 B→A 結果相同', `${pairs} 對，不對稱 ${bad} 對`);
 }
-{ // 高爆彈留下彈坑
+if (BUILTINS) { // 高爆彈留下彈坑
   const w = blank(), gun = addUnit(w, 0, UK_HOWITZER, 2, 2);
   addUnit(w, 1, UK_TANK, 31, 0);
   step(w, [{ t: 'fireAt', side: 0, ids: [gun.id], x: 15, z: 15 }]);
@@ -228,7 +246,7 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) if (w.crater[idx(x, z)]) { craters++; if (Math.abs(x - 15) > 4 || Math.abs(z - 15) > 4) near = false; }
   log(craters > 0 && near, '高爆彈落點留下彈坑（落在散布範圍內）', `${craters} 格有彈坑`);
 }
-{ // 死掉的單位不再被瞄準；一方全滅判勝
+if (BUILTINS) { // 死掉的單位不再被瞄準；一方全滅判勝
   const w = blank(), me = addUnit(w, 0, UK_TANK, 10, 10), dead = addUnit(w, 1, UK_TANK, 12, 10), live = addUnit(w, 1, UK_TANK, 10, 13);
   dead.alive = false; dead.hp = 0; me.hp = 1000;
   run(w, 1);
@@ -237,7 +255,7 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   runUntil(w, () => w.winner >= 0);
   log(!live.alive && w.winner === 0, '敵方全滅時判我方勝', `winner ${w.winner}，敵人 hp ${live.hp}`);
 }
-{ // 攻擊目標死掉：放棄指令，不再對屍體開火
+if (BUILTINS) { // 攻擊目標死掉：放棄指令，不再對屍體開火
   const w = blank(), me = addUnit(w, 0, UK_TANK, 10, 10), foe = addUnit(w, 1, UK_TANK, 14, 10);
   addUnit(w, 1, UK_TANK, 30, 30);
   me.hp = 1e6;
@@ -248,7 +266,7 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   const atDead = w.shells.filter(s => s.id >= next && s.target === foe.id).length;
   log(me.order === ORD_IDLE && atDead === 0, '攻擊目標死掉：放棄指令、不再對它開火', `order ${me.order}，新砲彈瞄屍體 ${atDead}`);
 }
-{ // 我方全滅判敗；同一刻互相打死判同歸於盡（砲彈還在飛的時候不判）
+if (BUILTINS) { // 我方全滅判敗；同一刻互相打死判同歸於盡（砲彈還在飛的時候不判）
   const w = blank(), me = addUnit(w, 0, UK_TANK, 10, 10), foe = addUnit(w, 1, UK_TANK, 13, 10);
   foe.hp = 1e6;
   runUntil(w, () => w.winner >= 0);
@@ -265,12 +283,12 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
   runUntil(w3, () => w3.winner >= 0);
   log(gunDiedFirst && w3.winner === 2, '砲彈還在飛時不判勝負（榴彈砲先死、砲彈落地打死敵人＝同歸於盡）', `榴彈砲先死 ${gunDiedFirst}，winner ${w3.winner}`);
 }
-{ // 整數平方根
+if (BUILTINS) { // 整數平方根
   let ok = true;
   for (const n of [0, 1, 2, 3, 4, 15, 16, 17, 99, 100, 65535, 65536, 1e9, 2 ** 40 + 7]) { const r = isqrt(n); if (!(r * r <= n && (r + 1) * (r + 1) > n)) ok = false; }
   log(ok, '整數平方根 isqrt 對 0…2^40 的抽樣都精確');
 }
-{ // 地圖（種子 0–199 都驗）：建築 ≥12、出生角落沒有建築、單位不站在建築上、每個單位都走得到每個敵人
+if (BUILTINS) { // 地圖（種子 0–199 都驗）：建築 ≥12、出生角落沒有建築、單位不站在建築上、每個單位都走得到每個敵人
   const badSeeds = [];
   let minB = 1e9, maxB = 0;
   for (let seed = 0; seed < 200; seed++) {
@@ -289,16 +307,19 @@ const firesOf = (w, n, id) => { let c = 0; for (let i = 0; i < n; i++) { step(w,
 // 排在黃金雜湊之前（R005）：弄壞某個機制時，第一個紅燈落在那個機制的守衛上，不是黃金雜湊。
 {
   const dir = path.join(ROOT, 'tests');
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.mjs')).sort() : [];
+  const all = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.mjs')).sort() : [];
+  const files = SHARD ? shardOf(all, dir, SHARD.k, SHARD.n) : all;
+  if (SHARD) console.log(`・分片 ${SHARD.k}/${SHARD.n}：內建各節${BUILTINS ? '有跑' : '在第 1 份'}；這一份跑 ${files.length}／${all.length} 支：${files.join(' ')}`);
   for (const f of files) {
+    if (LIST_ONLY) { console.log(`LIST tests/${f}`); continue; }
     const r = spawnSync(process.execPath, [path.join(dir, f)], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
     log(r.status === 0, `tests/${f}`, r.status === 0 ? '' : `退出碼 ${r.status}：${(r.stdout + r.stderr).trim().split('\n').slice(-3).join(' ｜ ')}`);
   }
-  if (!files.length) console.log('・tests/ 還沒有守衛');
+  if (!all.length) console.log('・tests/ 還沒有守衛');
 }
 
 // ---- 5. 決定性與黃金雜湊（放在所有行為守衛之後：行為壞了，第一個紅燈落在那條行為守衛上）----
-{
+if (BUILTINS) {
   const ta = Date.now(), a = hashWorld(runScript()), ms = Date.now() - ta, b = hashWorld(runScript());
   log(a === b, `同種子同指令跑 ${SCRIPT_TICKS} tick 兩次，雜湊相同`, `${a} / ${b}；一次 ${ms} ms（只記錄，不設門檻）`);
   const c = hashWorld(runScript(SCRIPT_TICKS, SCRIPT_SEED + 1));

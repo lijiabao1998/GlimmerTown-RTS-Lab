@@ -66,22 +66,7 @@ const ALLOWED = [
   /^tools\/golden\.json$/,
   /^(LOG|README)\.md$/,
 ];
-// R129 單次 CI 拆分候選：只接受固定分支／歷史／新增卡與已核定的 Git blob。
-// 不加入 ALLOWED，不放行本守衛自身；CI 與合併仍必須由 main 採用本候選才會生效。
-const R129_CI = '.github/workflows/ci.yml';
-const R129_CARD = 'docs/tasks/R129-沙盒互動回饋修補.md';
-const ancestor = (a, b) => { try { git('merge-base', '--is-ancestor', a, b); return true; } catch { return false; } };
-const blob = (ref, file) => { try { return git('rev-parse', '--verify', `${ref}:${file}`).trim(); } catch { return null; } };
-const mode = (ref, file) => { try { return git('ls-tree', ref, '--', file).split(' ')[0]; } catch { return null; } };
-const r129CiApproved = files.includes(R129_CI)
-  && BRANCH === 'gpt/sandbox-feedback-r129'
-  && ancestor('7cbc1100928620e6fe138a6368e92d1fce68a234', BASE)
-  && ancestor('76c93727d7eda8ce1920c97dd181f284f314c81d', HEAD)
-  && files.includes(R129_CARD) && show(BASE, R129_CARD) === null && show(HEAD, R129_CARD) !== null
-  && blob(HEAD, R129_CI) === 'ff61451de0bffce035dd651da60fc11c31c71ed7'
-  && mode(HEAD, R129_CI) === '100644';
-for (const f of files) if (!ALLOWED.some(re => re.test(f)) && !(f === R129_CI && r129CiApproved)) no(`改到白名單以外的檔案 ${f}：GPT 車道不准改（規則、守衛、CI、工具鏈、後製）。要改請 PR 標「等業主」並在卡面說明，交業主或 Claude。`);
-if (r129CiApproved) notes.push('R129 CI 精確例外：僅 .github/workflows/ci.yml 的 Git blob ff61451de0bffce035dd651da60fc11c31c71ed7；其他守衛照常執行。');
+for (const f of files) if (!ALLOWED.some(re => re.test(f))) no(`改到白名單以外的檔案 ${f}：GPT 車道不准改（規則、守衛、CI、工具鏈、後製）。要改請 PR 標「等業主」並在卡面說明，交業主或 Claude。`);
 
 // 4. 卡面：一張新卡；卡號比 main 上出現過的都大；第一個提交只放卡；卡頭機讀欄；驗收段落沒被改；卡之外真的有施工
 if (!statusOnly) {
