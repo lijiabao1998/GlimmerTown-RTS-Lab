@@ -173,7 +173,7 @@ let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true, sandbox = false) {
+function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {
   if (r109) clearGestureInput();
   battleAudio?.reset();
   w = sandbox ? createSandboxWorld(s) : createWorld(s);
@@ -569,7 +569,7 @@ if (r128) sandboxBar = initSandbox({
   side: side => { sandboxSide = side; sandboxHint = ''; },
 });
 if (r043) mapPick = initMapPick({
-  state: () => ({ show: phase === 'build' && !w.sandbox, large }),
+  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: r026 }),
   toggle: () => { large = !large; reset(); },
 });
 

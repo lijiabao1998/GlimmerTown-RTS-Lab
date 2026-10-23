@@ -905,6 +905,7 @@ await withBrowser({ width: 1280, height: 800, port: PORTS.streets + 2 }, async (
   });
   await withBrowser({ width: 1280, height: 800, port: PORTS.largeDesk }, async ({ open, page }) => {
     await open('map=64');
+    await shot(page, path.join(SHOTS, 'r043-desktop-start.png'));
     await page.evaluate('__rts.startBattle(); __rts.pause(true); 0');
     await battle30(page, 'desktop');
     await page.evaluate('__rts.focus(32, 32, 0.55); 0'); await sleep(500);
@@ -916,6 +917,17 @@ await withBrowser({ width: 1280, height: 800, port: PORTS.streets + 2 }, async (
     const help = await page.evaluate("(() => { const li = document.querySelector('#help li.r043'); return li ? getComputedStyle(li).display : ''; })()"), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
     log(m.join() === '1,32' && !btn && help === 'none' && h === nodeHash && page.errors.length === 0, '?noR043=1：沒有地圖鍵、?map=64 不生效（仍是萊伊 32×32）、說明沒有大地圖那一句、腳本雜湊不變、零頁面錯誤',
       `地圖 ${m}；鍵 ${btn}；說明那一句 ${help}；${h}`);
+    await open('noR026=1&map=64');
+    const large = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()')];
+    const pick = await rectOf(page, '#map-pick'), x = (pick[0] + pick[2]) / 2, y = (pick[1] + pick[3]) / 2;
+    await touchTap(page, x, y);
+    const small = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()')];
+    const label = await page.evaluate("document.getElementById('map-pick').textContent");
+    await touchTap(page, x, y);
+    const again = [await page.evaluate('__rts.map()'), await page.evaluate('__rts.mapSize()')];
+    const script = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+    log(large.join() === '2,64' && small.join() === '0,32' && label === '地圖：村莊' && again.join() === '2,64' && script === nodeHash && page.errors.length === 0,
+      'R043 ?noR026=1：網址仍開大圖、真觸控切回村莊再回大圖、腳本重播不受選圖影響', `${large} → ${small}（${label}）→ ${again}；${script}`);
   });
 }
 // ---- R040 載入畫面：拿掉 module 腳本的頁面＝停在載入畫面（特寫兩張）；module 腳本丟錯＝寫出「載入失敗」；

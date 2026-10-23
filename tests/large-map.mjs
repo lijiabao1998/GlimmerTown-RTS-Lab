@@ -3,13 +3,16 @@
 // 指揮部與人口上限 40；電腦（普通）60 秒內推過中線；只在新開世界的第 0 步有效；JSON 重播與中途 structuredClone；
 // 舊地圖（id 0、1）的雜湊跟 R043 之前逐位相同（凍結值在 main e0c6348 上算的）。
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import { stripTypeScriptTypes } from 'node:module';
 import {
   createWorld, hashWorld, cellIdx, cellOf, blocks, UNIT_KINDS, TER_ROAD, TER_MUD, SIDE_PLAYER, SIDE_ENEMY,
   UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_LIGHT, UK_HEAVY, BK_HQ,
 } from '../src/sim/world.ts';
 import { step, runLog } from '../src/sim/step.ts';
 import { findPath } from '../src/sim/path.ts';
-import { applyMap } from '../src/sim/maps.ts';
+import { applyMap, MAP_RYE } from '../src/sim/maps.ts';
 import { MAP_LARGE, LARGE_N, LARGE_POP, LARGE_CORNER, LARGE_FORCE, inSpawnCorner } from '../src/sim/largeMap.ts';
 import { ECO_POP } from '../src/sim/eco.ts';
 import { createSandboxWorld } from '../src/sim/sandbox.ts';
@@ -48,6 +51,8 @@ function bridges(w) {
 }
 
 group('generate', () => {
+  assert.equal(LARGE_N, 64, '卡面邊長固定為 64');
+  assert.equal(LARGE_CORNER, 12, '卡面出生空地固定為 12×12');
   let minB = Infinity, maxB = 0, minBridge = Infinity;
   for (let seed = 0; seed < 50; seed++) {
     const w = large(seed), why = `種子 ${seed}`;
@@ -78,7 +83,7 @@ group('generate', () => {
     }
     // 走得到：1 號走得到其他每一個單位（格子路網是無向的，所以每個單位都走得到每個敵人）
     const a = w.units[0];
-    for (const u of w.units.slice(1)) assert(findPath(w, cellOf(a.x), cellOf(a.z), cellOf(u.x), cellOf(u.z), 0, 0, a.kind).length > 0, `${why}：1 號走得到 ${u.id} 號`);
+    for (const u of w.units.slice(1)) assert.equal(findPath(w, cellOf(a.x), cellOf(a.z), cellOf(u.x), cellOf(u.z), 0, 0, a.kind).at(-1), cellIdx(w, cellOf(u.x), cellOf(u.z)), `${why}：1 號走得到 ${u.id} 號`);
     const nb = bridges(w);
     minBridge = Math.min(minBridge, nb);
     assert(nb >= 2, `${why}：河上至少兩座橋（${nb}）`);
@@ -112,6 +117,7 @@ group('once', () => {
 });
 
 group('eco', () => {
+  assert.equal(LARGE_POP, 40, '卡面人口上限固定為 40');
   const w = createWorld(1944);
   step(w, [{ t: 'map', id: MAP_LARGE, vegetation: 1 }, ECO]);
   const hq = [0, 1].map(s => w.blds[w.eco.hq[s] - 1]);
@@ -186,6 +192,41 @@ group('text', () => {
   assert.match(startOrderText(MAP_LARGE, true, '普通').place, /英格蘭東南鄉間（64×64）/, '開戰命令條的地點');
   assert.match(startOrderText(1, true, undefined).place, /萊伊/, '萊伊照舊');
   assert.equal(UNIT_KINDS.length >= 11, true);
+});
+
+group('main', () => {
+  // Run the actual reset with real maps: noR026 disables Rye, not the independent large-map selection.
+  const source = fs.readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  let reset = stripTypeScriptTypes(source).match(/function reset\([^]*?\n\}/)?.[0];
+  assert(reset, '實際 reset 存在');
+  if (process.argv.includes('--mutant=rye-gate')) {
+    assert(reset.includes('map = r026 || large'), '選圖突變錨點存在');
+    reset = reset.replace('map = r026 || large', 'map = r026');
+  }
+  for (const rye of [true, false]) {
+    const c = vm.createContext({
+      createWorld, createSandboxWorld, applyMap, MAP_RYE, MAP_LARGE, seed: 1944,
+      r006: false, r018: false, r019: false, r026: rye, large: true, r109: false,
+      r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true, r118: true, r104: true,
+      q: new URLSearchParams(), fxOn: true, selected: new Set(), view: undefined, battleAudio: undefined, reportView: undefined,
+      BattleView: class { constructor() { return { dispose() {}, target: { set(...p) { c.focus = p; } } }; } },
+      newStats: () => ({}), ui() {}, syncBattleAudio() {}, issue(cmd) { c.log.push({ tick: c.w.tick, cmd }); },
+    });
+    vm.runInContext(reset, c); c.reset();
+    assert.equal(c.w.n, 64, '選大圖不受 noR026 影響');
+    assert.equal(c.w.map, 2, '預覽真的套用 map id 2');
+    assert.deepEqual(Array.from(c.focus), [55, 0, 55], '開局鏡頭對準裝甲連');
+    const recorded = JSON.parse(JSON.stringify(c.log));
+    assert.deepEqual(recorded, [{ tick: 0, cmd: { t: 'map', id: 2, vegetation: 1 } }], '預覽與紀錄使用同一張大圖');
+    step(c.w, recorded.map(x => x.cmd));
+    assert.equal(hashWorld(c.w), hashWorld(runLog(createWorld(1944), recorded, 1)), '開局與 Node 重播一致');
+    c.reset(1944, false, false, false, false, false);
+    assert.equal(c.w.n, 32, '腳本明確 map=false 不受目前選圖影響');
+    assert.equal(c.log.length, 0, '舊腳本不混入 map 指令');
+    c.large = false; c.reset();
+    assert.equal(c.w.n, 32, '切回小圖回到 32');
+    assert.equal(c.log[0].cmd.id, rye ? 1 : 0, '切回遵守萊伊逃生閥');
+  }
 });
 
 assert(groups > 0, `沒有群組叫 ${only}`);
