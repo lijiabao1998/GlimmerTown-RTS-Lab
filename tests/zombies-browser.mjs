@@ -42,15 +42,16 @@ const budget = info => { assert(info.calls <= 22 && info.triangles <= 80000, `ba
 function secondWave(seed, log) {
   const w = runLog(createWorld(seed), log, 1);
   while (w.winner < 0 && w.zombies.wave <= 2 && w.tick < 2701) {
+    const hp = new Map(w.units.filter(u => u.kind === UK_ZOMBIE).map(u => [u.id, u.hp]));
     step(w, []);
     const e = w.events.find(e => e.e === 'fire' && w.units[e.unit - 1].kind === UK_ZOMBIE && spotted(w, 0, e.x, e.z));
-    // 大圖在第二波已交火，但慢速喪屍尚未貼身；以真實飛向可見喪屍的砲彈也證明交戰。
-    const shell = w.shells.find(s => w.units[s.target - 1]?.kind === UK_ZOMBIE && spotted(w, 0, s.ex, s.ez));
-    const shooter = shell && w.units[shell.shooter - 1];
-    const contact = e ?? (shell && { x: (shell.ex + shooter.x) / 2, z: (shell.ez + shooter.z) / 2 });
-    if (w.zombies.wave === 2 && contact) return { tick: w.tick, hash: hashWorld(w), x: contact.x / SUB, z: contact.z / SUB };
+    // 大圖的慢速喪屍第二波尚未貼身，取守軍真正命中的當步。
+    const hit = w.units.find(u => u.kind === UK_ZOMBIE && u.alive && u.hp < hp.get(u.id) && spotted(w, 0, u.x, u.z));
+    // 取實際交戰的喪屍；遠程交火的中點在手機窄畫幅可能只拍到空地。
+    const contact = e ? w.units[e.unit - 1] : hit;
+    if (w.zombies.wave === 2 && contact) return { tick: w.tick, hash: hashWorld(w), id: contact.id, x: contact.x / SUB, z: contact.z / SUB };
   }
-  assert.fail('fixture: second wave includes visible close combat');
+  assert.fail('fixture: second wave includes visible melee or a real hit');
 }
 try {
   await build({ root, logLevel: 'error', plugins: [stressPlugin], build: { outDir: temp } });
@@ -91,10 +92,15 @@ try {
     assert.equal(await E('__rts.hash()'), contact.hash, 'replay: Node and Chrome second wave agree');
     assert.equal((await E('__rts.report().data.zombies')).wave, 2);
     await sleep(3000); await frames();
+    const inFrame = async () => {
+      const [x, y] = await E(`__rts.screenOf(${contact.id})`);
+      assert(await E(`(()=>{const u=__rts.units().find(u=>u.id===${contact.id});return u?.alive && ${x}>32 && ${x}<innerWidth-32 && ${y}>200 && ${y}<innerHeight-200 && document.elementFromPoint(${x},${y})?.tagName==='CANVAS'})()`), 'shot: live combat zombie is inside the unobstructed frame');
+    };
+    await inFrame();
     const mobile = await E('__rts.info()'); budget(mobile);
     await shot(page, path.join(root, 'shots', `r045-map${map}-phone-wave2.png`));
     await page.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-    await page.send('Emulation.setTouchEmulationEnabled', { enabled: false }); await frames();
+    await page.send('Emulation.setTouchEmulationEnabled', { enabled: false }); await frames(); await inFrame();
     const desktop = await E('__rts.info()'); budget(desktop);
     await shot(page, path.join(root, 'shots', `r045-map${map}-desktop-wave2.png`));
     assert.equal(page.errors.length, 0, `runtime: ${page.errors.join(' | ')}`);
