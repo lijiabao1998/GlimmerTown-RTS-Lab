@@ -34,7 +34,6 @@
 |---|---|---|---|---|---|
 | 33 | 修補：R129（#64）從分支拿掉 `.github/workflows/ci.yml` 的改動 | 業主 2026-10-23「要求能跑的起來」（R038） | CI | 不會 | Claude 插（R039）：CI 拆分已由 R039 做掉（四份 unit 並行＋chrome，`smoke` 是總閘）；`aeaf94a` 的 R129 精確例外已拿掉，`.github/` 照舊只歸 Claude。#64 的音效與放兵回饋照常做。另：載入動畫、大地圖、更多坦克、喪屍模式是 Claude 線 R040–R045，GPT 不重複出卡 |
 | 31 | 沙盒最小切片（業主新方向優先） | 「帝模式也就是沙盒模式」 | 模擬／介面 | 舊腳本不變 | R128／[#63](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/63)已實作，僅Draft未發布：32×32、雙方坦克／榴彈砲、開始／暫停／重置／返回、32輛上限；本機80/88守衛通過，8項Windows既有紅已對main，smoke250.9秒綠，四標準與14功能圖已核。取代下一個UI小題；大地圖、畫質、載入動畫未施工；禁止Ready／合併／發布 |
-| 23 | 修補：手機說明面板的「知道了」完整可見、可直接點到 | 手機優先／不改壞 | 介面 | 不會 | R114／PR47草稿卡住：R037手勢修復已在main，舊卡R114不大於main最大R120，待Claude處理受保護車道門檻；未發布 |
 | 30 | 選取坦克／砲車耐久摘要 | 坦克與榴彈砲對轟的存活判斷 | 介面 | 不會 | 不改單位數值與步兵分工 |
 
 ## 卡住／等業主看圖
@@ -42,12 +41,12 @@
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
 | 17 電網防禦 | 卡住；考據不足，未施工、未完成 | 2026-10-20：1943 年美軍情報記載德軍在法、荷、比有少量帶電鐵絲網，不能外推為 1940 英國本土防衛常規。現有資料不足以支持本作的致傷電網；改成步兵電擊會碰 Claude 分工，改成探照燈供電又需夜戰／全局光照決策。不偷換成普通鐵絲網的 R121，也不宣稱史上不存在。待有英國相符史料或業主明確決定改編範圍。來源：[1943 年原始情報轉錄](https://ww2.lonesentry.com/articles/barbedwire/index.html)、[RAF Museum 英國防衛背景](https://www.rafmuseum.org.uk/research/online-exhibitions/history-of-the-battle-of-britain/british-defences) | 研究狀態，沒有功能卡 |
-| 23 手機說明關閉按鈕 | 卡住；R037已整合於本機，但舊卡R114被最新main卡號門檻擋住，交Claude處理受保護規則 | 2026-10-20：原PR47的0cedb08以merge合main58667af，原驗收／首紅保留，沒有改名重編卡或修改工具。當時main版tools/gpt-lane.mjs第73–80行實測拒絕R114不大於R118；2026-10-20 06:08 UTC以最新main c32ccbf守衛重新核對同一本機整合50c2f97，仍拒絕「卡號 R114 不比 main 上用過的最大號 R120 大」，沒有舊卡恢復例外。typecheck／build及非瀏覽器守衛通過、golden eea1d59b；8支Chrome守衛與smoke受socket EPERM未能驗收。R037提供實質時間戳修復，但原CI39197550253缺診斷，根因仍未知。未推R114整合、未重跑CI、未解除Draft／卡住、未發布。待Claude處理舊卡恢復門檻，再驗最新head CI與新圖；R120（#52）已獨立完成並合併為main c32ccbf，CI39375945968與Pages成功；其通過不代表R114舊卡門檻已解除 | R114／[#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) |
 
 ## 已完成（最新在上）
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 修補：手機說明面板「知道了」完整可見（GPT 實作；卡號門檻擋住，Claude R058 接手合併） | R114＋R058 | [#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) 收進 Claude 的 PR | 2026-10-23 | 見 R058 卡面；Android 實機未測 |
 | 我方HQ耐久／既有損壞階段摘要，獨立noR127 | R127 | [#62](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/62) | 2026-10-21（實作驗收完成，待發布） | head0f0853b CI39614371641 unit726.4秒／smoke185.7秒／lane綠；四標準與21功能圖核對；本機Chrome受限與既有3項失敗保留，Android未測；收尾head與main／Pages／公網待核 |
 | 生產不可用原因／精確補給差額，原指令與R125保留，獨立noR126 | R126 | [#61](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/61) | 2026-10-21（發布） | main 2e1a6b6 CI39599403644及Pages成功；最終head CI／四標準與功能圖已核；公網713458bytes／SHA256 d748ed87b08f5807be3a1386afcdb6c260d89d124178b7e49f063556f19624ff；本機Chrome受限／trenches-negative退出碼null保留，Android未測 |
 | 生產佇列製造遊戲秒／等待部署／後續數，獨立 noR125 | R125 | [#60](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/60) | 2026-10-21（發布） | main 07833f3e CI39583044281及Pages成功；最終head 2efa29f tree與已驗收版本一致；四標準圖＋七功能圖已看；公網712243bytes／SHA256 805c46258e24ee446427e70c5350a2793619ebb7d8aebb1138af0555ab389b0a；本機Chrome受限及counterbattery首紅保留，Android未測 |
