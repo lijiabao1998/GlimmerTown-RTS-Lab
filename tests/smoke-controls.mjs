@@ -5,6 +5,7 @@ import { reloadStatus } from '../src/ui/reloadStatus.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { stripTypeScriptTypes } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -55,6 +56,7 @@ function controller(visual = true) {
   const views = [], issued = [], placements = [];
   const mockView = () => ({ dispose() {}, setWorld() {}, visibleUnit: () => true, buildingAt: () => null, groundAt: () => ({ x: 16.2, z: 15.8 }), setMarker(...p) { this.marker = p; } });
   const c = vm.createContext({
+    MAP_LARGE, large: false, // Keep this legacy controller on its original small map.
     createWorld, hashWorld, runLog, routeBattleOrder: route,
     seed: 1944, r006: false, r018: false, r019: false, r026: false, r109: false, r015: true, r115: true, r118: true, reloadStatus, counterbatteryHint: () => '', battleHint: undefined,
     r004: true, r008: true, r009: false, r010: false, r011: true, r012: false, r014: true, r016: true, r104: true, fxOn: true,

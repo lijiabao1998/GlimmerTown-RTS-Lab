@@ -166,7 +166,7 @@ export type SimEvent =
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
-export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number }   // R044 armor2：可出裝甲車、驅逐戰車、突擊砲
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; pop?: number }   // R044 armor2：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number }   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
@@ -381,7 +381,7 @@ export function hashWorld(w: World): string {
     for (const s of w.wires.segments) f.int(s.id).int(s.kind).int(s.x).int(s.z).int(s.w).int(s.d).int(s.floors).int(s.hp).int(s.maxHp).int(s.builtBy ?? -1);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
-  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.pop) f.int(0x504f).int(e.pop); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);

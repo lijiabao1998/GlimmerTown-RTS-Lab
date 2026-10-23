@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { stripTypeScriptTypes } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +55,7 @@ function controller(visual = true) {
   globalThis.document = { createElement: () => new Element(), getElementById: id => id === 'hint' ? { getBoundingClientRect: () => ({ top: 800 }) } : null, body: { appendChild: el => { root = el; } } };
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
   const c = vm.createContext({
+    MAP_LARGE, large: false, // Existing construction fixture; large-map behavior has its own guards.
     structuredClone, createWorld, hashWorld, isWallKind, bldMaxHp, buildKind, buildError, applyBuild, enemyPlan, TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, step, runLog, materialBuildDetail,
     BK_WIRE, WIRE_KIND, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_KINDS_NOW: BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
     w: emptyWorld(), view: mockView(), phase: 'build', plan: [], pickKind: BK_COTTAGE, pickRot: 0, pickTrench: -1, trenchRot: 0, buildHint: '', log: [], pending: [], selected: new Set(), acc: 0,
