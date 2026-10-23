@@ -1,6 +1,6 @@
 // R116：可穿行的鄉間植被。只讀世界，一個不投影的合併網格；穩定畫面不重建。
 import * as THREE from 'three';
-import { N, type World } from '../sim/world.ts';
+import { type World } from '../sim/world.ts';
 import { VEG_HEDGE, VEG_WOOD, VEGETATION_MAX, vegetationAt } from '../sim/vegetation.ts';
 import { Geo } from './geo.ts';
 
@@ -22,7 +22,7 @@ function crown(g: Geo, x: number, y: number, z: number, r: number, h: number) {
 }
 export function vegetationGeometry(w: World): { geometry: THREE.BufferGeometry; cells: number } {
   const g = new Geo(); let cells = 0;
-  for (let z = 0; z < N && cells < VEGETATION_MAX; z++) for (let x = 0; x < N && cells < VEGETATION_MAX; x++) {
+  for (let z = 0; z < w.n && cells < VEGETATION_MAX; z++) for (let x = 0; x < w.n && cells < VEGETATION_MAX; x++) {
     const kind = vegetationAt(w, x, z);
     if (kind !== VEG_HEDGE && kind !== VEG_WOOD) continue;
     cells++;

@@ -4,7 +4,7 @@ import { clearVegetation } from './vegetation.ts';
 import { isqrt } from './math.ts';
 import { nextU32, randInt, type RngState } from './rng.ts';
 import {
-  N, idx, inMap, cellOf, blocks, bldMaxHp, TER_ROAD, TER_MUD, BK_COTTAGE, BK_HOUSE, BK_BARN, BK_PILLBOX, SIDE_PLAYER, SIDE_ENEMY,
+  cellIdx, inGrid, cellOf, blocks, bldMaxHp, TER_ROAD, TER_MUD, BK_COTTAGE, BK_HOUSE, BK_BARN, BK_PILLBOX, SIDE_PLAYER, SIDE_ENEMY,
   BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, BK_WIRE, UK_INFANTRY, wireAt, wireBlocks, isWallKind,
   type World, type Building,
 } from './world.ts';
@@ -33,9 +33,10 @@ export const WIRE_KIND: BuildKind = { name: 'wire', kind: BK_WIRE, w: 2, d: 1, f
 
 export const buildKind = (kind: number): BuildKind | null => BUILD_KINDS_24.find(k => k.kind === kind) ?? WALL_KINDS.find(k => k.kind === kind) ?? (kind === BK_WIRE ? WIRE_KIND : null);
 
-// 半場：我方 x+z ≥ N+2、敵方 x+z ≤ N−4，中間是無人帶
-export function territory(side: number, x: number, z: number): boolean {
-  return side === SIDE_PLAYER ? x + z >= N + 2 : side === SIDE_ENEMY ? x + z <= N - 4 : false;
+// 半場：地圖邊長 n（世界的 w.n）時我方 x+z ≥ n+2、敵方 x+z ≤ n−4，中間是無人帶。
+// n 預設 32 只給舊守衛的三參數呼叫；src/ 一律傳 w.n（R042）。
+export function territory(side: number, x: number, z: number, n = 32): boolean {
+  return side === SIDE_PLAYER ? x + z >= n + 2 : side === SIDE_ENEMY ? x + z <= n - 4 : false;
 }
 
 export function pointsUsed(w: World, side: number): number {
@@ -57,28 +58,28 @@ const DZ = [0, 0, 1, -1, 1, -1, 1, -1];
 
 // 把佔地當成擋路，從第一個活著的單位做廣度搜尋（跟 A* 一樣八方向、不切角），看每個活著的單位是不是都走得到
 export function stillConnected(w: World, fx: number, fz: number, fw: number, fd: number): boolean {
-  const unitCell = new Uint8Array(N * N);
+  const n = w.n, unitCell = new Uint8Array(n * n);
   let start = -1;
-  for (const u of w.units) if (u.alive) { const c = idx(cellOf(u.x), cellOf(u.z)); unitCell[c] = 1; if (start < 0) start = c; }
+  for (const u of w.units) if (u.alive) { const c = cellIdx(w, cellOf(u.x), cellOf(u.z)); unitCell[c] = 1; if (start < 0) start = c; }
   if (start < 0) return true;
   const blocked = (x: number, z: number) => {
     if (x >= fx && z >= fz && x < fx + fw && z < fz + fd) return true;
-    return blocks(w, x, z) && !unitCell[idx(x, z)];   // 單位站的格一定算走得到（觀測員可能在屋裡）
+    return blocks(w, x, z) && !unitCell[cellIdx(w, x, z)];   // 單位站的格一定算走得到（觀測員可能在屋裡）
   };
-  const seen = new Uint8Array(N * N), queue = new Int32Array(N * N);
+  const seen = new Uint8Array(n * n), queue = new Int32Array(n * n);
   let head = 0, tail = 0;
   seen[start] = 1; queue[tail++] = start;
   while (head < tail) {
-    const cur = queue[head++], cx = cur % N, cz = (cur - cx) / N;
+    const cur = queue[head++], cx = cur % n, cz = (cur - cx) / n;
     for (let k = 0; k < 8; k++) {
       const nx = cx + DX[k], nz = cz + DZ[k];
-      if (!inMap(nx, nz) || blocked(nx, nz)) continue;
+      if (!inGrid(w, nx, nz) || blocked(nx, nz)) continue;
       if (k >= 4 && (blocked(cx + DX[k], cz) || blocked(cx, cz + DZ[k]))) continue;   // 不切角
-      const ni = idx(nx, nz);
+      const ni = cellIdx(w, nx, nz);
       if (!seen[ni]) { seen[ni] = 1; queue[tail++] = ni; }
     }
   }
-  for (const u of w.units) if (u.alive && !seen[idx(cellOf(u.x), cellOf(u.z))]) return false;
+  for (const u of w.units) if (u.alive && !seen[cellIdx(w, cellOf(u.x), cellOf(u.z))]) return false;
   return true;
 }
 
@@ -86,14 +87,14 @@ export function stillConnected(w: World, fx: number, fz: number, fw: number, fd:
 // 分別標記施工前後的連通分量；同一舊分量的剩餘格只能落在一個新分量。
 // 不要求原本隔開的區域相通，也不把被合法佔用的兩格誤算成「失去通路」。
 function wallKeepsOpenCells(w: World, fx: number, fz: number, fw: number, fd: number, foot = false): boolean {
-  const before = new Int32Array(N * N), after = new Uint8Array(N * N), used = new Uint8Array(N * N + 1);
-  const queue = new Int32Array(N * N);
+  const n = w.n, before = new Int32Array(n * n), after = new Uint8Array(n * n), used = new Uint8Array(n * n + 1);
+  const queue = new Int32Array(n * n);
   const covered = (x: number, z: number) => x >= fx && z >= fz && x < fx + fw && z < fz + fd;
   const blocked = (x: number, z: number, placed: boolean) => blocks(w, x, z) || (foot && wireBlocks(w, x, z, UK_INFANTRY)) || (placed && covered(x, z));
   let component = 0;
   for (const placed of [false, true]) {
-    for (let start = 0; start < N * N; start++) {
-      const sx = start % N, sz = (start - sx) / N;
+    for (let start = 0; start < n * n; start++) {
+      const sx = start % n, sz = (start - sx) / n;
       if ((placed ? after[start] : before[start]) || blocked(sx, sz, placed)) continue;
       if (placed) {
         if (used[before[start]]) return false;
@@ -103,12 +104,12 @@ function wallKeepsOpenCells(w: World, fx: number, fz: number, fw: number, fd: nu
       queue[tail++] = start;
       if (placed) after[start] = 1; else before[start] = component;
       while (head < tail) {
-        const cur = queue[head++], cx = cur % N, cz = (cur - cx) / N;
+        const cur = queue[head++], cx = cur % n, cz = (cur - cx) / n;
         for (let k = 0; k < 8; k++) {
           const nx = cx + DX[k], nz = cz + DZ[k];
-          if (!inMap(nx, nz) || blocked(nx, nz, placed)) continue;
+          if (!inGrid(w, nx, nz) || blocked(nx, nz, placed)) continue;
           if (k >= 4 && (blocked(cx + DX[k], cz, placed) || blocked(cx, cz + DZ[k], placed))) continue;
-          const ni = idx(nx, nz);
+          const ni = cellIdx(w, nx, nz);
           if (placed ? after[ni] : before[ni]) continue;
           if (placed) after[ni] = 1; else before[ni] = component;
           queue[tail++] = ni;
@@ -132,13 +133,13 @@ export function buildError(w: World, cmd: BuildCmd): string | null {
   if (cmd.rot !== undefined && cmd.rot !== 0 && cmd.rot !== 1) return 'rot';
   if (!Number.isInteger(cmd.x) || !Number.isInteger(cmd.z)) return 'coord';
   const f = footprint(cmd)!;
-  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (!inMap(x, z)) return 'map';
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (!inGrid(w, x, z)) return 'map';
   for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) {
-    if (!territory(cmd.side, x, z)) return territory(1 - cmd.side, x, z) ? 'foreign' : 'neutral';
+    if (!territory(cmd.side, x, z, w.n)) return territory(1 - cmd.side, x, z, w.n) ? 'foreign' : 'neutral';
   }
-  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_ROAD) return 'road';
-  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[idx(x, z)] === TER_MUD) return 'mud';   // R026
-  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[idx(x, z)] || trenchAt(w, x, z) || wireAt(w, x, z)) return 'occupied';
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[cellIdx(w, x, z)] === TER_ROAD) return 'road';
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.ter[cellIdx(w, x, z)] === TER_MUD) return 'mud';   // R026
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) if (w.occ[cellIdx(w, x, z)] || trenchAt(w, x, z) || wireAt(w, x, z)) return 'occupied';
   for (const u of w.units) {
     if (!u.alive) continue;
     const ux = cellOf(u.x), uz = cellOf(u.z);
@@ -151,8 +152,8 @@ export function buildError(w: World, cmd: BuildCmd): string | null {
   // 建築之間至少隔一格：跟 createWorld 的 free() 同一條規矩（地圖外的邊框格不算）
   for (let dz = -1; dz <= f.d; dz++) for (let dx = -1; dx <= f.w; dx++) {
     const cx = f.x + dx, cz = f.z + dz;
-    if (inMap(cx, cz) && w.occ[idx(cx, cz)]) {
-      const neighbor = w.blds[w.occ[idx(cx, cz)] - 1];
+    if (inGrid(w, cx, cz) && w.occ[cellIdx(w, cx, cz)]) {
+      const neighbor = w.blds[w.occ[cellIdx(w, cx, cz)] - 1];
       if (!isWallKind(k.kind) || !isWallKind(neighbor.kind)) return 'gap';
     }
   }
@@ -174,7 +175,7 @@ export function applyBuild(w: World, cmd: BuildCmd): string | null {
     return null;
   }
   w.blds.push(b);
-  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) w.occ[idx(x, z)] = id;
+  for (let z = f.z; z < f.z + f.d; z++) for (let x = f.x; x < f.x + f.w; x++) w.occ[cellIdx(w, x, z)] = id;
   clearVegetation(w, f.x, f.z, f.w, f.d);
   w.events.push({ e: 'build', bld: id });
   return null;
@@ -199,7 +200,7 @@ export function enemyPlan(w: World, kindsAll: BuildKind[] = BUILD_KINDS): BuildC
   if (!en) return out;
   // 兩倍座標（格中心＝2c+1），避免小數
   const cx = Math.floor((2 * ex) / en) + 1, cz = Math.floor((2 * ez) / en) + 1;
-  const tx = pn ? Math.floor((2 * px) / pn) + 1 : 2 * N - 1, tz = pn ? Math.floor((2 * pz) / pn) + 1 : 2 * N - 1;
+  const n = w.n, tx = pn ? Math.floor((2 * px) / pn) + 1 : 2 * n - 1, tz = pn ? Math.floor((2 * pz) / pn) + 1 : 2 * n - 1;
   const dx = tx - cx, dz = tz - cz, L = Math.max(1, isqrt(dx * dx + dz * dz));
   let left = BUILD_POINTS - pointsUsed(s, SIDE_ENEMY);
   for (let pass = 0; pass < 2 && left > 0; pass++) {
@@ -213,13 +214,13 @@ export function enemyPlan(w: World, kindsAll: BuildKind[] = BUILD_KINDS): BuildC
         const cands: { cmd: BuildCmd; score: number; i: number }[] = [];
         for (let rot = 0; rot < (k.w === k.d ? 1 : 2); rot++) {
           const fw = rot ? k.d : k.w, fd = rot ? k.w : k.d;
-          for (let z = 0; z + fd <= N; z++) for (let x = 0; x + fw <= N; x++) {
-            if (!territory(SIDE_ENEMY, x + fw - 1, z + fd - 1)) continue;          // 最靠我方的那一角也要在敵方半場
+          for (let z = 0; z + fd <= n; z++) for (let x = 0; x + fw <= n; x++) {
+            if (!territory(SIDE_ENEMY, x + fw - 1, z + fd - 1, n)) continue;          // 最靠我方的那一角也要在敵方半場
             const ax = 2 * x + fw - cx, az = 2 * z + fd - cz;                      // 佔地中心－敵軍重心（兩倍座標）
             const along = ax * dx + az * dz, lat = Math.abs(ax * dz - az * dx);   // 都是 L 倍
             if (pass === 0 && (along < 6 * L || along > 20 * L)) continue;        // 3–10 格
             const score = Math.floor((4 * lat + Math.abs(along - 12 * L)) / L) + randInt(r, 10);
-            cands.push({ cmd: { t: 'build', side: SIDE_ENEMY, kind: k.kind, x, z, rot }, score, i: (rot * N + z) * N + x });
+            cands.push({ cmd: { t: 'build', side: SIDE_ENEMY, kind: k.kind, x, z, rot }, score, i: (rot * n + z) * n + x });
           }
         }
         cands.sort((a, b) => a.score - b.score || a.i - b.i);

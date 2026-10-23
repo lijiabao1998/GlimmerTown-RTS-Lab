@@ -23,7 +23,7 @@ const mutations = {
   inscribed_polygon: { group: 'geometry', from: '(s.scatterRadius + EDGE_MARGIN) / COS_HALF', to: '(s.scatterRadius + EDGE_MARGIN)', message: 'inner polygon sides conservatively contain the radial upper bound' },
   endpoint_bound: { group: 'endpoints', from: 's.scatterRadius = Math.SQRT2 * offset / SUB;', to: 's.scatterRadius = offset / SUB;', message: 'actual step endpoint must be inside scatter inner polygon' },
   clip_right: { group: 'clipping', from: ' || worldXZ.x > mapSize', to: '', message: 'fragment beyond right map edge must be discarded' },
-  clamp_vertices: { group: 'clipping', from: 'this.positions[at] = x + COS[i] * r;', to: 'this.positions[at] = Math.max(0, Math.min(N, x + COS[i] * r));', message: 'ring vertices retain circular radii instead of false border chords' },
+  clamp_vertices: { group: 'clipping', from: 'this.positions[at] = x + COS[i] * r;', to: 'this.positions[at] = Math.max(0, Math.min(this.mesh.material.uniforms.mapSize.value, x + COS[i] * r));', message: 'ring vertices retain circular radii instead of false border chords' },
   world_write: { group: 'readonly_pool', from: 'const s = this.state;', to: 'const s = this.state; w.rng = (w.rng + 1) >>> 0;', message: 'preview preserves the complete World including events and RNG' },
   stale_draw: { group: 'readonly_pool', from: 'this.mesh.visible = false; this.mesh.geometry.setDrawRange(0, 0);', to: 'this.mesh.visible = false;', message: 'invalid state clears the old circle draw range' },
   double_pass: { group: 'readonly_pool', from: 'material.forceSinglePass = true;', to: 'material.forceSinglePass = false;', message: 'transparent double-sided ring must use one draw pass' },

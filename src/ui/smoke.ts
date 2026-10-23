@@ -1,5 +1,5 @@
 // R107：輸入路由只讀世界、產生指令。命中的單位由畫面先做可見性篩選。
-import { N, SUB, SIDE_PLAYER, UK_HOWITZER, UNIT_KINDS, bldAt, type World } from '../sim/world.ts';
+import { SUB, SIDE_PLAYER, UK_HOWITZER, UNIT_KINDS, bldAt, type World } from '../sim/world.ts';
 import type { Command } from '../sim/step.ts';
 
 export type AmmoMode = 'he' | 'smoke';
@@ -12,7 +12,7 @@ export interface OrderRoute {
   commands: Command[];
   marker: { x: number; z: number; hostile: boolean };
 }
-const validCell = (x: number, z: number) => Number.isInteger(x) && Number.isInteger(z) && x >= 0 && z >= 0 && x < N && z < N;
+const validCell = (w: World, x: number, z: number) => Number.isInteger(x) && Number.isInteger(z) && x >= 0 && z >= 0 && x < w.n && z < w.n;
 
 export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode: boolean, ammo: AmmoMode, hit: OrderHit): OrderRoute | null {
   const ids = [...selected].filter(id => w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER);
@@ -27,7 +27,7 @@ export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode:
   if (fireMode && ammo === 'smoke') {
     const guns = ids.filter(id => w.units[id - 1].kind === UK_HOWITZER);
     const aim = target ? [Math.floor(target.x / SUB), Math.floor(target.z / SUB)] : cell;
-    return guns.length && aim && validCell(aim[0], aim[1]) ? fire(guns, aim[0], aim[1], true) : null;
+    return guns.length && aim && validCell(w, aim[0], aim[1]) ? fire(guns, aim[0], aim[1], true) : null;
   }
   if (target && target.side !== SIDE_PLAYER) return {
     commands: [{ t: 'attack', side: SIDE_PLAYER, ids, target: target.id }],
@@ -42,7 +42,7 @@ export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode:
     if (armed.length) commands.push({ t: 'fireAt', side: SIDE_PLAYER, ids: armed, x, z });
     return { commands, marker: { x: x + 0.5, z: z + 0.5, hostile: true } };
   }
-  if (!cell || !validCell(cell[0], cell[1])) return null;
+  if (!cell || !validCell(w, cell[0], cell[1])) return null;
   const [x, z] = cell, b = bldAt(w, x, z);
   const guns = ids.filter(id => UNIT_KINDS[w.units[id - 1].kind].indirect);
   if ((b && b.hp > 0) || (fireMode && guns.length)) return fire(b && b.hp > 0 ? ids : guns, x, z);

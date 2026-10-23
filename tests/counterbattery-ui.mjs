@@ -19,7 +19,7 @@ const mutations = {
   fixed_fine: { group: 'projection', file: 'ui', from: 'const area = areas[i];', to: 'const area = { ...areas[i], rx: 2 * SUB, rz: 1.5 * SUB };' },
   low_samples: { group: 'projection', file: 'ui', from: 'COUNTERBATTERY_SEGMENTS = 40', to: 'COUNTERBATTERY_SEGMENTS = 20' },
   no_clip: { group: 'clipping', file: 'ui', from: 'ctx.closePath(); ctx.clip();', to: 'ctx.closePath();' },
-  clamp_vertices: { group: 'clipping', file: 'ui', from: '(area.x + circle[0] * area.rx) / SUB', to: 'Math.max(0, Math.min(N, (area.x + circle[0] * area.rx) / SUB))' },
+  clamp_vertices: { group: 'clipping', file: 'ui', from: '(area.x + circle[0] * area.rx) / SUB', to: 'Math.max(0, Math.min(n, (area.x + circle[0] * area.rx) / SUB))' },
   faint_minimum: { group: 'minimum', file: 'ui', from: 'ctx.lineWidth = 1.5;', to: 'ctx.lineWidth = 0.4;' },
   solid_circle: { group: 'minimum', file: 'ui', from: 'ctx.setLineDash(DASH);', to: 'ctx.setLineDash([]);' },
   unlimited: { group: 'capacity', file: 'ui', from: ' && i < 8', to: '' },
@@ -27,7 +27,7 @@ const mutations = {
   private_cell: { group: 'public_only', file: 'ui', from: 'const area = areas[i];', to: 'const area = { ...areas[i], x: w.counterbattery[0].cell * SUB };' },
   rng_write: { group: 'readonly', file: 'ui', from: '  if (!enabled) return;', to: '  if (!enabled) return; w.rng ^= 1;' },
   ignored_valve: { group: 'valves', file: 'ui', from: '  if (!enabled) return;', to: '  if (false) return;' },
-  missed_paint: { group: 'minimap', file: 'mini', from: '    drawCounterbattery(ctx, w, counterbatteryProject, a.counterbattery !== false);', to: '' },
+  missed_paint: { group: 'minimap', file: 'mini', from: '    drawCounterbattery(ctx, w, counterbatteryProject, a.counterbattery !== false, w.n);', to: '' },
   stale_world: { group: 'refresh', file: 'mini', from: 'if (w !== baseWorld) baseDirty = true;', to: 'if (false) baseDirty = true;' },
   stale_expiry: { group: 'expiry', file: 'ui', from: 'counterbatteryAreasInto(w, SIDE_PLAYER, AREA_BUFFER);', to: 'counterbatteryAreasInto({ ...w, tick: 0 }, SIDE_PLAYER, AREA_BUFFER);' },
   overwrite_priority: { group: 'hud', file: 'hud', from: 's.hint === undefined && s.counterbatteryInfo', to: 's.counterbatteryInfo' },
@@ -36,7 +36,7 @@ const mutations = {
   disconnected_valve: { group: 'wiring', file: 'main', from: 'counterbattery: r115,', to: 'counterbattery: true,' },
   hidden_minimap_hint: { group: 'wiring', file: 'main', from: "counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115)", to: "counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r115)" },
   absent_suffix: { group: 'layout', file: 'hud', from: "    if (s.hint === undefined && s.counterbatteryInfo) $('hint').textContent += `。${s.counterbatteryInfo}`;", to: '' },
-  replaced_slot: { group: 'buffer_reuse', file: 'sim', from: 'projectArea(r, buffer.areas[buffer.count]);', to: 'buffer.areas[buffer.count] = projectArea(r, { x: 0, z: 0, rx: 0, rz: 0, level: 0 });' },
+  replaced_slot: { group: 'buffer_reuse', file: 'sim', from: 'projectArea(r, buffer.areas[buffer.count], zones);', to: 'buffer.areas[buffer.count] = projectArea(r, { x: 0, z: 0, rx: 0, rz: 0, level: 0 }, zones);' },
   stale_count: { group: 'buffer_reuse', file: 'sim', from: '  buffer.count = 0;', to: '  if (w.counterbattery?.length) buffer.count = 0;' },
   query_expiry: { group: 'has_query', file: 'sim', from: 'if (r.side === side && w.tick - r.last < COUNTERBATTERY_TTL) return true;', to: 'if (r.side === side && w.tick - r.last <= COUNTERBATTERY_TTL) return true;' },
   query_rng: { group: 'query_readonly', file: 'sim', from: 'export function hasCounterbattery(w: World, side: number): boolean {', to: 'export function hasCounterbattery(w: World, side: number): boolean { w.rng ^= 1;' },
@@ -44,7 +44,7 @@ const mutations = {
   new_projection_tuple: { group: 'projection_reuse', file: 'mini', from: '  out[0] = g.w / 2', to: '  out = [0, 0]; out[0] = g.w / 2' },
   new_dash_array: { group: 'hotpath', file: 'ui', from: 'ctx.setLineDash(DASH);', to: 'ctx.setLineDash([3, 2]);' },
   query_filter: { group: 'hotpath', file: 'sim', from: 'export function hasCounterbattery(w: World, side: number): boolean {', to: 'export function hasCounterbattery(w: World, side: number): boolean { w.counterbattery?.filter(() => true);' },
-  new_project_closure: { group: 'project_closure', file: 'mini', from: 'drawCounterbattery(ctx, w, counterbatteryProject, a.counterbattery !== false);', to: 'drawCounterbattery(ctx, w, (x, z) => counterbatteryProject(x, z), a.counterbattery !== false);' },
+  new_project_closure: { group: 'project_closure', file: 'mini', from: 'drawCounterbattery(ctx, w, counterbatteryProject, a.counterbattery !== false, w.n);', to: 'drawCounterbattery(ctx, w, (x, z) => counterbatteryProject(x, z), a.counterbattery !== false, w.n);' },
 };
 const mutant = process.argv.find(arg => arg.startsWith('--mutant='))?.slice(9);
 if (mutant) {
