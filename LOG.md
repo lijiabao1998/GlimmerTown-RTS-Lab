@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R039 | 2026-10-23 | Claude | CI 分片：Node 守衛分四份並行（`UNIT_SHARD=k/n`，分法固定）、chrome 同時跑，`smoke` 變總閘；拿掉 `aeaf94a` 的 R129 精確例外與它的鎖定守衛；方向檔插修補 33 | 本機乾跑四份聯集＝全部 88 支、無重複；寫錯分片直接紅；本機第 1 份 48 OK／1 紅（input-browser，乾淨 main 本機也紅） | 待開 PR | 總閘弄壞一次的 run 號見卡面；分法用檔名輪流分，沒照實際秒數平衡 |
 | R128 | 2026-10-22 | GPT | 32×32沙盒：雙方坦克／榴彈砲，32輛上限，開始／暫停／重置／返回；指令步序凍結戰鬥 | Node6組／20負控、Chrome9負控，smoke250.9秒綠；四標準＋14功能圖 | [#63](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/63) | 本機8項Windows既有紅已對main；Android未測；僅Draft，無發布；大圖／畫質／載入動畫未做 |
 | R127 | 2026-10-21 | GPT | 我方HQ耐久／狀態與noR127；修長按釋放誤按HE定位，不改模擬 | CI39614371641 unit726.4秒／smoke185.7秒／lane綠；HQ Node22／Chrome11、定位3負控；四標準及21功能圖核對 | [#62](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/62) | 本機1797.5秒Chrome限制／既有3項紅保留；Android未測，收尾head與發布待核 |
 | R126 | 2026-10-21 | GPT | 原生產按鈕的補給差額／佇列滿／HQ失效回饋；原指令／R125保留，獨立noR126 | CI39587104101 unit659.6秒／smoke185.5秒／lane綠；Node31組／32負控、Chrome13負控、12圖審通過 | [#61](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/61) | 首輪README／錨點遺漏已修；本機Chrome限制及trenches-negative退出碼null保留；Android未測；main2e1a6b6 CI39599403644／Pages綠，公網713458bytes逐位一致 |
