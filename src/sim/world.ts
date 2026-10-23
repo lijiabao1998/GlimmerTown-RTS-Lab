@@ -52,6 +52,9 @@ export const UK_ATGUN = 4;      // R022 反戰車砲（直射、要架好才能�
 export const UK_MORTAR = 5;     // R022 迫擊砲（短程間接射擊、兩個砲手）
 export const UK_LIGHT = 6;      // R023 輕坦克（快、看得遠、皮薄、主砲穿甲低）
 export const UK_HEAVY = 7;      // R023 重坦克（慢、裝甲只吃七成傷害、火力稍強）
+export const UK_ARMORED_CAR = 8; // R044 裝甲車（快、看得遠、皮薄、打裝甲很弱、便宜）
+export const UK_DESTROYER = 9;   // R044 驅逐戰車（射程遠、打車痛、要停下來才能開火、開頂怕步兵）
+export const UK_ASSAULT = 10;    // R044 突擊砲（打建築強、承傷七成五、慢、射程稍短）
 
 export interface UnitKind {
   name: string;
@@ -75,6 +78,7 @@ export interface UnitKind {
   men: number;          // R021 畫成幾個人（0＝一個模型）
   soft: number;         // R022 打非裝甲目標時剩幾 %（100＝全吃）
   setup: boolean;       // R022 要停下來（架好）才能開火（間接射擊的砲本來就是）
+  openTop?: boolean;    // R044 開頂車廂（驅逐戰車）：步兵打它照「打非裝甲目標」算（只加不改：既有兵種沒有這一欄）
 }
 
 // 數字都是暫定，玩家看得到的數字由業主定（AGENTS.md 規則 6）。
@@ -87,6 +91,10 @@ export const UNIT_KINDS: UnitKind[] = [
   { name: 'mortar', hp: 40, speed: 12, range: 12 * SUB, minRange: 2 * SUB, reload: 60, indirect: true, dmgUnit: 30, dmgBld: 12, splash: 256, sight: 6 * SUB, armor: 100, radius: 0, cost: 30, buildTicks: 200, garrison: false, armored: false, pierce: 50, men: 0, soft: 100, setup: false },
   { name: 'light', hp: 70, speed: 26, range: 8 * SUB, minRange: 0, reload: 45, indirect: false, dmgUnit: 24, dmgBld: 15, splash: 0, sight: 12 * SUB, armor: 100, radius: 72, cost: 30, buildTicks: 220, garrison: false, armored: true, pierce: 70, men: 0, soft: 100, setup: false },
   { name: 'heavy', hp: 160, speed: 13, range: 9 * SUB, minRange: 0, reload: 70, indirect: false, dmgUnit: 40, dmgBld: 30, splash: 0, sight: 9 * SUB, armor: 70, radius: 88, cost: 65, buildTicks: 480, garrison: false, armored: true, pierce: 100, men: 0, soft: 100, setup: false },
+  // R044 只往後加（id 8–10）；倍數與理由見 docs/tasks/R044-更多坦克.md
+  { name: 'armoredcar', hp: 55, speed: 32, range: 7 * SUB, minRange: 0, reload: 30, indirect: false, dmgUnit: 14, dmgBld: 6, splash: 0, sight: 13 * SUB, armor: 100, radius: 64, cost: 25, buildTicks: 160, garrison: false, armored: true, pierce: 35, men: 0, soft: 100, setup: false },
+  { name: 'destroyer', hp: 85, speed: 17, range: 12 * SUB, minRange: 0, reload: 75, indirect: false, dmgUnit: 58, dmgBld: 18, splash: 0, sight: 9 * SUB, armor: 100, radius: 80, cost: 50, buildTicks: 360, garrison: false, armored: true, pierce: 100, men: 0, soft: 55, setup: true, openTop: true },
+  { name: 'assault', hp: 130, speed: 14, range: 8 * SUB, minRange: 0, reload: 80, indirect: false, dmgUnit: 40, dmgBld: 60, splash: 0, sight: 8 * SUB, armor: 75, radius: 84, cost: 55, buildTicks: 420, garrison: false, armored: true, pierce: 75, men: 0, soft: 100, setup: false },
 ];
 
 export const ORD_IDLE = 0;
@@ -158,9 +166,9 @@ export type SimEvent =
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
-export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number }
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number }   // R044 armor2：可出裝甲車、驅逐戰車、突擊砲
 
-export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number }
+export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number }   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
 export interface SmokeCloud { id: number; side: number; x: number; z: number; born: number; expires: number }
 
@@ -367,8 +375,8 @@ export function hashWorld(w: World): string {
     for (const s of w.wires.segments) f.int(s.id).int(s.kind).int(s.x).int(s.z).int(s.w).int(s.d).int(s.floors).int(s.hp).int(s.maxHp).int(s.builtBy ?? -1);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
-  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
-  if (w.ai) for (const a of w.ai) f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp);   // R018：只有開了電腦才折
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
+  if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
   if (w.smoke) {

@@ -87,7 +87,7 @@
     #help h2 { margin: 0 0 6px; font-size: 22px; text-align: center; letter-spacing: 0.15em; }
     #help h3 { margin: 10px 0 4px; font-size: 15px; color: #c8d8ee; }
     #help ol, #help ul { margin: 4px 0; padding-left: 1.3em; } #help li { margin: 3px 0; } #help p { margin: 4px 0; }
-    #help .acts { display: flex; justify-content: center; margin-top: 10px; }
+    #help .acts { display: flex; justify-content: center; margin-top: 10px; position: sticky; bottom: -14px; margin-bottom: -14px; padding: 6px 0 14px; background: #181c16; box-shadow: 0 -6px 8px -4px #181c16; }   /* R044 說明變長：「知道了」黏在面板底部，手機上不用捲也點得到 */
     #help .acts button { min-height: 44px; min-width: 120px; font-weight: 700; background: #2f5f9a; border-color: #9cc6ff; }
     /* R015 小地圖：右上、按鈕列下面（手機在標題列下面） */
     #minimap { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 58px); pointer-events: auto;
@@ -98,7 +98,8 @@
     #prodbar button { min-height: 44px; min-width: 64px; padding: 0 10px; }
     #prodbar button b { margin-left: 4px; color: #ffd36a; font-weight: 800; }
     #prodbar button.dim { opacity: 0.45; }
-    @media (max-width: 560px) { #prodbar button { min-width: 0; padding: 0 7px; font-size: 13px; } }   /* R022 七顆按鈕：手機上排緊一點 */
+    @media (max-width: 560px), (max-height: 500px) { #hud #prodbar { gap: 4px; } #prodbar button { min-width: 0; padding: 0 5px; font-size: 13px; } }   /* R022 七顆按鈕：手機上排緊一點；R044 十一顆：間距、內距再縮（命中區照樣 44 高），橫放手機也排緊 */
+    @media (max-height: 500px) { #prodbar button { font-size: 12px; } }   /* R044 橫放手機：十一顆排成一列，生產列不比加新車之前高 */
     #prodbar .info { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; margin-left: auto; }
     #prodbar.production-countdown #pb-countdown { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; color: #d9e8bf; }
     #prodbar #pb-countdown[hidden] { display: none; }

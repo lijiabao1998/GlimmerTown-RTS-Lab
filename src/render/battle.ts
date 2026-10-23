@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
+  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -31,6 +31,20 @@ const DK_PATH = 0, DK_ATTACK = 1, DK_FIRE = 2, DK_END = 3, DK_CROSS = 4;
 const MEN_CAP = 1600, BODY_CAP = 300;   // R021 小兵實例上限、倒下的人上限
 // R023 坦克的網格縮放（輕坦克小一號、重坦克大一號；中坦克原樣）
 const TANK_SCALE23: Record<number, number> = { [UK_LIGHT]: 0.8, [UK_HEAVY]: 1.18 };
+// R044 三種新車也畫進同一組車體、砲塔網格（不加繪製呼叫），只換各軸縮放與砲塔位置：
+// hull＝車體（長、高、寬）、top＝砲塔／戰鬥室（長、高、寬；砲管跟著長度伸縮）、fwd＝砲塔沿車頭前移（格）、casemate＝固定戰鬥室（平常朝車頭，停下來開火時才對準）
+// 裝甲車：長窄低、小砲塔；驅逐戰車：低車體、壓扁的戰鬥室、長砲管；突擊砲：寬低車體、寬扁戰鬥室、短粗砲管
+type Art44 = { hull: [number, number, number]; top: [number, number, number]; fwd: number; casemate: boolean };
+const ART44: Record<number, Art44> = {
+  [UK_ARMORED_CAR]: { hull: [0.86, 0.8, 0.66], top: [0.6, 0.75, 0.6], fwd: 0, casemate: false },
+  [UK_DESTROYER]: { hull: [1.05, 0.72, 0.95], top: [1.45, 0.55, 1.2], fwd: 0.04, casemate: true },
+  [UK_ASSAULT]: { hull: [1.0, 0.7, 1.15], top: [0.78, 0.62, 1.4], fwd: 0.07, casemate: true },
+};
+const CASEMATE_HOLD = 3;              // R044 戰鬥室開火後幾秒內還對著目標（之後轉回車頭）
+// 車的整體大小（裝甲弧、車轍間距用）；槍口離車中心多遠（槍口火光用）
+const vehSize = (kind: number) => ART44[kind] ? Math.max(ART44[kind].hull[0], ART44[kind].hull[2]) : TANK_SCALE23[kind] ?? 1;
+const muzzleL = (kind: number) => ART44[kind] ? 0.42 * ART44[kind].top[0] + ART44[kind].fwd : 0.44 * (TANK_SCALE23[kind] ?? 1);
+const muzzleY = (kind: number) => ART44[kind] ? 0.195 * ART44[kind].top[1] + 0.15 * (ART44[kind].hull[1] - ART44[kind].top[1]) : 0.2;
 // R022 砲的網格縮放（長、高、寬）：榴彈砲原樣；反戰車砲壓低放平；迫擊砲短而翹
 const GUN_SCALE22: Record<number, [number, number, number]> = { [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4] };
 // 一班六個人的位置（班長前進方向的本地座標：兩排三列）
@@ -138,6 +152,7 @@ export class BattleView {
   private lastHp = new Int32Array(MAX_UNITS + 1);
   private turretYaw = new Float64Array(MAX_UNITS + 1);
   private turretT = -1;
+  private fire44 = new Float64Array(MAX_UNITS + 1).fill(-99);   // R044 每台最後一次開火的模擬時間（戰鬥室要不要對著目標）
   private cFlash = new THREE.Color();
 
   // ---- R009 血條（?noR009=1 時不畫）----
@@ -403,6 +418,7 @@ export class BattleView {
   onEvents(events: SimEvent[], simT: number) {
     if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory); // tick0 的 map 重播要同步城鎮與地面。
     if (this.holeMesh) this.holes14(events);
+    for (const e of events) if (e.e === 'fire') this.fire44[e.unit] = simT;
     if (this.r8) this.vehicles8(events, simT);
     if (this.r4) { this.frameNo++; for (const e of events) this.fx4(e, simT); }   // 世界剛走一步：可見度快取作廢
     let townDirty = false, groundDirty = false, vegetationDirty = false;
@@ -438,8 +454,8 @@ export class BattleView {
           if (this.fxOn && !this.r4) this.burst(x, 0.1, z, 0.55, simT, 5, false);
         } else if (this.fxOn && !this.r4) this.burst(x, e.bld ? 0.35 : 0.12, z, 0.22, simT, 2, !!e.bld);
       } else if (e.e === 'fire' && this.fxOn && !this.r4 && this.visibleUnit(this.w.units[e.unit - 1])) {
-        const u = this.w.units[e.unit - 1], a = Math.atan2(u.aimZ, u.aimX), L = UNIT_KINDS[u.kind].armored ? 0.44 * (TANK_SCALE23[u.kind] ?? 1) : 0.4;
-        this.spawn({ x: e.x / SUB + Math.cos(a) * L, y: u.kind === UK_TANK ? 0.2 : 0.3, z: e.z / SUB + Math.sin(a) * L, t0: simT, life: 0.12, s0: 0.07, s1: 0.12, vy: 0, c0: new THREE.Color(0xfff3b0), c1: new THREE.Color(0xffb040) });
+        const u = this.w.units[e.unit - 1], a = Math.atan2(u.aimZ, u.aimX), L = UNIT_KINDS[u.kind].armored ? muzzleL(u.kind) : 0.4;
+        this.spawn({ x: e.x / SUB + Math.cos(a) * L, y: u.kind === UK_TANK ? 0.2 : ART44[u.kind] ? muzzleY(u.kind) : 0.3, z: e.z / SUB + Math.sin(a) * L, t0: simT, life: 0.12, s0: 0.07, s1: 0.12, vy: 0, c0: new THREE.Color(0xfff3b0), c1: new THREE.Color(0xffb040) });
       } else if (e.e === 'kill' && this.visibleUnit(this.w.units[e.unit - 1])) {
         this.wrecks.push({ id: e.unit, until: simT + 10 });
         const u = this.w.units[e.unit - 1];
@@ -491,7 +507,18 @@ export class BattleView {
       // R008 後座：開火後 0.3 秒內沿瞄準反方向退一下再回位（前 0.04 秒猛退，之後慢慢回）
       const rk = (simT - this.recoilT0[u.id]) / 0.3, back = this.r8 && u.alive && rk >= 0 && rk < 1 ? (rk < 0.13 ? rk / 0.13 : (1 - rk) / 0.87) ** 2 : 0;
       const bx = -Math.cos(aim) * back, bz = Math.sin(aim) * back;
-      if (UNIT_KINDS[u.kind].armored) {   // R023 輕、中、重坦克共用車體與砲塔網格，只差縮放
+      const a44 = ART44[u.kind];
+      if (a44) {   // R044 裝甲車、驅逐戰車、突擊砲：同一組車體與砲塔網格，各軸縮放不同
+        const yaw = this.yaw[u.id], top = a44.casemate ? this.casemate44(u, aim, simT) : aim;
+        const cx = -Math.cos(top) * back, cz = Math.sin(top) * back, [hx, hy, hz] = a44.hull, [tx, ty, tz] = a44.top;
+        m.position.set(x + cx * 0.03, 0, z + cz * 0.03); m.rotation.set(0, yaw, u.alive ? back * 0.05 : 0.06); m.scale.set(hx, hy, hz); m.updateMatrix();
+        this.hull.setMatrixAt(nh, m.matrix); this.hull.setColorAt(nh, col);
+        m.rotation.set(0, u.alive ? top : top + 0.5, u.alive ? 0 : 0.12); m.scale.set(tx, ty, tz);
+        m.position.set(x + Math.cos(yaw) * a44.fwd + cx * 0.09, (u.alive ? 0 : -0.02) + 0.15 * (hy - ty), z - Math.sin(yaw) * a44.fwd + cz * 0.09); m.updateMatrix();
+        const tossed = !u.alive && this.r4 ? this.toss.get(u.id) : undefined;
+        this.turret.setMatrixAt(nh, tossed ? this.tossMatrix(tossed, x, z, simT, tx, ty, tz) : m.matrix); this.turret.setColorAt(nh, col);
+        nh++;
+      } else if (UNIT_KINDS[u.kind].armored) {   // R023 輕、中、重坦克共用車體與砲塔網格，只差縮放
         const ts = TANK_SCALE23[u.kind] ?? 1;
         m.position.set(x + bx * 0.03, 0, z + bz * 0.03); m.rotation.set(0, this.yaw[u.id], u.alive ? back * 0.05 : 0.06); m.scale.set(ts * (u.kind === UK_HEAVY ? 1.06 : 1), ts * (u.kind === UK_LIGHT ? 0.85 : 1), ts); m.updateMatrix();
         this.hull.setMatrixAt(nh, m.matrix); this.hull.setColorAt(nh, col);
@@ -520,7 +547,7 @@ export class BattleView {
           m.position.y = this.unitHeight(u) + 0.02; m.updateMatrix();
           this.rings.setMatrixAt(nr, m.matrix); this.rings.setColorAt(nr, C_SEL); nr++;
           if (this.armorArcs && u.side === SIDE_PLAYER && UNIT_KINDS[u.kind].armored && u.hullX !== undefined && u.hullZ !== undefined) {
-            const size = TANK_SCALE23[u.kind] ?? 1;
+            const size = vehSize(u.kind);
             m.position.set(x, 0.025, z); m.scale.setScalar(size); m.rotation.set(0, this.yaw[u.id], 0); m.updateMatrix();
             this.armorArcs.setMatrixAt(na, m.matrix); this.armorArcs.setColorAt(na++, C_ARMOR_FRONT);
             m.rotation.y += Math.PI; m.updateMatrix();
@@ -659,7 +686,7 @@ export class BattleView {
         this.glow!.spawn({ x: x0, y: y0, z: z0, t0: t, life: 0.06, s0: 0.03, s1: 0.07, c0: 0xfff6c8, c1: 0xffa040, fog: u.side !== SIDE_PLAYER });
         return;
       }
-      const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER, L = gun ? 0.42 : u.kind === UK_MORTAR ? 0.16 : 0.44, y = gun ? 0.32 : u.kind === UK_MORTAR ? 0.26 : u.kind === UK_ATGUN ? 0.15 : 0.2;
+      const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER, L = gun ? 0.42 : u.kind === UK_MORTAR ? 0.16 : ART44[u.kind] ? muzzleL(u.kind) : 0.44, y = gun ? 0.32 : u.kind === UK_MORTAR ? 0.26 : u.kind === UK_ATGUN ? 0.15 : ART44[u.kind] ? muzzleY(u.kind) : 0.2;   // R044 新車的槍口照各自的砲塔縮放
       const mx = e.x / SUB + Math.cos(a) * L, mz = e.z / SUB + Math.sin(a) * L, fog = u.side !== SIDE_PLAYER;
       this.glow!.spawn({ x: mx, y, z: mz, t0: t, life: 0.08, s0: 0.1, s1: gun ? 0.34 : 0.22, c0: 0xfff6c8, c1: 0xffa040, fog });
       this.glow!.spawn({ x: mx, y, z: mz, vx: Math.cos(a) * 2.2, vz: Math.sin(a) * 2.2, drag: 9, t0: t, life: 0.11, s0: 0.07, s1: gun ? 0.2 : 0.13, c0: 0xffe090, c1: 0xff6020, fog });
@@ -811,14 +838,14 @@ export class BattleView {
   }
 
   // 砲塔飛起：彈道、翻滾，落在車旁（繞砲塔中心轉）
-  private tossMatrix(T: Toss, x: number, z: number, t: number): THREE.Matrix4 {
+  private tossMatrix(T: Toss, x: number, z: number, t: number, sx = 1, sy = 1, sz = 1): THREE.Matrix4 {
     const dt = Math.max(0, t - T.t0), g = 9, vy = 3.4, tl = (2 * vy) / g, k = Math.min(dt, tl);
     const px = x + T.vx * k, pz = z + T.vz * k;
     let py: number, rx: number, ry: number, rz: number;
     if (dt < tl) { py = 0.2 + vy * dt - 0.5 * g * dt * dt; rx = T.spin * dt; ry = T.yaw + T.spin * 0.5 * dt; rz = T.spin * 0.7 * dt; }
     else { py = 0.07; rx = T.tilt * 0.8; ry = T.yaw + T.spin * 0.5 * tl; rz = 0.45 + T.tilt * 0.3; }
     const e = this.tmp;
-    e.position.set(px, py, pz); e.rotation.set(rx, ry, rz); e.scale.setScalar(1); e.updateMatrix();
+    e.position.set(px, py, pz); e.rotation.set(rx, ry, rz); e.scale.set(sx, sy, sz); e.updateMatrix();
     return this.mA.multiplyMatrices(e.matrix, this.mB.makeTranslation(0, -0.2, 0));
   }
 
@@ -849,7 +876,7 @@ export class BattleView {
       if (!u.alive || UNIT_KINDS[u.kind].radius === 0) continue;   // 步兵（觀測員、步兵班）不壓車轍
       const dx = u.x - this.prevX[u.id], dz = u.z - this.prevZ[u.id];
       if (!dx && !dz) continue;
-      const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = UNIT_KINDS[u.kind].armored ? 0.13 * (TANK_SCALE23[u.kind] ?? 1) : 0.11;
+      const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = UNIT_KINDS[u.kind].armored ? (ART44[u.kind] ? 0.13 * ART44[u.kind].hull[2] : 0.13 * (TANK_SCALE23[u.kind] ?? 1)) : 0.11;
       // 兩條車轍：沿這一步走過的線段，每 1/8 格蓋一個像素；同一條車轍連續壓到同一個像素只算一次
       const steps = Math.max(1, Math.ceil((len / SUB) * PX));
       for (let side = 0; side < 2; side++) {
@@ -888,7 +915,7 @@ export class BattleView {
     const dt = t - this.turretT;
     this.turretT = t;
     for (const u of this.w.units) {
-      const want = Math.atan2(-u.aimZ, u.aimX);
+      const want = ART44[u.kind]?.casemate && !this.engaged44(u, t) && u.hullX !== undefined && u.hullZ !== undefined ? Math.atan2(-u.hullZ, u.hullX) : Math.atan2(-u.aimZ, u.aimX);   // R044 固定戰鬥室沒在打就轉回車頭
       if (dt < 0 || dt > 1) { this.turretYaw[u.id] = want; continue; }
       let d = want - this.turretYaw[u.id];
       d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
@@ -897,6 +924,16 @@ export class BattleView {
     }
   }
 
+
+  // ======== R044 固定戰鬥室 ========
+  // 停著、而且正在打（攻擊／射擊指令，或剛開過火）才對著目標；行進中、沒在打就朝車頭。模擬照舊瞄準，這裡只決定畫成什麼方向
+  private engaged44(u: Unit, t: number): boolean {
+    return u.alive && u.pathIdx >= u.path.length && (u.order === ORD_ATTACK || u.order === ORD_FIRE_AT || t - this.fire44[u.id] < CASEMATE_HOLD);
+  }
+  private casemate44(u: Unit, aim: number, t: number): number {
+    if (this.r8 && u.alive) return this.turretYaw[u.id];   // R008 開著：turn8 已經平滑轉向（目標或車頭）
+    return this.engaged44(u, t) ? aim : this.yaw[u.id];
+  }
 
   // ======== R009 血條與耐久條 ========
   // 單位：受過傷或被選取才畫；扣血時白色殘影從舊血量縮到新血量（0.5 秒）。敵方只在看得到時畫（R100）。

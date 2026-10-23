@@ -23,7 +23,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451, loader: 9471, loaderDesk: 9491, loaderFail: 9511, noR040: 9531, noR041: 9551 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451, loader: 9471, loaderDesk: 9491, loaderFail: 9511, noR040: 9531, noR041: 9551, armor2: 9701, armor2Desk: 9721, noR044: 9741 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -688,6 +688,60 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR023 },
   const btn = await page.evaluate("!!document.getElementById('pb-k6') || !!document.getElementById('pb-k7')"), e = await page.evaluate('__rts.eco()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
   log(!btn && !e.tanks && h === nodeHash && page.errors.length === 0, '?noR023=1：沒有新坦克按鈕、eco 不帶 tanks、雜湊不變', h);
 });
+
+// ---- R044 裝甲車、驅逐戰車、突擊砲：手機生產列有三顆新鍵、真觸控排「驅逐戰車」；三種都出來的特寫（桌機、手機）；?noR044=1 沒有 ----
+{
+  // 特寫用的紀錄：沒有電腦（新車不會先被打掉）；補給夠時依序出三種，排成一列（中坦克、裝甲車、驅逐戰車、突擊砲，沿畫面直的那條斜線），
+  // 驅逐戰車、突擊砲各轟一棟房子（戰鬥室轉向目標）；停在驅逐戰車開完一砲的下一步（槍口火光還在）
+  const log44 = [{ tick: 0, cmd: { t: 'eco', inf: 1, guns: 1, tanks: 1, armor2: 1 } }, { tick: 1, cmd: { t: 'produce', side: 0, kind: 8 } }, { tick: 300, cmd: { t: 'produce', side: 0, kind: 9 } }, { tick: 1460, cmd: { t: 'produce', side: 0, kind: 10 } },
+    ...[[1, 21], [13, 23], [14, 25], [15, 27]].map(([id, c]) => ({ tick: 1950, cmd: { t: 'move', side: 0, ids: [id], x: c, z: c } })), { tick: 1950, cmd: { t: 'move', side: 0, ids: [11], x: 29, z: 24 } },
+    { tick: 2150, cmd: { t: 'fireAt', side: 0, ids: [14], x: 18, z: 22 } }, { tick: 2150, cmd: { t: 'fireAt', side: 0, ids: [15], x: 28, z: 20 } }];
+  const w44 = createWorld(1944);
+  let T44 = 0;
+  for (let i = 0; !T44 && w44.tick < 3000;) {
+    const now = []; while (i < log44.length && log44[i].tick <= w44.tick) { if (log44[i].tick === w44.tick) now.push(log44[i].cmd); i++; }
+    step(w44, now);
+    if (w44.tick >= 2280 && w44.events.some(e => e.e === 'fire' && e.unit === 14)) T44 = w44.tick;
+  }
+  const node44 = hashWorld(w44);
+  const closeUp = async (page, name, zoom, at) => {
+    const h = await page.evaluate(`__rts.playLog(1944, ${JSON.stringify(log44)}, ${T44})`);
+    await page.evaluate('__rts.pause(true)');
+    const mine = (await page.evaluate('__rts.units()')).filter(u => u.side === 0 && u.kind >= 8 && u.alive);
+    await page.evaluate(`__rts.focus(${at}, ${at}, ${zoom}); 0`);
+    await sleep(400);
+    const info = await page.evaluate('__rts.info()');
+    await shot(page, path.join(SHOTS, `r044-${name}.png`));
+    const kinds = [...new Set(mine.map(u => u.kind))].sort((a, b) => a - b);
+    log(kinds.join(',') === '8,9,10' && h === node44 && info.calls <= BUDGET.calls + 2 && info.triangles <= BUDGET.triangles, `R044 新車特寫（${name === 'phone' ? '手機' : '桌機'}；裝甲車、驅逐戰車、突擊砲都在，驅逐戰車剛開火）：繪製呼叫 ≤ 22、三角形 ≤ 80,000；瀏覽器＝Node`,
+      `第 ${T44} 步；活著的新車 ${mine.map(u => u.kind).join(',')}；${JSON.stringify({ calls: info.calls, triangles: info.triangles })}；${h} / ${node44}`);
+  };
+  await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.armor2 }, async ({ open, page }) => {
+    await open('');
+    await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await page.evaluate('__rts.stepN(1)');
+    const rect = id => page.evaluate(`(() => { const b = document.getElementById('${id}'); if (!b) return null; const q = b.getBoundingClientRect(); return [q.x + q.width / 2, q.y + q.height / 2, q.width, q.height]; })()`);
+    const ac = await rect('pb-k8'), td = await rect('pb-k9'), sg = await rect('pb-k10'), bar = await page.evaluate("document.getElementById('prodbar').getBoundingClientRect().height");
+    await shot(page, path.join(SHOTS, 'r044-phone-bar.png'));
+    if (td) await touchTap(page, td[0], td[1]);
+    await page.evaluate('__rts.stepN(1)');
+    const e = await page.evaluate('__rts.eco()'), big = r => !!r && r[2] >= 44 && r[3] >= 44, wh = r => (r ? `${r[2].toFixed(0)}×${r[3].toFixed(0)}` : '無');
+    log(big(ac) && big(td) && big(sg) && bar <= 200 && e.armor2 === 1 && e.queue[0].includes(9), '生產列有「裝甲車」「驅逐戰車」「突擊砲」（≥ 44 像素）、手機生產列 ≤ 200 像素高；觸控按「驅逐戰車」排進佇列',
+      `裝甲車 ${wh(ac)}、驅逐戰車 ${wh(td)}、突擊砲 ${wh(sg)}；生產列高 ${bar.toFixed(0)}；佇列 ${e.queue[0]}`);
+    await closeUp(page, 'phone', 2.2, 24.9);
+    log(page.errors.length === 0, 'R044（手機）零頁面錯誤', page.errors.join(' | '));
+  });
+  await withBrowser({ width: 1280, height: 800, port: PORTS.armor2Desk }, async ({ open, page }) => {
+    await open('');
+    await closeUp(page, 'desktop', 3, 25);
+    log(page.errors.length === 0, 'R044（桌機）零頁面錯誤', page.errors.join(' | '));
+  });
+  await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.noR044 }, async ({ open, page }) => {
+    await open('noR044=1');
+    await page.evaluate('__rts.startBattle(); __rts.pause(true); 0'); await page.evaluate('__rts.stepN(1)');
+    const btn = await page.evaluate("!!document.getElementById('pb-k8') || !!document.getElementById('pb-k9') || !!document.getElementById('pb-k10')"), e = await page.evaluate('__rts.eco()'), h = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
+    log(!btn && !e.armor2 && e.tanks === 1 && h === nodeHash && page.errors.length === 0, '?noR044=1：沒有三顆新鍵、eco 不帶 armor2、雜湊不變', `${h}；eco ${JSON.stringify(e)}`);
+  });
+}
 
 // ---- R024 碉堡：布陣列有「碉堡」、真觸控選了蓋一座、開戰後瀏覽器＝Node 重播；?noR024=1 沒有碉堡 ----
 await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.pillbox }, async ({ open, page }) => {
