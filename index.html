@@ -13,9 +13,14 @@
     #sandbox-panel strong { flex: 1 1 100%; }
     #sandbox-panel button[aria-pressed="true"] { background: #9a4a2e; border-color: #d0835f; }
     #sb-enter[hidden], #sandbox-panel[hidden] { display: none; }
+    /* R043 地圖鍵：跟「沙盒模式」同一排、在它右邊（沒有沙盒鍵時靠左） */
+    #map-pick { position: fixed; z-index: 6; left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 58px); box-sizing: border-box; min-width: 44px; min-height: 44px; border: 1px solid #6c745f; border-radius: 5px; background: #3c4535; color: #f3eedf; font: inherit; padding: 6px 10px; touch-action: manipulation; cursor: pointer; }
+    #sb-enter:not([hidden]) ~ #map-pick { left: calc(max(8px, env(safe-area-inset-left)) + 92px); }
+    #map-pick[aria-pressed="true"] { border-color: #b9a46a; }
+    #map-pick[hidden] { display: none; }
     #sb-hint { font-size: 13px; overflow-wrap: anywhere; }
-    @media (max-width: 640px) { #sb-enter { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
-    @media (max-width: 411px) { #hud.cover-durability ~ #sb-enter { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
+    @media (max-width: 640px) { #sb-enter, #map-pick { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
+    @media (max-width: 411px) { #hud.cover-durability ~ #sb-enter, #hud.cover-durability ~ #map-pick { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #2a3329; color: #f3eedf;
       font: 14px/1.4 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
     canvas { display: block; touch-action: none; image-rendering: pixelated; }
@@ -90,6 +95,7 @@
     #help ol, #help ul { margin: 4px 0; padding-left: 1.3em; } #help li { margin: 3px 0; } #help p { margin: 4px 0; }
     #help .acts { display: flex; flex-shrink: 0; justify-content: center; margin-top: 10px; }
     #help li.r044 { display: none; } body.r044 #help li.r044 { display: list-item; }   /* R044 剋制那一句：?noR044=1 時不出現 */
+    #help li.r043 { display: none; } body.r043 #help li.r043 { display: list-item; }   /* R043 大地圖那一句：?noR043=1 時不出現 */
     #help .acts button { min-height: 44px; min-width: 120px; font-weight: 700; background: #2f5f9a; border-color: #9cc6ff; }
     /* R015 小地圖：右上、按鈕列下面（手機在標題列下面） */
     #minimap { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 58px); pointer-events: auto;

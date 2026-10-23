@@ -413,7 +413,7 @@ export function step(w: World, cmds: Command[]): void {
     w.sandbox.frame++;
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {
-  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 ? c.vegetation : undefined);   // R026：地圖最先套
+  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 ? c.vegetation : undefined);   // R026：地圖最先套（R043 id 2＝大地圖）
   for (const c of cmds) { if (c.t === 'build') applyBuild(w, c); else if (c.t === 'trench') applyTrench(w, c); }   // R118：布陣保留相對順序，全部先於移動與 HQ
   for (const c of cmds) if (c.t !== 'build' && c.t !== 'trench' && c.t !== 'map') applyCommand(w, c);
   }

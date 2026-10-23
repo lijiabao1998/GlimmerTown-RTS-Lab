@@ -3,6 +3,7 @@ import { trenchAt } from './trenches.ts';
 import { clearVegetation } from './vegetation.ts';
 import { findPath } from './path.ts';
 import { stillConnected, keepsFootPaths } from './build.ts';
+import { MAP_LARGE, LARGE_POP } from './largeMap.ts';
 import {
   SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, BK_HQ, TER_ROAD,
   ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, type World, type Building,
@@ -11,7 +12,7 @@ import {
 export const ECO_START = 60;          // 開局補給
 export const ECO_INCOME_TICKS = 20;   // 每 20 步（1 秒）+1
 export const ECO_QUEUE = 5;           // 佇列最多幾個
-export const ECO_POP = 16;            // 每方同時活著最多幾台
+export const ECO_POP = 16;            // 每方同時活著最多幾台（R043 大地圖寫進 eco.pop＝40）
 export const PRODUCIBLE = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT];
 export const ARMOR2 = [UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT];   // R044：eco 帶 armor2 才能出
 
@@ -53,7 +54,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0): vo
     w.events.push({ e: 'build', bld: id });
     hq[side] = id;
   }
-  w.eco = { supply: [ECO_START, ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}) };
+  w.eco = { supply: [ECO_START, ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}), ...(w.map === MAP_LARGE ? { pop: LARGE_POP } : {}) };
   if (inf) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_INFANTRY, b); }   // R021：雙方各一班步兵
 }
 
@@ -83,7 +84,7 @@ export function ecoStep(w: World): void {
     if (!q.length) continue;
     const k = UNIT_KINDS[q[0]];
     if (e.prog[side] < k.buildTicks) { e.prog[side]++; continue; }
-    if (w.units.filter(u => u.alive && u.side === side).length >= ECO_POP) continue;   // 人數滿了：做好的先等著
+    if (w.units.filter(u => u.alive && u.side === side).length >= (e.pop ?? ECO_POP)) continue;   // 人數滿了：做好的先等著
     if (!spawnCell(w, hq)) continue;
     const kind = q.shift()!;
     e.prog[side] = 0;
