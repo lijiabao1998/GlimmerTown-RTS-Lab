@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { build } from 'vite';
-import { BK_HQ } from '../src/sim/world.ts';
+import { BK_HQ, createWorld, hashWorld } from '../src/sim/world.ts';
+import { runLog } from '../src/sim/step.ts';
 import { withBrowser, shot } from '../tools/cdp.mjs';
 const root=path.resolve(import.meta.dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'r134-native-')), metrics=[];
 const fixture={name:'r134-native-review',transform(code,id){if(path.relative(root,id.split('?')[0]).replaceAll('\\','/')!=='src/main.ts')return;return code+`\nwindow.__r134Review=(x,z,zoom)=>{paused=true;view.fogOn=false;view.target.set(x,0,z);view.zoom=zoom;};`;}};
@@ -27,7 +28,7 @@ try{
     // Real simulation, deterministic fixed steps. Existing battle budget is unchanged.
     await E("document.getElementById('bb-start').click();__rts.pause(true)");await E('__rts.stepN(600-__rts.tick());__r134Review(48,48,2)');await frames();
     const info=await E('__rts.info()');assert(info.calls<=22&&info.triangles<=80000,`battle budget: ${JSON.stringify(info)}`);
-    assert.equal(await E('__rts.mapSize()'),96);assert.equal(await E('__rts.blds().length'),286,'284 original buildings plus two native HQ');assert.equal(await E(`__rts.blds().filter(b=>b.kind===${BK_HQ}).length`),2,'two native eco HQ');const battleHash=await E('__rts.hash()');if(off)pair.battle=battleHash;else assert.equal(battleHash,pair.battle,'battle replay invariant');metrics.push({name:`r134-${width}-battle-${off?'before':'after'}`,...info,hash:battleHash,...await E('({mapSize:__rts.mapSize(),buildings:__rts.blds().length,seed:__rts.seed(),camera:__rts.cam(),tick:__rts.tick()})')});
+    assert.equal(await E('__rts.mapSize()'),96);const replay=runLog(createWorld(await E('__rts.seed()')),await E('__rts.log()'),600);assert.deepEqual(await E('__rts.blds()'),replay.blds,'actual enemy deployment and HQ match independent Node replay');assert.equal(await E('__rts.hash()'),hashWorld(replay),'complete world matches Node replay');assert.equal(await E(`__rts.blds().filter(b=>b.kind===${BK_HQ}).length`),2,'two native eco HQ');const battleHash=await E('__rts.hash()');if(off)pair.battle=battleHash;else assert.equal(battleHash,pair.battle,'battle replay invariant');metrics.push({name:`r134-${width}-battle-${off?'before':'after'}`,...info,hash:battleHash,...await E('({mapSize:__rts.mapSize(),buildings:__rts.blds().length,seed:__rts.seed(),camera:__rts.cam(),tick:__rts.tick()})')});
     await shot(page,path.join(root,'shots',`r134-${width}-battle-${off?'before':'after'}.png`));
    }
   }
