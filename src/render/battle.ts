@@ -97,6 +97,10 @@ export class BattleView {
   private groundTex!: THREE.DataTexture;
   private groundPx!: Uint8Array;
   private town: THREE.Mesh;
+  private pickTown: THREE.Mesh | null = null;
+  private townLoX = NaN; private townLoZ = NaN; private townHiX = NaN; private townHiZ = NaN;
+  private townLod = 0; private townShown = 0;
+  private skipTownRegion = (b: Building) => this.skipRising(b) || b.x + b.w < this.townLoX || b.z + b.d < this.townLoZ || b.x > this.townHiX || b.z > this.townHiZ;
   private hull: THREE.InstancedMesh;
   private turret: THREE.InstancedMesh;
   private gun: THREE.InstancedMesh;
@@ -235,6 +239,7 @@ export class BattleView {
     this.town = new THREE.Mesh(buildTown(w).geometry(), toon({ vertexColors: true }));
     this.town.castShadow = this.town.receiveShadow = true;
     this.scene.add(this.town);
+    this.prepareRegionTown();
     this.vegetation116 = new VegetationView(this.scene, this.ramp);
     this.vegetation116.sync(w);
 
@@ -252,7 +257,7 @@ export class BattleView {
     this.observerMesh = inst(observer(observerDetails), toon({ vertexColors: true }), MAX_UNITS, true);
     this.men = inst(soldier(), toon({ vertexColors: true }), MEN_CAP, true);   // R021 步兵：活著的小兵＋倒下的人
     this.menNormal = this.men.geometry;
-    if (w.zombies) this.menDense = soldier(false);
+    if (w.zombies || w.n >= 96) this.menDense = soldier(false);
     this.men.castShadow = !w.zombies; // R045 密集人群保留原網格與受光，省去小兵的陰影第二遍；車與房屋照舊。
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
@@ -343,7 +348,7 @@ export class BattleView {
     if (cached && cached.x === u.x && cached.z === u.z) return cached.height;
     // Anchor the garrison indicator to the real roof/floor surface, including damage.
     const ray = new THREE.Raycaster(new THREE.Vector3(u.x / SUB, 20, u.z / SUB), new THREE.Vector3(0, -1, 0));
-    const height = ray.intersectObject(this.town, false)[0]?.point.y ?? 0;
+    const height = ray.intersectObject(this.pickTown ?? this.town, false)[0]?.point.y ?? 0;
     this.observerHeights.set(u.id, { x: u.x, z: u.z, height });
     return height;
   }
@@ -363,9 +368,41 @@ export class BattleView {
     this.trench118.sync(w, true);
     for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
     this.groundTex.needsUpdate = true;
+    this.clearRegionTown();
     this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry();
+    this.prepareRegionTown();
     this.vegetation116.sync(w);
   }
+
+  private clearRegionTown(): void {
+    if (this.pickTown && this.pickTown.geometry !== this.town.geometry) this.pickTown.geometry.dispose();
+    this.pickTown = null; this.townLoX = NaN; this.townLod = 0; this.townShown = 0;
+  }
+  private prepareRegionTown(): void {
+    if (this.n < 96) return;
+    // 完整模型留在 CPU 給屋頂站位與點選，區域簡化不改碰撞／選取。
+    this.pickTown = new THREE.Mesh(this.town.geometry, this.town.material);
+    this.pickTown.updateMatrixWorld(); this.townLoX = NaN;
+  }
+  private updateTownRegion(cssW: number, cssH: number): void {
+    if (!this.pickTown) return;
+    const hh = BASE_HALF_H / this.zoom, half = (hh * cssW / Math.max(1, cssH) + hh / Math.sin(ELEV)) * Math.SQRT1_2 + 4;
+    const lx = Math.max(0, Math.floor((this.target.x - half) / 4) * 4), lz = Math.max(0, Math.floor((this.target.z - half) / 4) * 4);
+    const hx = Math.min(this.n, Math.ceil((this.target.x + half) / 4) * 4), hz = Math.min(this.n, Math.ceil((this.target.z + half) / 4) * 4);
+    if (lx === this.townLoX && lz === this.townLoZ && hx === this.townHiX && hz === this.townHiZ) return;
+    this.townLoX = lx; this.townLoZ = lz; this.townHiX = hx; this.townHiZ = hz;
+    let lod = 0, geo = buildTown(this.w, this.skipTownRegion);
+    // 保留人口與特效空間；兩趟建築最多 28k，未提高手機總預算。
+    while (geo.triangles > 14000 && lod < 2) geo = buildTown(this.w, this.skipTownRegion, ++lod);
+    if (this.town.geometry !== this.pickTown.geometry) this.town.geometry.dispose();
+    this.town.geometry = geo.geometry(); this.townLod = lod; this.townShown = 0;
+    for (const b of this.w.blds) if (!this.skipTownRegion(b)) this.townShown++;
+    const cx = (lx + hx) / 2, cz = (lz + hz) / 2, radius = Math.max(hx - lx, hz - lz) * 0.9 + 4;
+    this.sun.position.set(cx - 0.35 * this.n, 1.25 * this.n, cz + this.n); this.sun.target.position.set(cx, 0, cz);
+    const sc = this.sun.shadow.camera as THREE.OrthographicCamera;
+    sc.left = sc.bottom = -radius; sc.right = sc.top = radius; sc.updateProjectionMatrix();
+  }
+  get townRegion() { return { shown: this.pickTown ? this.townShown : this.w.blds.length, total: this.w.blds.length, lod: this.townLod }; }
 
   visibleAt(x: number, z: number): boolean {
     return !this.fogOn || spotted(this.w, SIDE_PLAYER, x, z);
@@ -451,8 +488,8 @@ export class BattleView {
 
   onEvents(events: SimEvent[], simT: number) {
     this.men.castShadow = !this.w.zombies;
-    if (this.w.zombies && !this.menDense) this.menDense = soldier(false);
-    if (this.w.zombies) this.zombieUnitSlots();
+    if ((this.w.zombies || this.w.n >= 96) && !this.menDense) this.menDense = soldier(false);
+    if (this.w.zombies || this.w.n >= 96) this.zombieUnitSlots();
     for (const e of events) if (e.e === 'spawn') { const u = this.w.units[e.unit - 1]; this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; }
     if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory); // tick0 的 map 重播要同步城鎮與地面。
     if (this.n !== this.w.n) this.setWorld(this.w, this.territory);   // R042：同一個世界在 tick0 換了大小，緩衝照新的 w.n 重配
@@ -503,7 +540,9 @@ export class BattleView {
         if (this.fxOn && !this.r4) this.burst(u.x / SUB, 0.2, u.z / SUB, 0.45, simT, 4, false);
       }
     }
+    if (townDirty && this.n >= 96) this.clearRegionTown();
     if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); }
+    if (townDirty && this.n >= 96) this.prepareRegionTown();
     if (groundDirty) this.groundTex.needsUpdate = true;
     this.vegetation116.sync(this.w, vegetationDirty);
   }
@@ -552,7 +591,7 @@ export class BattleView {
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
-    if (!w.zombies && w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
+    if (w.units.length >= this.prevX.length) console.error(`單位 id ${w.units.length} 超過已配置渲染容量 ${this.prevX.length - 1}（src/render/battle.ts）`);
     let nh = 0, ng = 0, no = 0, nd = 0, nr = 0, nm = 0, na = 0;
     for (const u of w.units) {
       if (!this.visibleUnit(u)) continue;
@@ -672,7 +711,7 @@ export class BattleView {
     if (this.rising.size) {   // R016：升完的房子併回城鎮網格
       let done = false;
       for (const [id, until] of this.rising) if (simT >= until) { this.rising.delete(id); done = true; }
-      if (done) { this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); this.observerHeights.clear(); }
+      if (done) { this.clearRegionTown(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); this.prepareRegionTown(); this.observerHeights.clear(); }
     }
     if (this.r4) this.updateFx(simT);
     if (this.r9) this.bars9(simT, selected);
@@ -680,7 +719,7 @@ export class BattleView {
     this.range113?.update(w, selected, showRanges);
     this.multi122.update(w, selected, showRanges && this.multiRangeEnabled);
     nm = this.bodies21(nm);
-    this.men.geometry = w.zombies && nm > 320 ? this.menDense! : this.menNormal; // 滿人口群眾保留頭／身／雙腿，仍只有同一個網格呼叫。
+    this.men.geometry = (w.zombies || w.n >= 96) && nm > 320 ? this.menDense! : this.menNormal; // 滿人口群眾保留頭／身／雙腿，仍只有同一個網格呼叫。
     fin(this.men, nm);
     if (this.armorArcs) fin(this.armorArcs, na);
     fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
@@ -1259,7 +1298,7 @@ export class BattleView {
     for (let k = 0; k < B.n && n < MEN_CAP; k++) {
       const j = (B.next - B.n + k + BODY_CAP) % BODY_CAP;
       const zombie = !!this.zombieBodies[j], age = this.lastT - this.bodyBorn[j];
-      const fade = !!this.w.zombies;
+      const fade = !!this.w.zombies || this.w.n >= 96;
       if (fade && (k < B.n - 64 || age >= 30)) continue;
       if (B.side[j] !== SIDE_PLAYER && !this.visibleAt(B.x[j] * SUB, B.z[j] * SUB)) continue;   // 敵方的屍體在霧裡不畫
       m.position.set(B.x[j], B.y[j] + 0.03, B.z[j]); m.rotation.set(0, B.yaw[j], Math.PI / 2); m.scale.setScalar(fade ? Math.min(1, (30 - age) / 10, (k - Math.max(0, B.n - 64) + 1) / 8) : 1); m.updateMatrix();
@@ -1301,7 +1340,7 @@ export class BattleView {
     this.layout(cssW, cssH);
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2((cssX / cssW) * 2 - 1, -(cssY / cssH) * 2 + 1), this.cam);
-    for (const hit of ray.intersectObject(this.town, false)) {
+    for (const hit of ray.intersectObject(this.pickTown ?? this.town, false)) {
       // 沿著視線往內推一點再取格，避免剛好落在牆面外緣的格線上
       const p = hit.point.clone().addScaledVector(ray.ray.direction, 0.02);
       const x = Math.floor(p.x), z = Math.floor(p.z);
@@ -1329,6 +1368,7 @@ export class BattleView {
 
   render(renderer: THREE.WebGLRenderer, style: Style, cssW: number, cssH: number, dpr: number) {
     this.layout(cssW, cssH);
+    this.updateTownRegion(cssW, cssH);
     // R004 鏡頭震動：只加在畫面這一趟（點選用的 layout() 會重排鏡頭，不受影響）；幅度 ≤ 0.08 格、0.4 秒內衰減
     const k = (this.lastT - this.shakeT0) / 0.4;
     if (this.r4 && k >= 0 && k < 1) {
@@ -1343,6 +1383,7 @@ export class BattleView {
 
   // 換世界（重開、跑腳本）時釋放 GPU 資源
   dispose() {
+    this.clearRegionTown();
     (this.men.geometry === this.menNormal ? this.menDense : this.menNormal)?.dispose();
     this.scene.traverse(o => {
       // 燈要 dispose 才會放掉 2048² 的陰影貼圖；實例化網格要 dispose 才會放掉實例緩衝

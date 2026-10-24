@@ -1,3 +1,4 @@
+import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R118: execute actual build-bar DOM and main-controller functions. This is not browser layout evidence.
 // --mutations proves each semantic negative fails its designated assertion, never a startup error.
 import assert from 'node:assert/strict';
@@ -55,7 +56,7 @@ function controller(visual = true) {
   globalThis.document = { createElement: () => new Element(), getElementById: id => id === 'hint' ? { getBoundingClientRect: () => ({ top: 800 }) } : null, body: { appendChild: el => { root = el; } } };
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
   const c = vm.createContext({
-    MAP_LARGE, large: false, // Existing construction fixture; large-map behavior has its own guards.
+    MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // Existing construction fixture; large-map behavior has its own guards.
     structuredClone, createWorld, hashWorld, isWallKind, bldMaxHp, buildKind, buildError, applyBuild, enemyPlan, TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, step, runLog, materialBuildDetail,
     BK_WIRE, WIRE_KIND, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_KINDS_NOW: BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
     w: emptyWorld(), view: mockView(), phase: 'build', plan: [], pickKind: BK_COTTAGE, pickRot: 0, pickTrench: -1, trenchRot: 0, buildHint: '', log: [], pending: [], selected: new Set(), acc: 0,

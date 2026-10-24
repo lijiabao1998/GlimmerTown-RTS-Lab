@@ -6,7 +6,7 @@ export const START_ORDER_MS = 2800;
 
 // 文字只看開局設定：地圖、有沒有指揮部（R019）、電腦難度（R018）
 export function startOrderText(map: number, eco: boolean, ai: string | undefined, zombies = false): StartOrder {
-  const where = map === 1 ? '萊伊（Rye），1940 年夏' : map === 2 ? '英格蘭東南鄉間（64×64），1940 年夏' : '英格蘭東南的村莊，1940 年夏';   // R043 大地圖
+  const where = map === 1 ? '萊伊（Rye），1940 年夏' : map === 2 ? '英格蘭東南鄉間（64×64），1940 年夏' : map === 3 ? '英格蘭河鎮與村落（96×96），1940 年夏' : '英格蘭東南的村莊，1940 年夏';
   return {
     place: zombies ? `${where} · 喪屍防守` : ai ? `${where} · 敵方由電腦指揮（${ai}）` : where,
     title: '作戰開始',

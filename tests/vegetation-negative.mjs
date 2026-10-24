@@ -12,7 +12,7 @@ const mutants = [
   ['road_filter', 'generation', 'vegetation.ts', ' || w.ter[c] === TER_ROAD', '', 'generation: avoids road, mud and all building footprints'],
   ['spawn_filter', 'generation', 'vegetation.ts', ' || units.has(c)', '', 'generation: custom initial unit excludes an otherwise valid candidate'],
   ['loose_activation', 'activation', 'maps.ts', 'if (vegetation === 1 &&', 'if (vegetation &&', 'activation: only numeric one enables'],
-  ['coerced_map', 'activation', 'step.ts', 'c.id === 0 || c.id === 1 || c.id === 2 ? c.vegetation : undefined', 'c.vegetation', 'activation: command cannot coerce invalid id into enabled terrain'],
+  ['coerced_map', 'activation', 'step.ts', 'c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined', 'c.vegetation', 'activation: command cannot coerce invalid id into enabled terrain'],
   ['old_field', 'legacy', 'world.ts', '  return w;\n}', '  w.vegetation = { version: 1, cells: new Uint8Array(N * N) };\n  return w;\n}', 'legacy: createWorld never enables new terrain'],
   ['endpoint_block', 'los', 'vegetation.ts', 'for (let i = 1; i + 1 < cells.length; i++)', 'for (let i = 0; i < cells.length; i++)', 'los: same, adjacent and endpoint vegetation remain visible both ways'],
   ['middle_visible', 'los', 'step.ts', '    if (w.vegetation && vegetationBlocks(w, cells)) continue;', '', 'los: middle vegetation blocks symmetrically'],

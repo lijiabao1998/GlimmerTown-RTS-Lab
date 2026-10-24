@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
-  stageOf, STAGE_INTACT, STAGE_ROOFLESS, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX,
+  stageOf, STAGE_INTACT, STAGE_ROOFLESS, STAGE_RUBBLE, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX,
   BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind,
   bldMaterial, BM_WOOD, BM_BRICK, BM_STONE, BM_CONCRETE, type World, type Building,
 } from '../sim/world.ts';
@@ -281,9 +281,34 @@ export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
 }
 
 // skip：這一刻先不畫的建築（R016 正在從地面升起的，由殘影網格畫）
-export function buildTown(w: World, skip?: (b: Building) => boolean): Geo {
+// R130：只供新大圖的遠景層級；建築佔格與完整點選模型仍是原資料。
+function distantBuilding(g: Geo, b: Building, lod: number): void {
+  if (isWallKind(b.kind) || b.kind === BK_HQ || b.kind === BK_PILLBOX) { buildingGeo(g, b, stageOf(b)); return; }
+  const p = palette(b.kind), x0 = b.x + 0.1, z0 = b.z + 0.1, x1 = b.x + b.w - 0.1, z1 = b.z + b.d - 0.1;
+  const stage = stageOf(b), h = wallHeight(b), wall = facadeStyle(b) === FAC_TIMBER ? PLASTER : p.wall;
+  if (stage === STAGE_RUBBLE) { g.box(x0, 0, z0, x1, 0.09, z1, rubbleColors(b.kind)[0]); return; }
+  g.box(x0, 0, z0, x1, stage === STAGE_ROOFLESS ? h * 0.65 : h, z1, wall, stage === STAGE_ROOFLESS ? CHAR : null);
+  if (stage === STAGE_ROOFLESS) return;
+  g.gable(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, roofRise(b.kind), b.w >= b.d, p.roof, wall);
+  if (b.kind === BK_CHURCH) {
+    g.box(x0, 0, z0, x0 + 0.8, h + 0.8, z0 + 0.8, p.wall);
+    g.pyramid(x0, z0, x0 + 0.8, z0 + 0.8, h + 0.8, 0.6, p.roof);
+  }
+  if (lod > 1) return;
+  // 中景只保留讀得出的窗與店招，不畫亞像素木條的側面。
+  for (let f = 0; f < b.floors; f++) for (let i = 0; i < b.w; i++) {
+    const x = b.x + i + 0.5, y = 0.12 + f * FLOOR_H;
+    g.quad([x - 0.06, y, z1 + 0.012], [x + 0.06, y, z1 + 0.012], [x + 0.06, y + 0.13, z1 + 0.012], [x - 0.06, y + 0.13, z1 + 0.012], [0, 0, 1], GLASS);
+    g.quad([x - 0.06, y, z0 - 0.012], [x + 0.06, y, z0 - 0.012], [x + 0.06, y + 0.13, z0 - 0.012], [x - 0.06, y + 0.13, z0 - 0.012], [0, 0, -1], GLASS);
+  }
+  if (b.kind === BK_SHOP) g.box(x0, 0.2, z1, x1, 0.28, z1 + 0.03, p.trim);
+}
+
+export function buildTown(w: World, skip?: (b: Building) => boolean, lod = 0): Geo {
   const g = new Geo();
-  for (const b of w.blds) if (!skip || !skip(b)) buildingGeo(g, b, stageOf(b));
+  for (const b of w.blds) if (!skip || !skip(b)) {
+    if (lod) distantBuilding(g, b, lod); else buildingGeo(g, b, stageOf(b));
+  }
   for (const b of w.wires?.segments ?? []) wireGeo(g, b);
   return g;
 }

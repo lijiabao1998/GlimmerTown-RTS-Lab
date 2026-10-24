@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R130 | 2026-10-24 | Codex | 可選96×96河鎮、284棟（seed1944）、多個村落與街廓；區域合批及LOD、保留完整點選；修map3植被重播與長局id容量告警 | Node六組／十負控；舊三圖凍結hash與golden eea1d59b不變；真Chrome兩模式重播；手機開局13／5924、交戰18／25904、80班壓力7／52698 | Draft待開 | 完整check／CI／Library待核；Android未測；本輪不合併發布 |
 | R059 | 2026-10-24 | Claude | 喪屍朝房子（指揮部、駐軍的屋子）走時，A* 准走進那一棟再切掉屋內段，斜角貼房角補一步到牆邊；原本終點走不到要翻完整張圖 | 兩圖各兩局 9000 步雜湊與改前逐位相同；壓力局每步 p99 大地圖 21.4→3.8ms、萊伊 4.7→2.0ms；zombies combat 加 2 條、負控 6→8；golden eea1d59b | [#75](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/75) | 一波冒出那一步大地圖仍有約 40ms 尖峰（桌機）；手機實機未量 |
 | R045 | 2026-10-23 | Codex 接 Claude 原卡 | 可選喪屍波次防守、近戰拆障、我方 HQ、入口／戰報／最佳紀錄；修駐軍穿牆、格心卡住與敵方布陣；滿人口人群共用精簡網格；第二波特寫取真命中並驗目標入鏡 | Node 6 組／6 負控＋wire 11 負控；兩圖 Chrome＝Node；自然第 4／8 波失守；滿人口 6 calls／72,154 tris；原 smoke 256.8s 綠；golden eea1d59b | [#74](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/74)，依賴 [#73](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/73) | 985d14c9 CI 全綠；已接 R043 發布 main fd672d72，對齊 head 的 CI／發布另核；原失敗及本機 Windows 舊紅保留；Android 未測 |
 | R043 | 2026-10-23 | Claude 原作／Codex 接手 | 64×64 鄉間、雙方裝甲連、人口 40；保留兩輪 CI 首敗，修舊 VM／突變錨點；另修 noR026 阻斷大圖入口，補真 reset 與觸控回歸 | large-map、舊地圖凍結雜湊、原語意負控；本機原 smoke 301.8s 綠；最新 CI 待核 | [#73](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/73) | 分塊網格與 spotted 查表量過不做；無橋模型；Android 未測；額外 vegetation-view 突變有舊錨點待整修 |
