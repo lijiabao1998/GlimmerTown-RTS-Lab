@@ -28,7 +28,7 @@ export function sandboxPlaceError(w: World, c: SandboxPlace): SandboxError | nul
 }
 
 // 只能由 step／applyCommand 呼叫；不改 AI、單位數值或一般模式。
-export function applySandbox(w: World, c: SandboxCommand): void {
+export function applySandbox(w: World, c: SandboxCommand): SandboxError | null | void {
   if (!w.sandbox) return;
   if (c.t === 'sandboxRun') {
     if (typeof c.running === 'boolean') w.sandbox.running = c.running;
@@ -42,9 +42,11 @@ export function applySandbox(w: World, c: SandboxCommand): void {
     w.sandbox!.frame = frame;
     return;
   }
-  if (sandboxPlaceError(w, c)) return;
+  const error = sandboxPlaceError(w, c);
+  if (error) return error;
   const k = UNIT_KINDS[c.kind], direction = c.side === SIDE_PLAYER ? -SUB : SUB;
   w.units.push({ id: w.units.length + 1, side: c.side, kind: c.kind, x: center(c.x), z: center(c.z), hp: k.hp, alive: true,
     order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: direction, aimZ: direction,
     ...(k.armored ? { hullX: direction, hullZ: direction } : {}) });
+  return null;
 }

@@ -43,8 +43,8 @@ const mutants = [
   ['partial_reuse', 'failures', '      if (!this.master || this.buffers.length !== 3) { this.fail(); return; }', '', 'failures: partial initialization is never reused as a working context'],
   ['failed_voice_leak', 'cleanup_failures', '      if (voice) this.release(voice, true);\n      else', '      if (voice) { voice.released = true; this.voices[this.voices.indexOf(voice)] = null; }\n      else', 'cleanup_failures: partially created or failed sources leave no connected voice nodes'],
   ['stale_rejection', 'races', 'if (serial === this.resumeSerial && !this.disposed) this.fail();', 'if (!this.disposed) this.fail();', 'races: an old resume outcome cannot disable a newer enable'],
-  ['world_write', 'readonly', '    if (!this.canPlay()) return;\n    for (const event of events)', '    if (!this.canPlay()) return;\n    world.rng++;\n    for (const event of events)', 'readonly: complete world including events and RNG remains unchanged'],
-  ['rng_read', 'readonly', '    if (!this.canPlay()) return;\n    for (const event of events)', '    if (!this.canPlay()) return;\n    void world.rng;\n    for (const event of events)', 'readonly: renderer never reads the simulation RNG'],
+  ['world_write', 'readonly', '  private collect(world: World, events: readonly SimEvent[], visibility: AudioVisibility): void {', '  private collect(world: World, events: readonly SimEvent[], visibility: AudioVisibility): void {\n    world.rng++;', 'readonly: complete world including events and RNG remains unchanged'],
+  ['rng_read', 'readonly', '  private collect(world: World, events: readonly SimEvent[], visibility: AudioVisibility): void {', '  private collect(world: World, events: readonly SimEvent[], visibility: AudioVisibility): void {\n    void world.rng;', 'readonly: renderer never reads the simulation RNG'],
 ];
 try {
   for (const [name, group, from, to, wanted] of mutants) {

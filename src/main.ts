@@ -9,8 +9,8 @@ import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY
 import { BUILD_KINDS, BUILD_KINDS_24, WIRE_KIND, WALL_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
 import { step, runLog, commandTick, type Command, type LoggedCommand } from './sim/step.ts';
-import { createSandboxWorld, sandboxPlaceError, type SandboxCommand } from './sim/sandbox.ts';
-import { initSandbox, type SandboxBar } from './ui/sandbox.ts';
+import { createSandboxWorld, sandboxPlaceError, type SandboxCommand, type SandboxError } from './sim/sandbox.ts';
+import { initSandbox, SANDBOX_WHY, sandboxPlacementFeedback, type SandboxBar } from './ui/sandbox.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
 import { BattleAudio } from './render/audio.ts';
@@ -115,6 +115,7 @@ document.body.appendChild(renderer.domElement);
 const canvas = renderer.domElement;
 
 let w: World, view: BattleView, log: LoggedCommand[], pending: Command[];
+const sandboxPlacementResults: (SandboxError | null)[] = [];
 let hud: Hud | undefined, buildBar: BuildBar | undefined;
 let acc = 0, paused = false, speed = 1, fireMode = false, lastT = performance.now();
 let ammo: AmmoMode = 'he';
@@ -219,7 +220,10 @@ function sandboxAction(cmd: SandboxCommand) {
   issue(cmd);
   // 運行中放兵排入下一個 20Hz step；暫停編輯、暫停及重置可即時處理，但不跑戰鬥。
   if (paused || cmd.t !== 'sandboxPlace') {
+    const starting = cmd.t === 'sandboxRun' && cmd.running;
+    if (starting) { paused = false; syncBattleAudio(); }
     tick(); acc = 0; paused = !w.sandbox.running;
+    if (starting) battleAudio?.enqueueInteraction(w, w.events, view);
     syncBattleAudio(); ui();
   }
 }
@@ -233,8 +237,8 @@ function sandboxPlaceAt(cx: number, cy: number) {
   if (!p || sandboxTool === null) return;
   const cmd = { t: 'sandboxPlace' as const, side: sandboxSide, kind: sandboxTool, x: Math.floor(p.x), z: Math.floor(p.z) };
   const err = sandboxPlaceError(w, cmd);
-  const why = { mode: '目前不是沙盒。', side: '請選我方或敵方。', kind: '僅能放置坦克或榴彈砲。', map: '超出地圖。', building: '有建築擋住這一格。', unit: '已有單位，請換一格。', capacity: '已達 32 輛上限（含殘骸）；請重置後再放置。' };
-  sandboxHint = err ? why[err] : '已下放置指令。';
+  const why = SANDBOX_WHY;
+  sandboxHint = err ? why[err] : '放置指令待處理。';
   if (!err) sandboxAction(cmd);
   sandboxBar?.update();
 }
@@ -302,14 +306,15 @@ function tick() {
   view.snapshot();
   const now = pending; pending = [];
   const priorWinner = w.winner, priorMap = w.map;
-  step(w, now);
+  sandboxPlacementResults.length = 0;
+  step(w, now, sandboxPlacementResults);
   if (w.sandbox) {
     if (now.some(c => c.t === 'sandboxReset')) {
       const priorView = view;
       priorView.dispose(); view = priorView.recreate(w);
       selected.clear(); fireMode = false; ammo = 'he'; battleHint = undefined; sandboxHint = '已重置；沙盒暫停。';
       stats = newStats(w); minimap?.dirty(); battleAudio?.reset();
-    }
+    } else if (sandboxPlacementResults.length) sandboxHint = sandboxPlacementFeedback(sandboxPlacementResults);
     if (!w.sandbox.running || now.some(c => c.t === 'sandboxPlace' || c.t === 'sandboxReset')) view.snapshot(); // 新 ID 不從 (0,0) 插值；運行時仍保留既有移動插值。
     sandboxBar?.update();
   }
