@@ -125,6 +125,11 @@ try {
       assert(stress.men - stress.alive <= 64 && stress.faded === 0, 'render: mixed bodies are bounded and expire');
       const info = await E('__rts.info()'); budget(info);
       await shot(page, path.join(root, 'shots', 'r045-phone-cap48.png'));
+      // Separate diagnostic receipt, after the untouched native gameplay screenshot.
+      const receipt = {label:'R045 cap48 diagnostic, not gameplay', viewport:[412,860], stress, info};
+      await E(`(()=>{const e=document.createElement('pre');e.id='r134-budget-receipt';e.style='position:fixed;inset:0;z-index:999999;background:white;color:black;font:14px monospace;white-space:pre-wrap;padding:12px;margin:0';e.textContent=${JSON.stringify(JSON.stringify(receipt,null,2))};document.body.append(e)})()`);
+      await shot(page, path.join(root, 'shots', 'r134-r045-budget-receipt.png'));
+      await E("document.getElementById('r134-budget-receipt').remove()");
       console.log(`OK zombies Chrome cap48/id512: ${JSON.stringify(stress)}; ${info.calls}/${info.triangles}`);
     }
     await open(query + '&mode=zombies&noR045=1');

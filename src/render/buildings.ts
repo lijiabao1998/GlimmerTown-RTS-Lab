@@ -217,7 +217,23 @@ function facade(g: Geo, b: Building, style: number, x0: number, z0: number, x1: 
   ];
   const strip = (axis: number, a0: number, a1: number, at: number, dir: number, y0: number, y1: number, c: THREE.Color, out = t) => {
     const o0 = dir > 0 ? at : at - out, o1 = dir > 0 ? at + out : at;
-    if (axis === 0) g.box(a0, y0, o0, a1, y1, o1, c, null); else g.box(o0, y0, a0, o1, y1, a1, c, null);
+    if (!buildingDetailsOn) {
+      if (axis === 0) g.box(a0, y0, o0, a1, y1, o1, c, null); else g.box(o0, y0, a0, o1, y1, a1, c, null);
+      return;
+    }
+    // Intact opaque wall hides only the strip's inward rear face. Keep the exact
+    // outward face and both end faces, colours/normals/depth; no detail or LOD loss.
+    if (axis === 0) {
+      const front = dir > 0 ? o1 : o0;
+      g.quad([a0,y0,front],[a1,y0,front],[a1,y1,front],[a0,y1,front],[0,0,dir],c);
+      g.quad([a1,y0,o0],[a1,y0,o1],[a1,y1,o1],[a1,y1,o0],[1,0,0],c);
+      g.quad([a0,y0,o0],[a0,y0,o1],[a0,y1,o1],[a0,y1,o0],[-1,0,0],c);
+    } else {
+      const front = dir > 0 ? o1 : o0;
+      g.quad([front,y0,a0],[front,y0,a1],[front,y1,a1],[front,y1,a0],[dir,0,0],c);
+      g.quad([o0,y0,a1],[o1,y0,a1],[o1,y1,a1],[o0,y1,a1],[0,0,1],c);
+      g.quad([o0,y0,a0],[o1,y0,a0],[o1,y1,a0],[o0,y1,a0],[0,0,-1],c);
+    }
   };
   for (const [axis, a0, a1, at, dir] of faces) {
     if (style === FAC_TIMBER) {                                   // 角柱、每層的橫梁、間柱
