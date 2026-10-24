@@ -270,7 +270,7 @@ for (const [name, run] of Object.entries(groups)) if (!only || name === only) {
 if (!only && !mutant || process.argv.includes('--mutations')) for (const [name, m] of Object.entries(mutations)) {
   const p = spawnSync(process.execPath, [fileURLToPath(import.meta.url), `--mutant=${name}`], { encoding: 'utf8', timeout: 15000 });
   assert.equal(p.status, 1, `${name}: isolated mutant must exit 1\n${p.stdout}\n${p.stderr}`);
-  const first = p.stderr.match(/AssertionError \[ERR_ASSERTION\]: ([^\n]+)/)?.[1];
+  const first = p.stderr.match(/AssertionError \[ERR_ASSERTION\]: ([^\r\n]+)/)?.[1];
   assert.equal(first, m.message, `${name}: first failure must be intended semantic assertion, not startup\n${p.stderr.slice(-3000)}`);
   assert(p.stderr.includes(`NG trenches-view ${m.group}`)); console.log(`RED trenches-view ${name}: ${first}`);
 }

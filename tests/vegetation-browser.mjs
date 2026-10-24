@@ -150,8 +150,8 @@ function plugin(broken, hits) {
             `  if (view.vegetation116.mesh) view.vegetation116.mesh.visible = !(${is('model')});\n  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));`, 'model');
           replace('if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);',
             `if (map || vegetation) applyMap(w, mapId, vegetation && !(${is('generation')}) ? 1 : undefined);`, 'generation');
-          replace('function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {',
-            `function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {\n  if (${is('legacy')}) vegetation = true;`, 'legacy');
+          replace('function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large || expanded, vegetation = true, sandbox = false) {',
+            `function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large || expanded, vegetation = true, sandbox = false) {\n  if (${is('legacy')}) vegetation = true;`, 'legacy');
         }
         code += instrumentation; hits.add('observation');
       }
