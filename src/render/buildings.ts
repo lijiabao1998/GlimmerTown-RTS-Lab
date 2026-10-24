@@ -38,6 +38,10 @@ export function wireGeo(g: Geo, b: Building): Geo {
   return g;
 }
 
+// R134 legal R131 successor: presentation-only and deterministic; both valves restore old geometry.
+let buildingDetailsOn = false;
+export function setBuildingDetails(on: boolean): void { buildingDetailsOn = on; }
+
 export const FLOOR_H = 0.36;   // 一層樓高（格）；3D-lab blockArt.ts 的換算
 
 const C = (hex: number) => new THREE.Color(hex);
@@ -121,6 +125,9 @@ function boundaryWall(g: Geo, b: Building, broken: boolean) {
 }
 
 function windows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: number, h: number) {
+  if (buildingDetailsOn && h === wallHeight(b)) {
+    detailedWindows(g, b, x0, z0, x1, z1, h); return;
+  }
   const ww = 0.12, wh = 0.13, t = 0.012;
   for (let f = 0; f < b.floors; f++) {
     const y0 = 0.12 + f * FLOOR_H, y1 = y0 + wh;
@@ -135,6 +142,59 @@ function windows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: nu
       g.box(x1, y0, cz - ww / 2, x1 + t, y1, cz + ww / 2, GLASS, null);
       g.box(x0 - t, y0, cz - ww / 2, x0, y1, cz + ww / 2, GLASS, null);
     }
+  }
+}
+
+// Thin facade planes, not separate meshes: robust screen-width frames without hidden box faces.
+function detailedWindows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: number, h: number) {
+  const trim = palette(b.kind).trim;
+  const faces = [[0, x0, x1, z0, -1], [0, x0, x1, z1, 1], [1, z0, z1, x0, -1], [1, z0, z1, x1, 1]];
+  for (const [axis, start, end, at, dir] of faces) {
+    const pane = (a: number, c: number, lo: number, hi: number, color: THREE.Color, offset = 0.015) => {
+      const p = at + dir * offset;
+      if (axis === 0) g.quad([a,lo,p],[c,lo,p],[c,hi,p],[a,hi,p],[0,0,dir],color);
+      else g.quad([p,lo,a],[p,lo,c],[p,hi,c],[p,hi,a],[dir,0,0],color);
+    };
+    for (let f = 0; f < b.floors; f++) for (let k = Math.floor(start); k < end; k++) {
+      const c = k + 0.5, y = 0.12 + f * FLOOR_H, t = 0.025;
+      if (c - 0.085 < start || c + 0.085 > end || y + 0.155 > h - 0.025) continue;
+      // The front centre bay is a readable entrance, not a window buried behind its door.
+      if (!axis && dir === 1 && f === 0 && Math.abs(c - (x0+x1)/2) < 0.18) continue;
+      pane(c-0.085,c+0.085,y-t,y+0.155,trim);
+      pane(c-0.06,c+0.06,y,y+0.13,GLASS,0.017);
+      pane(c-0.009,c+0.009,y,y+0.13,trim,0.019);
+      pane(c-0.06,c+0.06,y+0.06,y+0.075,trim,0.019);
+      pane(c-0.095,c+0.095,y-0.035,y-0.015,trim,0.022);
+    }
+  }
+}
+
+function buildingDetails(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: number, h: number, rise: number, alongX: boolean) {
+  if (!buildingDetailsOn) return;
+  const p = palette(b.kind), cx = (x0+x1)/2, cz = (z0+z1)/2;
+  // Solid fascia and ridge remain in the original 0.1-cell setback.
+  if (alongX) {
+    g.box(x0-0.04,h-0.035,z0-0.04,x1+0.04,h+0.008,z0+0.015,p.trim);
+    g.box(x0-0.04,h-0.035,z1-0.015,x1+0.04,h+0.008,z1+0.04,p.trim);
+    g.box(x0-0.025,h+rise-0.015,cz-0.025,x1+0.025,h+rise+0.025,cz+0.025,p.roof);
+  } else {
+    g.box(x0-0.04,h-0.035,z0-0.04,x0+0.015,h+0.008,z1+0.04,p.trim);
+    g.box(x1-0.015,h-0.035,z0-0.04,x1+0.04,h+0.008,z1+0.04,p.trim);
+    g.box(cx-0.025,h+rise-0.015,z0-0.025,cx+0.025,h+rise+0.025,z1+0.025,p.roof);
+  }
+  // Entrance width distinguishes barn carriage doors, shop fronts and domestic doors.
+  const half = b.kind === BK_BARN ? 0.22 : b.kind === BK_SHOP ? 0.17 : 0.10;
+  g.quad([cx-half-0.025,0,z1+0.015],[cx+half+0.025,0,z1+0.015],[cx+half+0.025,0.29,z1+0.015],[cx-half-0.025,0.29,z1+0.015],[0,0,1],p.trim);
+  g.quad([cx-half,0.015,z1+0.018],[cx+half,0.015,z1+0.018],[cx+half,0.26,z1+0.018],[cx-half,0.26,z1+0.018],[0,0,1],BEAM);
+  g.box(cx-half-0.025,0,z1+0.02,cx+half+0.025,0.035,z1+0.065,p.trim);
+  // Broad corner dressings, no subpixel brick-line multiplication.
+  for (const x of [x0,x1-0.04]) {
+    g.quad([x,0,z1+0.01],[x+0.04,0,z1+0.01],[x+0.04,h,z1+0.01],[x,h,z1+0.01],[0,0,1],p.trim);
+    g.quad([x,0,z0-0.01],[x+0.04,0,z0-0.01],[x+0.04,h,z0-0.01],[x,h,z0-0.01],[0,0,-1],p.trim);
+  }
+  if (b.kind === BK_HOUSE || b.kind === BK_SHOP) {
+    const x = alongX ? x1-0.18 : cx, z = alongX ? cz : z1-0.18;
+    g.box(x-0.065,h+rise+0.1,z-0.065,x+0.065,h+rise+0.145,z+0.065,p.trim);
   }
 }
 
@@ -237,6 +297,7 @@ function intact(g: Geo, b: Building) {
   }
   if (b.kind === BK_SHOP) g.box(x0, 0.2, z1, x1, 0.28, z1 + 0.03, p.trim, p.trim);   // 店招
   if (b.kind !== BK_BARN) windows(g, b, x0, z0, x1, z1, h);
+  buildingDetails(g, b, x0, z0, x1, z1, h, rise, alongX);
 }
 
 // 沒屋頂：四面薄牆剩七成高，牆頂鋸齒，屋裡焦黑，幾根斷梁

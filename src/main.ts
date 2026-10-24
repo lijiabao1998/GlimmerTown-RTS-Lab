@@ -28,7 +28,7 @@ import { initMapPick, initTownPick, type MapPick } from './ui/mapPick.ts';
 import { startZombies } from './sim/zombies.ts';
 import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
 import { materialBuildDetail } from './ui/materials.ts';
-import { setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
+import { setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
 import { setStreets } from './render/battle.ts';
 import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
@@ -93,6 +93,7 @@ let battleHint: string | undefined;
 const r107 = q.get('noR107') !== '1'; // 只關煙團畫面；煙幕指令與視線模擬保持啟用
 const r105 = q.get('noR105') !== '1';
 setMaterials(r105); // R105 材質視覺提示；只關畫面，模擬不變
+setBuildingDetails(q.get('noR134') !== '1' && q.get('noR131') !== '1');
 setFacades(q.get('noR028') !== '1');
 setStreets(q.get('noR027') !== '1');   // R027 人行道與燈火管制路緣；逃生閥 ?noR027=1   // R028 外牆細節（木構、掛瓦、護牆板）；逃生閥 ?noR028=1＝全部紅磚原樣
 // R041 開戰命令條（取代上面的發光大字）。逃生閥 ?noR041=1＝回到 R016 的「開戰！」
