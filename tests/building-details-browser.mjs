@@ -21,7 +21,7 @@ try{
      const info=await E('__rts.info()'),state=await E('({hash:__rts.hash(),camera:__rts.cam(),tick:__rts.tick()})');
      assert(info.calls<=20&&info.triangles<=80000,`budget ${width} ${scene}: ${JSON.stringify(info)}`);
      const key=width+'-'+scene;if(off)pair[key]=state;else assert.deepEqual(state,pair[key],'same native view and simulation');
-     const name=`r134-${width}-${scene}-${off?'before':'after'}`;metrics.push({name,...info,...state});await shot(page,path.join(root,'shots',name+'.png'));
+     const name=`r134-${width}-${scene}-${off?'before':'after'}`;metrics.push({name,...info,...state});console.log('R134 capture',JSON.stringify(metrics.at(-1)));await shot(page,path.join(root,'shots',name+'.png'));
     }
     // Real simulation, deterministic fixed steps. Existing battle budget is unchanged.
     await E("document.getElementById('bb-start').click();__rts.pause(true)");await E('__rts.stepN(600-__rts.tick());__r134Review(48,48,2)');await frames();
