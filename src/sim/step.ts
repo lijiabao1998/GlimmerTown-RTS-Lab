@@ -12,14 +12,16 @@ import { applyMap } from './maps.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.ts';
+import { startZombies, zombiesStep, finishZombiesStep, zombieAim } from './zombies.ts';
 import {
-  N, SUB, HALF, idx, inMap, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
-  UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SIDE_PLAYER, SIDE_ENEMY,
+  SUB, HALF, cellIdx, inGrid, gridLimit, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
+  UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, UK_ZOMBIE, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SHELL_MELEE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building, type Shell,
 } from './world.ts';
 
 export type Command =
   | SandboxCommand
+  | { t: 'zombies' }
   | { t: 'move'; side: number; ids: number[]; x: number; z: number }
   | { t: 'attack'; side: number; ids: number[]; target: number }
   | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number; ammo?: 'smoke' }
@@ -28,7 +30,7 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）
   | { t: 'map'; id: number; vegetation?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number };   // R019：花補給排進生產佇列
 
 export interface LoggedCommand { tick: number; cmd: Command }
@@ -45,9 +47,11 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 export function applyCommand(w: World, cmd: Command): SandboxError | null | void {
   if (cmd.t === 'sandboxPlace' || cmd.t === 'sandboxRun' || cmd.t === 'sandboxReset') return applySandbox(w, cmd);
   if (w.sandbox && cmd.t !== 'move' && cmd.t !== 'attack' && cmd.t !== 'fireAt' && cmd.t !== 'stop') return;
+  if (cmd.t === 'zombies') return; // 地圖後、eco 前在 step() 開頭套。
+  if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map') return;   // 布陣、地圖（R026）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -55,7 +59,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
     if (u && u.alive && u.side === cmd.side && !seen.has(u.id)) { seen.add(u.id); us.push(u); }
   }
   us.sort((a, b) => a.id - b.id);
-  const cx = (v: number) => Math.max(0, Math.min(N - 1, v | 0));
+  const cx = (v: number) => Math.max(0, Math.min(w.n - 1, v | 0));
   us.forEach((u, k) => {
     const ux = cellOf(u.x), uz = cellOf(u.z);
     if (cmd.t === 'stop') { delete u.fireAmmo; u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
@@ -65,7 +69,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
       // 觀測員照舊不排隊形；R021 步兵點到房子時直接進去、點地面照隊形
       const garr = UNIT_KINDS[u.kind].garrison, intoBld = garr && blocks(w, gx, gz);
       const [ox, oz] = u.kind === UK_OBSERVER || intoBld ? [0, 0] : FORMATION[k % FORMATION.length];
-      if (inMap(gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz) && !wireBlocks(w, gx + ox, gz + oz, u.kind)) { gx += ox; gz += oz; }
+      if (inGrid(w, gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz) && !wireBlocks(w, gx + ox, gz + oz, u.kind)) { gx += ox; gz += oz; }
       u.order = ORD_MOVE; u.tx = gx; u.tz = gz; u.target = 0;
       u.path = findPath(w, ux, uz, gx, gz, garr ? (bldAt(w, gx, gz)?.id ?? 0) : 0, garr ? (bldAt(w, ux, uz)?.id ?? 0) : 0, u.kind); u.pathIdx = 0;
       if (!u.path.length) u.order = ORD_IDLE;
@@ -109,17 +113,18 @@ function inRange(u: Unit, x: number, z: number): boolean {
 }
 
 // 兩格之間的直線（Bresenham）。一律從格索引小的那一端畫，需要時再反轉：A→B 與 B→A 經過同一組格，視線才對稱
-export function lineCells(x0: number, z0: number, x1: number, z1: number): number[] {
-  const flip = idx(x0, z0) > idx(x1, z1);
+// n＝地圖邊長（格索引＝z*n+x）；src/ 一律傳 w.n，預設 32 只給舊守衛的四參數呼叫（R042）
+export function lineCells(x0: number, z0: number, x1: number, z1: number, n = 32): number[] {
+  const flip = z0 * n + x0 > z1 * n + x1;
   if (flip) { const tx = x0, tz = z0; x0 = x1; z0 = z1; x1 = tx; z1 = tz; }
   const dx = Math.abs(x1 - x0), dz = -Math.abs(z1 - z0), sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1;
-  const out = [idx(x0, z0)];
+  const out = [z0 * n + x0];
   let x = x0, z = z0, err = dx + dz;
   while (x !== x1 || z !== z1) {
     const e2 = 2 * err;
     if (e2 >= dz) { err += dz; x += sx; }
     if (e2 <= dx) { err += dx; z += sz; }
-    out.push(idx(x, z));
+    out.push(z * n + x);
   }
   if (flip) out.reverse();
   return out;
@@ -127,7 +132,7 @@ export function lineCells(x0: number, z0: number, x1: number, z1: number): numbe
 
 // 從 (ax,az) 到 (bx,bz)（位置單位），回傳第一個擋住的建築格（不含起點格）；沒有擋就回傳 -1
 export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number, ignoreBuilding = 0): number {
-  return firstBlockCells(w, lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz)), ignoreBuilding);
+  return firstBlockCells(w, lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz), w.n), ignoreBuilding);
 }
 
 // LOS 與實體彈道共用原建築掃描；spotted 已有射線時不再配置第二份格陣列。
@@ -138,15 +143,15 @@ function firstBlockCells(w: World, cells: readonly number[], ignoreBuilding = 0)
 
 // 每 tick 查當前世界，不保留快取。阻擋建築本身可見，後方不可見；瓦礫不擋。
 export function spotted(w: World, side: number, x: number, z: number, ignoreSmokeId = 0): boolean {
-  if (!inMap(cellOf(x), cellOf(z))) return false;
+  if (!inGrid(w, cellOf(x), cellOf(z))) return false;
   for (const u of w.units) {
     if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight) continue;
     if (smokeBlocks(w, u.x, u.z, x, z, ignoreSmokeId)) continue;
-    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z));
+    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z), w.n);
     if (w.vegetation && vegetationBlocks(w, cells)) continue;
     const home = UNIT_KINDS[u.kind].garrison ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
     const block = firstBlockCells(w, cells, home?.id ?? 0);
-    if (block < 0 || block === idx(cellOf(x), cellOf(z))) return true;
+    if (block < 0 || block === cellIdx(w, cellOf(x), cellOf(z))) return true;
   }
   return false;
 }
@@ -167,7 +172,7 @@ function moveUnit(w: World, u: Unit): void {
     return;
   }
   const oldX = u.x, oldZ = u.z;
-  const c = u.path[u.pathIdx], gx = center(c % N), gz = center((c - (c % N)) / N);
+  const c = u.path[u.pathIdx], n = w.n, gx = center(c % n), gz = center((c - (c % n)) / n);
   const k = UNIT_KINDS[u.kind];
   const spd = Math.max(1, Math.floor((k.speed * speedPct(w, cellOf(u.x), cellOf(u.z))) / 100));
   const dx = gx - u.x, dz = gz - u.z, d = isqrt(dx * dx + dz * dz);
@@ -193,7 +198,7 @@ function stepVehicle(w: World, u: Unit, nx: number, nz: number, spd: number): vo
     return;
   }
   const end = u.path[u.path.length - 1];
-  u.path = findPath(w, cellOf(u.x), cellOf(u.z), end % N, (end - (end % N)) / N, 0, 0, u.kind); u.pathIdx = 0;
+  u.path = findPath(w, cellOf(u.x), cellOf(u.z), end % w.n, (end - (end % w.n)) / w.n, 0, 0, u.kind); u.pathIdx = 0;
 }
 
 // 車輛碰撞（R005）：全部單位移動之後，中心距離小於兩者半徑和的車輛沿連線推開。
@@ -224,7 +229,7 @@ function separate(w: World): void {
     px[i] -= Math.trunc((dx * sa) / len); pz[i] -= Math.trunc((dz * sa) / len);
     px[j] += Math.trunc((dx * sb) / len); pz[j] += Math.trunc((dz * sb) / len);
   }
-  const lim = (v: number) => Math.max(0, Math.min(N * SUB - 1, v));
+  const top = gridLimit(w), lim = (v: number) => Math.max(0, Math.min(top, v));
   vs.forEach((u, i) => {
     let qx = px[i], qz = pz[i];
     if (!qx && !qz) return;
@@ -277,7 +282,27 @@ function syncRanging(w: World, u: Unit, aim: { x: number; z: number; unit: Unit 
   }
 }
 
+function zombieVision(w: World, u: Unit, target: Unit): boolean {
+  if (dist(u.x, u.z, target.x, target.z) > UNIT_KINDS[UK_ZOMBIE].sight || !spotted(w, SIDE_PLAYER, u.x, u.z) || smokeBlocks(w, u.x, u.z, target.x, target.z)) return false;
+  const ray = lineCells(cellOf(u.x), cellOf(u.z), cellOf(target.x), cellOf(target.z), w.n);
+  if (w.vegetation && vegetationBlocks(w, ray)) return false;
+  const block = firstBlockCells(w, ray);
+  return block < 0 || block === cellIdx(w, cellOf(target.x), cellOf(target.z));
+}
+
 function fireUnit(w: World, u: Unit): void {
+  if (u.kind === UK_ZOMBIE) {
+    if (u.cooldown > 0) u.cooldown--;
+    const aim = zombieAim(w, u, (a, b) => zombieVision(w, a, b));
+    if (!aim || u.cooldown > 0) return;
+    u.cooldown = UNIT_KINDS[UK_ZOMBIE].reload; u.aimX = aim.x - u.x; u.aimZ = aim.z - u.z;
+    w.events.push({ e: 'fire', unit: u.id, x: u.x, z: u.z });
+    if (aim.unit) damageUnit(w, aim.unit, pierced(UNIT_KINDS[UK_ZOMBIE], aim.unit, UNIT_KINDS[UK_ZOMBIE].dmgUnit));
+    else if (aim.bld && aim.wire) { aim.bld.hp = Math.max(0, aim.bld.hp - UNIT_KINDS[UK_ZOMBIE].dmgBld); w.events.push({ e: 'wire' }); }
+    else if (aim.bld) damageBld(w, aim.bld, UNIT_KINDS[UK_ZOMBIE].dmgBld);
+    w.events.push({ e: 'impact', kind: SHELL_MELEE, x: aim.x, z: aim.z, bld: aim.bld?.id ?? 0 });
+    return;
+  }
   if (UNIT_KINDS[u.kind].range === 0) return;   // 觀測員沒有武裝
   if (u.cooldown > 0) u.cooldown--;
   const k = UNIT_KINDS[u.kind];
@@ -297,7 +322,7 @@ function fireUnit(w: World, u: Unit): void {
   const sh: Shell = { id: w.nextShell++, side: u.side, kind: smoke ? SHELL_SMOKE : k.indirect ? SHELL_HE : k.men ? SHELL_SMALL : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
   if (!k.indirect) {
     const blockCell = firstBlock(w, u.x, u.z, aim.x, aim.z, homeOf(w, u));   // R021：從自己待的房子往外打
-    if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % N); sh.ez = center((blockCell - (blockCell % N)) / N); sh.target = 0; }
+    if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % w.n); sh.ez = center((blockCell - (blockCell % w.n)) / w.n); sh.target = 0; }
     sh.T = sh.kind === SHELL_SMALL ? Math.max(1, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / (3 * SUB))) : Math.max(2, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / SUB));
   } else {
     let r = Math.floor(d / 12);
@@ -306,8 +331,8 @@ function fireUnit(w: World, u: Unit): void {
       sh.rangingEpoch = u.ranging?.epoch;
     }
     if (!spotted(w, u.side, aim.x, aim.z)) r *= 2;               // 沒有友軍看得到：盲射，散布加倍
-    sh.ex = Math.max(0, Math.min(N * SUB - 1, aim.x + randSym(w, r)));
-    sh.ez = Math.max(0, Math.min(N * SUB - 1, aim.z + randSym(w, r)));
+    sh.ex = Math.max(0, Math.min(gridLimit(w), aim.x + randSym(w, r)));
+    sh.ez = Math.max(0, Math.min(gridLimit(w), aim.z + randSym(w, r)));
     sh.T = 20 + 2 * Math.floor(d / SUB);
   }
   w.shells.push(sh);
@@ -315,7 +340,8 @@ function fireUnit(w: World, u: Unit): void {
 }
 
 // R021：打裝甲目標時只剩穿甲率那一部分（坦克、榴彈砲的穿甲率是 100＝跟以前一樣）；R022：打非裝甲目標剩 soft（既有兵種是 100＝不變）
-function pierced(k: { pierce: number; soft: number }, t: Unit, dmg: number): number { return Math.floor((dmg * (UNIT_KINDS[t.kind].armored ? k.pierce : k.soft)) / 100); }
+// R044：開頂的車（驅逐戰車）被步兵打時照「打非裝甲目標」算（既有兵種沒有 openTop＝不變）
+function pierced(k: { pierce: number; soft: number; men: number }, t: Unit, dmg: number): number { const tk = UNIT_KINDS[t.kind]; return Math.floor((dmg * (tk.armored && !(tk.openTop && k.men > 0) ? k.pierce : k.soft)) / 100); }
 // R021：能進駐的單位待在還站著的房子裡時，射線不算自己這棟
 function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) return 0; const b = bldAt(w, cellOf(u.x), cellOf(u.z)); return b && b.hp > 0 ? b.id : 0; }
 
@@ -324,7 +350,7 @@ function damageUnit(w: World, u: Unit, dmg: number, allowGroundCover = true): vo
   const x = cellOf(u.x), z = cellOf(u.z);
   const home = UNIT_KINDS[u.kind].garrison && blocks(w, x, z) ? bldAt(w, x, z) : null;
   // R106：只用命中前已有的彈坑；建築掩護更強，不疊乘。倒塌傷害不吃地形掩護。
-  const terrain = !allowGroundCover ? 100 : vegetationAt(w, x, z) ? 50 : inMap(x, z) && w.crater[idx(x, z)] > 0 ? 75 : 100;
+  const terrain = !allowGroundCover ? 100 : vegetationAt(w, x, z) ? 50 : inGrid(w, x, z) && w.crater[cellIdx(w, x, z)] > 0 ? 75 : 100;
   const ground = Math.min(terrain, allowGroundCover ? trenchCover(w, x, z) : 100);
   const cover = !home ? ground : Math.min(ground, home.kind === BK_PILLBOX ? 25 : 50);   // R024 碉堡裡只吃四分之一
   u.hp -= Math.floor((dmg * UNIT_KINDS[u.kind].armor * cover) / 10000);
@@ -379,7 +405,7 @@ function land(w: World, s: Shell): void {
     for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) if (dist(center(x), center(z), s.ex, s.ez) <= R + HALF) reached = true;
     if (reached) { b.hp = Math.max(0, b.hp - k.dmgBld); w.events.push({ e: 'wire' }); }
   }
-  if (inMap(cx, cz) && !blocks(w, cx, cz)) { const i = idx(cx, cz); if (w.crater[i] < 3) w.crater[i]++; }
+  if (inGrid(w, cx, cz) && !blocks(w, cx, cz)) { const i = cellIdx(w, cx, cz); if (w.crater[i] < 3) w.crater[i]++; }
   w.events.push(R < UNIT_KINDS[UK_HOWITZER].splash ? { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0, r: R } : { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0 });
 }
 
@@ -393,6 +419,11 @@ function updateShells(w: World): void {
 }
 
 function checkWinner(w: World): void {
+  if (w.zombies) {
+    const hq = w.eco?.hq[SIDE_PLAYER] ?? 0;
+    if (w.winner < 0 && (hq ? !hqAlive(w, SIDE_PLAYER) : !w.units.some(u => u.alive && u.side === SIDE_PLAYER))) w.winner = SIDE_ENEMY;
+    return; // 沒有喪屍不算贏；指揮部失守立即結束。
+  }
   if (w.winner >= 0 || w.shells.some(s => s.kind !== SHELL_SMOKE)) return; // 只等可能改變結局的砲彈；無傷害煙幕不拖延戰報
   if (w.eco) {   // R019：有指揮部時，指揮部塌了才輸（全軍覆沒但指揮部還在可以再出兵）
     const a = !!hqAlive(w, SIDE_PLAYER), b = !!hqAlive(w, SIDE_ENEMY);
@@ -416,11 +447,14 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
     w.sandbox.frame++;
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {
-  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 ? c.vegetation : undefined);   // R026：地圖最先套
+  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 ? c.vegetation : undefined);   // R026：地圖最先套（R043 id 2＝大地圖）
+  for (const c of cmds) if (c.t === 'zombies') startZombies(w);
+  if (w.zombies) cmds = cmds.filter(c => !('side' in c) || c.side === SIDE_PLAYER); // 布陣也走同一個敵方命令禁令。
   for (const c of cmds) { if (c.t === 'build') applyBuild(w, c); else if (c.t === 'trench') applyTrench(w, c); }   // R118：布陣保留相對順序，全部先於移動與 HQ
   for (const c of cmds) if (c.t !== 'build' && c.t !== 'trench' && c.t !== 'map') applyCommand(w, c);
   }
   ecoStep(w);   // R019：補給與生產（電腦想之前，剛出生的單位這一步就能被指揮）
+  if (w.zombies) zombiesStep(w, (a, b) => zombieVision(w, a, b));
   // R018：電腦在玩家指令之後、單位移動之前想（每隔 AI_THINK 步想一次），下的指令跟玩家的一樣套用
   if (w.ai) for (const st of w.ai) if (w.tick >= st.next) {
     for (const c of aiThink(w, st, spotted)) applyCommand(w, c);
@@ -430,6 +464,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   separate(w);
   for (const u of w.units) if (u.alive) fireUnit(w, u);
   updateShells(w);
+  if (w.zombies) finishZombiesStep(w);
   if (!w.sandbox) checkWinner(w);
   w.tick++;
   advanceSmoke(w);

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { stripTypeScriptTypes } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +62,7 @@ function controller(query = '') {
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
   const q = new URLSearchParams(query);
   const c = vm.createContext({
+    MAP_LARGE, large: false, // Existing construction fixture; use the real map constant.
     structuredClone, createWorld, hashWorld, isWallKind, bldMaxHp, buildKind, buildError, applyBuild, TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, step, runLog, materialBuildDetail,
     enemyPlan(w, kinds) { enemyArgs.push(kinds); return enemyPlan(w, kinds); }, setWalls: flag => wallFlags.push(flag),
     BK_WIRE, WIRE_KIND, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
@@ -191,7 +193,7 @@ if (!mutant) for (const [name, m] of Object.entries(mutations)) {
   const p = spawnSync(process.execPath, [fileURLToPath(import.meta.url), `--mutant=${name}`], { encoding: 'utf8', timeout: 20000 });
   const output = p.stdout + p.stderr; assert.equal(p.status, 1, `${name}: must fail\n${output}`);
   assert.ok(output.includes(`NG walls-ui: ${m[0]}`), `${name}: designated group ran\n${output}`);
-  assert.equal(output.match(/AssertionError \[ERR_ASSERTION\]: ([^\n]+)/)?.[1], m[4], `${name}: designated semantic assertion must be first red\n${output}`);
+  assert.equal(output.match(/AssertionError \[ERR_ASSERTION\]: ([^\r\n]+)/)?.[1], m[4], `${name}: designated semantic assertion must be first red\n${output}`);
   assert.doesNotMatch(output, /(?:ReferenceError|SyntaxError|TypeError):/, `${name}: startup/runtime errors are not evidence`);
   console.log(`RED walls-ui ${name}: ${m[4]}`);
 }

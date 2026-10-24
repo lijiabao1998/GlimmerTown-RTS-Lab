@@ -1,7 +1,7 @@
 // R118：開戰前的可穿行戰壕。格子清單是唯一佔地來源，不改道路、尋路或視線。
 import { BUILD_POINTS, pointsUsed, territory } from './build.ts';
 import { clearVegetation } from './vegetation.ts';
-import { idx, inMap, cellOf, wireAt, TER_ROAD, TER_MUD, SIDE_PLAYER, SIDE_ENEMY, type World, type TrenchSegment } from './world.ts';
+import { cellIdx, inGrid, cellOf, wireAt, TER_ROAD, TER_MUD, SIDE_PLAYER, SIDE_ENEMY, type World, type TrenchSegment } from './world.ts';
 
 export interface TrenchCmd { t: 'trench'; side: number; kind: number; x: number; z: number; rot?: number }
 export interface TrenchKind { kind: number; name: string; cost: number; cover: number; cells: readonly (readonly [number, number])[] }
@@ -23,7 +23,7 @@ export function trenchCells(cmd: Pick<TrenchCmd, 'kind' | 'x' | 'z' | 'rot'>): A
 }
 
 export function trenchAt(w: World, x: number, z: number): TrenchSegment | null {
-  if (!Number.isInteger(x) || !Number.isInteger(z) || !inMap(x, z) || w.trenches?.version !== 1) return null;
+  if (!Number.isInteger(x) || !Number.isInteger(z) || !inGrid(w, x, z) || w.trenches?.version !== 1) return null;
   for (const s of w.trenches.segments) if (trenchCells(s).some(([cx, cz]) => cx === x && cz === z)) return s;
   return null;
 }
@@ -45,11 +45,11 @@ export function trenchError(w: World, cmd: TrenchCmd): string | null {
   if (cmd.rot !== undefined && (!Number.isInteger(cmd.rot) || cmd.rot < 0 || cmd.rot > 3)) return 'rot';
   if (!Number.isInteger(cmd.x) || !Number.isInteger(cmd.z)) return 'coord';
   const cells = trenchCells(cmd);
-  if (cells.some(([x, z]) => !inMap(x, z))) return 'map';
-  for (const [x, z] of cells) if (!territory(cmd.side, x, z)) return territory(1 - cmd.side, x, z) ? 'foreign' : 'neutral';
-  if (cells.some(([x, z]) => w.ter[idx(x, z)] === TER_ROAD)) return 'road';
-  if (cells.some(([x, z]) => w.ter[idx(x, z)] === TER_MUD)) return 'mud';
-  if (cells.some(([x, z]) => w.occ[idx(x, z)] || trenchAt(w, x, z) || wireAt(w, x, z))) return 'occupied';
+  if (cells.some(([x, z]) => !inGrid(w, x, z))) return 'map';
+  for (const [x, z] of cells) if (!territory(cmd.side, x, z, w.n)) return territory(1 - cmd.side, x, z, w.n) ? 'foreign' : 'neutral';
+  if (cells.some(([x, z]) => w.ter[cellIdx(w, x, z)] === TER_ROAD)) return 'road';
+  if (cells.some(([x, z]) => w.ter[cellIdx(w, x, z)] === TER_MUD)) return 'mud';
+  if (cells.some(([x, z]) => w.occ[cellIdx(w, x, z)] || trenchAt(w, x, z) || wireAt(w, x, z))) return 'occupied';
   if (w.units.some(u => u.alive && cells.some(([x, z]) => cellOf(u.x) === x && cellOf(u.z) === z))) return 'unit';
   if (pointsUsed(w, cmd.side) + k.cost > BUILD_POINTS) return 'points';
   return null;

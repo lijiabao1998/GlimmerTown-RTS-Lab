@@ -5,7 +5,7 @@ import { coverDurability } from './ui/coverDurability.ts';
 import { reloadStatus } from './ui/reloadStatus.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, N, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UNIT_KINDS, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UNIT_KINDS, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, WIRE_KIND, WALL_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
 import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
 import { step, runLog, commandTick, type Command, type LoggedCommand } from './sim/step.ts';
@@ -22,6 +22,10 @@ import { initCommandMenu, bombardCommand, bombardTarget, type CommandMenu } from
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
 import { applyMap, MAP_RYE } from './sim/maps.ts';
+import { MAP_LARGE } from './sim/largeMap.ts';
+import { initMapPick, type MapPick } from './ui/mapPick.ts';
+import { startZombies } from './sim/zombies.ts';
+import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
 import { materialBuildDetail } from './ui/materials.ts';
 import { setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
 import { setStreets } from './render/battle.ts';
@@ -32,6 +36,7 @@ import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
+import { showStartOrder, startOrderText } from './ui/startOrder.ts';
 
 const q = new URLSearchParams(location.search);
 const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
@@ -89,6 +94,12 @@ const r105 = q.get('noR105') !== '1';
 setMaterials(r105); // R105 材質視覺提示；只關畫面，模擬不變
 setFacades(q.get('noR028') !== '1');
 setStreets(q.get('noR027') !== '1');   // R027 人行道與燈火管制路緣；逃生閥 ?noR027=1   // R028 外牆細節（木構、掛瓦、護牆板）；逃生閥 ?noR028=1＝全部紅磚原樣
+// R041 開戰命令條（取代上面的發光大字）。逃生閥 ?noR041=1＝回到 R016 的「開戰！」
+const r041 = q.get('noR041') !== '1';
+function startOrder() {
+  // 開戰這一刻 eco／ai 指令還在佇列裡沒套用：看同一組開關（r019 指揮部、r018 電腦），不看世界
+  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, r019, r018 ? AI_NAME[aiLevel] : undefined, !!w.zombies));
+}
 function startBanner() {
   const el = document.createElement('div');
   el.id = 'start-banner'; el.textContent = '開戰！';
@@ -150,38 +161,53 @@ const r019 = q.get('noR019') !== '1';
 const r021 = q.get('noR021') !== '1';
 const r022 = q.get('noR022') !== '1';   // R022 反戰車砲、迫擊砲（關掉＝eco 不帶 guns：生產列沒有、電腦不出）
 const r026 = q.get('noR026') !== '1';   // R026 Rye 1940 手排地圖（關掉＝亂數村莊）
+// R043 大地圖：布陣時左上「地圖」鍵在萊伊 32×32 與鄉間 64×64 之間換；?map=64 直接開。逃生閥 ?noR043=1＝沒有這顆鍵、不認 ?map=64
+const r043 = q.get('noR043') !== '1';
+let large = r043 && q.get('map') === '64';
+document.body.classList.toggle('r043', r043);   // 說明面板的大地圖那一句只在開著時出現（index.html 的 body.r043）
+let mapPick: MapPick | undefined;
+let zombiesPick: ZombiesPick | undefined;
+document.body.classList.toggle('r045', q.get('noR045') !== '1');
 const r024 = q.get('noR024') !== '1';   // R024 碉堡（關掉＝布陣列沒有碉堡、敵方布陣也不蓋）
 const BUILD_KINDS_NOW = r024 ? BUILD_KINDS_24 : BUILD_KINDS;
 const r023 = q.get('noR023') !== '1';   // R023 輕坦克、重坦克（關掉＝eco 不帶 tanks：生產列沒有、電腦不出）
-const ecoCmd = (): Command => ({ t: 'eco', ...(r021 ? { inf: 1 } : {}), ...(r022 ? { guns: 1 } : {}), ...(r023 ? { tanks: 1 } : {}) });
+const r044 = q.get('noR044') !== '1';   // R044 裝甲車、驅逐戰車、突擊砲（關掉＝eco 不帶 armor2：生產列沒有、電腦不出）
+document.body.classList.toggle('r044', r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
+const ecoCmd = (): Command => ({ t: 'eco', ...(r021 ? { inf: 1 } : {}), ...(r022 ? { guns: 1 } : {}), ...(r023 ? { tanks: 1 } : {}), ...(r044 ? { armor2: 1 } : {}) });
 let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true, sandbox = false) {
+function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {
   if (r109) clearGestureInput();
   battleAudio?.reset();
   w = sandbox ? createSandboxWorld(s) : createWorld(s);
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
-  if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);
+  // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
+  const mapId = map ? (large ? MAP_LARGE : MAP_RYE) : 0;
+  if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
+  const zombies = !sandbox && (map || vegetation) && q.get('noR045') !== '1' && q.get('mode') === 'zombies';
+  if (zombies) startZombies(w);
   view?.dispose();
   view = new BattleView(w, fxOn, !w.sandbox && q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
   view.multiRangeEnabled = q.get('noR122') !== '1';
+  if (w.map === MAP_LARGE) view.target.set(55, 0, 55);   // R043：大地圖開局鏡頭對準我方裝甲連（右下角落）
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
   battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
   if (sandbox) paused = true;
-  if (map || vegetation) issue({ t: 'map', id: map ? MAP_RYE : 0, ...(vegetation ? { vegetation: 1 } : {}) });
+  if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}) });
+  if (zombies) issue({ t: 'zombies' });
   if (build) { paused = true; refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(ecoCmd());
-    if (ai) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
+    if (ai && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   }
   ui();
   syncBattleAudio();
 }
-function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); }
+function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); mapPick?.update(); zombiesPick?.update(); }
 
 function sandboxAction(cmd: SandboxCommand) {
   if (!w.sandbox || audioHelpActive) return;
@@ -214,13 +240,13 @@ function sandboxPlaceAt(cx: number, cy: number) {
 // 開戰：我方布陣＋敵方布陣都寫進指令紀錄（第 0 步），馬上走第一步讓房子落地（中間不畫任何一幀，不會閃）
 function startBattle() {
   if (phase !== 'build') return;
-  const pv = previewWorld(), enemy = enemyPlan(pv, BUILD_KINDS_NOW);
+  const pv = previewWorld(), enemy = w.zombies ? [] : enemyPlan(pv, BUILD_KINDS_NOW);
   for (const c of plan) issue(c);
   for (const c of enemy) issue(c);
   if (r019) issue(ecoCmd());
-  if (r018) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
+  if (r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   phase = 'battle'; plan = []; buildHint = '';
-  if (r016) startBanner();
+  if (r016) { if (r041) startOrder(); else startBanner(); }
   view.setWorld(w, -1);
   tick();
   paused = false;
@@ -238,7 +264,7 @@ function placeAt(cx: number, cy: number) {
   const p = view.groundAt(cx, cy, innerWidth, innerHeight);
   if (!p) return;
   const gx = Math.floor(p.x), gz = Math.floor(p.z);
-  if (gx < 0 || gz < 0 || gx >= N || gz >= N) return;
+  if (gx < 0 || gz < 0 || gx >= w.n || gz >= w.n) return;
   // 圍牆模型窄於佔地：點任一佔地格仍能拿掉整段，不必精準命中薄牆表面。
   const wallIndex = plan.findIndex(c => { if (c.t !== 'build' || !(isWallKind(c.kind) || c.kind === BK_WIRE)) return false; const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return gx >= c.x && gz >= c.z && gx < c.x + fw && gz < c.z + fd; });
   if (wallIndex >= 0) { plan.splice(wallIndex, 1); buildHint = '拿掉了一段障礙'; refreshPreview(); ui(); return; }
@@ -479,6 +505,7 @@ hud = initHud({
       tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: r010,
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : battleHint,
       mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
+      mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: r009 && sel.length ? selInfo(sel) : undefined,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
@@ -502,7 +529,8 @@ hud = initHud({
 reportView = initReportView({ again: () => reset() });
 prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []),
   ...(r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
-  ...(r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : [])], {
+  ...(r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : []),
+  ...(r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : [])], {
   state: () => {
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
     return { hq: phase === 'battle' ? hqDurability(w, q.get('noR127') !== '1') : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5, countdown: phase === 'battle' ? productionCountdown(w, q.get('noR125') !== '1') : '' };
@@ -553,6 +581,14 @@ if (r128) sandboxBar = initSandbox({
   pick: kind => { clearGestureInput(); sandboxTool = kind; sandboxHint = ''; selected.clear(); fireMode = false; ammo = 'he'; ui(); },
   side: side => { sandboxSide = side; sandboxHint = ''; },
 });
+if (r043) mapPick = initMapPick({
+  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: r026 }),
+  toggle: () => { large = !large; reset(); },
+});
+if (q.get('noR045') !== '1') zombiesPick = initZombiesPick({
+  state: () => ({ show: phase === 'build' && !w.sandbox, active: !!w.zombies }),
+  toggle: () => { if (w.zombies) q.delete('mode'); else q.set('mode', 'zombies'); reset(); },
+});
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
@@ -582,7 +618,7 @@ renderer.setAnimationLoop(() => {
     fling.step(dt, camStep);
     const bx = view.target.x, bz = view.target.z;
     view.pan(camStep.x, camStep.z, innerHeight);
-    if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= N || view.target.z >= N) fling.stop();
+    if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= view.world.n || view.target.z >= view.world.n) fling.stop();
   }
   if (glide.active) { glide.at(t / 1000, camStep); view.target.x = camStep.x; view.target.z = camStep.z; }
   view.update(alpha, simT(alpha), selected, phase === 'battle');
@@ -605,6 +641,10 @@ renderer.setAnimationLoop(() => {
   prodBar?.update();
   minimap?.frame(t);
 });
+
+// R040：初始化做完才拿掉載入畫面，跟下面設好 __rts（守衛等的「準備好了」）在同一個同步步驟裡：準備好的那一刻畫面上已經沒有它。
+// 放在守衛掛勾之前：幾支守衛會把守衛掛勾那個物件以後的原文抽到沒有 DOM 的沙箱裡跑。
+document.getElementById('loader')?.remove();
 
 // ---- 守衛掛勾（tools/smoke.mjs 用）----
 const rts = {
@@ -643,15 +683,16 @@ const rts = {
   multiRange: () => ({ ...view.multi122.solution, shown: view.multi122.mesh.visible, triangles: view.multi122.mesh.visible ? 2 : 0 }),
   rangePreview: () => view.range113 ? { ...view.range113.solution, triangles: view.range113.mesh.geometry.drawRange.count / 3, shown: view.range113.mesh.visible } : null,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
-  eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0 } : null),
+  eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0, armor2: w.eco.armor2 ?? 0 } : null),
   men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n }),
   map: () => w.map ?? 0,
+  mapSize: () => w.n,   // R043：地圖邊長（萊伊 32、鄉間大地圖 64）
   vegetation: () => ({ version: w.vegetation?.version ?? 0, cells: w.vegetation ? [...w.vegetation.cells] : [],
     shown: !!view.vegetation116.mesh, count: view.vegetation116.cells, triangles: view.vegetation116.triangles, builds: view.vegetation116.builds }),
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
-  rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner') }),
+  rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner'), order: !!document.getElementById('start-order') }),
   cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }),
   groundAt: (cx: number, cy: number) => { const p = view.groundAt(cx, cy, innerWidth, innerHeight); return p ? [p.x, p.z] : null; },
   select: (ids: number[]) => { selected.clear(); for (const id of ids) if (w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER) selected.add(id); hud?.update(); return [...selected]; },

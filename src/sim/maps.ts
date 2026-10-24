@@ -4,17 +4,22 @@
 // 參考：Rye 舊城（Citadel）的街道格局——High Street、Mermaid Street、Watchbell Street、Lion Street、Church Square、
 // East Cliff 經 Landgate 下山、Conduit Hill、The Strand 碼頭、Cinque Ports Street；St Mary's 教堂、Ypres Tower、Landgate 城門、Strand 倉庫、火車站（1851）。
 import {
-  N, idx, bldMaxHp, TER_GRASS, TER_ROAD, TER_FIELD, TER_MUD, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, type World,
+  cellIdx, bldMaxHp, TER_GRASS, TER_ROAD, TER_FIELD, TER_MUD, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, type World,
 } from './world.ts';
 
 import { generateVegetation, clearVegetation } from './vegetation.ts';
 import { trenchCells } from './trenches.ts';
+import { applyLarge, MAP_LARGE } from './largeMap.ts';
 
 export const MAP_RYE = 1;
+const RYE_N = 32;   // Rye 資料表的邊長
 
 // id=0 保留原亂數村莊；舊 map 指令不帶 vegetation，地圖／雜湊逐位保持。
+// R042：Rye 是 32×32 的手排資料表，只在 w.n === 32 的世界套；別的大小整個指令不動世界。
+// R043：id 2＝64×64 鄉間大地圖（largeMap.ts），整個世界換成新的大小、建築與兵力；只能從新開的世界套一次。
 export function applyMap(w: World, id: number, vegetation?: number): void {
-  if (w.tick !== 0 || (id !== 0 && id !== MAP_RYE)) return;
+  if (id === MAP_LARGE) { applyLarge(w, vegetation); return; }
+  if (w.tick !== 0 || (id !== 0 && id !== MAP_RYE) || (id === MAP_RYE && w.n !== RYE_N)) return;
   // 已付費布陣不會被換底圖埋掉；正常 step 先套 map 才會套戰壕。
   if (w.trenches?.segments.length && (w.map ?? 0) !== id) return;
   if (w.wires?.segments.length && (w.map ?? 0) !== id) return;
@@ -29,32 +34,33 @@ export function applyMap(w: World, id: number, vegetation?: number): void {
 }
 
 function applyRye(w: World, id: number): void {
-  if (id !== MAP_RYE || w.tick !== 0 || w.map) return;
+  if (id !== MAP_RYE || w.tick !== 0 || w.map || w.n !== RYE_N) return;
+  const E = RYE_N - 1;   // 表裡的東／南邊界格
   w.ter.fill(TER_GRASS); w.occ.fill(0); w.crater.fill(0); w.blds = [];
   const ter = (t: number, x0: number, z0: number, x1: number, z1: number) => {   // 含兩端
-    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) w.ter[idx(x, z)] = t;
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) w.ter[cellIdx(w, x, z)] = t;
   };
   const bld = (kind: number, x: number, z: number, bw: number, bd: number, floors: number) => {
     const id = w.blds.length + 1, maxHp = bldMaxHp(kind, bw, bd, floors);
     w.blds.push({ id, kind, x, z, w: bw, d: bd, floors, hp: maxHp, maxHp });
-    for (let dz = 0; dz < bd; dz++) for (let dx = 0; dx < bw; dx++) w.occ[idx(x + dx, z + dz)] = id;
+    for (let dz = 0; dz < bd; dz++) for (let dx = 0; dx < bw; dx++) w.occ[cellIdx(w, x + dx, z + dz)] = id;
   };
 
   // ---- 地形：田、泥灘（河與潮間帶），最後鋪路（橋＝路蓋過河）----
-  ter(TER_FIELD, 0, 11, 6, N - 1);          // Romney Marsh 的牧草地
+  ter(TER_FIELD, 0, 11, 6, E);              // Romney Marsh 的牧草地
   ter(TER_FIELD, 10, 4, 23, 6);             // Rock Channel 南邊的鹽沼地
-  ter(TER_FIELD, 29, 0, N - 1, 18);         // Tillingham 河谷西岸
-  ter(TER_FIELD, 17, 25, 21, N - 1);        // 車站北邊的田
-  ter(TER_MUD, 7, 9, 8, N - 1);             // Rother 河
-  ter(TER_MUD, 9, 7, N - 1, 8);             // Rock Channel（兩河合流往海）
+  ter(TER_FIELD, 29, 0, E, 18);             // Tillingham 河谷西岸
+  ter(TER_FIELD, 17, 25, 21, E);            // 車站北邊的田
+  ter(TER_MUD, 7, 9, 8, E);                 // Rother 河
+  ter(TER_MUD, 9, 7, E, 8);                 // Rock Channel（兩河合流往海）
   ter(TER_MUD, 27, 9, 28, 20);              // Tillingham 河
-  ter(TER_MUD, 29, 19, N - 1, 20);          // Tillingham 往西的上游
+  ter(TER_MUD, 29, 19, E, 20);              // Tillingham 往西的上游
   ter(TER_ROAD, 3, 0, 3, 21);               // 往 Camber 的路
   ter(TER_ROAD, 4, 3, 23, 3);               // 沿海小路（Rye Harbour 村）
   ter(TER_ROAD, 24, 0, 24, 14);             // Harbour Road（過 Rock Channel 的橋）
-  ter(TER_ROAD, 0, 21, N - 1, 21);          // Cinque Ports Street（東邊過 Rother 橋、西邊往 Udimore）
-  ter(TER_ROAD, 25, 12, 25, N - 1);         // The Strand 沿河，往北接 Rye Hill（往 Peasmarsh）
-  ter(TER_ROAD, 26, 15, N - 1, 15);         // A259 過 Tillingham 橋往 Winchelsea
+  ter(TER_ROAD, 0, 21, E, 21);              // Cinque Ports Street（東邊過 Rother 橋、西邊往 Udimore）
+  ter(TER_ROAD, 25, 12, 25, E);             // The Strand 沿河，往北接 Rye Hill（往 Peasmarsh）
+  ter(TER_ROAD, 26, 15, E, 15);             // A259 過 Tillingham 橋往 Winchelsea
   ter(TER_ROAD, 11, 15, 24, 15);            // High Street（西端是 The Mint 下到 Strand）
   ter(TER_ROAD, 17, 12, 24, 12);            // Mermaid Street（石板路，往西下坡到 Strand）
   ter(TER_ROAD, 12, 9, 21, 9);              // Watchbell Street（崖邊）

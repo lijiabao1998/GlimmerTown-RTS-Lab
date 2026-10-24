@@ -21,7 +21,7 @@ const add = (w, side, kind, x, z) => { const u = { id: w.units.length + 1, side,
 const building = (w, kind, x = 10, z = 10, width = 1, depth = 1, hp) => { const maxHp = bldMaxHp(kind, width, depth, 1), b = { id: w.blds.length + 1, kind, x, z, w: width, d: depth, floors: 1, hp: hp ?? maxHp, maxHp }; w.blds.push(b); for (let dz = 0; dz < depth; dz++) for (let dx = 0; dx < width; dx++) w.occ[idx(x + dx, z + dz)] = b.id; return b; };
 const queue = (w, g, t, kind = SHELL_AP, hitBld = 0) => w.shells.push({ id: w.nextShell++, side: g.side, kind, shooter: g.id, sx: g.x, sz: g.z, ex: t.x, ez: t.z, t: 0, T: 1, target: hitBld ? 0 : t.id, hitBld });
 const hit = (w, g, t, kind = SHELL_AP, hitBld = 0) => { const hp = t.hp; queue(w, g, t, kind, hitBld); step(w, []); return hp - t.hp; };
-const expected = (gun, target, cover) => { const k = UNIT_KINDS[gun], t = UNIT_KINDS[target]; return Math.floor(Math.floor(k.dmgUnit * (t.armored ? k.pierce : k.soft) / 100) * t.armor * cover / 10000); };
+const expected = (gun, target, cover) => { const k = UNIT_KINDS[gun], t = UNIT_KINDS[target]; return Math.floor(Math.floor(k.dmgUnit * (t.armored && !(t.openTop && k.men > 0) ? k.pierce : k.soft) / 100) * t.armor * cover / 10000); }; // R044：開頂車被步兵打照軟目標算
 const worldAt = (seed, map) => { const w = createWorld(seed); applyMap(w, map, 1); return w; };
 
 group('generation', () => {
@@ -60,7 +60,7 @@ group('activation', () => {
     const w = createWorld(1944); applyMap(w, map, value); assert.equal(w.vegetation, undefined, 'activation: only numeric one enables');
     const command = createWorld(1944); step(command, [{ t: 'map', id: map, vegetation: value }]); assert.equal(command.vegetation, undefined, 'activation: command validates exact optional value');
   }
-  for (const id of [-1, 2, 1.5, NaN, '1', null]) {
+  for (const id of [-1, 3, 1.5, NaN, '1', null]) {
     const w = createWorld(1944); applyMap(w, id, 1); assert.equal(w.vegetation, undefined, 'activation: helper rejects invalid map id');
     step(w, [{ t: 'map', id, vegetation: 1 }]); assert.equal(w.vegetation, undefined, 'activation: command cannot coerce invalid id into enabled terrain');
   }

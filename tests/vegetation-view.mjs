@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { stripTypeScriptTypes } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +19,7 @@ const paths = { render: '../src/render/vegetation.ts', battle: '../src/render/ba
 const sources = Object.fromEntries(Object.entries(paths).map(([k, p]) => [k, fs.readFileSync(new URL(p, import.meta.url), 'utf8')]));
 const mutations = {
   omit_wood: { group: 'geometry', file: 'render', from: 'if (kind !== VEG_HEDGE && kind !== VEG_WOOD) continue;', to: 'if (kind !== VEG_HEDGE) continue;', message: 'geometry: both independently specified cell kinds produce geometry' },
-  over_capacity: { group: 'capacity', file: 'render', from: 'x < N && cells < VEGETATION_MAX;', to: 'x < N;', message: 'capacity: even an overfull input draws at most 64 cells' },
+  over_capacity: { group: 'capacity', file: 'render', from: 'x < w.n && cells < VEGETATION_MAX;', to: 'x < w.n;', message: 'capacity: even an overfull input draws at most 64 cells' },
   world_write: { group: 'readonly', file: 'render', from: 'const g = new Geo(); let cells = 0;', to: 'w.rng ^= 1; const g = new Geo(); let cells = 0;', message: 'readonly: full world including events and RNG remains unchanged' },
   ignore_valve: { group: 'valve', file: 'render', from: 'this.enabled = vegetation116;', to: 'this.enabled = true;', message: 'valve: off has no foliage scene objects or hint' },
   cast_shadow: { group: 'budget', file: 'render', from: 'this.mesh.castShadow = false;', to: 'this.mesh.castShadow = true;', message: 'budget: foliage adds exactly one draw call including the shadow pass' },
@@ -26,7 +27,7 @@ const mutations = {
   ignore_replacement: { group: 'replacement', file: 'render', from: 'this.world === w && this.state === w.vegetation && !changed', to: 'this.state === w.vegetation && !changed', message: 'replacement: a different preview world rebuilds even with the same state object' },
   ignore_activation: { group: 'activation', file: 'render', from: 'this.world === w && this.state === w.vegetation && !changed', to: 'this.world === w && !changed', message: 'activation: same world map command immediately activates geometry' },
   stale_map: { group: 'activation', file: 'battle', from: 'if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory);', to: '', message: 'activation: recorded Rye map refreshes actual ground pixels in the same tick' },
-  footprint_only: { group: 'build_replay', file: 'battle', from: 'for (let z = Math.max(0, b.z - 1); z < Math.min(N, b.z + b.d + 1); z++) for (let x = Math.max(0, b.x - 1); x < Math.min(N, b.x + b.w + 1); x++) this.paintCell(x, z);', to: 'for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z);', message: 'build_replay: native construction and recorded map/build replay have byte-identical ground including adjacent curbs' },
+  footprint_only: { group: 'build_replay', file: 'battle', from: 'for (let z = Math.max(0, b.z - 1); z < Math.min(this.n, b.z + b.d + 1); z++) for (let x = Math.max(0, b.x - 1); x < Math.min(this.n, b.x + b.w + 1); x++) this.paintCell(x, z);', to: 'for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) this.paintCell(x, z);', message: 'build_replay: native construction and recorded map/build replay have byte-identical ground including adjacent curbs' },
   stale_build: { group: 'construction', file: 'battle', from: 'townDirty = true; vegetationDirty = true;', to: 'townDirty = true;', message: 'construction: build event removes the cleared cell from geometry' },
   stale_clear: { group: 'clear', file: 'render', from: 'this.scene.remove(this.mesh);', to: '', message: 'clear: old world removes foliage from the actual scene' },
   absent_symbols: { group: 'minimap', file: 'mini', from: 'if (!b && foliage) {', to: 'if (false) {', message: 'minimap: hedge has the independent light-green line symbol' },
@@ -35,7 +36,7 @@ const mutations = {
   mini_dirty: { group: 'minimap_construction', file: 'mini', from: 'dirty: () => { baseDirty = true; }', to: 'dirty: () => {}', message: 'minimap_construction: cleared foliage disappears on the dirty frame' },
   hint_priority: { group: 'hud', file: 'hud', from: 's.hint === undefined && !sel && !s.fireMode && !s.rangeInfo && !s.counterbatteryInfo && s.vegetationInfo', to: 's.vegetationInfo', message: 'hud: explicit high-priority feedback is never altered' },
   absent_hint: { group: 'hud', file: 'render', from: "return this.cells ? VEGETATION_HINT : '';", to: "return '';", message: 'hud: active world exposes the concise traversable/LOS/half-cover explanation' },
-  no_default: { group: 'main_setup', file: 'main', from: 'map = r026, vegetation = true)', to: 'map = r026, vegetation = false)', message: 'main_setup: default new village explicitly enables vegetation' },
+  no_default: { group: 'main_setup', file: 'main', from: 'map = r026 || large, vegetation = true, sandbox = false)', to: 'map = r026 || large, vegetation = false, sandbox = false)', message: 'main_setup: default new village explicitly enables vegetation' },
   omit_log: { group: 'main_setup', file: 'main', from: '...(vegetation ? { vegetation: 1 } : {})', to: '...{}', message: 'main_setup: preview and command recording use the same optional setting' },
   legacy_on: { group: 'legacy_replay', file: 'main', from: 'reset(s, false, false, false, false, false);', to: 'reset(s, false, false, false, false, true);', message: 'legacy_replay: a legacy replay never gains vegetation state' },
 };
@@ -117,6 +118,7 @@ function mini(w, enabled = true) {
 function mainFixture() {
   const mockView = () => ({ dispose() {}, setWorld() {}, vegetation116: { mesh: null, cells: 0, triangles: 0, builds: 0 } });
   const c = vm.createContext({ ...sim, applyMap, MAP_RYE, runLog, SCRIPT, SCRIPT_SEED, SCRIPT_TICKS, seed: 1944,
+    MAP_LARGE, large: false, // Default village and legacy replay; large maps are checked separately.
     r006: false, r018: false, r019: false, r026: false, r109: false, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true,
     r116: false, r118: true, r104: true, fxOn: true, q: new URLSearchParams('noR116=1'),
     w: undefined, view: mockView(), selected: new Set(), log: [], pending: [], paused: true, phase: 'battle', window: {},
@@ -299,7 +301,7 @@ for (const [name, run] of Object.entries(groups)) if (!only || name === only) {
 if (process.argv.includes('--mutations')) for (const [name, m] of Object.entries(mutations)) {
   const p = spawnSync(process.execPath, [fileURLToPath(import.meta.url), `--mutant=${name}`, `--group=${m.group}`], { encoding: 'utf8', timeout: 10000 });
   assert.equal(p.status, 1, `${name}: isolated mutant must exit 1\n${p.stdout}\n${p.stderr}`);
-  const first = p.stderr.match(/AssertionError \[ERR_ASSERTION\]: ([^\n]+)/)?.[1];
+  const first = p.stderr.match(/AssertionError \[ERR_ASSERTION\]: ([^\r\n]+)/)?.[1];
   assert.equal(first, m.message, `${name}: first red must be intended semantic assertion, not startup\n${p.stderr}`);
   assert(p.stderr.includes(`NG vegetation-view ${m.group}`)); console.log(`RED vegetation-view ${name}: ${first}`);
 }

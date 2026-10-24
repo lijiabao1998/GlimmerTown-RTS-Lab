@@ -12,12 +12,12 @@ const mutants = [
   ['road_filter', 'generation', 'vegetation.ts', ' || w.ter[c] === TER_ROAD', '', 'generation: avoids road, mud and all building footprints'],
   ['spawn_filter', 'generation', 'vegetation.ts', ' || units.has(c)', '', 'generation: custom initial unit excludes an otherwise valid candidate'],
   ['loose_activation', 'activation', 'maps.ts', 'if (vegetation === 1 &&', 'if (vegetation &&', 'activation: only numeric one enables'],
-  ['coerced_map', 'activation', 'step.ts', 'c.id === 0 || c.id === 1 ? c.vegetation : undefined', 'c.vegetation', 'activation: command cannot coerce invalid id into enabled terrain'],
+  ['coerced_map', 'activation', 'step.ts', 'c.id === 0 || c.id === 1 || c.id === 2 ? c.vegetation : undefined', 'c.vegetation', 'activation: command cannot coerce invalid id into enabled terrain'],
   ['old_field', 'legacy', 'world.ts', '  return w;\n}', '  w.vegetation = { version: 1, cells: new Uint8Array(N * N) };\n  return w;\n}', 'legacy: createWorld never enables new terrain'],
   ['endpoint_block', 'los', 'vegetation.ts', 'for (let i = 1; i + 1 < cells.length; i++)', 'for (let i = 0; i < cells.length; i++)', 'los: same, adjacent and endpoint vegetation remain visible both ways'],
   ['middle_visible', 'los', 'step.ts', '    if (w.vegetation && vegetationBlocks(w, cells)) continue;', '', 'los: middle vegetation blocks symmetrically'],
   ['projectile_block', 'los', 'step.ts', 'const c = cells[i]; if (w.occ[c]', 'const c = cells[i]; if (w.vegetation?.cells[c]) return c; if (w.occ[c]', 'los: foliage never returns nonexistent building impact'],
-  ['duplicate_ray', 'allocations', 'step.ts', '    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z));', '    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z)); if (w.vegetation) lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z));', 'allocations: enabled clear LOS reuses original single ray'],
+  ['duplicate_ray', 'allocations', 'step.ts', '    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z), w.n);', '    const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z), w.n); if (w.vegetation) lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z), w.n);', 'allocations: enabled clear LOS reuses original single ray'],
   ['full_damage', 'cover', 'step.ts', 'vegetationAt(w, x, z) ? 50', 'vegetationAt(w, x, z) ? 100', 'cover: strongest vegetation/crater/garrison protection without stacking'],
   ['stack_cover', 'cover', 'step.ts', 'Math.min(ground, home.kind === BK_PILLBOX ? 25 : 50)', 'ground * (home.kind === BK_PILLBOX ? 25 : 50) / 100', 'cover: strongest vegetation/crater/garrison protection without stacking'],
   ['collapse_cover', 'cover', 'step.ts', '!allowGroundCover ? 100 :', 'false ? 100 :', 'cover: collapse bypasses all terrain protection'],
@@ -37,7 +37,7 @@ try {
     const path = join(dir, 'src/sim', file), source = readFileSync(path, 'utf8'); assert.equal(source.split(from).length, 2, `${name}: unique mutation anchor`); writeFileSync(path, source.replace(from, to));
     const r = spawnSync(process.execPath, [join(dir, 'tests/vegetation.mjs'), group], { encoding: 'utf8', timeout: 120000 }), output = `${r.stdout}\n${r.stderr}`;
     assert.equal(r.error, undefined, `${name}: child starts and completes`); assert.equal(r.signal, null, `${name}: no timeout/signal`); assert.notEqual(r.status, 0, `${name}: mutation must fail`);
-    const first = /AssertionError \[ERR_ASSERTION\]: ([^\n]+)/.exec(output)?.[1]; assert.equal(first, wanted, `${name}: first failure must be intended semantic assertion, got ${output.slice(-2000)}`);
+    const first = /AssertionError \[ERR_ASSERTION\]: ([^\r\n]+)/.exec(output)?.[1]; assert.equal(first, wanted, `${name}: first failure must be intended semantic assertion, got ${output.slice(-2000)}`);
     console.log(`OK vegetation-negative/${name}: ${first}`);
   }
 } finally { rmSync(temp, { recursive: true, force: true }); }

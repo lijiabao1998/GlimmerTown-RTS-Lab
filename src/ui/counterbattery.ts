@@ -1,5 +1,5 @@
 // R115：只用當級公開投影，不能由隱藏單位的位置／存亡修正歷史砲聲。
-import { N, SUB, SIDE_PLAYER, type World } from '../sim/world.ts';
+import { SUB, SIDE_PLAYER, type World } from '../sim/world.ts';
 import { counterbatteryAreasInto, hasCounterbattery, type CounterbatteryAreaBuffer } from '../sim/counterbattery.ts';
 
 export const COUNTERBATTERY_SEGMENTS = 40;
@@ -8,7 +8,7 @@ const CIRCLE = Array.from({ length: COUNTERBATTERY_SEGMENTS }, (_, i) => {
   return [Math.cos(angle), Math.sin(angle)];
 });
 const INFO = '小地圖橙虛線：疑似敵砲，非精確位置';
-const DASH = [3, 2], CORNERS = [[0, 0], [N, 0], [N, N], [0, N]];
+const DASH = [3, 2];
 const AREA_BUFFER: CounterbatteryAreaBuffer = {
   areas: Array.from({ length: 8 }, () => ({ x: 0, z: 0, rx: 0, rz: 0, level: 0 })), count: 0,
 };
@@ -18,16 +18,18 @@ export function counterbatteryHint(w: World, enabled = true): string {
 }
 
 // 在世界中採樣，再逐點走小地圖的斜交投影；地圖外頂點保留，統一裁在菱形。
+// n＝地圖邊長，由呼叫者傳世界的 w.n（這裡只讀公開投影、不讀世界欄位）；預設 32 只給舊守衛的呼叫（R042）。
 export function drawCounterbattery(ctx: CanvasRenderingContext2D, w: World,
-  project: (x: number, z: number) => [number, number], enabled = true): void {
+  project: (x: number, z: number) => [number, number], enabled = true, n = 32): void {
   if (!enabled) return;
   counterbatteryAreasInto(w, SIDE_PLAYER, AREA_BUFFER);
   const areas = AREA_BUFFER.areas;
   if (!AREA_BUFFER.count) return;
   ctx.save();
   ctx.beginPath();
-  for (let i = 0; i < CORNERS.length; i++) {
-    const corner = CORNERS[i], point = project(corner[0], corner[1]);
+  // 四個地圖角，順序 (0,0)→(n,0)→(n,n)→(0,n)；不配置角點陣列
+  for (let i = 0; i < 4; i++) {
+    const point = project(i === 1 || i === 2 ? n : 0, i >= 2 ? n : 0);
     if (i) ctx.lineTo(point[0], point[1]); else ctx.moveTo(point[0], point[1]);
   }
   ctx.closePath(); ctx.clip();

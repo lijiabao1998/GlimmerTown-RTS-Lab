@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { hash2 } from '../sim/rng.ts';
 import {
-  N, SUB, inMap, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT, idx,
-  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, type Unit, type World, type SimEvent, type Building,
+  SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_ZOMBIE, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
+  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
@@ -23,6 +23,7 @@ let streets27 = true;
 export function setStreets(on: boolean): void { streets27 = on; }
 const PX = 8;                       // 地面貼圖：每格 8×8 像素
 const MAX_UNITS = 512, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
+const C_ZOMBIE = new THREE.Color(0x8d9b72), C_ZOMBIE_BODY = new THREE.Color(0x5c6650);
 export const TURRET_RATE = 3;        // R008 砲塔最大轉速（弧度／秒）
 const HOLE_CAP = 160;                 // R014 牆上痕跡最多幾個（滿了丟最舊的）
 const C_HOLE = 0x1b1713, C_SOOT = 0x2a2521;
@@ -31,6 +32,20 @@ const DK_PATH = 0, DK_ATTACK = 1, DK_FIRE = 2, DK_END = 3, DK_CROSS = 4;
 const MEN_CAP = 1600, BODY_CAP = 300;   // R021 小兵實例上限、倒下的人上限
 // R023 坦克的網格縮放（輕坦克小一號、重坦克大一號；中坦克原樣）
 const TANK_SCALE23: Record<number, number> = { [UK_LIGHT]: 0.8, [UK_HEAVY]: 1.18 };
+// R044 三種新車也畫進同一組車體、砲塔網格（不加繪製呼叫），只換各軸縮放與砲塔位置：
+// hull＝車體（長、高、寬）、top＝砲塔／戰鬥室（長、高、寬；砲管跟著長度伸縮）、fwd＝砲塔沿車頭前移（格）、casemate＝固定戰鬥室（平常朝車頭，正在打時才對準）
+// 裝甲車：長、矮、窄，小砲塔；驅逐戰車：低車體、壓扁的戰鬥室、長砲管；突擊砲：寬低車體、寬扁戰鬥室、短粗砲管
+type Art44 = { hull: [number, number, number]; top: [number, number, number]; fwd: number; casemate: boolean };
+const ART44: Record<number, Art44> = {
+  [UK_ARMORED_CAR]: { hull: [0.92, 0.56, 0.58], top: [0.5, 0.7, 0.5], fwd: 0, casemate: false },   // 比輕坦克（0.8／0.68／0.8）長、矮、窄
+  [UK_DESTROYER]: { hull: [1.05, 0.72, 0.95], top: [1.45, 0.55, 1.2], fwd: 0.04, casemate: true },
+  [UK_ASSAULT]: { hull: [1.0, 0.7, 1.15], top: [0.78, 0.62, 1.4], fwd: 0.07, casemate: true },
+};
+const CASEMATE_HOLD = 1;              // R044 戰鬥室開火後還對著目標的秒數＝裝填時間＋這麼多（兩發之間不轉回車頭）
+// 車的整體大小（裝甲弧、車轍間距用）；槍口離車中心多遠（槍口火光用）
+const vehSize = (kind: number) => ART44[kind] ? Math.max(ART44[kind].hull[0], ART44[kind].hull[2]) : TANK_SCALE23[kind] ?? 1;
+const muzzleL = (kind: number) => ART44[kind] ? 0.42 * ART44[kind].top[0] + ART44[kind].fwd : 0.44 * (TANK_SCALE23[kind] ?? 1);
+const muzzleY = (kind: number) => ART44[kind] ? 0.195 * ART44[kind].top[1] + 0.15 * (ART44[kind].hull[1] - ART44[kind].top[1]) : 0.2;
 // R022 砲的網格縮放（長、高、寬）：榴彈砲原樣；反戰車砲壓低放平；迫擊砲短而翹
 const GUN_SCALE22: Record<number, [number, number, number]> = { [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4] };
 // 一班六個人的位置（班長前進方向的本地座標：兩排三列）
@@ -66,7 +81,7 @@ export class BattleView {
   scene = new THREE.Scene();
   cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   pipe = new Pipeline();
-  target = new THREE.Vector3(N * 0.62, 0, N * 0.62);
+  target = new THREE.Vector3();   // 建構與換大小時照世界大小放到 0.62 處（sizeTo）
   zoom = 1;
   fxOn: boolean;
 
@@ -75,16 +90,24 @@ export class BattleView {
   private mapId: number | undefined;
   private fogOn: boolean;
   private ramp = toonRamp();
-  private groundTex: THREE.DataTexture;
-  private groundPx: Uint8Array;
+  // R042：跟地圖邊長有關的東西都照世界的 w.n 配置（sizeTo）；n 是目前配好的邊長
+  private n = 0;
+  private sun: THREE.DirectionalLight;
+  private ground: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>;
+  private groundTex!: THREE.DataTexture;
+  private groundPx!: Uint8Array;
   private town: THREE.Mesh;
   private hull: THREE.InstancedMesh;
   private turret: THREE.InstancedMesh;
   private gun: THREE.InstancedMesh;
   private observerMesh: THREE.InstancedMesh;
   private men: THREE.InstancedMesh;
+  private menNormal: THREE.BufferGeometry;
+  private menDense: THREE.BufferGeometry | null = null;
   // R021 倒下的人：位置、朝向、陣營（環狀覆寫最舊的）；每台步兵上一次看到的人數
   readonly bodies = { n: 0, next: 0, x: new Float32Array(BODY_CAP), z: new Float32Array(BODY_CAP), y: new Float32Array(BODY_CAP), yaw: new Float32Array(BODY_CAP), side: new Uint8Array(BODY_CAP) };
+  private zombieBodies = new Uint8Array(BODY_CAP);
+  private bodyBorn = new Float32Array(BODY_CAP);
   private lastMen = new Int8Array(MAX_UNITS + 1).fill(-1);
   readonly menDbg = { alive: 0 };
   private discs: THREE.InstancedMesh;
@@ -120,17 +143,17 @@ export class BattleView {
   private shakeAmp = 0;
   private lastT = 0;
   private frameNo = 0;
-  private visStamp = new Int32Array(N * N);
-  private visVal = new Uint8Array(N * N);
+  private visStamp = new Int32Array(0);
+  private visVal = new Uint8Array(0);
   private mA = new THREE.Matrix4();
   private mB = new THREE.Matrix4();
 
   // ---- R008 車輛有重量（?noR008=1 時全部不做）----
   private r8 = false;
-  private tracks = new Uint8Array(N * PX * N * PX);       // 每個地面像素被車輪壓過幾次（0–6）
+  private tracks = new Uint8Array(0);       // 每個地面像素被車輪壓過幾次（0–6）
   private trackLast = new Int32Array((MAX_UNITS + 1) * 2).fill(-1);   // 每台車左右兩條車轍上一次壓到的像素
-  private dirtyStamp = new Int32Array(N * N);
-  private dirtyList = new Int32Array(N * N);
+  private dirtyStamp = new Int32Array(0);
+  private dirtyList = new Int32Array(0);
   private dirtyN = 0;
   private stepNo = 0;
   private recoilT0 = new Float64Array(MAX_UNITS + 1).fill(-99);
@@ -138,6 +161,7 @@ export class BattleView {
   private lastHp = new Int32Array(MAX_UNITS + 1);
   private turretYaw = new Float64Array(MAX_UNITS + 1);
   private turretT = -1;
+  private fire44 = new Float64Array(MAX_UNITS + 1).fill(-99);   // R044 每台最後一次開火的模擬時間（戰鬥室要不要對著目標）
   private cFlash = new THREE.Color();
 
   // ---- R009 血條（?noR009=1 時不畫）----
@@ -192,30 +216,19 @@ export class BattleView {
     this.scene.background = new THREE.Color(0x3c4a3a);
     // 光：天光＋太陽。鏡頭固定不轉，太陽放在畫面左上方，光永遠從左上來（2D 線 T745 的規矩在這裡自然成立）
     this.scene.add(new THREE.HemisphereLight(0xe4ecff, 0x5b5444, 1.35));
-    const sun = new THREE.DirectionalLight(0xfff1d6, 2.1);
-    sun.position.set(N / 2 - 0.35 * N, 1.25 * N, N / 2 + 1.0 * N);
-    sun.target.position.set(N / 2, 0, N / 2);
+    // 位置與陰影範圍跟著地圖大小，在 sizeTo 裡放（R042）
+    const sun = this.sun = new THREE.DirectionalLight(0xfff1d6, 2.1);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    const sc = sun.shadow.camera as THREE.OrthographicCamera;
-    sc.left = sc.bottom = -N * 0.8; sc.right = sc.top = N * 0.8; sc.near = 1; sc.far = N * 4;
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
     this.scene.add(sun, sun.target);
 
     // 地面：一張四邊形＋每格 8×8 的資料貼圖（彈坑、瓦礫地直接畫進貼圖，不加繪製呼叫）
-    this.groundPx = new Uint8Array(N * PX * N * PX * 4);
-    this.groundTex = new THREE.DataTexture(this.groundPx, N * PX, N * PX);
-    this.groundTex.magFilter = this.groundTex.minFilter = THREE.NearestFilter;
-    this.groundTex.colorSpace = THREE.SRGBColorSpace;
-    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
-    this.groundTex.needsUpdate = true;
-    const gg = new THREE.BufferGeometry();
-    gg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, N, 0, 0, N, 0, N, 0, 0, N], 3));
-    gg.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-    gg.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
-    gg.setIndex([0, 3, 2, 0, 2, 1]);
-    const ground = new THREE.Mesh(gg, new THREE.MeshLambertMaterial({ map: this.groundTex }));
+    const ground = this.ground = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial());
     ground.receiveShadow = true;
+    this.sizeTo(w.n);
+    for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
+    this.groundTex.needsUpdate = true;
     this.scene.add(ground);
 
     const toon = (o: THREE.MeshToonMaterialParameters = {}) => new THREE.MeshToonMaterial({ gradientMap: this.ramp, ...o });
@@ -238,6 +251,9 @@ export class BattleView {
     this.gun = inst(howitzer(), toon({ vertexColors: true }), MAX_UNITS, true);
     this.observerMesh = inst(observer(observerDetails), toon({ vertexColors: true }), MAX_UNITS, true);
     this.men = inst(soldier(), toon({ vertexColors: true }), MEN_CAP, true);   // R021 步兵：活著的小兵＋倒下的人
+    this.menNormal = this.men.geometry;
+    if (w.zombies) this.menDense = soldier(false);
+    this.men.castShadow = !w.zombies; // R045 密集人群保留原網格與受光，省去小兵的陰影第二遍；車與房屋照舊。
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
     if (r104 && fxOn) this.armorArcs = inst(new THREE.RingGeometry(0.45, 0.53, 8, 1, -Math.PI / 4, Math.PI / 2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ depthWrite: false }), MAX_RINGS * 2, false);
@@ -288,9 +304,39 @@ export class BattleView {
     }
   }
 
+  // R042：照地圖邊長 n 配置地面貼圖與四邊形、車轍、可見度快取、髒格表、光與陰影範圍。
+  // 只在建構與換到不同大小的世界時配置；同大小直接返回，每幀不配置。
+  private sizeTo(n: number): void {
+    if (n === this.n) return;
+    this.n = n;
+    const W = n * PX;
+    this.visStamp = new Int32Array(n * n); this.visVal = new Uint8Array(n * n);
+    this.tracks = new Uint8Array(W * W); this.trackLast.fill(-1);
+    this.dirtyStamp = new Int32Array(n * n); this.dirtyList = new Int32Array(n * n); this.dirtyN = 0;
+    this.target.set(n * 0.62, 0, n * 0.62);   // 預設鏡頭：換了大小，舊位置在新地圖上沒有意義，回到我方那一側
+    // 太陽（左上方）與陰影相機蓋住整張地圖
+    const sun = this.sun, sc = sun.shadow.camera as THREE.OrthographicCamera;
+    sun.position.set(n / 2 - 0.35 * n, 1.25 * n, n / 2 + 1.0 * n);
+    sun.target.position.set(n / 2, 0, n / 2);
+    sc.left = sc.bottom = -n * 0.8; sc.right = sc.top = n * 0.8; sc.near = 1; sc.far = n * 4;
+    sc.updateProjectionMatrix();
+    this.groundTex?.dispose();
+    this.groundPx = new Uint8Array(W * W * 4);
+    this.groundTex = new THREE.DataTexture(this.groundPx, W, W);
+    this.groundTex.magFilter = this.groundTex.minFilter = THREE.NearestFilter;
+    this.groundTex.colorSpace = THREE.SRGBColorSpace;
+    this.ground.material.map = this.groundTex;
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, n, 0, 0, n, 0, n, 0, 0, n], 3));
+    gg.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+    gg.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+    gg.setIndex([0, 3, 2, 0, 2, 1]);
+    this.ground.geometry.dispose(); this.ground.geometry = gg;
+  }
+
   unitHeight(u: Unit): number {
     if (!UNIT_KINDS[u.kind].garrison) return 0;   // 觀測員、步兵可以站在屋頂上
-    const id = this.w.occ[idx(Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
+    const id = this.w.occ[cellIdx(this.w, Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
     const b = id ? this.w.blds[id - 1] : null;
     if (!b || b.hp <= 0) return 0;
     const cached = this.observerHeights.get(u.id);
@@ -310,10 +356,12 @@ export class BattleView {
     return next;
   }
   // R006：換一個世界來畫（布陣預覽世界 ↔ 真的世界）；重畫地面貼圖與房子，單位網格不動
+  // R042：大小不同的世界先照新的 w.n 重配所有跟大小有關的緩衝，不沿用舊大小
   setWorld(w: World, territorySide = -1) {
     this.w = w; this.mapId = w.map; this.territory = territorySide; this.observerHeights.clear();
+    this.sizeTo(w.n);
     this.trench118.sync(w, true);
-    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
+    for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
     this.groundTex.needsUpdate = true;
     this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry();
     this.vegetation116.sync(w);
@@ -324,14 +372,15 @@ export class BattleView {
   }
 
   visibleUnit(u: Unit): boolean {
+    if (this.w.zombies && u.side !== SIDE_PLAYER && u.kind !== UK_ZOMBIE) return false; // 起手敵軍的穩定 id 空槽
     return u.side === SIDE_PLAYER || this.visibleAt(u.x, u.z);
   }
 
   // ---- 地面貼圖 ----
   private paintCell(x: number, z: number) {
-    const w = this.w, i = idx(x, z), ter = w.ter[i], dep = w.crater[i];
+    const w = this.w, i = cellIdx(w, x, z), ter = w.ter[i], dep = w.crater[i];
     const b = w.occ[i] ? w.blds[w.occ[i] - 1] : null, rubble = !!b && stageOf(b) === STAGE_RUBBLE;
-    const W = N * PX;
+    const W = this.n * PX;
     for (let py = 0; py < PX; py++) for (let px = 0; px < PX; px++) {
       const gx = x * PX + px, gz = z * PX + py, n = hash2(gx, gz, 3);
       let r: number, g: number, bl: number;
@@ -344,7 +393,7 @@ export class BattleView {
           const sides = [[-1, 0, px, py], [1, 0, PX - 1 - px, py], [0, -1, py, px], [0, 1, PX - 1 - py, px]];
           for (const [dx, dz, d, along] of sides) {
             const nx = x + dx, nz = z + dz;
-            if (!inMap(nx, nz) || !w.occ[idx(nx, nz)] || d > 2) continue;
+            if (!inGrid(w, nx, nz) || !w.occ[cellIdx(w, nx, nz)] || d > 2) continue;
             if (d <= 1) { const j = (along + (dx ? gz : gx)) % 3 === 0; r = 170 + n * 10 - (j ? 22 : 0); g = 166 + n * 10 - (j ? 22 : 0); bl = 154 + n * 8 - (j ? 20 : 0); }
             else { const white = ((dx ? gz : gx) >> 1) % 2 === 0; r = g = bl = white ? 226 + n * 12 : 38 + n * 8; }
             break;
@@ -370,11 +419,11 @@ export class BattleView {
       if (b) { r = 112 + n * 16; g = 102 + n * 14; bl = 86 + n * 12; if (rubble) { r += 18; g += 16; bl += 14; } }
       else if (this.territory >= 0 && ter !== TER_ROAD) {
         // 布陣：我方可蓋的半場偏藍、對方半場偏紅，交界畫一條亮線；無人帶與路保持原色
-        const mine = territory(this.territory, x, z), theirs = territory(1 - this.territory, x, z);
+        const mine = territory(this.territory, x, z, w.n), theirs = territory(1 - this.territory, x, z, w.n);
         if (mine) { r = r * 0.62 + 26; g = g * 0.72 + 44; bl = bl * 0.55 + 104; }
         else if (theirs) { r = r * 0.8 + 38; g = g * 0.8 + 6; bl = bl * 0.8 + 4; }
-        const edge = mine && (!territory(this.territory, x - 1, z) && px === 0 || !territory(this.territory, x, z - 1) && py === 0
-          || !territory(this.territory, x + 1, z) && px === PX - 1 || !territory(this.territory, x, z + 1) && py === PX - 1);
+        const edge = mine && (!territory(this.territory, x - 1, z, w.n) && px === 0 || !territory(this.territory, x, z - 1, w.n) && py === 0
+          || !territory(this.territory, x + 1, z, w.n) && px === PX - 1 || !territory(this.territory, x, z + 1, w.n) && py === PX - 1);
         if (edge) { r = 196; g = 226; bl = 255; }
       }
       if (dep) {
@@ -401,8 +450,14 @@ export class BattleView {
   }
 
   onEvents(events: SimEvent[], simT: number) {
+    this.men.castShadow = !this.w.zombies;
+    if (this.w.zombies && !this.menDense) this.menDense = soldier(false);
+    if (this.w.zombies) this.zombieUnitSlots();
+    for (const e of events) if (e.e === 'spawn') { const u = this.w.units[e.unit - 1]; this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; }
     if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory); // tick0 的 map 重播要同步城鎮與地面。
+    if (this.n !== this.w.n) this.setWorld(this.w, this.territory);   // R042：同一個世界在 tick0 換了大小，緩衝照新的 w.n 重配
     if (this.holeMesh) this.holes14(events);
+    for (const e of events) if (e.e === 'fire') this.fire44[e.unit] = simT;
     if (this.r8) this.vehicles8(events, simT);
     if (this.r4) { this.frameNo++; for (const e of events) this.fx4(e, simT); }   // 世界剛走一步：可見度快取作廢
     let townDirty = false, groundDirty = false, vegetationDirty = false;
@@ -410,7 +465,7 @@ export class BattleView {
     if (trenchEvent) vegetationDirty = true;   // noR118 只隱藏壕溝，仍同步模擬已清除的植被。
     if (this.trench118.sync(this.w, trenchEvent)) {
       // 只在布陣狀態改變時整圖重刻，包含新接線的舊鄰格與取消後的空格。
-      for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) this.paintCell(x, z);
+      for (let z = 0; z < this.n; z++) for (let x = 0; x < this.n; x++) this.paintCell(x, z);
       groundDirty = true; vegetationDirty = true;
     }
     for (const e of events) {
@@ -426,20 +481,22 @@ export class BattleView {
         const b = this.w.blds[e.bld - 1];
         if (b) {
           // R027 路緣讀鄰格 occ；新房屋落地也重畫一格邊緣，與整圖重播一致。
-          for (let z = Math.max(0, b.z - 1); z < Math.min(N, b.z + b.d + 1); z++) for (let x = Math.max(0, b.x - 1); x < Math.min(N, b.x + b.w + 1); x++) this.paintCell(x, z);
+          for (let z = Math.max(0, b.z - 1); z < Math.min(this.n, b.z + b.d + 1); z++) for (let x = Math.max(0, b.x - 1); x < Math.min(this.n, b.x + b.w + 1); x++) this.paintCell(x, z);
           groundDirty = true;
         }
       } else if (e.e === 'impact') {
+        if (e.kind === SHELL_MELEE) continue;
         if (e.kind === SHELL_SMOKE) continue;   // R107：持續煙幕從世界重建，不冒充高爆／穿甲彈著
         const x = e.x / SUB, z = e.z / SUB;
         if (e.kind === SHELL_HE) {
           const cx = Math.floor(x), cz = Math.floor(z);
-          if (cx >= 0 && cz >= 0 && cx < N && cz < N) { this.paintCell(cx, cz); groundDirty = true; }
+          if (inGrid(this.w, cx, cz)) { this.paintCell(cx, cz); groundDirty = true; }
           if (this.fxOn && !this.r4) this.burst(x, 0.1, z, 0.55, simT, 5, false);
         } else if (this.fxOn && !this.r4) this.burst(x, e.bld ? 0.35 : 0.12, z, 0.22, simT, 2, !!e.bld);
       } else if (e.e === 'fire' && this.fxOn && !this.r4 && this.visibleUnit(this.w.units[e.unit - 1])) {
-        const u = this.w.units[e.unit - 1], a = Math.atan2(u.aimZ, u.aimX), L = UNIT_KINDS[u.kind].armored ? 0.44 * (TANK_SCALE23[u.kind] ?? 1) : 0.4;
-        this.spawn({ x: e.x / SUB + Math.cos(a) * L, y: u.kind === UK_TANK ? 0.2 : 0.3, z: e.z / SUB + Math.sin(a) * L, t0: simT, life: 0.12, s0: 0.07, s1: 0.12, vy: 0, c0: new THREE.Color(0xfff3b0), c1: new THREE.Color(0xffb040) });
+        if (this.w.units[e.unit - 1].kind === UK_ZOMBIE) continue;
+        const u = this.w.units[e.unit - 1], a = Math.atan2(u.aimZ, u.aimX), L = UNIT_KINDS[u.kind].armored ? muzzleL(u.kind) : 0.4;
+        this.spawn({ x: e.x / SUB + Math.cos(a) * L, y: u.kind === UK_TANK ? 0.2 : ART44[u.kind] ? muzzleY(u.kind) : 0.3, z: e.z / SUB + Math.sin(a) * L, t0: simT, life: 0.12, s0: 0.07, s1: 0.12, vy: 0, c0: new THREE.Color(0xfff3b0), c1: new THREE.Color(0xffb040) });
       } else if (e.e === 'kill' && this.visibleUnit(this.w.units[e.unit - 1])) {
         this.wrecks.push({ id: e.unit, until: simT + 10 });
         const u = this.w.units[e.unit - 1];
@@ -454,6 +511,24 @@ export class BattleView {
   private spawn(f: Fx) {
     if (this.fx.length >= MAX_FX) this.fx.shift();
     this.fx.push(f);
+  }
+  // 波次保留穩定 id，死者會累積；只擴 id 狀態，不增加實際畫出的網格容量。
+  private zombieUnitSlots() {
+    const old = this.prevX.length;
+    if (this.w.units.length < old) return;
+    const size = Math.max(old * 2, this.w.units.length + 1);
+    const grow = <T extends Int8Array | Int32Array | Float64Array>(a: T, fill = 0, factor = 1): T => {
+      const C = a.constructor as { new(length: number): T }, b = new C(size * factor);
+      if (fill) b.fill(fill); b.set(a); return b;
+    };
+    this.lastMen = grow(this.lastMen, -1); this.prevX = grow(this.prevX); this.prevZ = grow(this.prevZ); this.yaw = grow(this.yaw);
+    this.trackLast = grow(this.trackLast, -1, 2); this.recoilT0 = grow(this.recoilT0, -99); this.flashT0 = grow(this.flashT0, -99);
+    this.lastHp = grow(this.lastHp); this.turretYaw = grow(this.turretYaw); this.fire44 = grow(this.fire44, -99);
+    this.barHp = grow(this.barHp); this.barFrom = grow(this.barFrom); this.barHitT = grow(this.barHitT, -99);
+    for (const u of this.w.units) if (u.id >= old) {
+      this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = this.turretYaw[u.id] = Math.atan2(-u.aimZ, u.aimX);
+      this.lastHp[u.id] = this.barHp[u.id] = this.barFrom[u.id] = u.hp;
+    }
   }
   // 爆炸：一團火光＋幾朵煙；dust＝塵土色（打在建築上）
   private burst(x: number, y: number, z: number, size: number, t: number, puffs: number, dust: boolean) {
@@ -477,10 +552,11 @@ export class BattleView {
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
-    if (w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
+    if (!w.zombies && w.units.length > MAX_UNITS) console.error(`單位數 ${w.units.length} 超過渲染上限 ${MAX_UNITS}（src/render/battle.ts MAX_UNITS）`);
     let nh = 0, ng = 0, no = 0, nd = 0, nr = 0, nm = 0, na = 0;
     for (const u of w.units) {
       if (!this.visibleUnit(u)) continue;
+      if (w.zombies && !u.alive && u.kind !== UK_ZOMBIE && u.id < w.units.length - 400) continue; // 舊車殘骸不隨波數撐破固定網格。
       const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * alpha) / SUB;
       const z = (this.prevZ[u.id] + (u.z - this.prevZ[u.id]) * alpha) / SUB;
       const mdx = u.x - this.prevX[u.id], mdz = u.z - this.prevZ[u.id];
@@ -491,7 +567,18 @@ export class BattleView {
       // R008 後座：開火後 0.3 秒內沿瞄準反方向退一下再回位（前 0.04 秒猛退，之後慢慢回）
       const rk = (simT - this.recoilT0[u.id]) / 0.3, back = this.r8 && u.alive && rk >= 0 && rk < 1 ? (rk < 0.13 ? rk / 0.13 : (1 - rk) / 0.87) ** 2 : 0;
       const bx = -Math.cos(aim) * back, bz = Math.sin(aim) * back;
-      if (UNIT_KINDS[u.kind].armored) {   // R023 輕、中、重坦克共用車體與砲塔網格，只差縮放
+      const a44 = ART44[u.kind];
+      if (a44) {   // R044 裝甲車、驅逐戰車、突擊砲：同一組車體與砲塔網格，各軸縮放不同
+        const yaw = this.yaw[u.id], top = a44.casemate ? this.casemate44(u, aim, simT) : aim;
+        const cx = -Math.cos(top) * back, cz = Math.sin(top) * back, [hx, hy, hz] = a44.hull, [tx, ty, tz] = a44.top;
+        m.position.set(x + cx * 0.03, 0, z + cz * 0.03); m.rotation.set(0, yaw, u.alive ? back * 0.05 : 0.06); m.scale.set(hx, hy, hz); m.updateMatrix();
+        this.hull.setMatrixAt(nh, m.matrix); this.hull.setColorAt(nh, col);
+        m.rotation.set(0, u.alive ? top : top + 0.5, u.alive ? 0 : 0.12); m.scale.set(tx, ty, tz);
+        m.position.set(x + Math.cos(yaw) * a44.fwd + cx * 0.09, (u.alive ? 0 : -0.02) + 0.15 * (hy - ty), z - Math.sin(yaw) * a44.fwd + cz * 0.09); m.updateMatrix();
+        const tossed = !u.alive && this.r4 ? this.toss.get(u.id) : undefined;
+        this.turret.setMatrixAt(nh, tossed ? this.tossMatrix(tossed, x, z, simT, tx, ty, tz) : m.matrix); this.turret.setColorAt(nh, col);
+        nh++;
+      } else if (UNIT_KINDS[u.kind].armored) {   // R023 輕、中、重坦克共用車體與砲塔網格，只差縮放
         const ts = TANK_SCALE23[u.kind] ?? 1;
         m.position.set(x + bx * 0.03, 0, z + bz * 0.03); m.rotation.set(0, this.yaw[u.id], u.alive ? back * 0.05 : 0.06); m.scale.set(ts * (u.kind === UK_HEAVY ? 1.06 : 1), ts * (u.kind === UK_LIGHT ? 0.85 : 1), ts); m.updateMatrix();
         this.hull.setMatrixAt(nh, m.matrix); this.hull.setColorAt(nh, col);
@@ -507,7 +594,7 @@ export class BattleView {
         ng++;
         if (u.kind === UK_MORTAR && u.alive) nm = this.crew22(u, x, z, col, nm);
       }
-      if (u.kind === UK_INFANTRY) nm = this.squad21(u, x, z, simT, col, nm);
+      if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(u, x, z, simT, u.kind === UK_ZOMBIE ? C_ZOMBIE : col, nm);
       if (u.kind === UK_OBSERVER) {
         const y = this.unitHeight(u);
         m.position.set(x, y, z); m.rotation.set(0, this.yaw[u.id], u.alive ? 0 : Math.PI / 2); m.scale.setScalar(1); m.updateMatrix();
@@ -520,7 +607,7 @@ export class BattleView {
           m.position.y = this.unitHeight(u) + 0.02; m.updateMatrix();
           this.rings.setMatrixAt(nr, m.matrix); this.rings.setColorAt(nr, C_SEL); nr++;
           if (this.armorArcs && u.side === SIDE_PLAYER && UNIT_KINDS[u.kind].armored && u.hullX !== undefined && u.hullZ !== undefined) {
-            const size = TANK_SCALE23[u.kind] ?? 1;
+            const size = vehSize(u.kind);
             m.position.set(x, 0.025, z); m.scale.setScalar(size); m.rotation.set(0, this.yaw[u.id], 0); m.updateMatrix();
             this.armorArcs.setMatrixAt(na, m.matrix); this.armorArcs.setColorAt(na++, C_ARMOR_FRONT);
             m.rotation.y += Math.PI; m.updateMatrix();
@@ -593,6 +680,7 @@ export class BattleView {
     this.range113?.update(w, selected, showRanges);
     this.multi122.update(w, selected, showRanges && this.multiRangeEnabled);
     nm = this.bodies21(nm);
+    this.men.geometry = w.zombies && nm > 320 ? this.menDense! : this.menNormal; // 滿人口群眾保留頭／身／雙腿，仍只有同一個網格呼叫。
     fin(this.men, nm);
     if (this.armorArcs) fin(this.armorArcs, na);
     fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
@@ -602,9 +690,9 @@ export class BattleView {
   // 射擊線索（開火、彈著、擊毀）照 R100：看不到的地方不畫；建築的損壞本來就看得到，它的煙火照畫。
   private vis = (x: number, z: number): boolean => {
     if (!this.fogOn) return true;
-    const cx = Math.floor(x), cz = Math.floor(z);
-    if (cx < 0 || cz < 0 || cx >= N || cz >= N) return false;
-    const i = cz * N + cx;
+    const cx = Math.floor(x), cz = Math.floor(z), n = this.n;
+    if (cx < 0 || cz < 0 || cx >= n || cz >= n) return false;
+    const i = cz * n + cx;
     if (this.visStamp[i] !== this.frameNo) { this.visStamp[i] = this.frameNo; this.visVal[i] = spotted(this.w, SIDE_PLAYER, (cx + 0.5) * SUB, (cz + 0.5) * SUB) ? 1 : 0; }
     return this.visVal[i] === 1;
   };
@@ -649,6 +737,7 @@ export class BattleView {
   }
 
   private fx4(e: SimEvent, t: number) {
+    if ((e.e === 'impact' && e.kind === SHELL_MELEE) || (e.e === 'fire' && this.w.units[e.unit - 1]?.kind === UK_ZOMBIE)) return;
     if (e.e === 'impact' && e.kind === SHELL_SMOKE) return;   // 沒有火球、火星、碎片或震動
     const s = this.fxSeq++, H = (k: number, salt: number) => hash2(s, k, salt);
     if (e.e === 'fire') {
@@ -659,7 +748,7 @@ export class BattleView {
         this.glow!.spawn({ x: x0, y: y0, z: z0, t0: t, life: 0.06, s0: 0.03, s1: 0.07, c0: 0xfff6c8, c1: 0xffa040, fog: u.side !== SIDE_PLAYER });
         return;
       }
-      const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER, L = gun ? 0.42 : u.kind === UK_MORTAR ? 0.16 : 0.44, y = gun ? 0.32 : u.kind === UK_MORTAR ? 0.26 : u.kind === UK_ATGUN ? 0.15 : 0.2;
+      const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER, L = gun ? 0.42 : u.kind === UK_MORTAR ? 0.16 : ART44[u.kind] ? muzzleL(u.kind) : 0.44, y = gun ? 0.32 : u.kind === UK_MORTAR ? 0.26 : u.kind === UK_ATGUN ? 0.15 : ART44[u.kind] ? muzzleY(u.kind) : 0.2;   // R044 新車的槍口照各自的砲塔縮放
       const mx = e.x / SUB + Math.cos(a) * L, mz = e.z / SUB + Math.sin(a) * L, fog = u.side !== SIDE_PLAYER;
       this.glow!.spawn({ x: mx, y, z: mz, t0: t, life: 0.08, s0: 0.1, s1: gun ? 0.34 : 0.22, c0: 0xfff6c8, c1: 0xffa040, fog });
       this.glow!.spawn({ x: mx, y, z: mz, vx: Math.cos(a) * 2.2, vz: Math.sin(a) * 2.2, drag: 9, t0: t, life: 0.11, s0: 0.07, s1: gun ? 0.2 : 0.13, c0: 0xffe090, c1: 0xff6020, fog });
@@ -703,7 +792,7 @@ export class BattleView {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
       const x = u.x / SUB, z = u.z / SUB, fog = u.side !== SIDE_PLAYER;
-      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY) {
+      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) {
         for (let k = 0; k < 3; k++) this.puff!.spawn({ x, y: 0.08, z, vy: 0.2, t0: t + 0.05 * k, life: 1.4, s0: 0.06, s1: 0.22, c0: 0x9a8b74, c1: 0xa59c8c, fog });
         return;
       }
@@ -811,14 +900,14 @@ export class BattleView {
   }
 
   // 砲塔飛起：彈道、翻滾，落在車旁（繞砲塔中心轉）
-  private tossMatrix(T: Toss, x: number, z: number, t: number): THREE.Matrix4 {
+  private tossMatrix(T: Toss, x: number, z: number, t: number, sx = 1, sy = 1, sz = 1): THREE.Matrix4 {
     const dt = Math.max(0, t - T.t0), g = 9, vy = 3.4, tl = (2 * vy) / g, k = Math.min(dt, tl);
     const px = x + T.vx * k, pz = z + T.vz * k;
     let py: number, rx: number, ry: number, rz: number;
     if (dt < tl) { py = 0.2 + vy * dt - 0.5 * g * dt * dt; rx = T.spin * dt; ry = T.yaw + T.spin * 0.5 * dt; rz = T.spin * 0.7 * dt; }
     else { py = 0.07; rx = T.tilt * 0.8; ry = T.yaw + T.spin * 0.5 * tl; rz = 0.45 + T.tilt * 0.3; }
     const e = this.tmp;
-    e.position.set(px, py, pz); e.rotation.set(rx, ry, rz); e.scale.setScalar(1); e.updateMatrix();
+    e.position.set(px, py, pz); e.rotation.set(rx, ry, rz); e.scale.set(sx, sy, sz); e.updateMatrix();
     return this.mA.multiplyMatrices(e.matrix, this.mB.makeTranslation(0, -0.2, 0));
   }
 
@@ -842,14 +931,14 @@ export class BattleView {
   private vehicles8(events: SimEvent[], t: number) {
     this.stepNo++;
     for (const e of events) if (e.e === 'fire') this.recoilT0[e.unit] = t;
-    const W = N * PX;
+    const n = this.n, W = n * PX;
     for (const u of this.w.units) {
       if (u.hp < this.lastHp[u.id]) this.flashT0[u.id] = t;
       this.lastHp[u.id] = u.hp;
       if (!u.alive || UNIT_KINDS[u.kind].radius === 0) continue;   // 步兵（觀測員、步兵班）不壓車轍
       const dx = u.x - this.prevX[u.id], dz = u.z - this.prevZ[u.id];
       if (!dx && !dz) continue;
-      const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = UNIT_KINDS[u.kind].armored ? 0.13 * (TANK_SCALE23[u.kind] ?? 1) : 0.11;
+      const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = UNIT_KINDS[u.kind].armored ? (ART44[u.kind] ? 0.13 * ART44[u.kind].hull[2] : 0.13 * (TANK_SCALE23[u.kind] ?? 1)) : 0.11;
       // 兩條車轍：沿這一步走過的線段，每 1/8 格蓋一個像素；同一條車轍連續壓到同一個像素只算一次
       const steps = Math.max(1, Math.ceil((len / SUB) * PX));
       for (let side = 0; side < 2; side++) {
@@ -862,13 +951,13 @@ export class BattleView {
           if (this.trackLast[slot] === pi) continue;
           this.trackLast[slot] = pi;
           if (this.tracks[pi] < 6) this.tracks[pi]++;
-          const ci = Math.floor(gz / PX) * N + Math.floor(gx / PX);
+          const ci = Math.floor(gz / PX) * n + Math.floor(gx / PX);
           if (this.dirtyStamp[ci] !== this.stepNo) { this.dirtyStamp[ci] = this.stepNo; this.dirtyList[this.dirtyN++] = ci; }
         }
       }
       // 行進揚塵：車尾，草地農田每步、路上每三步一朵（R004 的煙塵池；?fx=off 時沒有池＝不揚塵）
       if (this.puff) {
-        const cx = Math.floor(u.x / SUB), cz = Math.floor(u.z / SUB), road = this.w.ter[idx(cx, cz)] === TER_ROAD;
+        const cx = Math.floor(u.x / SUB), cz = Math.floor(u.z / SUB), road = this.w.ter[cellIdx(this.w, cx, cz)] === TER_ROAD;
         if (!road || (this.stepNo + u.id) % 3 === 0) {
           const h = hash2(u.id, this.stepNo, 41), bx = u.x / SUB - (dx / len) * 0.3, bz = u.z / SUB - (dz / len) * 0.3;
           this.puff.spawn({ x: bx + (h - 0.5) * 0.2, y: 0.05, z: bz + (hash2(u.id, this.stepNo, 42) - 0.5) * 0.2, vx: -(dx / len) * 0.3, vz: -(dz / len) * 0.3, drag: 2, vy: 0.18,
@@ -877,7 +966,7 @@ export class BattleView {
       }
     }
     if (this.dirtyN) {
-      for (let i = 0; i < this.dirtyN; i++) { const c = this.dirtyList[i]; this.paintCell(c % N, (c - (c % N)) / N); }
+      for (let i = 0; i < this.dirtyN; i++) { const c = this.dirtyList[i]; this.paintCell(c % n, (c - (c % n)) / n); }
       this.dirtyN = 0;
       this.groundTex.needsUpdate = true;   // 一步最多上傳一次
     }
@@ -888,7 +977,7 @@ export class BattleView {
     const dt = t - this.turretT;
     this.turretT = t;
     for (const u of this.w.units) {
-      const want = Math.atan2(-u.aimZ, u.aimX);
+      const want = ART44[u.kind]?.casemate && !this.engaged44(u, t) && u.hullX !== undefined && u.hullZ !== undefined ? Math.atan2(-u.hullZ, u.hullX) : Math.atan2(-u.aimZ, u.aimX);   // R044 固定戰鬥室沒在打就轉回車頭
       if (dt < 0 || dt > 1) { this.turretYaw[u.id] = want; continue; }
       let d = want - this.turretYaw[u.id];
       d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
@@ -897,6 +986,19 @@ export class BattleView {
     }
   }
 
+
+  // ======== R044 固定戰鬥室 ========
+  // 正在打才對著目標：停著的攻擊／射擊指令，或一個裝填時間（＋CASEMATE_HOLD）內開過火——兩發之間不轉回車頭，下一發出膛時戰鬥室已經對準。
+  // （模擬只在冷卻歸零、目標進射程的那一步才開第一發，所以第一發跟一般砲塔一樣來不及轉。）邊走邊打的突擊砲照樣轉；要停下來才能開火的驅逐戰車在走就朝車頭。
+  // 模擬照舊瞄準，這裡只決定畫成什麼方向
+  private engaged44(u: Unit, t: number): boolean {
+    const k = UNIT_KINDS[u.kind], still = u.pathIdx >= u.path.length;
+    return u.alive && (still || !k.setup) && ((still && (u.order === ORD_ATTACK || u.order === ORD_FIRE_AT)) || t - this.fire44[u.id] < k.reload / TICK_HZ + CASEMATE_HOLD);
+  }
+  private casemate44(u: Unit, aim: number, t: number): number {
+    if (this.r8 && u.alive) return this.turretYaw[u.id];   // R008 開著：turn8 已經平滑轉向（目標或車頭）
+    return this.engaged44(u, t) ? aim : this.yaw[u.id];
+  }
 
   // ======== R009 血條與耐久條 ========
   // 單位：受過傷或被選取才畫；扣血時白色殘影從舊血量縮到新血量（0.5 秒）。敵方只在看得到時畫（R100）。
@@ -918,7 +1020,7 @@ export class BattleView {
     // 我方正在砲擊的建築（同一棟只畫一次）
     for (const u of w.units) {
       if (!u.alive || u.side !== SIDE_PLAYER || u.order !== ORD_FIRE_AT || u.target > 0) continue;
-      const id = w.occ[idx(u.tx, u.tz)], b = id ? w.blds[id - 1] : null;
+      const id = w.occ[cellIdx(w, u.tx, u.tz)], b = id ? w.blds[id - 1] : null;
       if (!b || b.hp <= 0) continue;
       let dup = false;
       for (let i = 0; i < dbg.n; i++) if (dbg.id[i] === -b.id) dup = true;
@@ -979,7 +1081,7 @@ export class BattleView {
       // 剩下的路：沿折線每 0.3 格一段
       let px = x, pz = z, walked = 0, ex = x, ez = z;
       for (let i = u.pathIdx; i < u.path.length && this.nd11 < DASH_CAP; i++) {
-        const c = u.path[i], cx = (c % N) + 0.5, cz = (c - (c % N)) / N + 0.5;
+        const c = u.path[i], cx = (c % w.n) + 0.5, cz = (c - (c % w.n)) / w.n + 0.5;
         walked = this.dashes11(u.id, DK_PATH, px, pz, cx, cz, col, walked);
         px = cx; pz = cz; ex = cx; ez = cz;
       }
@@ -1128,6 +1230,7 @@ export class BattleView {
     for (let i = men; i < last; i++) {   // 剛倒下的人：留一個躺著的在他的位置
       const [ax, az] = SLOTS[i], bx = x + ax * cy + az * sy, bz = z - ax * sy + az * cy, B = this.bodies, j = B.next;
       B.x[j] = bx; B.z[j] = bz; B.y[j] = y; B.yaw[j] = yaw + (i - 2.5) * 0.7; B.side[j] = u.side;
+      this.zombieBodies[j] = u.kind === UK_ZOMBIE ? 1 : 0; this.bodyBorn[j] = t;
       B.next = (B.next + 1) % BODY_CAP; B.n = Math.min(BODY_CAP, B.n + 1);
     }
     this.lastMen[u.id] = men;
@@ -1135,7 +1238,7 @@ export class BattleView {
     for (let i = 0; i < men && n < MEN_CAP; i++) {
       const [ax, az] = SLOTS[i], bob = moving ? 0.012 * Math.abs(Math.sin(t * 11 + i * 1.7)) : 0;
       m.position.set(x + (ax * cy + az * sy) * scale, y + bob, z + (-ax * sy + az * cy) * scale);
-      m.rotation.set(0, moving ? yaw : aim, 0); m.scale.setScalar(1); m.updateMatrix();
+      m.rotation.set(u.kind === UK_ZOMBIE ? 0.18 : 0, moving ? yaw : aim, u.kind === UK_ZOMBIE ? Math.sin(t * 4 + i + u.id) * 0.06 : 0); m.scale.setScalar(1); m.updateMatrix();
       this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, col); n++;
     }
     this.menDbg.alive += men;
@@ -1155,9 +1258,12 @@ export class BattleView {
     const B = this.bodies, m = this.tmp;
     for (let k = 0; k < B.n && n < MEN_CAP; k++) {
       const j = (B.next - B.n + k + BODY_CAP) % BODY_CAP;
+      const zombie = !!this.zombieBodies[j], age = this.lastT - this.bodyBorn[j];
+      const fade = !!this.w.zombies;
+      if (fade && (k < B.n - 64 || age >= 30)) continue;
       if (B.side[j] !== SIDE_PLAYER && !this.visibleAt(B.x[j] * SUB, B.z[j] * SUB)) continue;   // 敵方的屍體在霧裡不畫
-      m.position.set(B.x[j], B.y[j] + 0.03, B.z[j]); m.rotation.set(0, B.yaw[j], Math.PI / 2); m.scale.setScalar(1); m.updateMatrix();
-      this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, C_BODY[B.side[j]]); n++;
+      m.position.set(B.x[j], B.y[j] + 0.03, B.z[j]); m.rotation.set(0, B.yaw[j], Math.PI / 2); m.scale.setScalar(fade ? Math.min(1, (30 - age) / 10, (k - Math.max(0, B.n - 64) + 1) / 8) : 1); m.updateMatrix();
+      this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, zombie ? C_ZOMBIE_BODY : C_BODY[B.side[j]]); n++;
     }
     return n;
   }
@@ -1177,7 +1283,7 @@ export class BattleView {
     const wpp = (2 * BASE_HALF_H / this.zoom) / cssH;   // 每個 CSS 像素幾格（垂直方向）
     const right = new THREE.Vector3(1, 0, -1).normalize(), fwd = new THREE.Vector3(-1, 0, -1).normalize();
     this.target.addScaledVector(right, -dxCss * wpp).addScaledVector(fwd, dyCss * wpp / Math.sin(ELEV));
-    this.target.x = Math.max(0, Math.min(N, this.target.x)); this.target.z = Math.max(0, Math.min(N, this.target.z));
+    this.target.x = Math.max(0, Math.min(this.n, this.target.x)); this.target.z = Math.max(0, Math.min(this.n, this.target.z));
   }
   zoomBy(f: number) { this.zoom = Math.max(0.55, Math.min(3, this.zoom * f)); }
   // R012：縮放時 (cssX,cssY) 底下的地面點不動（正交鏡頭、方向固定：縮放後把焦點平移回來）
@@ -1186,8 +1292,8 @@ export class BattleView {
     this.zoomBy(f);
     const b = this.groundAt(cssX, cssY, cssW, cssH);
     if (!a || !b) return;
-    this.target.x = Math.max(0, Math.min(N, this.target.x + a.x - b.x));
-    this.target.z = Math.max(0, Math.min(N, this.target.z + a.z - b.z));
+    this.target.x = Math.max(0, Math.min(this.n, this.target.x + a.x - b.x));
+    this.target.z = Math.max(0, Math.min(this.n, this.target.z + a.z - b.z));
   }
 
   // 螢幕點 → 點到的建築格（先打建築的網格：點屋頂、牆面都算那棟；瓦礫不算）
@@ -1199,8 +1305,8 @@ export class BattleView {
       // 沿著視線往內推一點再取格，避免剛好落在牆面外緣的格線上
       const p = hit.point.clone().addScaledVector(ray.ray.direction, 0.02);
       const x = Math.floor(p.x), z = Math.floor(p.z);
-      if (x < 0 || z < 0 || x >= N || z >= N) continue;
-      const id = this.w.occ[idx(x, z)];
+      if (!inGrid(this.w, x, z)) continue;
+      const id = this.w.occ[cellIdx(this.w, x, z)];
       if (id && this.w.blds[id - 1].hp > 0) return [x, z];
     }
     return null;
@@ -1237,6 +1343,7 @@ export class BattleView {
 
   // 換世界（重開、跑腳本）時釋放 GPU 資源
   dispose() {
+    (this.men.geometry === this.menNormal ? this.menDense : this.menNormal)?.dispose();
     this.scene.traverse(o => {
       // 燈要 dispose 才會放掉 2048² 的陰影貼圖；實例化網格要 dispose 才會放掉實例緩衝
       if ((o as THREE.Light).isLight || (o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.Light | THREE.InstancedMesh).dispose();

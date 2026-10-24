@@ -1,4 +1,5 @@
-# 每次推送與 PR：unit 工作跑型別與全部 Node 守衛；smoke 接收樣張後建置、跑 Chrome，再合併上傳附件。
+# 每次推送與 PR：Node 端守衛分四份並行（第 1 份另跑型別檢查）＋同時建置單檔、跑無頭 Chrome 煙霧測試（WebGL 走 SwiftShader）→ 樣張當附件。
+# smoke 是總閘（R039）：四份 unit 與 chrome 都綠它才綠；分支保護、gpt-merge、AGENTS.md 說的「smoke 與 gpt-lane 都要綠」照舊看它。
 # gpt/* 分支另跑 GPT 車道守衛（用 main 上的那一份）。main 綠燈之後把 dist/index.html 發到 GitHub Pages。
 name: ci
 
@@ -18,9 +19,15 @@ permissions:
   contents: read
 
 jobs:
+  # R039：90 支守衛一支接一支跑已經 15 分鐘（上限 20），分四份並行；分法寫在 tools/unit.mjs（固定、跟機器無關）
   unit:
+    name: unit (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,47 +37,32 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: 中文字型（樣張上的 HUD 才看得懂）
+      - name: 中文字型（瀏覽器守衛量版面、拍樣張要用）
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-wqy-zenhei
-      - run: npm run typecheck
-      - name: Node 端守衛（純度、決定性、黃金雜湊、模擬行為）
+      - if: matrix.shard == 1
+        run: npm run typecheck
+      - name: Node 端守衛（第 1 份另跑純度、決定性、黃金雜湊、模擬行為）
         run: npm run unit 2>&1 | tee unit-run.txt; exit ${PIPESTATUS[0]}
         shell: bash
-      - name: 保存 Node 守衛日誌與樣張
-        uses: actions/upload-artifact@v4
+        env:
+          UNIT_SHARD: ${{ matrix.shard }}/4
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: unit-shots-${{ github.event.pull_request.head.sha || github.sha }}
+          name: unit-${{ matrix.shard }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             unit-run.txt
             shots/*.png
           if-no-files-found: warn
           retention-days: 14
 
-  smoke:
-    needs: unit
-    # 前置失敗也收回已有圖片，但不在取消後另啟工作；結果守衛仍會使本工作失敗。
-    if: ${{ !cancelled() }}
+  chrome:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: 取回同一提交的 Node 樣張與日誌
-        uses: actions/download-artifact@v4
-        with:
-          name: unit-shots-${{ github.event.pull_request.head.sha || github.sha }}
-          path: .
-      - name: 前置 Node 守衛必須成功
-        env:
-          UNIT_RESULT: ${{ needs.unit.result }}
-        run: |
-          if [ "$UNIT_RESULT" != "success" ]; then
-            printf 'unit result: %s\n' "$UNIT_RESULT"
-            exit 1
-          fi
-        shell: bash
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -87,7 +79,6 @@ jobs:
         with:
           name: shots-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            unit-run.txt
             smoke-run.txt
             shots/*.png
           if-no-files-found: warn
@@ -96,6 +87,21 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           path: dist
+
+  # 總閘：名字沿用 smoke（分支保護與合併條件看它）。四份 unit 與 chrome 都是 success 才綠；有一個紅、被跳過或取消就紅
+  smoke:
+    if: ${{ !cancelled() }}
+    needs: [unit, chrome]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: unit 四份與 chrome 都要綠
+        env:
+          UNIT: ${{ needs.unit.result }}
+          CHROME: ${{ needs.chrome.result }}
+        run: |
+          echo "unit=$UNIT chrome=$CHROME"
+          test "$UNIT" = success && test "$CHROME" = success
 
   gpt-lane:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'gpt/')
@@ -118,7 +124,7 @@ jobs:
 
   pages:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [unit, smoke]
+    needs: smoke
     runs-on: ubuntu-24.04
     permissions:
       pages: write

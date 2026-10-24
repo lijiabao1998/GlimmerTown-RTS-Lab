@@ -1,6 +1,6 @@
 // R121 independent fixtures: no AI source changes, no building/occupancy masquerading.
 import assert from 'node:assert/strict';
-import {createWorld,hashWorld,N,SUB,idx,center,cellOf,wireAt,wireBlocks,blocks,BK_WIRE,BK_COTTAGE,UNIT_KINDS,UK_TANK,UK_HOWITZER,UK_OBSERVER,UK_INFANTRY,UK_MORTAR,ORD_IDLE,SHELL_HE,bldMaxHp} from '../src/sim/world.ts';
+import {createWorld,hashWorld,N,SUB,idx,center,cellOf,wireAt,wireBlocks,blocks,BK_WIRE,BK_COTTAGE,UNIT_KINDS,UK_TANK,UK_HOWITZER,UK_OBSERVER,UK_INFANTRY,UK_MORTAR,UK_ZOMBIE,ORD_IDLE,SHELL_HE,bldMaxHp} from '../src/sim/world.ts';
 import {applyBuild,buildError,pointsUsed,buildKind} from '../src/sim/build.ts';
 import {applyTrench} from '../src/sim/trenches.ts';
 import {applyMap} from '../src/sim/maps.ts';
@@ -32,7 +32,7 @@ group('connectivity',()=>{
 });
 group('paths',()=>{
  for(let kind=0;kind<UNIT_KINDS.length;kind++){
-  const w=blank();applyBuild(w,cmd());const foot=[UK_OBSERVER,UK_INFANTRY,UK_MORTAR].includes(kind);
+  const w=blank();applyBuild(w,cmd());const foot=[UK_OBSERVER,UK_INFANTRY,UK_MORTAR,UK_ZOMBIE].includes(kind); // R045 喪屍也必須繞網，不把新種類當車輛。
   const p=findPath(w,19,20,22,20,1,1,kind);assert.equal(p.some(c=>wireAt(w,c%N,Math.floor(c/N))),!foot,'paths: infantry detour vehicles cross');assert.equal(blocks(w,20,20),false);
   const u=add(w,kind,19,20);add(w,UK_TANK,28,28,1);step(w,[{t:'move',side:0,ids:[u.id],x:22,z:20}]);
   let crossed=false;for(let t=0;t<Math.ceil(8*SUB/UNIT_KINDS[kind].speed);t++){step(w,[]);crossed ||= !!wireAt(w,cellOf(u.x),cellOf(u.z));if(foot)assert.equal(wireBlocks(w,cellOf(u.x),cellOf(u.z),kind),false,'paths: actual movement never enters wire');}

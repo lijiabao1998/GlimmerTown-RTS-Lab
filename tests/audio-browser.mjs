@@ -41,7 +41,7 @@ function audioFixture(name) {
     const building = name.includes('rubble') || name === 'roof';
     if (building) {
       const b = { id: 1, kind: BK_COTTAGE, x: Math.floor(x / SUB), z: Math.floor(z / SUB), w: 1, d: 1, floors: 1, hp: name === 'roof' ? 75 : 1, maxHp: 100 };
-      w.blds.push(b); w.occ[b.z * N + b.x] = 1;
+      w.blds.push(b); w.occ[b.z * w.n + b.x] = 1;
     }
     const kind = name === 'he' ? SHELL_HE : name === 'small-impact' ? SHELL_SMALL : name === 'smoke-impact' ? SHELL_SMOKE : SHELL_AP;
     for (let i = 0; i < (name === 'burst' ? 60 : 1); i++) w.shells.push({ id: w.nextShell++, side: 0, kind, shooter: 1,

@@ -23,7 +23,7 @@ const put = (w, kind = 0, x = 10, z = 10, side = 0, rot = 0) => { w.trenches = {
 const queue = (w, g, t, kind = SHELL_AP, hitBld = 0) => w.shells.push({ id: w.nextShell++, side: g.side, kind, shooter: g.id, sx: g.x, sz: g.z, ex: t.x, ez: t.z, t: 0, T: 1, target: hitBld ? 0 : t.id, hitBld });
 const hit = (w, g, t, kind = SHELL_AP, hitBld = 0) => { const hp = t.hp; queue(w, g, t, kind, hitBld); step(w, []); return hp - t.hp; };
 // R036：facing＝R104 的車體面向（穿甲彈打裝甲目標時正／側／背 75／100／125），沒給就是 100（沒有車體方向的目標）
-const expected = (gun, target, pct, offset = 0, splash = false, facing = 100) => { const g = UNIT_KINDS[gun], t = UNIT_KINDS[target], falloff = splash ? Math.floor(g.dmgUnit * (g.splash - offset) / g.splash) : Math.floor(g.dmgUnit * facing / 100); return Math.floor(Math.floor(falloff * (t.armored ? g.pierce : g.soft) / 100) * t.armor * pct / 10000); };
+const expected = (gun, target, pct, offset = 0, splash = false, facing = 100) => { const g = UNIT_KINDS[gun], t = UNIT_KINDS[target], falloff = splash ? Math.floor(g.dmgUnit * (g.splash - offset) / g.splash) : Math.floor(g.dmgUnit * facing / 100); return Math.floor(Math.floor(falloff * (t.armored && !(t.openTop && g.men > 0) ? g.pierce : g.soft) / 100) * t.armor * pct / 10000); }; // R044：開頂車被步兵打照軟目標算
 const sorted = cells => cells.map(([x, z]) => `${x},${z}`).sort();
 // 手寫各方向的相對格；不呼叫受測旋轉來產生答案。
 const shapes = [

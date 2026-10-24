@@ -1,13 +1,14 @@
 // R015 小地圖：上半是純函式（座標換算、要畫哪些點，Node 守衛直接測），下半是 DOM 畫布。只讀世界、不改世界。
-import { N, TER_ROAD, TER_FIELD, TER_MUD, SIDE_PLAYER, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
+import { cellIdx, TER_ROAD, TER_FIELD, TER_MUD, SIDE_PLAYER, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
 import { drawCounterbattery } from './counterbattery.ts';
 import { VEG_HEDGE, VEG_WOOD, vegetationAt } from '../sim/vegetation.ts';
 import { TrenchRaster, TRENCH_E, TRENCH_S, TRENCH_W, TRENCH_N, TRENCH_MINI_COLORS } from '../render/trenches.ts';
 
 // 菱形，方向跟主畫面一樣：主畫面的「右」＝世界 (+x,−z)、「上」＝世界 (−x,−z)。
-// 小地圖 px = w/2 + (x − z)·s、py = (x + z)·s/2，s = w/(2N)；整張高 = w/2。
+// 小地圖 px = w/2 + (x − z)·s、py = (x + z)·s/2，s = w/(2n)，n＝世界的地圖邊長 w.n；整張高 = w/2。
+// n 預設 32 只給舊守衛的一參數呼叫；畫面一律傳世界的 w.n（R042）。
 export interface MiniGeo { w: number; h: number; s: number }
-export const miniGeo = (w: number): MiniGeo => ({ w, h: w / 2, s: w / (2 * N) });
+export const miniGeo = (w: number, n = 32): MiniGeo => ({ w, h: w / 2, s: w / (2 * n) });
 export function toMini(g: MiniGeo, x: number, z: number, out: [number, number] = [0, 0]): [number, number] {
   out[0] = g.w / 2 + (x - z) * g.s; out[1] = ((x + z) * g.s) / 2; return out;
 }
@@ -31,7 +32,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
   cvs.id = 'minimap';
   (document.getElementById('hud') ?? document.body).appendChild(cvs);
   const base = document.createElement('canvas');
-  let baseDirty = true, last = -1, g = miniGeo(160), dpr = 1;
+  let baseDirty = true, last = -1, g = miniGeo(160), dpr = 1, gridN = 0;
   let baseWorld: World | undefined;
   let baseVegetation: World['vegetation'];
   const trenchRaster = new TrenchRaster(a.trenches !== false);
@@ -46,8 +47,8 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     const ctx = base.getContext('2d')!;
     base.width = Math.round(g.w * dpr); base.height = Math.round(g.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, g.w, g.h);
-    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
-      const i = z * N + x, t = w.ter[i], id = w.occ[i], b = id ? w.blds[id - 1] : null;
+    for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) {
+      const i = cellIdx(w, x, z), t = w.ter[i], id = w.occ[i], b = id ? w.blds[id - 1] : null;
       ctx.fillStyle = b ? (stageOf(b) === STAGE_RUBBLE ? '#6f6559' : b.builtBy === SIDE_PLAYER ? '#a9c4e6' : '#cfc3a8')
         : w.crater[i] ? '#4a3f33' : t === TER_ROAD ? '#8f7f62' : t === TER_FIELD ? '#9a9450' : t === TER_MUD ? '#4d6470' : '#5b7a42';
       cell(ctx, x, z);
@@ -61,8 +62,8 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
       }
     }
     // 先畫完地格，再疊接線；跨格的線不會被下一格底色蓋住。
-    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
-      const i = z * N + x, kind = trenchRaster.kinds[i] - 1;
+    for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) {
+      const i = cellIdx(w, x, z), kind = trenchRaster.kinds[i] - 1;
       if (kind < 0 || w.occ[i]) continue;
       const links = trenchRaster.links[i], [cx, cy] = toMini(g, x + 0.5, z + 0.5);
       ctx.beginPath();
@@ -86,14 +87,14 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     if (t - last < 100 && !baseDirty) return;   // 一秒最多重畫 10 次
     last = t;
     const cssW = innerWidth < 640 ? 150 : 200;
-    if (g.w !== cssW || dpr !== Math.min(devicePixelRatio || 1, 2)) { g = miniGeo(cssW); dpr = Math.min(devicePixelRatio || 1, 2); baseDirty = true; }
+    if (g.w !== cssW || dpr !== Math.min(devicePixelRatio || 1, 2) || gridN !== w.n) { g = miniGeo(cssW, w.n); gridN = w.n; dpr = Math.min(devicePixelRatio || 1, 2); baseDirty = true; }
     if (baseDirty) paintBase(w);
     cvs.width = Math.round(g.w * dpr); cvs.height = Math.round(g.h * dpr);
     cvs.style.width = `${g.w}px`; cvs.style.height = `${g.h}px`;
     const ctx = cvs.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(base, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawCounterbattery(ctx, w, counterbatteryProject, a.counterbattery !== false);
+    drawCounterbattery(ctx, w, counterbatteryProject, a.counterbattery !== false, w.n);
     for (const d of miniDots(w, a.visible)) {
       const [px, py] = toMini(g, d.x, d.z);
       ctx.fillStyle = d.side === SIDE_PLAYER ? '#4aa3ff' : '#ff5a3c';
@@ -108,6 +109,6 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
   }
   const pick = (e: PointerEvent) => { const r = cvs.getBoundingClientRect(); return fromMini(g, e.clientX - r.left, e.clientY - r.top); };
   cvs.addEventListener('pointerdown', e => e.stopPropagation());
-  cvs.addEventListener('pointerup', e => { e.stopPropagation(); const [x, z] = pick(e); if (x >= 0 && z >= 0 && x <= N && z <= N) a.tap(x, z); });
+  cvs.addEventListener('pointerup', e => { e.stopPropagation(); const [x, z] = pick(e), n = a.world().n; if (x >= 0 && z >= 0 && x <= n && z <= n) a.tap(x, z); });
   return { frame, dirty: () => { baseDirty = true; }, el: cvs, point: (x, z) => { const r = cvs.getBoundingClientRect(), [px, py] = toMini(g, x, z); return [r.left + px, r.top + py]; } };
 }

@@ -28,8 +28,8 @@ const mapLog = [{ tick: 0, cmd: { t: 'map', id: 1, vegetation: 1 } }, { tick: 0,
 function forestFixture() {
   const w = createWorld(1944);
   w.ter.fill(0); w.occ.fill(0); w.crater.fill(0); w.blds = []; w.units = []; w.shells = []; w.events = [];
-  w.vegetation = { version: 1, cells: new Uint8Array(N * N) };
-  for (const [x, z, v] of [[14,15,1],[14,16,1],[14,17,1],[16,16,2],[17,18,2],[18,18,2],[17,19,2],[18,19,2]]) w.vegetation.cells[z * N + x] = v;
+  w.vegetation = { version: 1, cells: new Uint8Array(w.n * w.n) };
+  for (const [x, z, v] of [[14,15,1],[14,16,1],[14,17,1],[16,16,2],[17,18,2],[18,18,2],[17,19,2],[18,19,2]]) w.vegetation.cells[z * w.n + x] = v;
   for (const [side, x, z] of [[0,12,16],[1,16,16]]) w.units.push({
     id: w.units.length + 1, side, kind: UK_TANK, x: (x + 0.5) * SUB, z: (z + 0.5) * SUB,
     hp: 1000000, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0,
@@ -105,14 +105,14 @@ let r116TerrainSnapshot: any;
   },
   terrainDifference: () => {
     const town = (view as any).town.geometry, current = { position: town.attributes.position.array, color: town.attributes.color.array, ground: (view as any).groundPx };
-    const fields: any = {}, cells: any = {}, width = (view as any).groundTex.image.width, height = (view as any).groundTex.image.height, cellSize = width / N;
+    const fields: any = {}, cells: any = {}, width = (view as any).groundTex.image.width, height = (view as any).groundTex.image.height, cellSize = width / w.n;
     for (const field of ['position', 'color', 'ground']) {
       const a = r116TerrainSnapshot[field], b = (current as any)[field], first: any[] = []; let count = 0;
       for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) {
         count++; if (first.length < 64) first.push({ index: i, native: a[i] ?? null, replay: b[i] ?? null });
         if (field === 'ground') {
           const pixel = Math.floor(i / 4), x = Math.floor((pixel % width) / cellSize), z = Math.floor(Math.floor(pixel / width) / cellSize), key = x + ',' + z;
-          if (!cells[key]) cells[key] = { x, z, bytes: 0, terrain: w.ter[z * N + x], occupation: w.occ[z * N + x] };
+          if (!cells[key]) cells[key] = { x, z, bytes: 0, terrain: w.ter[z * w.n + x], occupation: w.occ[z * w.n + x] };
           cells[key].bytes++;
         }
       }
@@ -148,10 +148,10 @@ function plugin(broken, hits) {
           replace("const r116 = q.get('noR116') !== '1';", "const r116 = q.get('__r116mutant') === 'valve' || q.get('noR116') !== '1';", 'valve');
           replace('  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));',
             `  if (view.vegetation116.mesh) view.vegetation116.mesh.visible = !(${is('model')});\n  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));`, 'model');
-          replace('if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation ? 1 : undefined);',
-            `if (map || vegetation) applyMap(w, map ? MAP_RYE : 0, vegetation && !(${is('generation')}) ? 1 : undefined);`, 'generation');
-          replace('function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true, sandbox = false) {',
-            `function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026, vegetation = true, sandbox = false) {\n  if (${is('legacy')}) vegetation = true;`, 'legacy');
+          replace('if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);',
+            `if (map || vegetation) applyMap(w, mapId, vegetation && !(${is('generation')}) ? 1 : undefined);`, 'generation');
+          replace('function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {',
+            `function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {\n  if (${is('legacy')}) vegetation = true;`, 'legacy');
         }
         code += instrumentation; hits.add('observation');
       }
