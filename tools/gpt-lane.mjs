@@ -74,7 +74,9 @@ if (!statusOnly) {
   if (cards.length !== 1) no(`要剛好新增一張卡（docs/tasks/R<號>-主題.md），現在 ${cards.length} 張：${cards.join(' ')}`);
   else {
     const card = cards[0], num = Number(card.match(/R(\d+)/)[1]);
-    const used = [...git('ls-tree', '-r', '--name-only', BASE, 'docs/tasks').matchAll(/R(\d{3,})-/g), ...(show(BASE, 'LOG.md') ?? '').matchAll(/\bR(\d{3,})\b/g)].map(m => Number(m[1]));
+    // 日誌只以第一欄的正式迭代號保留用號；敘述中引用別卡不是使用該號。
+    // 已撤回且卡面刪除的迭代仍由歷史日誌列保留，不准重用。
+    const used = [...git('ls-tree', '-r', '--name-only', BASE, 'docs/tasks').matchAll(/R(\d{3,})-/g), ...(show(BASE, 'LOG.md') ?? '').matchAll(/^\s*\|\s*R(\d{3,})\s*\|/gm)].map(m => Number(m[1]));
     const maxUsed = Math.max(99, ...used);
     if (num < 100) no(`GPT 的卡號從 R100 起（R001–R099 留給 Claude），這張是 R${num}。`);
     else if (num <= maxUsed) no(`卡號 R${num} 不比 main 上用過的最大號 R${maxUsed} 大：卡號只往上加，不重用（撤回過的號也不用）。`);
