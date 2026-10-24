@@ -32,11 +32,7 @@
 
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
-| 36 | 業主批准新卡承接R129沙盒首step音效與放兵實際回饋 | 原有功能阻塞修復，不改美術 | 模擬暫態回傳／介面／音效 | 不變 | R133；基線9640f923，保留PR64歷史，完整CI與圖片後才合併發布 |
-| 34 | 本輪業主指定：可選96×96河鎮與實際街廓密度 | 更大地圖、更多建築 | 模擬／渲染／介面 | 舊腳本不變 | R130；從62d04bd9開工；保留手機預算、舊圖與喪屍，只做Draft與CI，不合併發布 |
 | 35 | 本輪業主指定：建築細節與抗鋸齒 | 外觀更自然、明顯減少鋸齒 | 渲染 | 不會 | 後續畫面卡；已明確要求檢查post.ts，保留同視角比較與Library交付；不自動發布 |
-| 33 | 修補：R129（#64）從分支拿掉 `.github/workflows/ci.yml` 的改動 | 業主 2026-10-23「要求能跑的起來」（R038） | CI | 不會 | Claude 插（R039）：CI 拆分已由 R039 做掉（四份 unit 並行＋chrome，`smoke` 是總閘）；`aeaf94a` 的 R129 精確例外已拿掉，`.github/` 照舊只歸 Claude。#64 的音效與放兵回饋照常做。另：載入動畫、大地圖、更多坦克、喪屍模式是 Claude 線 R040–R045，GPT 不重複出卡 |
-| 31 | 沙盒最小切片（業主新方向優先） | 「帝模式也就是沙盒模式」 | 模擬／介面 | 舊腳本不變 | R128／[#63](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/63)已實作，僅Draft未發布：32×32、雙方坦克／榴彈砲、開始／暫停／重置／返回、32輛上限；本機80/88守衛通過，8項Windows既有紅已對main，smoke250.9秒綠，四標準與14功能圖已核。取代下一個UI小題；大地圖、畫質、載入動畫未施工；禁止Ready／合併／發布 |
 | 30 | 選取坦克／砲車耐久摘要 | 坦克與榴彈砲對轟的存活判斷 | 介面 | 不會 | 不改單位數值與步兵分工 |
 
 ## 卡住／等業主看圖
@@ -49,6 +45,10 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 沙盒首步音效與放兵回饋；取代舊 R129／#64 | R133 | [#78](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/78) | 2026-10-24（已合併發布） | main b40279e；[CI／Pages 40097505215](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40097505215) 成功；實體 Android／聽感未驗證 |
+| 卡號來源解析維護，產品不變 | R132 | [#77](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/77) | 2026-10-24（已合併發布） | main 9640f923；[CI／Pages 40095844664](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40095844664) 成功；一次維護例外不得擴用 |
+| 可選 96×96 河鎮與密集街廓 | R130 | [#76](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/76) | 2026-10-24（已合併發布） | main 67e3e81f；[CI／Pages 40093947740](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40093947740) 成功；保留舊圖、手機預算，Android 實機未驗證 |
+| 沙盒最小切片 | R128 | [#63](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/63) | 2026-10-24 狀態核對（已合併） | merge 7cbc1100 為目前 main 祖先；此列不單獨追認歷史硬體測試／發布證據 |
 | 修補：手機說明面板「知道了」完整可見（GPT 實作；卡號門檻擋住，Claude R058 接手合併） | R114＋R058 | [#47](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/47) 收進 Claude 的 PR | 2026-10-23 | 見 R058 卡面；Android 實機未測 |
 | 我方HQ耐久／既有損壞階段摘要，獨立noR127 | R127 | [#62](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/62) | 2026-10-21（實作驗收完成，待發布） | head0f0853b CI39614371641 unit726.4秒／smoke185.7秒／lane綠；四標準與21功能圖核對；本機Chrome受限與既有3項失敗保留，Android未測；收尾head與main／Pages／公網待核 |
 | 生產不可用原因／精確補給差額，原指令與R125保留，獨立noR126 | R126 | [#61](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/61) | 2026-10-21（發布） | main 2e1a6b6 CI39599403644及Pages成功；最終head CI／四標準與功能圖已核；公網713458bytes／SHA256 d748ed87b08f5807be3a1386afcdb6c260d89d124178b7e49f063556f19624ff；本機Chrome受限／trenches-negative退出碼null保留，Android未測 |
@@ -79,3 +79,12 @@
 ### 2026-10-24 正式整合核實
 
 R130已按業主後續明確授權由PR76合併67e3e81，main CI40093947740及Pages成功，公網754086bytes逐位匹配。上方原Draft-only記載保留為歷史，不代表目前仍待批准。R132獨立守衛維護PR77合併9640f923，main CI40095844664及Pages成功，產品與R130逐位相同。R131另有美術分支，未修改也未計作已發布。
+
+## 2026-10-24 待辦校正收據與原記載
+
+GitHub PR 狀態重新核對：#76／#77／#78 均 merged，#64 closed 且未合併，功能由 R133 正式承接；#63 已合併且為 main 祖先。以下為移出的舊待辦原文，僅供歷史追溯，不是現行施工佇列，也不是再次請求批准。R131 仍只有卡，不計作實作或發布。
+
+> | 36 | 業主批准新卡承接R129沙盒首step音效與放兵實際回饋 | 原有功能阻塞修復，不改美術 | 模擬暫態回傳／介面／音效 | 不變 | R133；基線9640f923，保留PR64歷史，完整CI與圖片後才合併發布 |
+> | 34 | 本輪業主指定：可選96×96河鎮與實際街廓密度 | 更大地圖、更多建築 | 模擬／渲染／介面 | 舊腳本不變 | R130；從62d04bd9開工；保留手機預算、舊圖與喪屍，只做Draft與CI，不合併發布 |
+> | 33 | 修補：R129（#64）從分支拿掉 `.github/workflows/ci.yml` 的改動 | 業主 2026-10-23「要求能跑的起來」（R038） | CI | 不會 | Claude 插（R039）：CI 拆分已由 R039 做掉（四份 unit 並行＋chrome，`smoke` 是總閘）；`aeaf94a` 的 R129 精確例外已拿掉，`.github/` 照舊只歸 Claude。#64 的音效與放兵回饋照常做。另：載入動畫、大地圖、更多坦克、喪屍模式是 Claude 線 R040–R045，GPT 不重複出卡 |
+> | 31 | 沙盒最小切片（業主新方向優先） | 「帝模式也就是沙盒模式」 | 模擬／介面 | 舊腳本不變 | R128／[#63](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/63)已實作，僅Draft未發布：32×32、雙方坦克／榴彈砲、開始／暫停／重置／返回、32輛上限；本機80/88守衛通過，8項Windows既有紅已對main，smoke250.9秒綠，四標準與14功能圖已核。取代下一個UI小題；大地圖、畫質、載入動畫未施工；禁止Ready／合併／發布 |
