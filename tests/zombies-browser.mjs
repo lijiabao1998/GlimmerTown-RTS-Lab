@@ -135,6 +135,11 @@ try {
     assert.equal(page.errors.length, 0, `runtime: ${page.errors.join(' | ')}`);
     console.log(`OK zombies Chrome map${map}: URL, valve and legacy ${legacy}`);
   });
+} catch (error) {
+  // Preserve the original assertion; the sharded runner only keeps the final stderr lines.
+  process.exitCode = 1;
+  console.error(`R045 first failure: ${error.stack || error}`);
+  console.error(`R045 assertion: ${error.message || error}`);
 } finally {
   const resolved = path.resolve(temp), parent = path.resolve(os.tmpdir()) + path.sep;
   assert(resolved.startsWith(parent) && path.basename(resolved).startsWith('r045-browser-'));
