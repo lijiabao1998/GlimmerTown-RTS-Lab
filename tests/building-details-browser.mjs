@@ -26,7 +26,7 @@ try{
     // Real simulation, deterministic fixed steps. Existing battle budget is unchanged.
     await E("document.getElementById('bb-start').click();__rts.pause(true)");await E('__rts.stepN(600-__rts.tick());__r134Review(48,48,2)');await frames();
     const info=await E('__rts.info()');assert(info.calls<=22&&info.triangles<=80000,`battle budget: ${JSON.stringify(info)}`);
-    metrics.push({name:`r134-${width}-battle-${off?'before':'after'}`,...info,hash:await E('__rts.hash()')});
+    const battleHash=await E('__rts.hash()');if(off)pair.battle=battleHash;else assert.equal(battleHash,pair.battle,'battle replay invariant');metrics.push({name:`r134-${width}-battle-${off?'before':'after'}`,...info,hash:battleHash});
     await shot(page,path.join(root,'shots',`r134-${width}-battle-${off?'before':'after'}.png`));
    }
   }

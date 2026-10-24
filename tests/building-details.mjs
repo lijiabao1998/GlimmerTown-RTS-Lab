@@ -26,7 +26,7 @@ for(const map of [0,1,2,3]) {
    valid(c,{...b,x,z,w:Math.max(b.x+b.w,...xs)-x,d:Math.max(b.z+b.d,...zs)-z}); if(fp(a)!==fp(c))changed++;maxAdded=Math.max(maxAdded,c.triangles-a.triangles); }
  }
  setBuildingDetails(false);assert.equal(fp(buildTown(w)),old,'valve restores full geometry');
- setBuildingDetails(true);const on=buildTown(w);assert.equal(hashWorld(w),before);assert.equal(JSON.stringify(w),data,'no world/RNG writes');
+ setBuildingDetails(true);const on=buildTown(w);assert.equal(JSON.stringify(w),data,'no world/RNG writes');assert.equal(hashWorld(w),before);
  if(map===3)assert.equal(w.blds.length,284);metrics.push({map,buildings:w.blds.length,off:old,on:fp(on),fullUnculledTriangles:on.triangles});
 }
 assert(changed>0);assert(maxAdded<=250,'bounded per-building detail geometry');
