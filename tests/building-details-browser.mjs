@@ -34,7 +34,7 @@ try{
   // Native screenshots above remain untouched. This last Chromium screenshot is an explicit diagnostic report, not a game preview.
   await page.send('Emulation.setDeviceMetricsOverride',{width:1440,height:1800,deviceScaleFactor:1,mobile:false});
   const report=['R134 TRUE CHROMIUM DIAGNOSTIC METRICS — not gameplay art', ...metrics.map(({name,calls,triangles,rt,hash,mapSize,buildings,seed,camera})=>JSON.stringify({name,calls,triangles,rt,hash,mapSize,buildings,seed,camera}))].join('\n\n');
-  await E(`document.body.replaceChildren();document.body.style='background:white;color:black';const pre=document.createElement('pre');pre.style='font:18px monospace;white-space:pre-wrap;padding:24px';pre.textContent=${JSON.stringify(report)};document.body.append(pre)`);await frames();await shot(page,path.join(root,'shots','r134-diagnostic-metrics.png'));
+  await E(`const pre=document.createElement('pre');pre.style='position:fixed;inset:0;z-index:2147483647;margin:0;background:white;color:black;font:18px monospace;white-space:pre-wrap;padding:24px';pre.textContent=${JSON.stringify(report)};document.body.append(pre)`);await frames();await shot(page,path.join(root,'shots','r134-diagnostic-metrics.png'));
  });
  console.log('R134 Chromium metrics',JSON.stringify(metrics));fs.writeFileSync(path.join(root,'shots','r134-metrics.json'),JSON.stringify(metrics,null,2));
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
