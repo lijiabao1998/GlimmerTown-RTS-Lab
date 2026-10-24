@@ -25,6 +25,7 @@
     #zombies-pick[hidden] { display: none; }
     @media (max-width: 640px) { #zombies-pick { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } body:has(#zombies-pick:not([hidden])) #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 156px); } }
     #help li.r045 { display: none; } body.r045 #help li.r045 { display: list-item; }
+    #help li.r130 { display: none; } body.r130 #help li.r130 { display: list-item; }
     #sb-hint { font-size: 13px; overflow-wrap: anywhere; }
     @media (max-width: 640px) { #sb-enter, #map-pick { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
     @media (max-width: 411px) { #hud.cover-durability ~ #sb-enter, #hud.cover-durability ~ #map-pick { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
@@ -171,7 +172,8 @@
     @keyframes ld-bob { 50% { transform: translateY(-1px); } }
     @keyframes ld-puff { 0% { opacity: .75; transform: translate(0, 0) scale(1); } 100% { opacity: 0; transform: translate(-28px, -14px) scale(2.2); } }
     @media (prefers-reduced-motion: reduce) { #loader .ld-scene * { animation: none; } }
-  </style>
+  #town-pick{position:fixed;left:8px;top:164px;min-width:120px;min-height:44px;z-index:20;padding:8px;border:1px solid #929477;border-radius:4px;background:#353e2c;color:#eee7d5;font:inherit;cursor:pointer}#town-pick[hidden]{display:none}
+</style>
 </head>
 <body>
   <div id="loader" role="status" aria-live="polite">

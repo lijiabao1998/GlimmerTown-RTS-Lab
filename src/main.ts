@@ -23,7 +23,8 @@ import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
 import { applyMap, MAP_RYE } from './sim/maps.ts';
 import { MAP_LARGE } from './sim/largeMap.ts';
-import { initMapPick, type MapPick } from './ui/mapPick.ts';
+import { MAP_TOWN } from './sim/expandedMap.ts';
+import { initMapPick, initTownPick, type MapPick } from './ui/mapPick.ts';
 import { startZombies } from './sim/zombies.ts';
 import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
 import { materialBuildDetail } from './ui/materials.ts';
@@ -163,8 +164,12 @@ const r026 = q.get('noR026') !== '1';   // R026 Rye 1940 手排地圖（關掉�
 // R043 大地圖：布陣時左上「地圖」鍵在萊伊 32×32 與鄉間 64×64 之間換；?map=64 直接開。逃生閥 ?noR043=1＝沒有這顆鍵、不認 ?map=64
 const r043 = q.get('noR043') !== '1';
 let large = r043 && q.get('map') === '64';
+const r130 = q.get('noR130') !== '1';
+let expanded = r130 && q.get('map') === '96';
+document.body.classList.toggle('r130', r130);
 document.body.classList.toggle('r043', r043);   // 說明面板的大地圖那一句只在開著時出現（index.html 的 body.r043）
 let mapPick: MapPick | undefined;
+let townPick: MapPick | undefined;
 let zombiesPick: ZombiesPick | undefined;
 document.body.classList.toggle('r045', q.get('noR045') !== '1');
 const r024 = q.get('noR024') !== '1';   // R024 碉堡（關掉＝布陣列沒有碉堡、敵方布陣也不蓋）
@@ -177,13 +182,13 @@ let prodBar: ProdBar | undefined;
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {
+function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large || expanded, vegetation = true, sandbox = false) {
   if (r109) clearGestureInput();
   battleAudio?.reset();
   w = sandbox ? createSandboxWorld(s) : createWorld(s);
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
-  const mapId = map ? (large ? MAP_LARGE : MAP_RYE) : 0;
+  const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : MAP_RYE) : 0;
   if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
   const zombies = !sandbox && (map || vegetation) && q.get('noR045') !== '1' && q.get('mode') === 'zombies';
   if (zombies) startZombies(w);
@@ -191,6 +196,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || larg
   view = new BattleView(w, fxOn, !w.sandbox && q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
   view.multiRangeEnabled = q.get('noR122') !== '1';
   if (w.map === MAP_LARGE) view.target.set(55, 0, 55);   // R043：大地圖開局鏡頭對準我方裝甲連（右下角落）
+  if (w.map === MAP_TOWN) view.target.set(87, 0, 87);
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
@@ -206,7 +212,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || larg
   ui();
   syncBattleAudio();
 }
-function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); mapPick?.update(); zombiesPick?.update(); }
+function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); mapPick?.update(); townPick?.update(); zombiesPick?.update(); }
 
 function sandboxAction(cmd: SandboxCommand) {
   if (!w.sandbox || audioHelpActive) return;
@@ -577,8 +583,12 @@ if (r128) sandboxBar = initSandbox({
   side: side => { sandboxSide = side; sandboxHint = ''; },
 });
 if (r043) mapPick = initMapPick({
-  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: r026 }),
-  toggle: () => { large = !large; reset(); },
+  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: r026, expanded }),
+  toggle: () => { if (expanded) { expanded = false; large = false; } else large = !large; reset(); },
+});
+if (r130) townPick = initTownPick({
+  state: () => ({ show: phase === 'build' && !w.sandbox, expanded }),
+  toggle: () => { expanded = !expanded; large = false; reset(); },
 });
 if (q.get('noR045') !== '1') zombiesPick = initZombiesPick({
   state: () => ({ show: phase === 'build' && !w.sandbox, active: !!w.zombies }),
@@ -670,7 +680,7 @@ const rts = {
   screenOfPoint: (x: number, y: number, z: number) => view.screenOf(x, y, z, innerWidth, innerHeight),
   blds: () => w.blds.map(b => ({ ...b })),
   focus: (x: number, z: number, zoom = 1) => { view.target.set(x, 0, z); view.zoom = zoom; },
-  info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, fx: fxOn, px: style.pixelCss, r004: fxOn && r004, pools: view.pools }),
+  info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, town: view.townRegion, fx: fxOn, px: style.pixelCss, r004: fxOn && r004, pools: view.pools }),
   armorArcs: () => view.armorArcCount,
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,

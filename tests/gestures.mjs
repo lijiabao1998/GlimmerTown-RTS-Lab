@@ -1,3 +1,4 @@
+import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R109 exact-boundary guards. Real production controller/main snippets; fake clock, not browser evidence.
 // --mutations corrupts an isolated in-memory production source and checks the intended first red.
 import assert from 'node:assert/strict';
@@ -60,7 +61,7 @@ function mainFixture(enabled = true) {
     pan: (x, y) => { pans.push([x, y]); view.target.x += x / 10; view.target.z += y / 10; }, zoomAt: (...a) => zooms.push(a), zoomBy: (...a) => zooms.push(a), setMarker() {}, dispose() {}, setWorld() {},
   };
   const c = vm.createContext({
-    MAP_LARGE, large: false, // This fixture exercises the existing small-map controller.
+    MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // This fixture exercises the existing small-map controller.
     r109: enabled, r012: true, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
     commandMenu: undefined, battleHint: undefined, document: { createElement: () => ({ id: '', hidden: false, style: {} }), body: { appendChild: el => elements.push(el) }, addEventListener: (t, f) => docEvents.set(t, f) },
     addEventListener: (t, f) => globalEvents.set(t, f), canvas, performance: { now: clock.now },

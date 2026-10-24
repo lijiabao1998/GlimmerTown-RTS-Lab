@@ -10,6 +10,7 @@ import {
 import { generateVegetation, clearVegetation } from './vegetation.ts';
 import { trenchCells } from './trenches.ts';
 import { applyLarge, MAP_LARGE } from './largeMap.ts';
+import { applyExpandedTown, MAP_TOWN } from './expandedMap.ts';
 
 export const MAP_RYE = 1;
 const RYE_N = 32;   // Rye 資料表的邊長
@@ -18,6 +19,7 @@ const RYE_N = 32;   // Rye 資料表的邊長
 // R042：Rye 是 32×32 的手排資料表，只在 w.n === 32 的世界套；別的大小整個指令不動世界。
 // R043：id 2＝64×64 鄉間大地圖（largeMap.ts），整個世界換成新的大小、建築與兵力；只能從新開的世界套一次。
 export function applyMap(w: World, id: number, vegetation?: number): void {
+  if (id === MAP_TOWN) { applyExpandedTown(w, vegetation); return; }
   if (id === MAP_LARGE) { applyLarge(w, vegetation); return; }
   if (w.tick !== 0 || (id !== 0 && id !== MAP_RYE) || (id === MAP_RYE && w.n !== RYE_N)) return;
   // 已付費布陣不會被換底圖埋掉；正常 step 先套 map 才會套戰壕。

@@ -1,3 +1,4 @@
+import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R043 大地圖守衛：64×64 鄉間（map 指令 id 2）。用法：node tests/large-map.mjs [群組名]
 // 地圖：種子 0–49 的大小、建築數、出生角落、單位站位、全部單位互相走得到、河上至少兩座橋、雙方起手兵力；
 // 指揮部與人口上限 40；電腦（普通）60 秒內推過中線；只在新開世界的第 0 步有效；JSON 重播與中途 structuredClone；
@@ -184,8 +185,8 @@ group('old-maps', () => {
     for (let i = 0; i < 599; i++) step(w, []);
     assert.equal(hashWorld(w), h600, `舊地圖 ${key}：第 600 步雜湊不變`);
   }
-  const w = createWorld(1944); step(w, [{ t: 'map', id: 3 }]);
-  assert.equal(hashWorld(w), '7c7c811f', '不認得的 id 3：世界照舊');
+  const w = createWorld(1944); step(w, [{ t: 'map', id: 4 }]);
+  assert.equal(hashWorld(w), '7c7c811f', '不認得的 id 4：世界照舊');
 });
 
 group('text', () => {
@@ -205,8 +206,8 @@ group('main', () => {
   }
   for (const rye of [true, false]) {
     const c = vm.createContext({
-      createWorld, createSandboxWorld, applyMap, MAP_RYE, MAP_LARGE, seed: 1944,
-      r006: false, r018: false, r019: false, r026: rye, large: true, r109: false,
+      createWorld, createSandboxWorld, applyMap, MAP_RYE, MAP_LARGE, MAP_TOWN, seed: 1944,
+      r006: false, r018: false, r019: false, r026: rye, large: true, expanded: false, townPick: undefined, r109: false,
       r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true, r118: true, r104: true,
       q: new URLSearchParams(), fxOn: true, selected: new Set(), view: undefined, battleAudio: undefined, reportView: undefined,
       BattleView: class { constructor() { return { dispose() {}, target: { set(...p) { c.focus = p; } } }; } },

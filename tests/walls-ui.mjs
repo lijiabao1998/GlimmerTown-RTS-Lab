@@ -1,3 +1,4 @@
+import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R120: run the real build-bar DOM and main callbacks, including semantic negative controls.
 // This fake DOM verifies behavior, not layout; walls-browser owns real Chrome hit testing.
 import assert from 'node:assert/strict';
@@ -62,7 +63,7 @@ function controller(query = '') {
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
   const q = new URLSearchParams(query);
   const c = vm.createContext({
-    MAP_LARGE, large: false, // Existing construction fixture; use the real map constant.
+    MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // Existing construction fixture; use the real map constant.
     structuredClone, createWorld, hashWorld, isWallKind, bldMaxHp, buildKind, buildError, applyBuild, TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, step, runLog, materialBuildDetail,
     enemyPlan(w, kinds) { enemyArgs.push(kinds); return enemyPlan(w, kinds); }, setWalls: flag => wallFlags.push(flag),
     BK_WIRE, WIRE_KIND, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,

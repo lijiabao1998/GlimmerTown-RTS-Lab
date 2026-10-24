@@ -1,3 +1,4 @@
+import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R116: actual merged geometry, BattleView/cache, minimap and HUD; Node is not a pixel test.
 // --mutations isolates production mutants and requires the named semantic assertion as first red.
 import assert from 'node:assert/strict';
@@ -118,7 +119,7 @@ function mini(w, enabled = true) {
 function mainFixture() {
   const mockView = () => ({ dispose() {}, setWorld() {}, vegetation116: { mesh: null, cells: 0, triangles: 0, builds: 0 } });
   const c = vm.createContext({ ...sim, applyMap, MAP_RYE, runLog, SCRIPT, SCRIPT_SEED, SCRIPT_TICKS, seed: 1944,
-    MAP_LARGE, large: false, // Default village and legacy replay; large maps are checked separately.
+    MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // Default village and legacy replay; large maps are checked separately.
     r006: false, r018: false, r019: false, r026: false, r109: false, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true,
     r116: false, r118: true, r104: true, fxOn: true, q: new URLSearchParams('noR116=1'),
     w: undefined, view: mockView(), selected: new Set(), log: [], pending: [], paused: true, phase: 'battle', window: {},
