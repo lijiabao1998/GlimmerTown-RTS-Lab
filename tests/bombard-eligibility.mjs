@@ -126,8 +126,8 @@ function menuFixture(enabled = true) {
 test('dom_labels', 'DOM: both original buttons show exact eligible counts', 'menu', 'he.textContent = heText;', "he.textContent = '錯誤';", message => {
   const f = menuFixture(); f.open(); eq(f.labels(), [heLabel(2), smokeLabel(1)], message); eq(f.chosen, [], 'opening only reads, never orders'); eq(f.$('cm-target').textContent, '砲擊格 19 · 18', 'original frozen target title retained');
 });
-test('disclaimer', 'disclaimer: qualification is visibly distinct from range reload and stock', 'menu', '適用只計資格，不檢查射程、裝填或煙幕存量。', '現在可開火', message => {
-  const f = menuFixture(); f.open(); eq(f.$('cm-eligibility').textContent, '適用只計資格，不檢查射程、裝填或煙幕存量。', message);
+test('disclaimer', 'disclaimer: qualification is visibly distinct from range reload and stock', 'menu', '適用不查射程、裝填、煙幕存量', '現在可開火', message => {
+  const f = menuFixture(); f.open(); eq(f.$('cm-eligibility').textContent, '適用不查射程、裝填、煙幕存量', message);
 });
 test('disabled_summary', 'rollback: absent read callback preserves exact old menu markup', 'menu', "+ (summaryEnabled ? '<small", "+ (true ? '<small", message => {
   const f = menuFixture(false); f.open(); eq(f.root.innerHTML, oldHTML, message); eq(f.labels(), ['高爆砲擊', '煙幕（榴彈砲）'], 'old button labels exact'); eq(f.reads(), 0, 'disabled summary never reads state');

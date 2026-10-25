@@ -16,9 +16,13 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r137-browser-'));
 const receipts = { status: 'initializing', measurements: [], negatives: [], firstError: null };
 const strictCI = !!(process.env.CI || process.env.GITHUB_ACTIONS || process.env.GITHUB_RUN_ID);
+// Keep the complete native baseline and the isolated negative pairs in separate
+// unit processes. Both retain the runner's original 120s ceiling and this test's
+// 108s diagnostic deadline; no timeout is accepted as a semantic negative.
+const negativeOnly = process.argv.includes('--r137-negatives-only');
 const plain = value => JSON.parse(JSON.stringify(value));
 const original = ['高爆砲擊', '煙幕（榴彈砲）', '取消'];
-const note = '適用只計資格，不檢查射程、裝填或煙幕存量。';
+const note = '適用不查射程、裝填、煙幕存量';
 const mutations = {
   counts: ['src/ui/commandMenu.ts', '${counts.he}', "${counts.he + (location.search.includes('__r137mutant=counts') ? 1 : 0)}"],
   refresh: ['src/main.ts', '  commandMenu?.frame();', "  if (!location.search.includes('__r137mutant=refresh')) commandMenu?.frame();"],
@@ -259,6 +263,7 @@ async function main() {
       const fixed = await snapshot(); replay(fixed); return { world: fixed.world, log: fixed.log, cam: fixed.cam };
     };
 
+    if (!negativeOnly) {
     for (const w of [1440, 412, 860]) {
       await viewport(w); const modes = [];
       for (const off of [false, true]) {
@@ -292,32 +297,41 @@ async function main() {
     const deathOn = await liveDeath(false, true), deathOff = await liveDeath(true, false);
     assert.deepEqual(deathOn, deathOff, 'valve: real death evidence then equal-tick full-world/log/camera replay');
     assert.equal(page.errors.length, 0, 'browser: all native/mixed/death fixtures have zero console errors');
+    } else {
 
-    // Each mutant changes one production behavior. The untouched baseline above
-    // must complete first; timeouts/setup failures never count as a semantic red.
-    overlay['index.html'] = fs.readFileSync(path.join(broken, 'index.html'), 'utf8');
+    // Each mutant changes one production behavior. Run its identical untouched
+    // case first in this process; timeouts/setup failures never count as a red.
+    await viewport(412);
+    const brokenHTML = fs.readFileSync(path.join(broken, 'index.html'), 'utf8');
     const negatives = {
-      counts: async () => { await fresh(false, 'counts'); await E('__rts.select([4])'); counts(await hold()); },
-      refresh: async () => { await fresh(false, 'refresh'); await E('__rts.select([4])'); counts(await hold()); await pausedSelection(false); },
-      readonly: async () => { await fresh(false, 'readonly'); await E('__rts.select([4])'); await hold(); },
-      layout: async () => { await fresh(false, 'layout'); await E('__rts.select([4])'); await hold(); await layout(); },
-      disclosure: async () => { await fresh(false, 'disclosure'); await E('__rts.select([4])'); counts(await hold()); },
-      routing: async () => { await fresh(false, 'routing'); await E('__rts.select([4])'); await hold(); await choose('smoke', false); },
-      close: async () => { await fresh(false, 'close'); await E('__rts.select([4])'); await hold(); await choose('smoke', false); },
-      valve: async () => { await fresh(true, 'valve'); await E('__rts.select([4])'); counts(await hold(), true, 'valve'); },
-      death: async () => { await liveDeath(false, true, 'death'); },
+      counts: async mutant => { await fresh(false, mutant); await E('__rts.select([4])'); counts(await hold()); },
+      refresh: async mutant => { await fresh(false, mutant); await E('__rts.select([4])'); counts(await hold()); await pausedSelection(false); },
+      readonly: async mutant => { await fresh(false, mutant); await E('__rts.select([4])'); await hold(); },
+      layout: async mutant => { await fresh(false, mutant); await E('__rts.select([4])'); await hold(); await layout(); },
+      disclosure: async mutant => { await fresh(false, mutant); await E('__rts.select([4])'); counts(await hold()); },
+      routing: async mutant => { await fresh(false, mutant); await E('__rts.select([4])'); await hold(); await choose('smoke', false); },
+      close: async mutant => { await fresh(false, mutant); await E('__rts.select([4])'); await hold(); await choose('smoke', false); },
+      valve: async mutant => { await fresh(true, mutant); await E('__rts.select([4])'); counts(await hold(), true, 'valve'); },
+      death: async mutant => { await liveDeath(false, true, mutant); },
     };
     for (const [name, run] of Object.entries(negatives)) {
+      delete overlay['index.html'];
+      await run('');
+      assert.equal(page.errors.length, 0, `baseline ${name}: no browser errors`);
+      overlay['index.html'] = brokenHTML;
       let failure;
-      try { await run(); } catch (e) { failure = e; }
+      try { await run(name); } catch (e) { failure = e; }
       assert(failure instanceof assert.AssertionError, `negative ${name}: must fail semantically, not timeout/bootstrap`);
       assert(failure.message.startsWith(name + ':'), `negative ${name}: first red must be its own contract, got ${failure.message}`);
       const red = { name, firstRed: failure.message.split('\n')[0] }; receipts.negatives.push(red); console.log('RED R137 ' + JSON.stringify(red));
     }
     delete overlay['index.html'];
+    }
   });
   receipts.status = 'passed real Chromium';
-  console.log('OK R137 native longpress/mouse/touch, qualification, live deaths, low FPS, complete replay, rollback, 3 viewports and isolated negatives');
+  console.log(negativeOnly
+    ? 'OK R137 9 independent native baseline / exact-first-red negative pairs; unchanged operational deadline'
+    : 'OK R137 native longpress/mouse/touch, qualification, live deaths, low FPS, complete replay, rollback and 3 viewports');
 }
 try { await main(); }
 catch (e) {

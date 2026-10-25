@@ -66,7 +66,7 @@ export function initCommandMenu(on: { choose: (ammo: AmmoMode, target: BombardTa
   const root = document.createElement('div');
   root.id = 'command-menu'; root.hidden = true; root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', '指定地點砲擊');
   root.innerHTML = '<strong id="cm-target"></strong>'
-    + (summaryEnabled ? '<small id="cm-eligibility" style="font-size:12px;line-height:1.3;text-align:center">適用只計資格，不檢查射程、裝填或煙幕存量。</small>' : '')
+    + (summaryEnabled ? '<small id="cm-eligibility" style="font-size:12px;line-height:1.3;text-align:center">適用不查射程、裝填、煙幕存量</small>' : '')
     + '<button id="cm-he" type="button">高爆砲擊</button><button id="cm-smoke" type="button">煙幕（榴彈砲）</button><button id="cm-cancel" type="button">取消</button>';
   if (summaryEnabled) root.setAttribute('aria-describedby', 'cm-eligibility');
   (document.getElementById('hud') ?? document.body).appendChild(root);
