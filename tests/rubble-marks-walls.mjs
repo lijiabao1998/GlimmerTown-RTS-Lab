@@ -11,7 +11,7 @@ function replay(kind,rot,walls,on){
  for(let z=0;z<bd;z++)for(let x=0;x<bw;x++)w.occ[idx(b.x+x,b.z+z)]=b.id;
  const add=(side,kind,x,z)=>{const k=UNIT_KINDS[kind];w.units.push({id:w.units.length+1,side,kind,x:center(x),z:center(z),hp:k.hp,alive:true,order:ORD_IDLE,target:0,tx:0,tz:0,path:[],pathIdx:0,cooldown:0,aimX:SUB,aimZ:0});};
  add(0,UK_TANK,16,20);add(0,UK_TANK,17,20);add(1,UK_OBSERVER,31,31);
- const v=new BattleView(w,true,false,true,true,true,true,true,true,true,true,true,true,true,true,on);
+ const v=new BattleView(w,true,false,true,true,true,true,true,true,true,true,true,true,true,true);v.rubbleMarkGuard=on;
  let lethal=false,legacy=0,living=0;const end=(Math.ceil(maxHp/UNIT_KINDS[UK_TANK].dmgBld)+2)*UNIT_KINDS[UK_TANK].reload;
  try{for(let t=0;t<end;t++){
   v.snapshot();step(w,t?[]:[{t:'fireAt',side:0,ids:[1,2],x:20,z:20}]);const before=JSON.stringify(w);v.onEvents(w.events,w.tick/20);v.update(0,w.tick/20,new Set());assert.equal(JSON.stringify(w),before,'wall replay: rendering is readonly');
