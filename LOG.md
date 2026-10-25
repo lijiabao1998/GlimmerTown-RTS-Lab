@@ -4,7 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
-| R137 | 2026-10-25 | GPT | 待辦37：原生砲擊選單只讀高爆／煙幕適用數，noR137回退 | 47／47與本機型別／建置綠；首輪CI的chrome／unit1、4／lane綠，總閘紅 | [Draft #83](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/83) | README漏閥、橫向選單增高、負控超時首紅保留並修補；完整最新head與真圖待核，Android未驗 |
+| R137 | 2026-10-25 | GPT | 待辦37：原砲擊選單高爆／煙幕適用數，資格非射程或立即可射擊，noR137回退 | 585ef8e完整CI40169483640綠；47／47、9瀏覽器負控、十功能原圖＋四R127回歸圖；四標準圖等同R136 | [#83](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/83)；收尾head／發布另核 | README、橫向增高、負控超時首紅保留；Android未驗、MSAA未做 |
 | R136 | 2026-10-25 | GPT | 沙盒雙方存活／殘骸／可放名額，只讀原32上限，noR136回退 | 10組／11負控；7d3b8a2完整CI40163832309綠；三視口37原圖，on/off完整世界與預算同 | #82；收尾head／發布另核 | 首紅橫向高度、JSON型別、節流frame等待與鏡頭落點皆保留；原守衛不改；Android未驗、MSAA未做 |
 | R135 | 2026-10-25 | GPT | 待辦30：選取坦克與砲車只讀耐久摘要，單選精確HP／種類上限、多選最低比例，獨立noR135 | 48正向／48負控；3366e2c完整CI40159088013全綠；1440/412真圖、on/off16calls/14484tris、Golden不變 | #81；收尾head與發布另核 | 首CI兩舊負控被全HUD刷新救活，改獨立前綴後通過；本機Chrome受限、Android未驗、MSAA未做 |
 | R134 | 2026-10-24 | GPT | 依原 R131 目的合法接續原生窗框、窗台、屋簷、屋脊、煙囪帽、角石、入口；雙逃生閥，原 R131 歷史保留 | typecheck／build／444 棟幾何與五負控、舊外牆／材質指紋通過；全套與真 Chrome CI 待核 | gpt/r134-building-details；首卡先推 | 原 R131 lane 首紅；本機 Chrome socket EPERM；MSAA 受保護 post.ts 無接口，未施工；Android 未測；Draft 圖審未批准 |
