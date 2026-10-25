@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R135 | 2026-10-25 | GPT | 待辦30：選取坦克與砲車只讀耐久摘要，單選精確HP／種類上限、多選最低比例，獨立noR135 | 本地typecheck/build及42正向／42負控通過；完整CI／真圖待核 | #81 Draft | 本機Chromium socket EPERM，官方CI待驗；Android實機未驗，MSAA不屬本卡 |
 | R134 | 2026-10-24 | GPT | 依原 R131 目的合法接續原生窗框、窗台、屋簷、屋脊、煙囪帽、角石、入口；雙逃生閥，原 R131 歷史保留 | typecheck／build／444 棟幾何與五負控、舊外牆／材質指紋通過；全套與真 Chrome CI 待核 | gpt/r134-building-details；首卡先推 | 原 R131 lane 首紅；本機 Chrome socket EPERM；MSAA 受保護 post.ts 無接口，未施工；Android 未測；Draft 圖審未批准 |
 | R133 | 2026-10-24 | GPT | 由R132新main合法承接PR64既有沙盒回饋；原卡／分支／失敗證據保留，不改R130地圖與美術 | 本地typecheck、六回饋／七負控、六沙盒／二十負控、六96圖組通過；完整head CI待核 | 新卡首提交df90bae；Draft待驗收 | Android／喇叭實聽未測；未宣稱發布 |
 | R130 | 2026-10-24 | Codex | 可選96×96河鎮、284棟（seed1944）、多個村落與街廓；區域合批及LOD、保留完整點選；修map3植被重播與長局id容量告警 | Node六組／十負控；舊三圖凍結hash與golden eea1d59b不變；真Chrome兩模式重播；手機開局13／5924、交戰18／25904、80班壓力7／52698 | Draft待開 | 完整check／CI／Library待核；Android未測；本輪不合併發布 |

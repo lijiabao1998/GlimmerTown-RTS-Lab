@@ -1,3 +1,4 @@
+import { vehicleDurability } from '../src/ui/vehicleDurability.ts';
 import { coverDurability } from '../src/ui/coverDurability.ts';
 import { reloadStatus } from '../src/ui/reloadStatus.ts';
 // R115: formal UI modules and Canvas/DOM recording fixtures. No browser/pixel claim.
@@ -139,9 +140,9 @@ function section(start, end) { const a = plain.indexOf(start), b = plain.indexOf
 function mainFixture(query = '', w = fixtureWorld()) {
   const document = dom(); w.units = [];
   const metrics = { updates: 0, minimaps: 0 }; let actions;
-  const c = vm.createContext({ ...world, reloadStatus, coverDurability, document, w, selected: new Set(), paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
+  const c = vm.createContext({ ...world, reloadStatus, coverDurability, vehicleDurability, document, w, selected: new Set(), paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
     battleAudio: undefined, syncBattleAudio() {}, // R117 stays outside this counterbattery-only fixture.
-    r009: false, r010: true, r018: false, r012: false, buildHint: '', BUILD_TIP: '布陣說明', q: new URLSearchParams(query),
+    r009: false, r010: true, r018: false, r012: false, buildHint: '', BUILD_TIP: '布陣說明', q: new URLSearchParams(`${query}&noR135=1`),
     view: { rangeInfo: '', visibleUnit: () => false }, counterbatteryHint, hud: undefined, minimap: undefined, lastCounterbatteryInfo: '', lastCounterbatteryWorld: undefined,
     initHud(a) { actions = a; const actual = initHud(a); return { frame: actual.frame, update() { metrics.updates++; actual.update(); } }; },
     initMinimap(a) { c.miniActions = a; metrics.minimaps++; return {}; },
