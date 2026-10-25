@@ -342,6 +342,9 @@ function damagedShell(g: Geo, b: Building) {
       g.face4(point(a, 0, c1), point(d, 0, c1), point(d, hi, c1), point(a, lo, c1), axis === 0 ? [0, 0, 1] : [1, 0, 0], p.wall);
       g.face4(point(a, lo, c0), point(d, hi, c0), point(d, hi, c1), point(a, lo, c1), [0, 1, 0], colors[2]);
     }
+    // Close each exposed end even where adjacent walls have unequal broken heights.
+    g.face4(point(a0, 0, c0), point(a0, 0, c1), point(a0, heights[0], c1), point(a0, heights[0], c0), axis === 0 ? [-1, 0, 0] : [0, 0, -1], colors[2]);
+    g.face4(point(a1, 0, c0), point(a1, 0, c1), point(a1, heights[5], c1), point(a1, heights[5], c0), axis === 0 ? [1, 0, 0] : [0, 0, 1], colors[2]);
   };
   wall(0, x0, x1, z0, z0 + t, 0); wall(0, x0, x1, z1 - t, z1, 1);
   wall(1, z0 + t, z1 - t, x0, x0 + t, 2); wall(1, z0 + t, z1 - t, x1 - t, x1, 3);
@@ -379,8 +382,8 @@ function damagedRubble(g: Geo, b: Building) {
 }
 
 // 沒屋頂：四面薄牆剩七成高，牆頂鋸齒，屋裡焦黑，幾根斷梁
-function roofless(g: Geo, b: Building) {
-  if (civilianDamage(b)) { damagedShell(g, b); return; }
+function roofless(g: Geo, b: Building, allowDamage = true) {
+  if (allowDamage && civilianDamage(b)) { damagedShell(g, b); return; }
   if (wallShown(b)) { boundaryWall(g, b, true); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, true); return; }
   const p = palette(b.kind), m = 0.1, t = 0.07, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
@@ -403,8 +406,8 @@ function roofless(g: Geo, b: Building) {
   windows(g, b, x0, z0, x1, z1, h);
 }
 
-function rubble(g: Geo, b: Building) {
-  if (civilianDamage(b)) { damagedRubble(g, b); return; }
+function rubble(g: Geo, b: Building, allowDamage = true) {
+  if (allowDamage && civilianDamage(b)) { damagedRubble(g, b); return; }
   const n = 6 + b.w * b.d * 3, colors = rubbleColors(b.kind);
   for (let k = 0; k < n; k++) {
     const hx = hash2(b.id, k, 1), hz = hash2(b.id, k, 2), hh = hash2(b.id, k, 3), hc = hash2(b.id, k, 4);
@@ -416,8 +419,9 @@ function rubble(g: Geo, b: Building) {
 
 // 一棟建築在指定損壞階段的模型（R004 倒塌殘影要畫「倒之前」那一段）
 export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
+  const allowDamage = !isWallKind(b.kind); // noR120 fallback houses remain boundary walls, outside R138.
   if (!wallsOn && isWallKind(b.kind)) b = { ...b, kind: BK_HOUSE };
-  if (stage === STAGE_INTACT) intact(g, b); else if (stage === STAGE_ROOFLESS) roofless(g, b); else rubble(g, b);
+  if (stage === STAGE_INTACT) intact(g, b); else if (stage === STAGE_ROOFLESS) roofless(g, b, allowDamage); else rubble(g, b, allowDamage);
   return g;
 }
 

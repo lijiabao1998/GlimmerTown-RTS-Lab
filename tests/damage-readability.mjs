@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createWorld,hashWorld,STAGE_INTACT,STAGE_ROOFLESS,STAGE_RUBBLE,BK_HQ,BK_PILLBOX,BK_WALL_BRICK,BK_WALL_STONE,BK_WALL_CONCRETE} from '../src/sim/world.ts';
 import {applyMap} from '../src/sim/maps.ts';
-import {buildingGeo,buildTown,setMaterials,setDamageDetails} from '../src/render/buildings.ts';
+import {buildingGeo,buildTown,setMaterials,setDamageDetails,setWalls} from '../src/render/buildings.ts';
 import {Geo} from '../src/render/geo.ts';
 const expected={
   "false-0": "c4f3493653bf6f14cfe9ce214887e238d658516d3292a7faea14c1621592fa6c",
@@ -36,8 +36,8 @@ for(const materials of [false,true]){setMaterials(materials);for(const map of [0
  setDamageDetails(true);buildTown(w);assert.equal(JSON.stringify(w),before,'readonly: complete world and RNG');assert.equal(hashWorld(w),hash,'readonly: world hash');metrics.push({materials,map,buildings:w.blds.length});
 }}
 // Types not populated on every initial map must also stay outside the candidate.
-for(const kind of [BK_HQ,BK_PILLBOX,BK_WALL_BRICK,BK_WALL_STONE,BK_WALL_CONCRETE])for(const stage of [0,1,2]){
- const b={id:88,kind,x:2,z:2,w:2,d:1,floors:1,hp:50,maxHp:100};setDamageDetails(false);const off=fp(buildingGeo(new Geo(),b,stage));setDamageDetails(true);assert.equal(fp(buildingGeo(new Geo(),b,stage)),off,'scope: special buildings unchanged');
+for(const walls of [false,true])for(const kind of [BK_HQ,BK_PILLBOX,BK_WALL_BRICK,BK_WALL_STONE,BK_WALL_CONCRETE])for(const stage of [0,1,2]){
+ setWalls(walls);const b={id:88,kind,x:2,z:2,w:2,d:1,floors:1,hp:50,maxHp:100};setDamageDetails(false);const off=fp(buildingGeo(new Geo(),b,stage));setDamageDetails(true);assert.equal(fp(buildingGeo(new Geo(),b,stage)),off,'scope: special buildings unchanged');
 }
-assert(changed>0,'enabled: candidate exercised');setDamageDetails(false);setMaterials(true);
+assert(changed>0,'enabled: candidate exercised');setDamageDetails(false);setMaterials(true);setWalls(true);
 console.log('OK R138 geometry',JSON.stringify({changed,maxAdded,metrics}));
