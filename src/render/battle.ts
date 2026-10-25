@@ -199,6 +199,7 @@ export class BattleView {
   readonly holes = { next: 0, live: new Uint8Array(HOLE_CAP), bld: new Int32Array(HOLE_CAP), kind: new Uint8Array(HOLE_CAP), x: new Float32Array(HOLE_CAP), y: new Float32Array(HOLE_CAP), z: new Float32Array(HOLE_CAP), nx: new Int8Array(HOLE_CAP), nz: new Int8Array(HOLE_CAP), w: new Float32Array(HOLE_CAP), h: new Float32Array(HOLE_CAP), r: new Float32Array(HOLE_CAP), g: new Float32Array(HOLE_CAP), b: new Float32Array(HOLE_CAP) };
   private holesDirty = false;
   private holeSeq = 0;
+  private r139 = true;
   // 每一步之前記下在飛、會打中建築的穿甲彈（彈著事件沒有射手位置）
   private apSnap = { n: 0, sx: new Float64Array(MAX_SHELLS), sz: new Float64Array(MAX_SHELLS), ex: new Float64Array(MAX_SHELLS), ez: new Float64Array(MAX_SHELLS), bld: new Int32Array(MAX_SHELLS) };
 
@@ -210,8 +211,9 @@ export class BattleView {
   readonly range113: RangePreview | null;
   get rangeInfo(): string { return this.multi122.solution.legend || this.range113?.solution.legend || ''; }
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true, r104 = true, r123 = true) {
-    this.fresh = world => new BattleView(world, fxOn, fogOn, observerDetails, r004, r008, r009, r011, r014, r016, r107, r113, r118, r104, r123);
+  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true, r104 = true, r123 = true, r139 = true) {
+    this.fresh = world => new BattleView(world, fxOn, fogOn, observerDetails, r004, r008, r009, r011, r014, r016, r107, r113, r118, r104, r123, r139);
+    this.r139 = r139;
     this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
     this.trench118 = new TrenchRaster(r118); this.trench118.sync(w);
     this.range113 = r113 ? new RangePreview() : null;
@@ -1209,6 +1211,8 @@ export class BattleView {
     }
     if (axis < 0 || tIn > tOut || tIn < 0) return;                 // 射手在牆裡面、或打不到這棟
     const seq = this.holeSeq++, hh = (k: number) => hash2(b.id * 977 + seq, k, 141);
+    // R139：保留既有有效射線的序號，後續存活建築彈痕不變；瓦礫不再佔用痕跡池。
+    if (this.r139 && b.hp <= 0) return;
     let px = sx + dx * tIn, pz = sz + dz * tIn;
     const nx = axis === 0 ? (dx > 0 ? -1 : 1) : 0, nz = axis === 1 ? (dz > 0 ? -1 : 1) : 0;
     // 沿牆面錯開一點（同一個方向連打不會疊成一個點），夾在牆面內

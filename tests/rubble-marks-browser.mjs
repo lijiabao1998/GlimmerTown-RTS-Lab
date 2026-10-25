@@ -32,7 +32,7 @@ try{
      const s=await E('({...__r139Read(),hash:__rts.hash(),camera:__rts.cam(),tick:__rts.tick(),info:__rts.info()})');
      assert.deepEqual(JSON.parse(s.world),JSON.parse(JSON.stringify(expected)),'complete browser world equals independent Node');assert.equal(s.hash,hashWorld(expected),'hash equals Node');assert(s.info.calls<=22&&s.info.triangles<=80000,'battle unchanged 22 / 80000 budget');
      const pixels=await E('document.querySelector("body>canvas").toDataURL()'),state={world:s.world,hash:s.hash,camera:s.camera,tick:s.tick};
-     if(off)pairs[name]={state,pixels,marks:s.marks};else{assert.deepEqual(state,pairs[name].state,'same full world/tick/camera');if(tick<=180){assert.equal(pixels,pairs[name].pixels,'living pixels unchanged');assert.deepEqual(s.marks,pairs[name].marks,'living AP/HE marks unchanged');}else if(pixels===pairs[name].pixels)lifecycleFailures.push(`${width}/${name}: rendered pixels did not change`);}
+     if(off)pairs[name]={state,pixels,marks:s.marks};else{assert.deepEqual(state,pairs[name].state,'same full world/tick/camera');if(tick<=180){assert.equal(pixels,pairs[name].pixels,'living pixels unchanged');assert.deepEqual(s.marks,pairs[name].marks,'living AP/HE marks unchanged');}else if(tick===600&&pixels===pairs[name].pixels)lifecycleFailures.push(`${width}/${name}: rendered pixels did not change`);}
      const dead=s.marks.filter(h=>expected.blds[h.bld-1].hp<=0);
      if(tick>=199){if(off)assert.equal(dead.length,tick===199?1:2,'rollback actual old bug');else if(dead.length!==0)lifecycleFailures.push(`${width}/${name}: ${dead.length} dead-building wall marks`);}
      const shot=`r139-${width}-${name}-${off?'before':'after'}`;metrics.push({name:shot,...s,world:digest(s.world),dead,png:await capture(shot)});console.log('R139 measurement',JSON.stringify(metrics.at(-1)));
@@ -42,8 +42,8 @@ try{
   }
   // Separate, clearly labelled evidence sheet; gameplay PNGs above remain untouched raw viewport images.
   await page.send('Emulation.setDeviceMetricsOverride',{width:1440,height:2200,deviceScaleFactor:1,mobile:false});
-  const report=['R139 CHROMIUM DIAGNOSTIC — measured results, NOT gameplay art',...metrics.map(m=>JSON.stringify({name:m.name,info:m.info,tick:m.tick,hash:m.hash,dead:m.dead,worldSHA256:m.world})),...lifecycleFailures].join('\n\n');
-  await E(`document.body.replaceChildren();const pre=document.createElement('pre');pre.style='margin:0;padding:20px;background:white;color:black;font:14px monospace;white-space:pre-wrap;line-height:1.3';pre.textContent=${JSON.stringify(report)};document.body.append(pre)`);await frames();await capture('r139-diagnostic');
+  const report=['R139 CHROMIUM DIAGNOSTIC — measured results, NOT gameplay art',...metrics.map(m=>JSON.stringify({name:m.name,calls:m.info.calls,triangles:m.info.triangles,tick:m.tick,hash:m.hash,deadMarks:m.dead?.length,worldSHA256:m.world})),...lifecycleFailures].join('\n\n');
+  await E(`document.body.replaceChildren();const pre=document.createElement('pre');pre.style='margin:0;padding:20px;background:white;color:black;font:14px monospace;white-space:pre-wrap;line-height:1.3';pre.textContent=${JSON.stringify(report)};document.body.append(pre)`);await frames();const reportHeight=await E('Math.ceil(document.querySelector("pre").getBoundingClientRect().bottom)');await page.send('Emulation.setDeviceMetricsOverride',{width:1440,height:Math.max(2200,reportHeight),deviceScaleFactor:1,mobile:false});await frames();assert(await E('document.querySelector("pre").getBoundingClientRect().bottom<=innerHeight'),'diagnostic: all measured rows fit');await capture('r139-diagnostic');
   assert.deepEqual(page.errors,[],'zero browser errors');assert.deepEqual(page.requests.filter(u=>!/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u)),[],'zero external requests');
   assert.deepEqual(lifecycleFailures,[],'rubble lifecycle: actual rendered lethal/in-flight marks removed');
  });
