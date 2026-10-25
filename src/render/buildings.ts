@@ -38,6 +38,10 @@ export function wireGeo(g: Geo, b: Building): Geo {
   return g;
 }
 
+// R134 legal R131 successor: presentation-only and deterministic; both valves restore old geometry.
+let buildingDetailsOn = false;
+export function setBuildingDetails(on: boolean): void { buildingDetailsOn = on; }
+
 export const FLOOR_H = 0.36;   // 一層樓高（格）；3D-lab blockArt.ts 的換算
 
 const C = (hex: number) => new THREE.Color(hex);
@@ -121,6 +125,9 @@ function boundaryWall(g: Geo, b: Building, broken: boolean) {
 }
 
 function windows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: number, h: number) {
+  if (buildingDetailsOn && h === wallHeight(b)) {
+    detailedWindows(g, b, x0, z0, x1, z1, h); return;
+  }
   const ww = 0.12, wh = 0.13, t = 0.012;
   for (let f = 0; f < b.floors; f++) {
     const y0 = 0.12 + f * FLOOR_H, y1 = y0 + wh;
@@ -135,6 +142,59 @@ function windows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: nu
       g.box(x1, y0, cz - ww / 2, x1 + t, y1, cz + ww / 2, GLASS, null);
       g.box(x0 - t, y0, cz - ww / 2, x0, y1, cz + ww / 2, GLASS, null);
     }
+  }
+}
+
+// Thin facade planes, not separate meshes: robust screen-width frames without hidden box faces.
+function detailedWindows(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: number, h: number) {
+  const trim = palette(b.kind).trim;
+  const faces = [[0, x0, x1, z0, -1], [0, x0, x1, z1, 1], [1, z0, z1, x0, -1], [1, z0, z1, x1, 1]];
+  for (const [axis, start, end, at, dir] of faces) {
+    const pane = (a: number, c: number, lo: number, hi: number, color: THREE.Color, offset = 0.015) => {
+      const p = at + dir * offset;
+      if (axis === 0) g.quad([a,lo,p],[c,lo,p],[c,hi,p],[a,hi,p],[0,0,dir],color);
+      else g.quad([p,lo,a],[p,lo,c],[p,hi,c],[p,hi,a],[dir,0,0],color);
+    };
+    for (let f = 0; f < b.floors; f++) for (let k = Math.floor(start); k < end; k++) {
+      const c = k + 0.5, y = 0.12 + f * FLOOR_H, t = 0.025;
+      if (c - 0.085 < start || c + 0.085 > end || y + 0.155 > h - 0.025) continue;
+      // The front centre bay is a readable entrance, not a window buried behind its door.
+      if (!axis && dir === 1 && f === 0 && Math.abs(c - (x0+x1)/2) < 0.18) continue;
+      pane(c-0.085,c+0.085,y-t,y+0.155,trim);
+      pane(c-0.06,c+0.06,y,y+0.13,GLASS,0.017);
+      pane(c-0.009,c+0.009,y,y+0.13,trim,0.019);
+      pane(c-0.06,c+0.06,y+0.06,y+0.075,trim,0.019);
+      pane(c-0.095,c+0.095,y-0.035,y-0.015,trim,0.022);
+    }
+  }
+}
+
+function buildingDetails(g: Geo, b: Building, x0: number, z0: number, x1: number, z1: number, h: number, rise: number, alongX: boolean) {
+  if (!buildingDetailsOn) return;
+  const p = palette(b.kind), cx = (x0+x1)/2, cz = (z0+z1)/2;
+  // Solid fascia and ridge remain in the original 0.1-cell setback.
+  if (alongX) {
+    g.box(x0-0.04,h-0.035,z0-0.04,x1+0.04,h+0.008,z0+0.015,p.trim);
+    g.box(x0-0.04,h-0.035,z1-0.015,x1+0.04,h+0.008,z1+0.04,p.trim);
+    g.box(x0-0.025,h+rise-0.015,cz-0.025,x1+0.025,h+rise+0.025,cz+0.025,p.roof);
+  } else {
+    g.box(x0-0.04,h-0.035,z0-0.04,x0+0.015,h+0.008,z1+0.04,p.trim);
+    g.box(x1-0.015,h-0.035,z0-0.04,x1+0.04,h+0.008,z1+0.04,p.trim);
+    g.box(cx-0.025,h+rise-0.015,z0-0.025,cx+0.025,h+rise+0.025,z1+0.025,p.roof);
+  }
+  // Entrance width distinguishes barn carriage doors, shop fronts and domestic doors.
+  const half = b.kind === BK_BARN ? 0.22 : b.kind === BK_SHOP ? 0.17 : 0.10;
+  g.quad([cx-half-0.025,0,z1+0.015],[cx+half+0.025,0,z1+0.015],[cx+half+0.025,0.29,z1+0.015],[cx-half-0.025,0.29,z1+0.015],[0,0,1],p.trim);
+  g.quad([cx-half,0.015,z1+0.018],[cx+half,0.015,z1+0.018],[cx+half,0.26,z1+0.018],[cx-half,0.26,z1+0.018],[0,0,1],BEAM);
+  g.box(cx-half-0.025,0,z1+0.02,cx+half+0.025,0.035,z1+0.065,p.trim);
+  // Broad corner dressings, no subpixel brick-line multiplication.
+  for (const x of [x0,x1-0.04]) {
+    g.quad([x,0,z1+0.01],[x+0.04,0,z1+0.01],[x+0.04,h,z1+0.01],[x,h,z1+0.01],[0,0,1],p.trim);
+    g.quad([x,0,z0-0.01],[x+0.04,0,z0-0.01],[x+0.04,h,z0-0.01],[x,h,z0-0.01],[0,0,-1],p.trim);
+  }
+  if (b.kind === BK_HOUSE || b.kind === BK_SHOP) {
+    const x = alongX ? x1-0.18 : cx, z = alongX ? cz : z1-0.18;
+    g.box(x-0.065,h+rise+0.1,z-0.065,x+0.065,h+rise+0.145,z+0.065,p.trim);
   }
 }
 
@@ -157,7 +217,23 @@ function facade(g: Geo, b: Building, style: number, x0: number, z0: number, x1: 
   ];
   const strip = (axis: number, a0: number, a1: number, at: number, dir: number, y0: number, y1: number, c: THREE.Color, out = t) => {
     const o0 = dir > 0 ? at : at - out, o1 = dir > 0 ? at + out : at;
-    if (axis === 0) g.box(a0, y0, o0, a1, y1, o1, c, null); else g.box(o0, y0, a0, o1, y1, a1, c, null);
+    if (!buildingDetailsOn) {
+      if (axis === 0) g.box(a0, y0, o0, a1, y1, o1, c, null); else g.box(o0, y0, a0, o1, y1, a1, c, null);
+      return;
+    }
+    // Intact opaque wall hides only the strip's inward rear face. Keep the exact
+    // outward face and both end faces, colours/normals/depth; no detail or LOD loss.
+    if (axis === 0) {
+      const front = dir > 0 ? o1 : o0;
+      g.quad([a0,y0,front],[a1,y0,front],[a1,y1,front],[a0,y1,front],[0,0,dir],c);
+      g.quad([a1,y0,o0],[a1,y0,o1],[a1,y1,o1],[a1,y1,o0],[1,0,0],c);
+      g.quad([a0,y0,o0],[a0,y0,o1],[a0,y1,o1],[a0,y1,o0],[-1,0,0],c);
+    } else {
+      const front = dir > 0 ? o1 : o0;
+      g.quad([front,y0,a0],[front,y0,a1],[front,y1,a1],[front,y1,a0],[dir,0,0],c);
+      g.quad([o0,y0,a1],[o1,y0,a1],[o1,y1,a1],[o0,y1,a1],[0,0,1],c);
+      g.quad([o0,y0,a0],[o1,y0,a0],[o1,y1,a0],[o0,y1,a0],[0,0,-1],c);
+    }
   };
   for (const [axis, a0, a1, at, dir] of faces) {
     if (style === FAC_TIMBER) {                                   // 角柱、每層的橫梁、間柱
@@ -171,7 +247,11 @@ function facade(g: Geo, b: Building, style: number, x0: number, z0: number, x1: 
       for (let y = y0 + 0.045; y < h - 0.01; y += 0.045) strip(axis, a0, a1, at, dir, y, y + 0.008, TILE_D, t + 0.002);
       strip(axis, a0, a1, at, dir, y0 - 0.02, y0, OAK, t + 0.003);    // 掛瓦下緣的收邊板
     } else if (style === FAC_BOARD) {                             // 白色護牆板：一條條橫線
-      for (let y = 0.05; y < h - 0.02; y += 0.05) strip(axis, a0, a1, at, dir, y, y + 0.006, BOARD_D);
+      // R134 owner review: coarse, subdued board joints instead of subpixel bright dot rows.
+      const calmBoards = buildingDetailsOn;
+      const spacing = calmBoards ? 0.12 : 0.05, thickness = calmBoards ? 0.012 : 0.006;
+      const jointColor = calmBoards ? palette(b.kind).wall.clone().lerp(BOARD_D, 0.22) : BOARD_D;
+      for (let y = spacing; y < h - 0.02; y += spacing) strip(axis, a0, a1, at, dir, y, y + thickness, jointColor);
     }
   }
 }
@@ -237,6 +317,7 @@ function intact(g: Geo, b: Building) {
   }
   if (b.kind === BK_SHOP) g.box(x0, 0.2, z1, x1, 0.28, z1 + 0.03, p.trim, p.trim);   // 店招
   if (b.kind !== BK_BARN) windows(g, b, x0, z0, x1, z1, h);
+  buildingDetails(g, b, x0, z0, x1, z1, h, rise, alongX);
 }
 
 // 沒屋頂：四面薄牆剩七成高，牆頂鋸齒，屋裡焦黑，幾根斷梁
