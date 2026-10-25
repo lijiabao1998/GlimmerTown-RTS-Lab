@@ -143,17 +143,17 @@ class Element {
 }
 function section(source, start, end, after = 0) { const a = source.indexOf(start, after), b = source.indexOf(end, a + start.length); assert(a >= 0 && b > a, `source boundaries: ${start}`); return source.slice(a, b); }
 function uiFixture(read, query = '') {
-  const f = fixture(); add(f); const document = { body: new Element(), createElement: () => new Element() }; globalThis.document = document;
+  const f = fixture(); add(f); let stateCalls = 0, vehicleCalls = 0; const document = { body: new Element(), createElement: () => new Element() }; globalThis.document = document;
   const c = vm.createContext({ ...world, ...f, vehicleDurability: read, reloadStatus, coverDurability, document, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
     battleAudio: undefined, r009: true, r010: false, r018: false, r015: false, r115: false, buildHint: '', BUILD_TIP: '布陣說明', q: new URLSearchParams(query),
-    view: { rangeInfo: '原射程', visibleUnit: () => true }, counterbatteryHint: () => '', lastVehicleInfo: '', lastVehicleWorld: undefined,
-    initHud: actions => initHud(actions) });
+    view: { rangeInfo: '原射程', visibleUnit: () => true }, counterbatteryHint: () => '', lastVehicleInfo: '',
+    initHud: actions => { const hud = initHud({ ...actions, state: () => { stateCalls++; return actions.state(); } }); return { ...hud, vehicleFrame: info => { vehicleCalls++; hud.vehicleFrame(info); } }; } });
   vm.runInContext(section(mainPlain, 'const ORD_NAME = ', '\nreportView = initReportView'), c);
   const frame = section(mainPlain, '  const vehicleInfo = ', '\n  const vegetationInfo = ', mainPlain.indexOf('  view.update(alpha'));
   const hint = document.body.children.get('hud').querySelector('#hint');
-  return { ...f, c, hint: () => hint.textContent, writes: () => hint.writes, refresh: () => vm.runInContext(`{${frame}}`, c) };
+  return { ...f, c, hint: () => hint.textContent, writes: () => hint.writes, stateCalls: () => stateCalls, vehicleCalls: () => vehicleCalls, refresh: () => vm.runInContext(`{${frame}}`, c) };
 }
-test('hud_prefix', 'vehicle durability is visible before existing operation hints', 'hud', "    if (s.hint === undefined && s.vehicleInfo) $('hint').textContent = `${s.vehicleInfo}。${$('hint').textContent}`;", '', (read, message) => {
+test('hud_prefix', 'vehicle durability is visible before existing operation hints', 'hud', '!priorityHint && info ? `${info}。${legacyHint}` : legacyHint', 'legacyHint', (read, message) => {
   const f = uiFixture(read); assert(f.hint().startsWith(single(UNIT_KINDS[UK_TANK].hp, UNIT_KINDS[UK_TANK].hp)), message);
   assert(f.hint().includes('待命 1。已選：坦克 1。點地面＝移動'), 'order state and controls preserved'); assert(f.hint().includes('裝填完成 1'), 'reload status preserved'); assert(f.hint().includes('原射程'), 'range status preserved');
 });
@@ -167,20 +167,47 @@ test('main_valve', 'noR135 restores the previous HUD without vehicle durability'
 test('independent_valve', 'noR009 does not disable the independent vehicle durability summary', 'main', "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');", "    const vehicleInfo = vehicleDurability(w, selected, r009 && phase === 'battle' && q.get('noR135') !== '1');", (read, message) => {
   const f = uiFixture(read); f.c.r009 = false; f.c.hud.update(); assert(f.hint().includes('車輛耐久'), message); assert(!f.hint().includes('待命 1'), 'R009 command summary remains independently disabled');
 });
-test('priority', 'defined priority hints suppress durability without losing it afterward', 'hud', 's.hint === undefined && s.vehicleInfo', 's.vehicleInfo', (read, message) => {
+test('priority', 'defined priority hints suppress durability without losing it afterward', 'hud', '!priorityHint && info', 'info', (read, message) => {
   const f = uiFixture(read); for (const hint of ['選擇這一格', '']) { f.c.battleHint = hint; f.c.hud.update(); eq(f.hint(), hint, message); }
   f.c.battleHint = undefined; f.c.hud.update(); assert(f.hint().includes('車輛耐久'), 'cancel restores current durability');
 });
-test('smoke_mode', 'smoke operation hints retain durability without overwriting controls', 'hud', 's.hint === undefined && s.vehicleInfo', "s.hint === undefined && !s.fireMode && s.vehicleInfo", (read, message) => {
+test('smoke_mode', 'smoke operation hints retain durability without overwriting controls', 'hud', '!priorityHint && info', '!priorityHint && !a.state().fireMode && info', (read, message) => {
   const f = uiFixture(read); f.c.fireMode = true; f.c.ammo = 'smoke'; f.c.hud.update(); assert(f.hint().includes('車輛耐久'), message); assert(f.hint().includes('煙幕只供榴彈砲'), 'smoke-specific controls preserved');
 });
-test('frame_hp', 'same-tick frame damage updates the paused HUD immediately', 'main', 'lastVehicleWorld = w; lastVehicleInfo = vehicleInfo; hud?.update();', 'lastVehicleWorld = w; lastVehicleInfo = vehicleInfo;', (read, message) => {
+test('frame_hp', 'same-tick frame damage updates the paused HUD immediately', 'main', 'lastVehicleInfo = vehicleInfo; hud?.vehicleFrame(vehicleInfo);', 'lastVehicleInfo = vehicleInfo;', (read, message) => {
   const f = uiFixture(read); f.refresh(); f.w.units[0].hp--; f.refresh(); assert(f.hint().startsWith(single(f.w.units[0].hp, UNIT_KINDS[UK_TANK].hp)), message);
   const writes = f.writes(); f.refresh(); eq(f.writes(), writes, 'unchanged frames add no DOM writes');
   f.selected.clear(); f.refresh(); assert(!f.hint().includes('車輛耐久'), 'same-tick clear removes old durability');
 });
-test('frame_world', 'replacement world refreshes HUD even with identical durability', 'main', 'w !== lastVehicleWorld || vehicleInfo !== lastVehicleInfo', 'vehicleInfo !== lastVehicleInfo', (read, message) => {
-  const f = uiFixture(read); f.refresh(); const fresh = structuredClone(f.w); fresh.units[0].order = ORD_MOVE; f.c.w = fresh; f.refresh(); assert(f.hint().includes('移動 1'), message);
+test('frame_replacement', 'replacement world reconstructs current vehicle durability', 'main', "  const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');\n  // 只更新R135", "  const vehicleInfo = vehicleDurability({ ...w, units: [] }, selected, phase === 'battle' && q.get('noR135') !== '1');\n  // 只更新R135", (read, message) => {
+  const f = uiFixture(read); f.refresh(); const fresh = structuredClone(f.w); fresh.units[0].hp = 1; f.c.w = fresh; f.refresh();
+  assert(f.hint().startsWith(single(1, UNIT_KINDS[UK_TANK].hp)), message);
+});
+test('frame_disabled', 'disabled vehicle durability adds no frame calls on first or replacement world', 'main', 'if (vehicleInfo !== lastVehicleInfo)', 'if (true)', (read, message) => {
+  const f = uiFixture(read, 'noR135=1'), calls = f.vehicleCalls(), writes = f.writes(); f.refresh(); eq(f.vehicleCalls(), calls, message);
+  f.c.w = structuredClone(f.w); f.refresh(); eq(f.vehicleCalls(), calls, message); eq(f.writes(), writes, 'disabled frames leave original HUD untouched');
+});
+test('frame_empty', 'absent vehicle durability adds no unrelated frame calls', 'main', 'if (vehicleInfo !== lastVehicleInfo)', 'if (true)', (read, message) => {
+  const f = uiFixture(read); f.selected.clear(); f.c.hud.update(); const calls = f.vehicleCalls(), writes = f.writes();
+  f.refresh(); eq(f.vehicleCalls(), calls, message); f.c.w = structuredClone(f.w); f.refresh(); eq(f.vehicleCalls(), calls, message); eq(f.writes(), writes, 'empty frames leave existing HUD untouched');
+});
+test('frame_disable_clear', 'disabling an existing vehicle summary still clears stale HUD text', 'main', 'if (vehicleInfo !== lastVehicleInfo)', 'if (vehicleInfo && vehicleInfo !== lastVehicleInfo)', (read, message) => {
+  const f = uiFixture(read); f.refresh(); assert(f.hint().includes('車輛耐久'), 'fixture begins with visible durability');
+  f.c.q.set('noR135', '1'); f.refresh(); assert(!f.hint().includes('車輛耐久'), message);
+  f.c.hud.update(); assert(f.hint().startsWith('血量 100%'), 'normal update with the disabled flag restores the original HUD');
+});
+test('frame_no_state', 'vehicle frames never call the full HUD state callback', 'main', 'hud?.vehicleFrame(vehicleInfo);', 'hud?.update();', (read, message) => {
+  const f = uiFixture(read); f.refresh(); const calls = f.stateCalls(); f.w.units[0].hp--; f.refresh(); eq(f.stateCalls(), calls, message);
+  const directCalls = f.stateCalls(); f.c.hud.vehicleFrame('測試耐久'); eq(f.stateCalls(), directCalls, 'direct vehicle presentation never reads simulation state');
+});
+test('frame_cached_legacy', 'vehicle frames cannot rescue another feature with a stale hint', 'main', 'hud?.vehicleFrame(vehicleInfo);', 'hud?.update();', (read, message) => {
+  const f = uiFixture(read); f.refresh(); f.c.view.rangeInfo = '尚未由射程功能刷新'; f.w.units[0].hp--; f.refresh();
+  assert(f.hint().includes('原射程') && !f.hint().includes('尚未由射程功能刷新'), message); assert(f.hint().startsWith(single(f.w.units[0].hp, UNIT_KINDS[UK_TANK].hp)), 'durability itself still refreshes');
+  f.c.hud.update(); assert(f.hint().includes('尚未由射程功能刷新'), 'the existing normal HUD update still refreshes its own information');
+});
+test('frame_priority', 'vehicle-only frames preserve defined priority hints', 'hud', '!priorityHint && info', 'info', (read, message) => {
+  const f = uiFixture(read); f.c.battleHint = '選擇這一格'; f.c.hud.update(); f.w.units[0].hp--; f.refresh(); eq(f.hint(), '選擇這一格', message);
+  f.c.battleHint = undefined; f.c.hud.update(); assert(f.hint().startsWith(single(f.w.units[0].hp, UNIT_KINDS[UK_TANK].hp)), 'cancel restores the current summary');
 });
 test('build_scope', 'build phase does not show battle durability', 'main', "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');", "    const vehicleInfo = vehicleDurability(w, selected, q.get('noR135') !== '1');", (read, message) => {
   const f = uiFixture(read); f.c.phase = 'build';

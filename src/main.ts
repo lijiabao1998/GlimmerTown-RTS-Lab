@@ -86,7 +86,6 @@ let sandboxBar: SandboxBar | undefined, sandboxTool: number | null = UK_TANK, sa
 let lastRangeInfo = '';
 let lastCoverInfo = ''; // R124：同 tick 傷害／換選／重播也重算
 let lastVehicleInfo = ''; // R135：同 tick 受傷／換選／清空即時刷新
-let lastVehicleWorld: World | undefined;
 let lastReloadInfo = ''; // R123：同 tick 換選與清理也重算
 let lastVegetationInfo = '';
 let lastCounterbatteryInfo = '';
@@ -646,8 +645,9 @@ renderer.setAnimationLoop(() => {
   const reloadInfo = reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1');
   if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
   const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');
-  if (w !== lastVehicleWorld || vehicleInfo !== lastVehicleInfo) {
-    lastVehicleWorld = w; lastVehicleInfo = vehicleInfo; hud?.update();
+  // 只更新R135前綴，不替其他提示補跑其自身的刷新路徑。
+  if (vehicleInfo !== lastVehicleInfo) {
+    lastVehicleInfo = vehicleInfo; hud?.vehicleFrame(vehicleInfo);
   }
   const vegetationInfo = view.vegetationInfo;
   if (vegetationInfo !== lastVegetationInfo) { lastVegetationInfo = vegetationInfo; hud?.update(); }
