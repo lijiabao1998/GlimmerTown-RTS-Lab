@@ -36,9 +36,8 @@ export function initSandbox(a: SandboxActions): SandboxBar {
   entry.id = 'sb-enter'; entry.textContent = '沙盒模式';
   const panel = document.createElement('section');
   panel.id = 'sandbox-panel'; panel.setAttribute('aria-label', '沙盒控制');
-  panel.innerHTML = `<div class="sb-row"><strong id="sb-status"></strong><button id="sb-run">開始</button><button id="sb-reset">重置</button><button id="sb-exit">一般模式</button></div>
+  panel.innerHTML = `<div class="sb-row"><strong id="sb-status"></strong><button id="sb-run">開始</button><button id="sb-reset">重置</button><button id="sb-exit">一般模式</button><span id="sb-summary" hidden></span></div>
     <div class="sb-row"><button id="sb-player">我方</button><button id="sb-enemy">敵方</button><button id="sb-tank">坦克</button><button id="sb-howitzer">榴彈砲</button><button id="sb-command">指揮</button></div>
-    <div id="sb-summary" hidden></div>
     <div id="sb-hint" role="status" aria-live="polite"></div>`;
   document.body.append(entry, panel);
   const $ = (id: string) => panel.querySelector('#' + id) as HTMLButtonElement;
