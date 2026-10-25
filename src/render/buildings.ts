@@ -42,6 +42,11 @@ export function wireGeo(g: Geo, b: Building): Geo {
 let buildingDetailsOn = false;
 export function setBuildingDetails(on: boolean): void { buildingDetailsOn = on; }
 
+// R138: local civilian damage meshes only; legacy geometry is an exact independent rollback.
+let damageDetailsOn = false;
+export function setDamageDetails(on: boolean): void { damageDetailsOn = on; }
+const civilianDamage = (b: Building) => damageDetailsOn && [BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP].includes(b.kind);
+
 export const FLOOR_H = 0.36;   // 一層樓高（格）；3D-lab blockArt.ts 的換算
 
 const C = (hex: number) => new THREE.Color(hex);
@@ -320,8 +325,62 @@ function intact(g: Geo, b: Building) {
   buildingDetails(g, b, x0, z0, x1, z1, h, rise, alongX);
 }
 
+// R138: a continuous broken profile, not extra loose detail on top of the old shell.
+// The top cut uses existing exposed-material colour; all faces stay inside the footprint.
+function damagedShell(g: Geo, b: Building) {
+  const p = palette(b.kind), colors = rubbleColors(b.kind), t = 0.09;
+  const x0 = b.x + 0.1, x1 = b.x + b.w - 0.1, z0 = b.z + 0.1, z1 = b.z + b.d - 0.1;
+  const h = wallHeight(b) * 0.72;
+  g.box(x0 + t, 0, z0 + t, x1 - t, 0.03, z1 - t, CHAR);
+  const wall = (axis: number, a0: number, a1: number, c0: number, c1: number, side: number) => {
+    const point = (a: number, y: number, c: number): [number, number, number] => axis === 0 ? [a, y, c] : [c, y, a];
+    // A broad breach reads at native pixel scale; unequal shoulders keep it from looking crenellated.
+    const heights = [0.91, 0.76, 0.3, 0.23, 0.68, 0.88].map((v, k) => h * (v + 0.06 * hash2(b.id, side * 7 + k, 138)));
+    for (let k = 0; k < 5; k++) {
+      const a = a0 + (a1 - a0) * k / 5, d = a0 + (a1 - a0) * (k + 1) / 5, lo = heights[k], hi = heights[k + 1];
+      g.face4(point(a, 0, c0), point(d, 0, c0), point(d, hi, c0), point(a, lo, c0), axis === 0 ? [0, 0, -1] : [-1, 0, 0], p.wall);
+      g.face4(point(a, 0, c1), point(d, 0, c1), point(d, hi, c1), point(a, lo, c1), axis === 0 ? [0, 0, 1] : [1, 0, 0], p.wall);
+      g.face4(point(a, lo, c0), point(d, hi, c0), point(d, hi, c1), point(a, lo, c1), [0, 1, 0], colors[2]);
+    }
+  };
+  wall(0, x0, x1, z0, z0 + t, 0); wall(0, x0, x1, z1 - t, z1, 1);
+  wall(1, z0 + t, z1 - t, x0, x0 + t, 2); wall(1, z0 + t, z1 - t, x1 - t, x1, 3);
+  // Low interior debris and the original two dark beams preserve the empty-room silhouette.
+  for (let k = 0; k < 3; k++) {
+    const x = x0 + (x1 - x0) * (0.3 + 0.2 * k), z = z1 - t - 0.11;
+    g.box(x - 0.09, 0.03, z - 0.07, x + 0.09, 0.11 + 0.02 * (k % 2), z + 0.07, colors[k]);
+  }
+  for (let k = 0; k < 2; k++) {
+    const y = 0.05 + 0.08 * k, zz = z0 + (z1 - z0) * (0.3 + 0.4 * hash2(b.id, k, 9));
+    g.box(x0 + t, y, zz - 0.025, x1 - t, y + 0.05, zz + 0.025, BEAM);
+  }
+}
+
+function damagedRubble(g: Geo, b: Building) {
+  const colors = rubbleColors(b.kind), p = palette(b.kind), n = 6 + b.w * b.d * 3;
+  const x0 = b.x + 0.1, x1 = b.x + b.w - 0.1, z0 = b.z + 0.1, z1 = b.z + b.d - 0.1;
+  // Low surviving wall corners outline the former room without recreating the roofless shell.
+  g.box(x0, 0, z0, x0 + (x1 - x0) * 0.45, 0.11, z0 + 0.09, p.wall, colors[2]);
+  g.box(x0, 0, z0 + 0.09, x0 + 0.09, 0.09, z0 + (z1 - z0) * 0.45, p.wall, colors[2]);
+  for (let k = 0; k < n; k++) {
+    const hx = hash2(b.id, k, 1), hz = hash2(b.id, k, 2), hh = hash2(b.id, k, 3), hc = hash2(b.id, k, 4);
+    const sx = 0.09 + hh * 0.1, sz = 0.07 + hc * 0.08;
+    const x = x0 + sx + hx * (x1 - x0 - sx * 2), z = z0 + sz + hz * (z1 - z0 - sz * 2);
+    const mound = 1 - Math.max(Math.abs(hx - 0.5), Math.abs(hz - 0.5)) * 2;
+    g.box(x - sx, 0, z - sz, x + sx, 0.06 + hh * 0.1 + mound * 0.13, z + sz, colors[Math.floor(hc * colors.length)]);
+  }
+  // Three larger roof fragments make rubble read as a collapse, rather than pebbles.
+  for (let k = 0; k < 3; k++) {
+    const x = x0 + (x1 - x0) * (0.25 + 0.25 * k), z = z0 + (z1 - z0) * (0.35 + 0.13 * (k % 2));
+    const sx = Math.min(0.2, (x1 - x0) * 0.17), sz = Math.min(0.15, (z1 - z0) * 0.15), y = 0.13 + k * 0.025;
+    g.face4([x - sx, y, z - sz], [x + sx, y + 0.07, z - sz], [x + sx, y + 0.07, z + sz], [x - sx, y, z + sz], [0, 1, 0], p.roof);
+  }
+  if (b.kind === BK_CHURCH) g.box(b.x + 0.1, 0, b.z + 0.1, b.x + 0.9, 0.55, b.z + 0.9, p.wall);
+}
+
 // 沒屋頂：四面薄牆剩七成高，牆頂鋸齒，屋裡焦黑，幾根斷梁
 function roofless(g: Geo, b: Building) {
+  if (civilianDamage(b)) { damagedShell(g, b); return; }
   if (wallShown(b)) { boundaryWall(g, b, true); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, true); return; }
   const p = palette(b.kind), m = 0.1, t = 0.07, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
@@ -345,6 +404,7 @@ function roofless(g: Geo, b: Building) {
 }
 
 function rubble(g: Geo, b: Building) {
+  if (civilianDamage(b)) { damagedRubble(g, b); return; }
   const n = 6 + b.w * b.d * 3, colors = rubbleColors(b.kind);
   for (let k = 0; k < n; k++) {
     const hx = hash2(b.id, k, 1), hz = hash2(b.id, k, 2), hh = hash2(b.id, k, 3), hc = hash2(b.id, k, 4);

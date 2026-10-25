@@ -32,13 +32,13 @@
 
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
-| 37 | 砲擊快捷選單適用砲數提示 | 下指令前看懂高爆與煙幕適用範圍 | 介面 | 不會 | R137產品585ef8e完整CI40169483640與真圖通過，PR83收尾head／正常合併發布待核；依原bombardCommand資格，不改射擊規則 |
-| 38 | 可見破牆邊緣與瓦礫辨識 | 房子是掩體也會被打爛 | 渲染研究 | 不會 | 僅候選排隊；先核既有局部幾何與圖審範圍，不改全局畫風或自動發布美術 |
+| 38 | 可見破牆邊緣與瓦礫辨識 | 房子是掩體也會被打爛 | 渲染研究 | 不會 | R138 已施工局部破牆／瓦礫候選，獨立 noR138；完整 CI 與真圖待驗，保持 Draft／等業主看圖，不改全局畫風或發布 |
 
 ## 卡住／等業主看圖
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
+| 38 破牆邊緣與瓦礫辨識 | R138 Draft 候選；等業主看圖 | 僅局部損壞幾何，原生對照與完整 CI 驗收後仍不得 Ready／合併／Pages；不將局部候選當作圖審通過。 | R138 |
 | 35 建築抗鋸齒剩餘 MSAA | 未完成；交 Claude 授權路徑 | R134 建築細節、隱面優化與板牆修正已發布；MSAA 需要受保護 post.ts，本線不繞過 gpt-lane，也不將局部細節算作抗鋸齒完成。 | R131／R134、[#80](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/80) |
 | 17 電網防禦 | 卡住；考據不足，未施工、未完成 | 2026-10-20：1943 年美軍情報記載德軍在法、荷、比有少量帶電鐵絲網，不能外推為 1940 英國本土防衛常規。現有資料不足以支持本作的致傷電網；改成步兵電擊會碰 Claude 分工，改成探照燈供電又需夜戰／全局光照決策。不偷換成普通鐵絲網的 R121，也不宣稱史上不存在。待有英國相符史料或業主明確決定改編範圍。來源：[1943 年原始情報轉錄](https://ww2.lonesentry.com/articles/barbedwire/index.html)、[RAF Museum 英國防衛背景](https://www.rafmuseum.org.uk/research/online-exhibitions/history-of-the-battle-of-britain/british-defences) | 研究狀態，沒有功能卡 |
 
@@ -46,6 +46,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 砲擊快捷選單適用砲數（待辦37） | R137 | [#83](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/83) | 2026-10-25（已發布） | main b43e7cb；主線 CI／Pages 40171274133 成功；公網 759001 bytes／SHA256 8b40166019c60bf28c0cf48e99447e621c9aad5712e4ae681db96c60b672c7a7 與官方逐位一致；Android 實機未驗 |
 | 沙盒戰況／容量分解（待辦36） | R136 | [#82](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/82) | 2026-10-25（已發布） | main7f1b89d；主線CI／Pages40165739121成功；公網758248bytes／SHA256 4c0f4b19291904c1cb3e72c948fd1111549295a23a85805888c98278202bfdf9與官方逐位一致；Android實機未驗 |
 | 選取坦克／砲車耐久摘要（待辦30） | R135 | [#81](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/81) | 2026-10-25（已發布） | main02ccaa4；主線CI／Pages40160846012成功；公網757878bytes／SHA256 e65ca6e23094b88e5cebf6285466ec02883ebb6de1802ee31f9fe92f25f5196d與官方逐位一致；Android實機未驗 |
 | 原生建築門窗屋簷細節、隱面優化、護牆板密度修正（不含 MSAA） | R134 | [#80](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/80) | 2026-10-25（已發布） | main af7a606；[CI／Pages 40157165732](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40157165732) 成功，公開 HTTPS 757169 bytes／SHA256 f6e9de3b928b81ce7b780bbb4597a4085b973aaadcf84ce98903c35b1eca73fb 與官方產物逐位一致；Android 實機未驗 |
