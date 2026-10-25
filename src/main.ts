@@ -1,3 +1,4 @@
+import { vehicleDurability } from './ui/vehicleDurability.ts';
 import { hqDurability } from './ui/hqDurability.ts';
 import { productionBlockReason } from './ui/productionBlockReason.ts';
 import { productionCountdown } from './ui/productionCountdown.ts';
@@ -84,6 +85,7 @@ const r128 = q.get('noR128') !== '1';
 let sandboxBar: SandboxBar | undefined, sandboxTool: number | null = UK_TANK, sandboxSide = SIDE_PLAYER, sandboxHint = '';
 let lastRangeInfo = '';
 let lastCoverInfo = ''; // R124：同 tick 傷害／換選／重播也重算
+let lastVehicleInfo = ''; // R135：同 tick 受傷／換選／清空即時刷新
 let lastReloadInfo = ''; // R123：同 tick 換選與清理也重算
 let lastVegetationInfo = '';
 let lastCounterbatteryInfo = '';
@@ -494,13 +496,13 @@ addEventListener('keydown', e => {
 
 reset();
 
-// R009 選取資訊：平均血量與正在做什麼
+// R009 選取資訊：正在做什麼；R135有精確車輛摘要時不再混用平均血量
 const ORD_NAME = ['待命', '移動', '攻擊', '砲擊'];
-function selInfo(sel: typeof w.units): string {
-  const hp = Math.round((100 * sel.reduce((p, u) => p + u.hp / UNIT_KINDS[u.kind].hp, 0)) / sel.length);
+function selInfo(sel: typeof w.units, showAverage = true): string {
+  const hp = showAverage ? `血量 ${Math.round((100 * sel.reduce((p, u) => p + u.hp / UNIT_KINDS[u.kind].hp, 0)) / sel.length)}%｜` : '';
   const n = [0, 0, 0, 0];
   for (const u of sel) n[u.order] = (n[u.order] ?? 0) + 1;
-  return `血量 ${hp}%｜${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}`;
+  return `${hp}${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}`;
 }
 
 // ---- HUD ----
@@ -508,13 +510,15 @@ hud = initHud({
   state: () => {
     const mine = w.units.filter(u => u.side === SIDE_PLAYER && u.alive), theirs = w.units.filter(u => u.side === SIDE_ENEMY && u.alive && view.visibleUnit(u));
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
+    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');
     return {
       tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: r010,
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : battleHint,
       mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
-      info: r009 && sel.length ? selInfo(sel) : undefined,
+      info: r009 && sel.length ? selInfo(sel, !vehicleInfo) : undefined,
+      vehicleInfo,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
       coverEnabled: phase === 'battle' && q.get('noR124') !== '1',
       coverInfo: coverDurability(w, selected, phase === 'battle' && q.get('noR124') !== '1'),
@@ -640,6 +644,11 @@ renderer.setAnimationLoop(() => {
   if (coverInfo !== lastCoverInfo) { lastCoverInfo = coverInfo; hud?.update(); }
   const reloadInfo = reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1');
   if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
+  const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');
+  // 只更新R135前綴，不替其他提示補跑其自身的刷新路徑。
+  if (vehicleInfo !== lastVehicleInfo) {
+    lastVehicleInfo = vehicleInfo; hud?.vehicleFrame(vehicleInfo);
+  }
   const vegetationInfo = view.vegetationInfo;
   if (vegetationInfo !== lastVegetationInfo) { lastVegetationInfo = vegetationInfo; hud?.update(); }
   // 暫停／重播也檢查當前世界；同 tick 換世界不能沿用上一局的提示。

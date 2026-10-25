@@ -32,19 +32,20 @@
 
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
-| 35 | 本輪業主指定：建築細節與抗鋸齒 | 外觀更自然、明顯減少鋸齒 | 渲染 | 不會 | 後續畫面卡；已明確要求檢查post.ts，保留同視角比較與Library交付；不自動發布 |
-| 30 | 選取坦克／砲車耐久摘要 | 坦克與榴彈砲對轟的存活判斷 | 介面 | 不會 | 不改單位數值與步兵分工 |
 
 ## 卡住／等業主看圖
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
+| 35 建築抗鋸齒剩餘 MSAA | 未完成；交 Claude 授權路徑 | R134 建築細節、隱面優化與板牆修正已發布；MSAA 需要受保護 post.ts，本線不繞過 gpt-lane，也不將局部細節算作抗鋸齒完成。 | R131／R134、[#80](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/80) |
 | 17 電網防禦 | 卡住；考據不足，未施工、未完成 | 2026-10-20：1943 年美軍情報記載德軍在法、荷、比有少量帶電鐵絲網，不能外推為 1940 英國本土防衛常規。現有資料不足以支持本作的致傷電網；改成步兵電擊會碰 Claude 分工，改成探照燈供電又需夜戰／全局光照決策。不偷換成普通鐵絲網的 R121，也不宣稱史上不存在。待有英國相符史料或業主明確決定改編範圍。來源：[1943 年原始情報轉錄](https://ww2.lonesentry.com/articles/barbedwire/index.html)、[RAF Museum 英國防衛背景](https://www.rafmuseum.org.uk/research/online-exhibitions/history-of-the-battle-of-britain/british-defences) | 研究狀態，沒有功能卡 |
 
 ## 已完成（最新在上）
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 選取坦克／砲車耐久摘要（待辦30） | R135 | [#81](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/81) | 2026-10-25（產品驗收完成；發布另核） | 3366e2c完整CI40159088013成功；1440／412原生on/off16 calls／14484 triangles、完整世界相同；收尾head仍須CI，Android實機未驗 |
+| 原生建築門窗屋簷細節、隱面優化、護牆板密度修正（不含 MSAA） | R134 | [#80](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/80) | 2026-10-25（已發布） | main af7a606；[CI／Pages 40157165732](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40157165732) 成功，公開 HTTPS 757169 bytes／SHA256 f6e9de3b928b81ce7b780bbb4597a4085b973aaadcf84ce98903c35b1eca73fb 與官方產物逐位一致；Android 實機未驗 |
 | 沙盒首步音效與放兵回饋；取代舊 R129／#64 | R133 | [#78](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/78) | 2026-10-24（已合併發布） | main b40279e；[CI／Pages 40097505215](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40097505215) 成功；實體 Android／聽感未驗證 |
 | 卡號來源解析維護，產品不變 | R132 | [#77](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/77) | 2026-10-24（已合併發布） | main 9640f923；[CI／Pages 40095844664](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40095844664) 成功；一次維護例外不得擴用 |
 | 可選 96×96 河鎮與密集街廓 | R130 | [#76](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/76) | 2026-10-24（已合併發布） | main 67e3e81f；[CI／Pages 40093947740](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40093947740) 成功；保留舊圖、手機預算，Android 實機未驗證 |
@@ -88,3 +89,11 @@ GitHub PR 狀態重新核對：#76／#77／#78 均 merged，#64 closed 且未合
 > | 34 | 本輪業主指定：可選96×96河鎮與實際街廓密度 | 更大地圖、更多建築 | 模擬／渲染／介面 | 舊腳本不變 | R130；從62d04bd9開工；保留手機預算、舊圖與喪屍，只做Draft與CI，不合併發布 |
 > | 33 | 修補：R129（#64）從分支拿掉 `.github/workflows/ci.yml` 的改動 | 業主 2026-10-23「要求能跑的起來」（R038） | CI | 不會 | Claude 插（R039）：CI 拆分已由 R039 做掉（四份 unit 並行＋chrome，`smoke` 是總閘）；`aeaf94a` 的 R129 精確例外已拿掉，`.github/` 照舊只歸 Claude。#64 的音效與放兵回饋照常做。另：載入動畫、大地圖、更多坦克、喪屍模式是 Claude 線 R040–R045，GPT 不重複出卡 |
 > | 31 | 沙盒最小切片（業主新方向優先） | 「帝模式也就是沙盒模式」 | 模擬／介面 | 舊腳本不變 | R128／[#63](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/63)已實作，僅Draft未發布：32×32、雙方坦克／榴彈砲、開始／暫停／重置／返回、32輛上限；本機80/88守衛通過，8項Windows既有紅已對main，smoke250.9秒綠，四標準與14功能圖已核。取代下一個UI小題；大地圖、畫質、載入動畫未施工；禁止Ready／合併／發布 |
+
+### 2026-10-25 R134 發布後接續
+
+以上 R131 只有卡的敘述是 2026-10-24 的歷史快照。R134 現已正式承接建築細節，原 R131 卡與分支保留；只有 MSAA 尚未完成。移出的原待辦完整保留如下，不作為再次施工指令：
+
+> | 35 | 本輪業主指定：建築細節與抗鋸齒 | 外觀更自然、明顯減少鋸齒 | 渲染 | 不會 | 後續畫面卡；已明確要求檢查post.ts，保留同視角比較與Library交付；不自動發布 |
+
+待辦30由 R135 接續並完成產品驗收；首紅與修復保留，最新head合併及發布仍按第4節閘門核實，不把產品驗收等同已上線。
