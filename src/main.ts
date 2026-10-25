@@ -11,7 +11,7 @@ import { BUILD_KINDS, BUILD_KINDS_24, WIRE_KIND, WALL_KINDS, BUILD_POINTS, apply
 import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
 import { step, runLog, commandTick, type Command, type LoggedCommand } from './sim/step.ts';
 import { createSandboxWorld, sandboxPlaceError, type SandboxCommand, type SandboxError } from './sim/sandbox.ts';
-import { initSandbox, SANDBOX_WHY, sandboxPlacementFeedback, type SandboxBar } from './ui/sandbox.ts';
+import { initSandbox, SANDBOX_WHY, sandboxPlacementFeedback, sandboxCapacity, type SandboxBar } from './ui/sandbox.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
 import { BattleAudio } from './render/audio.ts';
@@ -585,7 +585,7 @@ if (battleAudio) {
 }
 
 if (r128) sandboxBar = initSandbox({
-  state: () => ({ active: !!w.sandbox, running: !!w.sandbox?.running, count: w.units.length, tool: sandboxTool, side: sandboxSide, hint: sandboxHint }),
+  state: () => ({ active: !!w.sandbox, running: !!w.sandbox?.running, count: w.units.length, tool: sandboxTool, side: sandboxSide, hint: sandboxHint, summary: sandboxCapacity(w, q.get('noR136') !== '1') }),
   enter: () => { sandboxTool = UK_TANK; sandboxSide = SIDE_PLAYER; speed = 1; reset(seed, false, false, false, false, false, true); },
   exit: () => { sandboxTool = null; sandboxSide = SIDE_PLAYER; speed = 1; paused = false; reset(); },
   run: () => setPaused(!paused), reset: () => sandboxAction({ t: 'sandboxReset' }),
