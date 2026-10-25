@@ -200,6 +200,7 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || larg
   if (zombies) startZombies(w);
   view?.dispose();
   view = new BattleView(w, fxOn, !w.sandbox && q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
+  view.rubbleMarkGuard = q.get('noR139') !== '1';
   view.multiRangeEnabled = q.get('noR122') !== '1';
   if (w.map === MAP_LARGE) view.target.set(55, 0, 55);   // R043：大地圖開局鏡頭對準我方裝甲連（右下角落）
   if (w.map === MAP_TOWN) view.target.set(87, 0, 87);
@@ -690,6 +691,7 @@ const rts = {
     runLog(w, SCRIPT, ticks);
     view.dispose();
     view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
+    view.rubbleMarkGuard = q.get('noR139') !== '1';
   view.multiRangeEnabled = q.get('noR122') !== '1';
     return hashWorld(w);
   },

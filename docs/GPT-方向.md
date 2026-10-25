@@ -32,7 +32,7 @@
 
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
-| 38 | 可見破牆邊緣與瓦礫辨識 | 房子是掩體也會被打爛 | 渲染研究 | 不會 | R138 局部破牆／瓦礫，獨立 noR138；候選 1fe901b 完整 CI40173583028 與 45 原始 PNG 已驗，業主 2026-10-25 07:58 UTC「允許，接受」本輪外觀及依既有流程合併上線；收尾最新 CI／合併／main CI／Pages／公網逐位核實待完成 |
+| 39 | 修補：瓦礫不重生牆面彈孔 | 房子是掩體也會被打爛 | 渲染 | 不會 | R139／#85 產品37d4535完整CI40179227221全綠，37張正常／診斷PNG已核；真實致命／在途AP不再重生瓦礫牆孔，後續活建築痕跡不變；獨立noR139，六行渲染旗標／guard，不改建築mesh／模擬／後製；收尾文件head與發布閘門待核 |
 
 ## 卡住／等業主看圖
 
@@ -45,6 +45,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| 可見破牆邊緣與瓦礫辨識（待辦38） | R138 | [#84](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/84) | 2026-10-25（已發布） | main 5f73193；CI／Pages 40176224652 成功；公開產物 760906 bytes／SHA256 0fa5b4d863bc148b0559a2706c57924bbfbb28a2e2abf19ba0baa02258778869 與官方逐位一致；Android 實機未驗 |
 | 砲擊快捷選單適用砲數（待辦37） | R137 | [#83](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/83) | 2026-10-25（已發布） | main b43e7cb；主線 CI／Pages 40171274133 成功；公網 759001 bytes／SHA256 8b40166019c60bf28c0cf48e99447e621c9aad5712e4ae681db96c60b672c7a7 與官方逐位一致；Android 實機未驗 |
 | 沙盒戰況／容量分解（待辦36） | R136 | [#82](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/82) | 2026-10-25（已發布） | main7f1b89d；主線CI／Pages40165739121成功；公網758248bytes／SHA256 4c0f4b19291904c1cb3e72c948fd1111549295a23a85805888c98278202bfdf9與官方逐位一致；Android實機未驗 |
 | 選取坦克／砲車耐久摘要（待辦30） | R135 | [#81](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/81) | 2026-10-25（已發布） | main02ccaa4；主線CI／Pages40160846012成功；公網757878bytes／SHA256 e65ca6e23094b88e5cebf6285466ec02883ebb6de1802ee31f9fe92f25f5196d與官方逐位一致；Android實機未驗 |

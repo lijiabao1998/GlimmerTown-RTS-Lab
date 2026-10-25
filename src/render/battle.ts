@@ -199,6 +199,7 @@ export class BattleView {
   readonly holes = { next: 0, live: new Uint8Array(HOLE_CAP), bld: new Int32Array(HOLE_CAP), kind: new Uint8Array(HOLE_CAP), x: new Float32Array(HOLE_CAP), y: new Float32Array(HOLE_CAP), z: new Float32Array(HOLE_CAP), nx: new Int8Array(HOLE_CAP), nz: new Int8Array(HOLE_CAP), w: new Float32Array(HOLE_CAP), h: new Float32Array(HOLE_CAP), r: new Float32Array(HOLE_CAP), g: new Float32Array(HOLE_CAP), b: new Float32Array(HOLE_CAP) };
   private holesDirty = false;
   private holeSeq = 0;
+  rubbleMarkGuard = true; // R139：只管瓦礫彈痕；與既有 R014 開關獨立。
   // 每一步之前記下在飛、會打中建築的穿甲彈（彈著事件沒有射手位置）
   private apSnap = { n: 0, sx: new Float64Array(MAX_SHELLS), sz: new Float64Array(MAX_SHELLS), ex: new Float64Array(MAX_SHELLS), ez: new Float64Array(MAX_SHELLS), bld: new Int32Array(MAX_SHELLS) };
 
@@ -357,6 +358,7 @@ export class BattleView {
   // R128：重置視覺狀態時沿用同一組已解析的閥值，不另讀 URL 或複製設定規則。
   recreate(w: World): BattleView {
     const next = this.fresh(w);
+    next.rubbleMarkGuard = this.rubbleMarkGuard;
     next.target.copy(this.target); next.zoom = this.zoom; next.multiRangeEnabled = this.multiRangeEnabled;
     return next;
   }
@@ -1209,6 +1211,8 @@ export class BattleView {
     }
     if (axis < 0 || tIn > tOut || tIn < 0) return;                 // 射手在牆裡面、或打不到這棟
     const seq = this.holeSeq++, hh = (k: number) => hash2(b.id * 977 + seq, k, 141);
+    // R139：保留既有有效射線的序號，後續存活建築彈痕不變；瓦礫不再佔用痕跡池。
+    if (this.rubbleMarkGuard && b.hp <= 0) return;
     let px = sx + dx * tIn, pz = sz + dz * tIn;
     const nx = axis === 0 ? (dx > 0 ? -1 : 1) : 0, nz = axis === 1 ? (dz > 0 ? -1 : 1) : 0;
     // 沿牆面錯開一點（同一個方向連打不會疊成一個點），夾在牆面內
