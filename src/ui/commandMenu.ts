@@ -26,6 +26,13 @@ export function bombardCommand(w: World, selected: Iterable<number>, target: Bom
   return ids.length ? { t: 'fireAt', side: SIDE_PLAYER, ids, x: target.x, z: target.z, ...(ammo === 'smoke' ? { ammo: 'smoke' as const } : {}) } : null;
 }
 
+// R137：只沿用既有指令的 ids；資格不檢查射程、裝填或煙幕存量，也不派發指令。
+export function bombardEligibility(w: World, selected: Iterable<number>, target: BombardTarget): { he: number; smoke: number } {
+  const ids = [...selected];
+  const he = bombardCommand(w, ids, target, 'he'), smoke = bombardCommand(w, ids, target, 'smoke');
+  return { he: he?.t === 'fireAt' ? he.ids.length : 0, smoke: smoke?.t === 'fireAt' ? smoke.ids.length : 0 };
+}
+
 export interface MenuRect { left: number; top: number; right: number; bottom: number }
 // 優先靠手指，若 HUD 擋住，找同樣大小的空位；座標只用 CSS 像素。
 export function menuPosition(width: number, height: number, vw: number, vh: number, cx: number, cy: number, obstacles: MenuRect[]): { left: number; top: number } {
@@ -50,16 +57,32 @@ export function menuPosition(width: number, height: number, vw: number, vh: numb
 export interface CommandMenu {
   open: (target: BombardTarget, cx: number, cy: number) => void;
   close: () => void;
+  frame: () => void;
   isOpen: () => boolean;
   contains: (target: EventTarget | null) => boolean;
 }
-export function initCommandMenu(on: { choose: (ammo: AmmoMode, target: BombardTarget) => void; cancel: () => void }): CommandMenu {
+export function initCommandMenu(on: { choose: (ammo: AmmoMode, target: BombardTarget) => void; cancel: () => void }, read?: () => { world: World; selected: Iterable<number> } | undefined): CommandMenu {
+  const summaryEnabled = !!read?.();
   const root = document.createElement('div');
   root.id = 'command-menu'; root.hidden = true; root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', '指定地點砲擊');
-  root.innerHTML = '<strong id="cm-target"></strong><button id="cm-he" type="button">高爆砲擊</button><button id="cm-smoke" type="button">煙幕（榴彈砲）</button><button id="cm-cancel" type="button">取消</button>';
+  root.innerHTML = '<strong id="cm-target"></strong>'
+    + (summaryEnabled ? '<small id="cm-eligibility" style="font-size:12px;line-height:1.3;text-align:center">適用不查射程、裝填、煙幕存量</small>' : '')
+    + '<button id="cm-he" type="button">高爆砲擊</button><button id="cm-smoke" type="button">煙幕（榴彈砲）</button><button id="cm-cancel" type="button">取消</button>';
+  if (summaryEnabled) root.setAttribute('aria-describedby', 'cm-eligibility');
   (document.getElementById('hud') ?? document.body).appendChild(root);
   let aim: BombardTarget | null = null;
   const close = () => { aim = null; root.hidden = true; };
+  // 只刷新選單的兩個標籤，不呼叫 HUD；開著時每幀讀當下世界與選取，暫停也不留舊數字。
+  const frame = () => {
+    if (!summaryEnabled || !aim || root.hidden) return;
+    const state = read?.();
+    if (!state) return;
+    const counts = bombardEligibility(state.world, state.selected, aim);
+    const he = root.querySelector('#cm-he')!, smoke = root.querySelector('#cm-smoke')!;
+    const heText = `高爆砲擊 · 適用 ${counts.he}`, smokeText = `煙幕（榴彈砲） · 適用 ${counts.smoke}`;
+    if (he.textContent !== heText) he.textContent = heText;
+    if (smoke.textContent !== smokeText) smoke.textContent = smokeText;
+  };
   const choose = (ammo: AmmoMode) => {
     if (!aim || root.hidden) return;
     const target = { ...aim }; close(); on.choose(ammo, target);
@@ -74,6 +97,7 @@ export function initCommandMenu(on: { choose: (ammo: AmmoMode, target: BombardTa
       if (!validShape(target)) { close(); return; }
       aim = { ...target }; root.querySelector('#cm-target')!.textContent = `砲擊格 ${target.x + 1} · ${target.z + 1}`;
       root.hidden = false;
+      frame();
       const rect = root.getBoundingClientRect();
       const obstacles: MenuRect[] = [];
       for (const selector of ['#hud .btns', '#hud .top', '#hud .bottom', '#minimap', '#prodbar', '#buildbar']) {
@@ -85,6 +109,6 @@ export function initCommandMenu(on: { choose: (ammo: AmmoMode, target: BombardTa
       const p = menuPosition(rect.width, rect.height, innerWidth, innerHeight, cx, cy, obstacles);
       root.style.left = `${p.left}px`; root.style.top = `${p.top}px`;
     },
-    close, isOpen: () => !root.hidden, contains: target => target instanceof Node && root.contains(target),
+    close, frame, isOpen: () => !root.hidden, contains: target => target instanceof Node && root.contains(target),
   };
 }

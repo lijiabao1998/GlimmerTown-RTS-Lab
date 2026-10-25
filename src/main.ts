@@ -81,6 +81,7 @@ let minimap: Minimap | undefined;
 const r016 = q.get('noR016') !== '1';
 const r104 = q.get('noR104') !== '1'; // 裝甲弧提示；只關畫面，不改模擬
 const r109 = q.get('noR109') !== '1';
+const r137 = q.get('noR137') !== '1'; // 只關砲擊選單的適用數，不改原按鈕與下令資格
 const r128 = q.get('noR128') !== '1';
 let sandboxBar: SandboxBar | undefined, sandboxTool: number | null = UK_TANK, sandboxSide = SIDE_PLAYER, sandboxHint = '';
 let lastRangeInfo = '';
@@ -433,7 +434,7 @@ if (r109) {
       hud?.update();
     },
     cancel: () => { battleHint = undefined; hud?.update(); },
-  });
+  }, () => r137 ? { world: w, selected } : undefined);
   // HUD／小地圖仍照原本操作；它們不能留下地圖上的長按計時或框。
   document.addEventListener('pointerdown', e => {
     if (e.target !== canvas && (!commandMenu?.contains(e.target) || pointers.size > 0)) clearGestureInput();
@@ -658,6 +659,7 @@ renderer.setAnimationLoop(() => {
   }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
+  commandMenu?.frame(); // R137：只更新選單，不補跑其他 HUD 的刷新路徑。
   prodBar?.update();
   minimap?.frame(t);
 });

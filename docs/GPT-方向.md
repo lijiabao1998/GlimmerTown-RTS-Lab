@@ -32,7 +32,7 @@
 
 | 序 | 項目 | 對應方向的哪一句 | 模擬／渲染／介面／AI | 動黃金雜湊 | 備註 |
 |---|---|---|---|---|---|
-| 37 | 砲擊快捷選單適用砲數提示 | 下指令前看懂高爆與煙幕適用範圍 | 介面 | 不會 | 僅候選排隊；依既有bombardCommand資格，不改射擊規則 |
+| 37 | 砲擊快捷選單適用砲數提示 | 下指令前看懂高爆與煙幕適用範圍 | 介面 | 不會 | R137產品585ef8e完整CI40169483640與真圖通過，PR83收尾head／正常合併發布待核；依原bombardCommand資格，不改射擊規則 |
 | 38 | 可見破牆邊緣與瓦礫辨識 | 房子是掩體也會被打爛 | 渲染研究 | 不會 | 僅候選排隊；先核既有局部幾何與圖審範圍，不改全局畫風或自動發布美術 |
 
 ## 卡住／等業主看圖
@@ -46,7 +46,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
-| 沙盒戰況／容量分解（待辦36） | R136 | [#82](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/82) | 2026-10-25（候選驗收完成，發布另核） | 7d3b8a2完整CI40163832309、1440／412／860原生真圖與精確回退比較通過；Android實機未驗；收尾head及main／Pages另核，不計已上線 |
+| 沙盒戰況／容量分解（待辦36） | R136 | [#82](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/82) | 2026-10-25（已發布） | main7f1b89d；主線CI／Pages40165739121成功；公網758248bytes／SHA256 4c0f4b19291904c1cb3e72c948fd1111549295a23a85805888c98278202bfdf9與官方逐位一致；Android實機未驗 |
 | 選取坦克／砲車耐久摘要（待辦30） | R135 | [#81](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/81) | 2026-10-25（已發布） | main02ccaa4；主線CI／Pages40160846012成功；公網757878bytes／SHA256 e65ca6e23094b88e5cebf6285466ec02883ebb6de1802ee31f9fe92f25f5196d與官方逐位一致；Android實機未驗 |
 | 原生建築門窗屋簷細節、隱面優化、護牆板密度修正（不含 MSAA） | R134 | [#80](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/80) | 2026-10-25（已發布） | main af7a606；[CI／Pages 40157165732](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40157165732) 成功，公開 HTTPS 757169 bytes／SHA256 f6e9de3b928b81ce7b780bbb4597a4085b973aaadcf84ce98903c35b1eca73fb 與官方產物逐位一致；Android 實機未驗 |
 | 沙盒首步音效與放兵回饋；取代舊 R129／#64 | R133 | [#78](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/78) | 2026-10-24（已合併發布） | main b40279e；[CI／Pages 40097505215](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/40097505215) 成功；實體 Android／聽感未驗證 |
