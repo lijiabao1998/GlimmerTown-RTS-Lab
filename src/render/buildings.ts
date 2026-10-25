@@ -334,8 +334,8 @@ function damagedShell(g: Geo, b: Building) {
   g.box(x0 + t, 0, z0 + t, x1 - t, 0.03, z1 - t, CHAR);
   const wall = (axis: number, a0: number, a1: number, c0: number, c1: number, side: number) => {
     const point = (a: number, y: number, c: number): [number, number, number] => axis === 0 ? [a, y, c] : [c, y, a];
-    // A broad breach reads at native pixel scale; unequal shoulders keep it from looking crenellated.
-    const heights = [0.91, 0.76, 0.3, 0.23, 0.68, 0.88].map((v, k) => h * (v + 0.06 * hash2(b.id, side * 7 + k, 138)));
+    // Broad sloped cuts retain the legacy minimum wall envelope so R014 impact decals stay supported.
+    const heights = [0.97, 0.86, 0.7, 0.73, 0.86, 0.96].map((v, k) => h * (v + 0.02 * hash2(b.id, side * 7 + k, 138)));
     for (let k = 0; k < 5; k++) {
       const a = a0 + (a1 - a0) * k / 5, d = a0 + (a1 - a0) * (k + 1) / 5, lo = heights[k], hi = heights[k + 1];
       g.face4(point(a, 0, c0), point(d, 0, c0), point(d, hi, c0), point(a, lo, c0), axis === 0 ? [0, 0, -1] : [-1, 0, 0], p.wall);
