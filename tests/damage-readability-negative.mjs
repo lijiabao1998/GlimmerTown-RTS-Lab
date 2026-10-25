@@ -7,6 +7,7 @@ const mutants=[
  ['nonfinite','const h = wallHeight(b) * 0.72;','const h = Number.NaN;','finite: geometry'],
  ['footprint','x + sx, 0.06 + hh * 0.1 + mound * 0.13','x + sx + b.w, 0.06 + hh * 0.1 + mound * 0.13','footprint: native occupied cells'],
  ['decals','[0.97, 0.86, 0.7, 0.73, 0.86, 0.96]','[0.91, 0.76, 0.3, 0.23, 0.68, 0.88]','decals: original R014 extent unsupported','tests/damage-readability-decals.mjs'],
+ ['wall_scope','const allowDamage = !isWallKind(b.kind);','const allowDamage = true;','scope: special buildings unchanged'],
  ['readonly','for (const b of w.blds) if (!skip','w.rng++; for (const b of w.blds) if (!skip','readonly: complete world and RNG'],
 ];
 try{

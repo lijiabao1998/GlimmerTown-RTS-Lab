@@ -35,6 +35,11 @@ try{
     const shot=`r138-phone-${size}-${name}-${off?'before':'after'}`;metrics.push({name:shot,...s,world:digest(s.world),target:expected.blds[id-1],png:await capture(shot)});console.log('R138 large-map measurement',JSON.stringify(metrics.at(-1)));
    }
   }
+  // Protected CI archives PNGs only. This separately labelled diagnostic preserves exact measurements;
+  // every gameplay PNG above is the untouched full viewport screenshot, without any metric overlay.
+  await page.send('Emulation.setDeviceMetricsOverride',{width:1440,height:1600,deviceScaleFactor:1,mobile:false});
+  const report=['R138 CHROMIUM DIAGNOSTIC — measured results, NOT gameplay art',...metrics.map(m=>JSON.stringify({name:m.name,calls:m.info.calls,triangles:m.info.triangles,tick:m.tick,hash:m.hash,camera:m.camera,worldSHA256:m.world}))].join('\n\n');
+  await E(`document.body.replaceChildren();const pre=document.createElement('pre');pre.style='margin:0;padding:20px;background:white;color:black;font:17px monospace;white-space:pre-wrap;line-height:1.45';pre.textContent=${JSON.stringify(report)};document.body.append(pre)`);await frames();await capture('r138-map-diagnostic');
   assert.deepEqual(page.errors,[],'zero browser errors');assert.deepEqual(page.requests.filter(u=>! /^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u)),[],'zero external requests');
  });
  if(!process.argv.includes('--prepare-only'))console.log('OK R138 real replay, same-view independent valve, 64/96 damaged native mobile budgets');
