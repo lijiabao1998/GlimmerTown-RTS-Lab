@@ -247,7 +247,11 @@ function facade(g: Geo, b: Building, style: number, x0: number, z0: number, x1: 
       for (let y = y0 + 0.045; y < h - 0.01; y += 0.045) strip(axis, a0, a1, at, dir, y, y + 0.008, TILE_D, t + 0.002);
       strip(axis, a0, a1, at, dir, y0 - 0.02, y0, OAK, t + 0.003);    // 掛瓦下緣的收邊板
     } else if (style === FAC_BOARD) {                             // 白色護牆板：一條條橫線
-      for (let y = 0.05; y < h - 0.02; y += 0.05) strip(axis, a0, a1, at, dir, y, y + 0.006, BOARD_D);
+      // R134 owner review: coarse, subdued board joints instead of subpixel bright dot rows.
+      const calmBoards = buildingDetailsOn;
+      const spacing = calmBoards ? 0.12 : 0.05, thickness = calmBoards ? 0.012 : 0.006;
+      const jointColor = calmBoards ? palette(b.kind).wall.clone().lerp(BOARD_D, 0.22) : BOARD_D;
+      for (let y = spacing; y < h - 0.02; y += spacing) strip(axis, a0, a1, at, dir, y, y + thickness, jointColor);
     }
   }
 }
