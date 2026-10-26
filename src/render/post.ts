@@ -88,7 +88,7 @@ export class Pipeline {
 }
 
 // 待辦 35（R131／R134 留下的 MSAA）：只在 WebGL2 開；手機（粗指標）2 倍、桌面 4 倍，不超過 GPU 的 maxSamples。
-// 網址 ?msaa=0 關掉（對照用），?msaa=N 指定（仍受 maxSamples 限制）。不改畫風、描邊、量化的算法。
+// 網址 ?msaa=0 關掉（對照用），?msaa=2 之類的數字指定樣本數（仍受 maxSamples 限制）。不改畫風、描邊、量化的算法。
 export function msaaSamples(renderer: THREE.WebGLRenderer): number {
   const cap = renderer.capabilities;
   if (!cap.isWebGL2) return 0;
