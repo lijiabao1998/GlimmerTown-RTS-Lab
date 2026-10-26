@@ -41,6 +41,7 @@ export class Pipeline {
   private quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private mat: THREE.ShaderMaterial;
   sceneInfo = { calls: 0, triangles: 0 };
+  private samples = -1;   // 待辦 35：多重取樣抗鋸齒（MSAA）樣本數；-1＝還沒依裝置決定
 
   constructor() {
     this.rt = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true });
@@ -62,7 +63,9 @@ export class Pipeline {
   render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, cam: THREE.OrthographicCamera, style: Style, cssW: number, cssH: number, dpr: number) {
     const w = style.pixelCss > 1 ? Math.max(1, Math.floor(cssW / style.pixelCss)) : Math.max(1, Math.floor(cssW * dpr));
     const h = style.pixelCss > 1 ? Math.max(1, Math.floor(cssH / style.pixelCss)) : Math.max(1, Math.floor(cssH * dpr));
-    if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);
+    if (this.samples < 0) this.rt.samples = this.samples = msaaSamples(renderer);
+    if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);   // setSize 不動 samples，換尺寸後仍保留
+
     renderer.setRenderTarget(this.rt);
     renderer.render(scene, cam);
     // three.js 每次 render 都會把統計歸零；這裡記下場景這一趟的數字，否則讀到的是後製四邊形（1 次呼叫、2 個三角形）
@@ -76,9 +79,21 @@ export class Pipeline {
     renderer.render(this.quadScene, this.quadCam);
   }
 
+  get msaa() { return Math.max(0, this.samples); }
   get size() { return [this.rt.width, this.rt.height]; }
   dispose() {
     this.rt.dispose(); this.rt.depthTexture?.dispose(); this.mat.dispose();
     this.quadScene.traverse(o => (o as THREE.Mesh).geometry?.dispose());
   }
+}
+
+// 待辦 35（R131／R134 留下的 MSAA）：只在 WebGL2 開；手機（粗指標）2 倍、桌面 4 倍，不超過 GPU 的 maxSamples。
+// 網址 ?msaa=0 關掉（對照用），?msaa=N 指定（仍受 maxSamples 限制）。不改畫風、描邊、量化的算法。
+export function msaaSamples(renderer: THREE.WebGLRenderer): number {
+  const cap = renderer.capabilities;
+  if (!cap.isWebGL2) return 0;
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('msaa') : null;
+  const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+  const want = q !== null && /^\d+$/.test(q) ? Number(q) : coarse ? 2 : 4;
+  return Math.max(0, Math.min(want, cap.maxSamples));
 }
