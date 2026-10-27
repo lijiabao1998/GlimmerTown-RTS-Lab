@@ -72,6 +72,6 @@ export function initMobileChrome(canvas: HTMLCanvasElement): void {
   canvas.addEventListener('pointercancel', release);
   // 頁面自己的捏合、長按選字會把手指偷走。不在 pointerdown 上 preventDefault（會把相容滑鼠事件弄亂）。
   canvas.addEventListener('touchmove', e => { if (e.touches.length >= 2) e.preventDefault(); }, { passive: false });
-  addEventListener('gesturestart', e => e.preventDefault());
-  addEventListener('gesturechange', e => e.preventDefault());
+  canvas.addEventListener('gesturestart', e => e.preventDefault());
+  canvas.addEventListener('gesturechange', e => e.preventDefault());
 }

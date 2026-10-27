@@ -34,6 +34,9 @@ assert.match(css, /#r901-chrome button \{[^}]*width:\s*44px;\s*height:\s*44px/, 
 assert.match(valves, /get r901\(\) \{ return on\('901'\); \}/, 'valve r901 is on the table');
 assert.match(main, /touchBox: \(\) => typeof touchBoxArmed === 'function' && touchBoxArmed\(\)/, 'main asks the chrome whether touch box is armed');
 assert.match(main, /if \(V\.r901\) initMobileChrome\(canvas\);/, 'valve skips mounting the chrome');
+const chromeSrc = read('../src/ui/mobileChrome.ts');
+assert.equal((chromeSrc.match(/canvas\.addEventListener\('gesture(?:start|change)'/g) || []).length, 2, 'pinch blockers stay on the canvas');
+assert.equal((chromeSrc.match(/addEventListener\('gesture(?:start|change)'/g) || []).length, 2, 'pinch blockers are not also on the window');
 assert.ok(lines(main) <= 673, `main.ts stays within the hub ceiling (${lines(main)})`);
 assert.equal(lines(read('../src/render/battle.ts')), 1175, 'battle.ts line count is unchanged');
 
