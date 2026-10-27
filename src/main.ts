@@ -33,6 +33,7 @@ import { setStreets } from './render/battle.ts';
 import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
+import { initTutorial } from './ui/tutorial.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
@@ -473,6 +474,7 @@ if (V.r015) minimap = initMinimap({
   tap: (x, z) => { fling.stop(); if (V.r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
 const help = initHelp({ open: () => { if (V.r109) clearGestureInput(); audioHelpActive = true; pausedBeforeHelp = paused; paused = true; syncBattleAudio(); hud?.update(); }, close: () => { audioHelpActive = false; paused = pausedBeforeHelp; syncBattleAudio(); hud?.update(); } }, V.r109);
+const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
 buildBar = initBuildBar(planner.barItems(), planner.barActions(() => startBattle()), planner.barTrenches(), planner.barWalls());
 
 // R117：背景／離頁即清尾音；BFCache只暫停，真正離開才關閉context。
@@ -556,6 +558,7 @@ renderer.setAnimationLoop(() => {
   }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
+  tutorial.frame(t);
   commandMenu?.frame(); // R137：只更新選單，不補跑其他 HUD 的刷新路徑。
   prodBar?.update();
   minimap?.frame(t);

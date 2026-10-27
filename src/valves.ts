@@ -58,6 +58,7 @@ export function valves(q: URLSearchParams) {
     get r137() { return on('137'); }, // R137 砲擊選單的適用數；不改原按鈕與下令資格
     get r138() { return on('138'); }, // R138 破牆邊緣與瓦礫辨識
     get r139() { return on('139'); }, // R139 瓦礫不再長出牆面彈痕
+    get r902() { return on('902'); }, // R902 新手教學：移動、採集、建造、攻擊；只關面板，不改模擬
   };
 }
 export type Valves = ReturnType<typeof valves>;
