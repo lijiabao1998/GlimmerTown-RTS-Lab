@@ -17,8 +17,28 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read   # changes 工作讀 PR 改了哪些檔
 
 jobs:
+  # 路徑判斷：PR 只改 docs/**/*.md 或 LOG.md 時，chrome（建置＋無頭瀏覽器）不用跑；unit 四份照跑（README、規則檔另有守衛，所以不算在內）。
+  # push 到 main／claude 分支、手動觸發一律全跑（Pages 要 chrome 的產物）。判斷失敗就當作不是只改文件＝全跑。
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+    steps:
+      - id: diff
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename') || { echo "docs_only=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          echo "$files"
+          if [ -n "$files" ] && ! echo "$files" | grep -Ev '^(docs/.*\.md|LOG\.md)$' > /dev/null; then echo "docs_only=true" >> "$GITHUB_OUTPUT"; else echo "docs_only=false" >> "$GITHUB_OUTPUT"; fi
+
   # R039：90 支守衛一支接一支跑已經 15 分鐘（上限 20），分四份並行；分法寫在 tools/unit.mjs（固定、跟機器無關）
   unit:
     name: unit (${{ matrix.shard }}/4)
@@ -57,6 +77,8 @@ jobs:
           retention-days: 14
 
   chrome:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -91,7 +113,7 @@ jobs:
   # 總閘：名字沿用 smoke（分支保護與合併條件看它）。四份 unit 與 chrome 都是 success 才綠；有一個紅、被跳過或取消就紅
   smoke:
     if: ${{ !cancelled() }}
-    needs: [unit, chrome]
+    needs: [changes, unit, chrome]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -99,9 +121,13 @@ jobs:
         env:
           UNIT: ${{ needs.unit.result }}
           CHROME: ${{ needs.chrome.result }}
+          CHANGES: ${{ needs.changes.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
         run: |
-          echo "unit=$UNIT chrome=$CHROME"
-          test "$UNIT" = success && test "$CHROME" = success
+          echo "unit=$UNIT chrome=$CHROME changes=$CHANGES docs_only=$DOCS_ONLY"
+          test "$CHANGES" = success && test "$UNIT" = success || exit 1
+          # chrome 只有在「PR 只改文件」被判斷出來、因而跳過時才可以不是 success；其他任何情況（紅、取消、意外跳過）都紅
+          test "$CHROME" = success || { test "$CHROME" = skipped && test "$DOCS_ONLY" = true; }
 
   gpt-lane:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'gpt/')
