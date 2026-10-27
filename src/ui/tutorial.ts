@@ -13,7 +13,7 @@ const CSS = `
 #tutorial { position: fixed; z-index: 4; box-sizing: border-box; display: flex; flex-direction: column;
   left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 208px);
   width: min(180px, calc(50vw - 24px)); max-height: min(168px, 42vh, calc(100vh - 470px)); overflow: hidden; padding: 8px 10px 8px;
-  pointer-events: auto; background: rgba(24, 28, 22, 0.94); border: 2px solid #6c8fb8; border-radius: 8px;
+  pointer-events: none; background: rgba(24, 28, 22, 0.94); border: 2px solid #6c8fb8; border-radius: 8px;
   color: #f3eedf; font-size: 13px; line-height: 1.4; }
 #tutorial[hidden] { display: none; }
 #tutorial .hd { display: flex; flex: 0 0 auto; justify-content: space-between; gap: 8px; align-items: baseline; }
@@ -22,17 +22,18 @@ const CSS = `
 #tutorial p { margin: 6px 0; }
 #tutorial #tutorial-clock { font-variant-numeric: tabular-nums; opacity: 0.8; }
 #tutorial .row { display: flex; flex: 0 0 auto; flex-direction: column; }
-#tutorial .acts { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-#tutorial button { box-sizing: border-box; min-width: 44px; min-height: 44px; height: 44px; padding: 0 8px;
+#tutorial .acts { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+#tutorial button { box-sizing: border-box; min-width: 44px; min-height: 44px; height: 44px; padding: 0 6px; pointer-events: auto;
   border: 1px solid #6c745f; border-radius: 5px; background: #3c4535; color: #f3eedf; font: inherit; cursor: pointer; touch-action: manipulation; }
-#tutorial #tutorial-skip, #tutorial #tutorial-ok { flex: 0 0 auto; width: 100%; margin-top: 6px; }
+/* 按鈕不拉滿面板：Chrome 觸控會把距按鈕約 10px 的點吸過去，elementFromPoint 仍顯示畫布。 */
+#tutorial #tutorial-skip, #tutorial #tutorial-ok { flex: 0 0 auto; width: auto; align-self: flex-start; margin-top: 6px; }
 #tutorial #tutorial-skip { background: #2a2e26; }
 #tutorial #tutorial-ok { background: #2f5f9a; border-color: #9cc6ff; font-weight: 700; }
 #tutorial button[hidden] { display: none; }
 @media (max-height: 500px) {
   #tutorial { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: 44px minmax(0, 1fr);
     align-items: center; column-gap: 6px; top: calc(max(8px, env(safe-area-inset-top)) + 106px);
-    width: min(392px, calc(100vw - 16px)); max-height: 100px; padding: 0 6px 2px; }
+    width: min(300px, calc(100vw - 16px)); max-height: 100px; padding: 0 6px 2px; }
   #tutorial #tutorial-clock { display: none; }
   #tutorial h2 { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #tutorial p { margin: 0; }
