@@ -12,9 +12,20 @@ export interface Style {
 // 3D-lab 的畫風 A 是 pixelCss 3。RTS 的單位比建築小很多，預設先用 2（業主未定，見 docs/DECISIONS.md），網址 ?px=3 可以對照。
 export const STYLE_A: Style = { pixelCss: 2, outline: true, quant: 12, msaa: 4 };
 
-// R065：渲染目標要幾倍取樣——設定值，但不超過顯示卡上限（WebGL2 的 MAX_SAMPLES）
-export function msaaSamples(style: Style, maxSamples: number): number {
-  return Math.max(0, Math.min(style.msaa ?? 0, maxSamples | 0));
+// R065：渲染目標要幾倍取樣——設定值，但不超過顯示卡上限（WebGL2 的 MAX_SAMPLES）；軟體繪圖不取樣
+export function msaaSamples(style: Style, maxSamples: number, software = false): number {
+  return software ? 0 : Math.max(0, Math.min(style.msaa ?? 0, maxSamples | 0));
+}
+// 軟體繪圖＝沒有能用的顯示卡時瀏覽器的備援（SwiftShader、llvmpipe…）：多邊形全靠 CPU 畫，4 倍取樣每幀貴兩成；真的顯示卡上幾乎不花時間
+export function softwareRenderer(name: string): boolean {
+  return /swiftshader|llvmpipe|softpipe|software/i.test(name);
+}
+function rendererName(renderer: THREE.WebGLRenderer): string {
+  const gl = renderer.getContext?.();
+  if (!gl) return '';
+  let name = String(gl.getParameter(gl.RENDERER));
+  if (/webkit webgl/i.test(name)) { const ext = gl.getExtension('WEBGL_debug_renderer_info'); if (ext) name = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)); }   // Chrome 把真名藏在這個擴充裡
+  return name;
 }
 
 const FRAG = /* glsl */ `
@@ -47,6 +58,7 @@ export class Pipeline {
   private quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private mat: THREE.ShaderMaterial;
   sceneInfo = { calls: 0, triangles: 0 };
+  private software: boolean | null = null;   // R065：第一次畫時看一次是不是軟體繪圖
 
   constructor() {
     this.rt = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true });
@@ -70,7 +82,8 @@ export class Pipeline {
     const h = style.pixelCss > 1 ? Math.max(1, Math.floor(cssH / style.pixelCss)) : Math.max(1, Math.floor(cssH * dpr));
     if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);
     // R065：畫之前確認取樣數；變了才重建渲染目標（釋放後這一次畫就照新取樣數重配；深度一樣解析出來給描邊用）
-    const samples = msaaSamples(style, renderer.capabilities.maxSamples);
+    this.software ??= softwareRenderer(rendererName(renderer));
+    const samples = msaaSamples(style, renderer.capabilities.maxSamples, this.software);
     if (this.rt.samples !== samples) { this.rt.samples = samples; this.rt.dispose(); }
     renderer.setRenderTarget(this.rt);
     renderer.render(scene, cam);

@@ -1,4 +1,4 @@
-// R065 建築抗鋸齒守衛（Node）：後製渲染目標照設定開多重取樣、不超過顯示卡上限、取樣數變了才重建、換大小不掉取樣；?noR065=1 回到 0。
+// R065 建築抗鋸齒守衛（Node）：後製渲染目標照設定開多重取樣、不超過顯示卡上限、軟體繪圖不取樣、取樣數變了才重建、換大小不掉取樣；?noR065=1 回到 0。
 // --mutations：故意弄壞 post.ts（隔離的資料網址模組），每個都要紅在對應那一句。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +10,8 @@ import { valves } from '../src/valves.ts';
 
 const url = new URL('../src/render/post.ts', import.meta.url), source = fs.readFileSync(url, 'utf8');
 const mutations = {
-  never: ['config', 'const samples = msaaSamples(style, renderer.capabilities.maxSamples);', 'const samples = 0;', 'pipeline: default style renders with 4 samples'],
+  never: ['config', 'const samples = msaaSamples(style, renderer.capabilities.maxSamples, this.software);', 'const samples = 0;', 'pipeline: default style renders with 4 samples'],
+  software_ignored: ['software', 'return software ? 0 : Math.max(', 'return Math.max(', 'software: a software renderer (SwiftShader) renders without samples'],
   uncapped: ['cap', 'Math.min(style.msaa ?? 0, maxSamples | 0)', '(style.msaa ?? 0)', 'cap: never more samples than the GPU allows'],
   rebuild: ['rebuild', 'if (this.rt.samples !== samples) {', 'if (true) {', 'rebuild: same sample count keeps the render target'],
   resize_drop: ['resize', 'if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);', 'if (this.rt.width !== w || this.rt.height !== h) { this.rt.setSize(w, h); this.rt.samples = 0; }', 'resize: a new size rebuilds the target once and keeps the sample count'],
@@ -24,7 +25,7 @@ async function load() {
   const js = stripTypeScriptTypes(source.replace(from, to)).replace(/from '([^']+)'/g, (_, spec) => `from '${spec.startsWith('.') ? new URL(spec, url).href : import.meta.resolve(spec)}'`);
   return import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 }
-const { Pipeline, STYLE_A, msaaSamples } = await load();
+const { Pipeline, STYLE_A, msaaSamples, softwareRenderer } = await load();
 let groups = 0;
 function group(name, fn) {
   try { fn(); groups++; console.log(`OK msaa: ${name}`); }
@@ -32,6 +33,8 @@ function group(name, fn) {
 }
 // 假的 renderer：只記下 Pipeline 用到的東西（設渲染目標、畫、統計、顯示卡上限）
 const fakeRenderer = (maxSamples = 4) => ({ capabilities: { maxSamples }, info: { render: { calls: 0, triangles: 0 } }, targets: [], setRenderTarget(rt) { this.targets.push(rt ? rt.samples : null); }, render() {} });
+// 假的 GL：Chrome 的 RENDERER 是「WebKit WebGL」，真名在 WEBGL_debug_renderer_info；Firefox 直接給真名
+const withGL = (r, renderer, unmasked) => Object.assign(r, { getContext: () => ({ RENDERER: 0x1f01, getParameter: p => p === 0x1f01 ? renderer : p === 0x9246 ? unmasked : null, getExtension: n => n === 'WEBGL_debug_renderer_info' && unmasked ? { UNMASKED_RENDERER_WEBGL: 0x9246 } : null }) });
 const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
 const disposals = rt => { const box = { n: 0 }; rt.addEventListener('dispose', () => box.n++); return box; };
 
@@ -62,6 +65,15 @@ group('cap', () => {
     assert.equal(pipe.samples, want, 'cap: never more samples than the GPU allows'); pipe.dispose();
   }
   assert.equal(msaaSamples({ ...STYLE_A, msaa: -3 }, 4), 0, 'cap: negative settings clamp to 0');
+});
+group('software', () => {
+  const swift = 'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)';
+  for (const [renderer, unmasked, want, label] of [['WebKit WebGL', swift, 0, 'Chrome SwiftShader'], ['llvmpipe (LLVM 17.0.6, 256 bits)', null, 0, 'Firefox llvmpipe'],
+    ['WebKit WebGL', 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)', 4, 'desktop GPU'], ['WebKit WebGL', 'ANGLE (Qualcomm, Adreno (TM) 650, OpenGL ES 3.2)', 4, 'phone GPU'], ['Apple GPU', null, 4, 'Safari']]) {
+    const pipe = new Pipeline(); pipe.render(withGL(fakeRenderer(8), renderer, unmasked), scene, cam, STYLE_A, 400, 300, 1);
+    assert.equal(pipe.samples, want, want ? `software: a real GPU keeps 4 samples (${label})` : 'software: a software renderer (SwiftShader) renders without samples'); pipe.dispose();
+  }
+  assert.equal(softwareRenderer(''), false, 'software: unknown renderer counts as a real GPU');
 });
 group('rebuild', () => {
   const pipe = new Pipeline(), r = fakeRenderer(4), rt = pipe.rt, d = disposals(rt);
