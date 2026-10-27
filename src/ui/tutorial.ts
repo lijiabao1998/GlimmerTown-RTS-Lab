@@ -1,4 +1,5 @@
 // R902 新手教學面板（DOM）。只顯示文字、只改自己的演練狀態，不碰對戰世界。
+// 不會自己彈出：玩家在說明裡點「新手教學」才打開。面板本體不接收點擊，只有裡面的按鈕吃得到。
 import {
   TUTORIAL_BUILD, TUTORIAL_ENEMY, TUTORIAL_LESSONS, TUTORIAL_MOVE, TUTORIAL_STORE_KEY, TUTORIAL_SUPPLY_CELL,
   createTutorial, tutorialAct, tutorialClock, tutorialHolding, tutorialMark, tutorialStatus, tutorialVisible,
@@ -11,13 +12,12 @@ export interface TutorialHandle { frame: (now: number) => void; visible: () => b
 
 const CSS = `
 #tutorial { position: fixed; z-index: 4; box-sizing: border-box; display: flex; flex-direction: column;
-  left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 208px);
-  width: min(180px, calc(50vw - 24px)); max-height: min(168px, 42vh, calc(100vh - 470px)); overflow: hidden; padding: 8px 10px 8px;
+  left: 8px; top: 228px; width: 160px; max-height: 360px; overflow: hidden; padding: 8px 8px 6px;
   pointer-events: none; background: rgba(24, 28, 22, 0.94); border: 2px solid #6c8fb8; border-radius: 8px;
   color: #f3eedf; font-size: 13px; line-height: 1.4; }
 #tutorial[hidden] { display: none; }
 #tutorial .hd { display: flex; flex: 0 0 auto; justify-content: space-between; gap: 8px; align-items: baseline; }
-#tutorial .copy { min-height: 0; overflow: auto; }
+#tutorial .copy { min-height: 0; overflow: auto; pointer-events: auto; }
 #tutorial h2 { margin: 0; font-size: 15px; letter-spacing: 0.06em; }
 #tutorial p { margin: 6px 0; }
 #tutorial #tutorial-clock { font-variant-numeric: tabular-nums; opacity: 0.8; }
@@ -25,24 +25,16 @@ const CSS = `
 #tutorial .acts { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 #tutorial button { box-sizing: border-box; min-width: 44px; min-height: 44px; height: 44px; padding: 0 6px; pointer-events: auto;
   border: 1px solid #6c745f; border-radius: 5px; background: #3c4535; color: #f3eedf; font: inherit; cursor: pointer; touch-action: manipulation; }
-/* 按鈕不拉滿面板：Chrome 觸控會把距按鈕約 10px 的點吸過去，elementFromPoint 仍顯示畫布。 */
 #tutorial #tutorial-skip, #tutorial #tutorial-ok { flex: 0 0 auto; width: auto; align-self: flex-start; margin-top: 6px; }
 #tutorial #tutorial-skip { background: #2a2e26; }
 #tutorial #tutorial-ok { background: #2f5f9a; border-color: #9cc6ff; font-weight: 700; }
 #tutorial button[hidden] { display: none; }
-@media (max-height: 500px) {
-  #tutorial { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: 44px minmax(0, 1fr);
-    align-items: center; column-gap: 6px; top: calc(max(8px, env(safe-area-inset-top)) + 106px);
-    width: min(300px, calc(100vw - 16px)); max-height: 100px; padding: 0 6px 2px; }
-  #tutorial #tutorial-clock { display: none; }
-  #tutorial h2 { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #tutorial p { margin: 0; }
-  #tutorial .hd { grid-area: 1 / 1; min-width: 0; }
-  #tutorial .copy { grid-area: 2 / 1 / auto / -1; margin-left: 128px; }
-  #tutorial .row { display: contents; }
-  #tutorial .acts { grid-area: 1 / 2; margin-top: 0; flex-wrap: nowrap; }
-  #tutorial #tutorial-skip, #tutorial #tutorial-ok { grid-area: 1 / 3; width: auto; margin: 0; }
-}
+/* 入口放在說明遮罩裡、課文面板外面。說明收起時整層 display:none，不會躺在地圖上擋按鈕。 */
+#help #tutorial-open { position: absolute; left: 8px; bottom: 8px; z-index: 2; box-sizing: border-box;
+  width: auto; min-width: 44px; min-height: 44px; height: 44px; padding: 0 10px; pointer-events: auto;
+  border: 1px solid #9cc6ff; border-radius: 5px; background: #2f5f9a; color: #f3eedf; font: inherit; font-weight: 700;
+  cursor: pointer; touch-action: manipulation; }
+#help #tutorial-open[hidden] { display: none; }
 `;
 
 const ACTS = [
@@ -61,13 +53,8 @@ function dormant(): TutorialHandle {
   return { frame() {}, visible: () => false };
 }
 
-// 倉庫的瀏覽器守衛開的是全新無頭 Chrome。面板上的按鈕會把鄰近觸控吸走，elementFromPoint 仍顯示畫布。
-function harnessBrowser(): boolean {
-  try { return navigator.webdriver === true || navigator.userAgent.includes('HeadlessChrome'); } catch { return false; }
-}
-
 export function initTutorial(host: TutorialHost, enabled: boolean, store?: TutorialStore | null): TutorialHandle {
-  if (!enabled || harnessBrowser()) return dormant();
+  if (!enabled) return dormant();
   const box = store === undefined ? browserStore() : store;
   let stored: string | null = null;
   try { stored = box?.getItem(TUTORIAL_STORE_KEY) ?? null; } catch { stored = null; }
@@ -81,6 +68,7 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
   }
   const root = document.createElement('div');
   root.id = 'tutorial';
+  root.hidden = true;
   root.setAttribute('role', 'region');
   root.setAttribute('aria-label', '新手教學');
   root.innerHTML = `
@@ -144,19 +132,39 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
     }
     refresh();
   };
-  root.addEventListener('click', e => e.stopPropagation());
+  const hide = () => {
+    root.hidden = true;
+    const opener = document.getElementById('tutorial-open');
+    if (opener) opener.hidden = true;
+  };
+  let last = 0, acc = 0;
   btnA.addEventListener('click', e => { e.stopPropagation(); press('a'); });
   btnB.addEventListener('click', e => { e.stopPropagation(); press('b'); });
   skip.addEventListener('click', e => {
     e.stopPropagation();
     tutorialAct(state, { t: 'skip' });
     persist();
-    root.hidden = true;
+    hide();
   });
-  ok.addEventListener('click', e => { e.stopPropagation(); root.hidden = true; });
+  ok.addEventListener('click', e => { e.stopPropagation(); hide(); });
+  const help = document.getElementById('help');
+  if (help && !help.querySelector('#tutorial-open')) {
+    const open = document.createElement('button');
+    open.id = 'tutorial-open';
+    open.type = 'button';
+    open.textContent = '新手教學';
+    open.addEventListener('click', e => {
+      e.stopPropagation();
+      const okBtn = document.getElementById('help-ok');
+      if (okBtn instanceof HTMLElement) okBtn.click();
+      root.hidden = false;
+      last = 0;
+      acc = 0;
+    });
+    help.appendChild(open);
+  }
   refresh();
 
-  let last = 0, acc = 0;
   return {
     visible: () => !root.hidden,
     frame(now: number) {

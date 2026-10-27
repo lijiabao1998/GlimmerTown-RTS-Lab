@@ -76,7 +76,7 @@ assert.equal(done.attacked, 1);
 assert.equal(done.px, TUTORIAL_MOVE.x);
 assert.equal(tutorialMark(done), 'done');
 assert.equal(tutorialVisible(true, 'done'), false);
-assert.equal(tutorialVisible(true, null), true, '第一次進、沒有紀錄就出現');
+assert.equal(tutorialVisible(true, null), true, '沒做完、閥開著，玩家還可以自己打開');
 assert.equal(tutorialVisible(false, null), false, '閥關掉就不出現');
 assert.equal(JSON.stringify(done), JSON.stringify(again), '同一份腳本兩次結果相同');
 
@@ -93,21 +93,25 @@ assert.equal(mounted, 0, '?noR902=1 不掛上面板');
 assert.equal(off.visible(), false);
 assert.equal(writes.length, 0, '?noR902=1 不寫本機紀錄');
 
-const previousNavigator = globalThis.navigator;
-Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { webdriver: false, userAgent: 'HeadlessChrome/0' } });
-let headlessMounted = 0;
-const headlessWrites = [];
-const headless = initTutorial(
-  { appendChild() { headlessMounted++; } },
-  true,
-  { getItem() { throw new Error('headless must not read storage'); }, setItem(key, value) { headlessWrites.push([key, value]); } },
-);
-headless.frame(1);
-headless.frame(99999);
-assert.equal(headlessMounted, 0, '無頭測試瀏覽器不掛面板');
-assert.equal(headless.visible(), false);
-assert.equal(headlessWrites.length, 0, '無頭測試瀏覽器不寫紀錄');
-Object.defineProperty(globalThis, 'navigator', { configurable: true, value: previousNavigator });
+for (const mark of ['done', 'skip']) {
+  let seen = 0;
+  const held = initTutorial(
+    { appendChild() { mounted++; } },
+    true,
+    { getItem() { seen++; return mark; }, setItem() { writes.push(mark); } },
+  );
+  held.frame(1);
+  assert.equal(seen, 1, `${mark} 會讀紀錄`);
+  assert.equal(held.visible(), false, `已是 ${mark} 就不再掛面板`);
+}
+assert.equal(mounted, 0, '做完或跳過都不掛面板');
+assert.equal(writes.length, 0, '做完或跳過不再寫紀錄');
+
+const ui = read('src/ui/tutorial.ts');
+assert.equal(/HeadlessChrome|webdriver/.test(ui), false, '不偵測無頭瀏覽器');
+assert.equal(ui.includes('新手教學'), true, '入口文字是新手教學');
+assert.match(ui, /root\.hidden = true/, '面板先收著，不會自己彈出');
+assert.equal(ui.includes("root.addEventListener('click'"), false, '面板本體不接點擊');
 
 const main = read('src/main.ts');
 const valves = read('src/valves.ts');
