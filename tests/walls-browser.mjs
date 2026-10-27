@@ -127,7 +127,7 @@ function isolatedPlugin(hits) {
       replace('if (plan.pop())',`if (!(${is('undo')}) && plan.pop())`,'undo');
       replace('for (const c of plan) issue(c);',`for (const c of plan) if (!(c.t==='build' && isWallKind(c.kind) && (${is('record')}))) issue(c);`,'record');
       replace("pickTrench = -1; pickKind = kind;",`if(!(${is('selection')})) pickTrench = -1; pickKind = kind; if(${is('leak')}){const p=view.screenOf(20.5,0,26.5,innerWidth,innerHeight);placeAt(p[0],p[1]);}`,'leak');
-      replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }',"while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r120mutant') === 'replay' && !r120 && lg[i].cmd.t === 'build' && isWallKind((lg[i].cmd as BuildCmd).kind))) issue(lg[i].cmd); i++; }",'replay');
+      replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }',"while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r120mutant') === 'replay' && !V.r120 && lg[i].cmd.t === 'build' && isWallKind((lg[i].cmd as BuildCmd).kind))) issue(lg[i].cmd); i++; }",'replay');
       code+=instrumentation;hits.add('observation');
     }
     if(rel==='src/sim/step.ts')replace('if (b.hp <= 0 || dmg <= 0) return;',`if (b.hp <= 0 || dmg <= 0) return; if (${is('damage')} && b.kind===9) dmg >>= 2;`,'damage');
