@@ -59,7 +59,7 @@ function fixture(r037 = true) {
     fling: { stop() {}, start: (...a) => flings.push(a) }, glide: { stop() {}, start: (...a) => glides.push(a) },
     dragV: { vx: 0, vy: 0, t: 0 }, lastTap: { id: 0, t: -1e9 },
     innerWidth: 412, innerHeight: 860, SIDE_PLAYER, SIDE_ENEMY, SUB, routeBattleOrder, bombardCommand, bombardTarget,
-    issue: cmd => issued.push(cmd), simT: () => 0, placeAt() {},
+    issue: cmd => issued.push(cmd), simT: () => 0, planner: { placeAt() {} },
     initCommandMenu: () => ({ open() { menuOpen = true; }, close() { menuOpen = false; }, isOpen: () => menuOpen, contains: () => false }),
   });
   vm.runInContext(plain.slice(plain.indexOf('const pointers ='), plain.indexOf('\nreset();')), c);

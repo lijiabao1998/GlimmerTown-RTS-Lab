@@ -94,13 +94,13 @@ const instrumentation = `
 import { ORD_IDLE, SHELL_AP } from './sim/world.ts';
 ${trenchFixture.toString()}
 (window as any).__r118test = {
-  inspect: () => ({tick:w.tick,hash:hashWorld(w),shownHash:hashWorld(view.world),paintWorldCurrent:(globalThis as any).__r118paintWorld===view.world,phase,log:JSON.parse(JSON.stringify(log)),plan:JSON.parse(JSON.stringify(plan)),
+  inspect: () => ({tick:w.tick,hash:hashWorld(w),shownHash:hashWorld(view.world),paintWorldCurrent:(globalThis as any).__r118paintWorld===view.world,phase,log:JSON.parse(JSON.stringify(log)),plan:JSON.parse(JSON.stringify(planner.plan)),
     trenches:JSON.parse(JSON.stringify(w.trenches??null)),shown:JSON.parse(JSON.stringify(view.world.trenches??null)),
-    units:w.units.map(u=>({id:u.id,x:u.x,z:u.z,hp:u.hp})),left:pointsLeft()}),
+    units:w.units.map(u=>({id:u.id,x:u.x,z:u.z,hp:u.hp})),left:planner.pointsLeft()}),
   ground: () => Array.from((view as any).groundPx),
-  maximumPreview: () => { reset(1944,true,false,false,true,true);plan=${JSON.stringify(maximumPlan)};refreshPreview();paused=true;ui(); },
+  maximumPreview: () => { reset(1944,true,false,false,true,true);planner.plan=${JSON.stringify(maximumPlan)};planner.refreshPreview();paused=true;ui(); },
   fixture: (mode='cover',kind=UK_TANK) => {
-    reset(1944,false,false,false,false,false); w=trenchFixture(mode,kind); phase='battle';plan=[];pending=[];log=[];acc=0;paused=true;
+    reset(1944,false,false,false,false,false); w=trenchFixture(mode,kind); phase='battle';planner.plan=[];pending=[];log=[];acc=0;paused=true;
     view.setWorld(w,-1);view.snapshot();stats=newStats(w);minimap?.dirty();ui();return hashWorld(w);
   },
   command: (c:Command) => issue(c),
@@ -113,14 +113,18 @@ function plugin(broken, hits) {
     const rel = path.relative(ROOT, id.split('?')[0]).replaceAll('\\', '/');
     const replace = (from, to, label) => { assert.equal(code.split(from).length-1,1,`unique R118 isolated anchor: ${label}`);code=code.replace(from,to);hits.add(label); };
     if (rel === 'src/main.ts') {
+      const need = (mod, names) => { const miss = names.filter(n => !new RegExp(`import \\{[^}]*\\b${n}\\b[^}]*\\} from '${mod.replace(/[./]/g, '\\$&')}'`).test(code)); if (miss.length) code = `import { ${miss.join(', ')} } from '${mod}';\n` + code; };   // R062：布陣搬出 main.ts 後 main 不再 import 這些；注入的觀測程式還要用，缺的才補
+      need('./sim/trenches.ts', ['applyTrench']);
       if (broken) {
         replace("const V = valves(q);", "const V = Object.defineProperty(valves(q), 'r118', { get: () => q.get('__r118mutant') === 'valve' || q.get('noR118') !== '1' });", 'valve');   // R060：閥從閥表來
-        replace("if (trenchIndex >= 0) { plan.splice(trenchIndex, 1);", `if (trenchIndex >= 0) { if (!(${is('remove')})) plan.splice(trenchIndex, 1);`, 'remove');
-        replace('trenchRot = (trenchRot + 1) % 4;', `trenchRot = (trenchRot + (${is('rotation')} ? 0 : 1)) % 4;`, 'rotation');
-        replace('for (const c of plan) issue(c);', `for (const c of plan) if (!(c.t === 'trench' && (${is('record')}))) issue(c);`, 'record');
+        replace('for (const c of planner.plan) issue(c);', `for (const c of planner.plan) if (!(c.t === 'trench' && (${is('record')}))) issue(c);`, 'record');
         replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }', "while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r118mutant') === 'replay' && !V.r118 && lg[i].cmd.t === 'trench')) issue(lg[i].cmd); i++; }", 'replay');
       }
       code += instrumentation; hits.add('observation');
+    }
+    if (broken && rel === 'src/ui/buildPlanner.ts') {   // R062：布陣計畫搬出 main.ts
+      replace("if (trenchIndex >= 0) { this.plan.splice(trenchIndex, 1);", `if (trenchIndex >= 0) { if (!(${is('remove')})) this.plan.splice(trenchIndex, 1);`, 'remove');
+      replace('this.trenchRot = (this.trenchRot + 1) % 4;', `this.trenchRot = (this.trenchRot + (${is('rotation')} ? 0 : 1)) % 4;`, 'rotation');
     }
     if (broken && rel === 'src/sim/trenches.ts') {
       replace('return s ? trenchKind(s.kind)!.cover : 100;', `return s && !(${is('cover')}) ? trenchKind(s.kind)!.cover : 100;`, 'cover');

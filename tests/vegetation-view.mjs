@@ -125,7 +125,7 @@ function mainFixture() {
     V: { ...valves(new URLSearchParams('noR116=1')), r006: false, r018: false, r019: false, r026: false, r109: false }, fxOn: true, q: new URLSearchParams('noR116=1'),
     w: undefined, view: mockView(), selected: new Set(), log: [], pending: [], paused: true, phase: 'battle', window: {},
     battleAudio: undefined, syncBattleAudio() {}, // Explicit absent optional audio for extracted replay/reset code.
-    newStats() { return {}; }, reportView: undefined, ui() {}, refreshPreview() {},
+    newStats() { return {}; }, reportView: undefined, ui() {}, planner: { clear() {}, refreshPreview() {} },
     issue(cmd) { c.log.push({ tick: c.w.tick, cmd }); c.pending.push(cmd); }, tick() { step(c.w, c.pending); c.pending = []; },
     BattleView: class { constructor() { return mockView(); } },
   });

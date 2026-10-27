@@ -102,15 +102,15 @@ import { ORD_IDLE, SHELL_AP, stageOf } from './sim/world.ts';
 ${galleryWorld.toString()}
 ${queueImpacts.toString()}
 (window as any).__r120test = {
-  inspect: () => ({tick:w.tick,hash:hashWorld(w),rng:w.rng,phase,plan:structuredClone(plan),log:structuredClone(log),left:pointsLeft(),
-    pickKind,pickRot,pickTrench,trenchRot,blds:structuredClone(w.blds),shown:structuredClone(view.world.blds),
+  inspect: () => ({tick:w.tick,hash:hashWorld(w),rng:w.rng,phase,plan:structuredClone(planner.plan),log:structuredClone(log),left:planner.pointsLeft(),
+    pickKind:planner.pickKind,pickRot:planner.pickRot,pickTrench:planner.pickTrench,trenchRot:planner.trenchRot,blds:structuredClone(w.blds),shown:structuredClone(view.world.blds),
     shownHash:hashWorld(view.world),trenches:structuredClone(w.trenches??null),stages:w.blds.filter(b=>isWallKind(b.kind)).map(stageOf),
     vertices:(view as any).town.geometry.attributes.position.count,meshes:(()=>{let n=0;view.scene.traverse(o=>{if((o as any).isMesh)n++;});return n;})()}),
   world: () => JSON.stringify(w),
-  gallery: (empty=false) => { reset(1944,false,false,false,false,false);w=galleryWorld(empty);phase='battle';plan=[];pending=[];log=[];acc=0;paused=true;
+  gallery: (empty=false) => { reset(1944,false,false,false,false,false);w=galleryWorld(empty);phase='battle';planner.plan=[];pending=[];log=[];acc=0;paused=true;
     view.setWorld(w,-1);view.snapshot();stats=newStats(w);minimap?.dirty();ui();return hashWorld(w); },
   impact: (stage:number) => {queueImpacts(w,stage);tick();return hashWorld(w);},
-  maximum: (p:PlanCmd[]) => {reset(1944,true,false,false,true,true);plan=structuredClone(p);refreshPreview();paused=true;ui();},
+  maximum: (p:PlanCmd[]) => {reset(1944,true,false,false,true,true);planner.plan=structuredClone(p);planner.refreshPreview();paused=true;ui();},
   mutation: (name:string) => { (globalThis as any).__r120mutation=name;
     if(name==='layout'){const b=document.getElementById('bb-k7')!;b.style.cssText='min-width:30px;max-width:30px;width:30px;min-height:30px;max-height:30px;height:30px;padding:0';} },
 };`;
@@ -121,14 +121,18 @@ function isolatedPlugin(hits) {
     const replace=(from,to,label)=>{assert.equal(code.split(from).length-1,1,`fixture: unique R120 anchor ${label}`);code=code.replace(from,to);hits.add(label);};
     if(rel==='src/main.ts'){
       replace("const V = valves(q);","const V = Object.defineProperty(valves(q), 'r120', { get: () => q.get('__r120mutant') === 'valve' || q.get('noR120') !== '1' });",'valve');   // R060：閥從閥表來
-      replace('pickRot = 1 - pickRot;',`pickRot = ${is('rotation')} ? pickRot : 1 - pickRot;`,'rotation');
-      replace('plan.splice(k, 1);',`if (!(${is('remove')})) plan.splice(k, 1);`,'remove-mesh');
-      replace('plan.splice(wallIndex, 1);',`if (!(${is('remove')})) plan.splice(wallIndex, 1);`,'remove-footprint');
-      replace('if (plan.pop())',`if (!(${is('undo')}) && plan.pop())`,'undo');
-      replace('for (const c of plan) issue(c);',`for (const c of plan) if (!(c.t==='build' && isWallKind(c.kind) && (${is('record')}))) issue(c);`,'record');
-      replace("pickTrench = -1; pickKind = kind;",`if(!(${is('selection')})) pickTrench = -1; pickKind = kind; if(${is('leak')}){const p=view.screenOf(20.5,0,26.5,innerWidth,innerHeight);placeAt(p[0],p[1]);}`,'leak');
+      const need = (mod, names) => { const miss = names.filter(n => !new RegExp(`import \\{[^}]*\\b${n}\\b[^}]*\\} from '${mod.replace(/[./]/g, '\\$&')}'`).test(code)); if (miss.length) code = `import { ${miss.join(', ')} } from '${mod}';\n` + code; };   // R062：布陣搬出 main.ts 後 main 不再 import 這些；注入的觀測程式還要用，缺的才補
+      need('./sim/world.ts', ['isWallKind']); need('./sim/build.ts', ['applyBuild']);
+      replace('for (const c of planner.plan) issue(c);',`for (const c of planner.plan) if (!(c.t==='build' && isWallKind(c.kind) && (${is('record')}))) issue(c);`,'record');
       replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }',"while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r120mutant') === 'replay' && !V.r120 && lg[i].cmd.t === 'build' && isWallKind((lg[i].cmd as BuildCmd).kind))) issue(lg[i].cmd); i++; }",'replay');
       code+=instrumentation;hits.add('observation');
+    }
+    if(rel==='src/ui/buildPlanner.ts'){   // R062：布陣計畫搬出 main.ts
+      replace('this.pickRot = 1 - this.pickRot;',`this.pickRot = ${is('rotation')} ? this.pickRot : 1 - this.pickRot;`,'rotation');
+      replace('this.plan.splice(k, 1);',`if (!(${is('remove')})) this.plan.splice(k, 1);`,'remove-mesh');
+      replace('this.plan.splice(wallIndex, 1);',`if (!(${is('remove')})) this.plan.splice(wallIndex, 1);`,'remove-footprint');
+      replace('if (this.plan.pop())',`if (!(${is('undo')}) && this.plan.pop())`,'undo');
+      replace("this.pickTrench = -1; this.pickKind = kind;",`if(!(${is('selection')})) this.pickTrench = -1; this.pickKind = kind; if(${is('leak')}){const [W,H]=this.env.size();const p=(this.env.view() as any).screenOf(20.5,0,26.5,W,H);this.placeAt(p[0],p[1]);}`,'leak');
     }
     if(rel==='src/sim/step.ts')replace('if (b.hp <= 0 || dmg <= 0) return;',`if (b.hp <= 0 || dmg <= 0) return; if (${is('damage')} && b.kind===9) dmg >>= 2;`,'damage');
     if(rel==='src/render/buildings.ts')replace('if (!wallsOn && isWallKind(b.kind)) b = { ...b, kind: BK_HOUSE };',`if (!wallsOn && isWallKind(b.kind)) { if (${is('fallback')}) return g; b = { ...b, kind: BK_HOUSE }; }`,'fallback');
