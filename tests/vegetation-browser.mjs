@@ -125,7 +125,7 @@ let r116TerrainSnapshot: any;
   },
   fixture: () => {
     reset(1944, false, false, false, false, false);
-    w = forestFixture(); phase = 'battle'; plan = []; pending = []; log = []; acc = 0; paused = true;
+    w = forestFixture(); phase = 'battle'; planner.plan = []; pending = []; log = []; acc = 0; paused = true;
     view.setWorld(w, -1); view.snapshot(); stats = newStats(w); minimap?.dirty(); ui();
     return hashWorld(w);
   },

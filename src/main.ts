@@ -6,9 +6,8 @@ import { coverDurability } from './ui/coverDurability.ts';
 import { reloadStatus } from './ui/reloadStatus.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UNIT_KINDS, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, cellOf, type World } from './sim/world.ts';
-import { BUILD_KINDS, BUILD_KINDS_24, WIRE_KIND, WALL_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, enemyPlan, type BuildCmd } from './sim/build.ts';
-import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from './sim/trenches.ts';
+import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UNIT_KINDS, cellOf, type World } from './sim/world.ts';
+import { BUILD_KINDS, BUILD_KINDS_24, enemyPlan } from './sim/build.ts';
 import { step, runLog, commandTick, type Command, type LoggedCommand } from './sim/step.ts';
 import { createSandboxWorld, sandboxPlaceError, type SandboxCommand, type SandboxError } from './sim/sandbox.ts';
 import { initSandbox, SANDBOX_WHY, sandboxPlacementFeedback, sandboxCapacity, type SandboxBar } from './ui/sandbox.ts';
@@ -28,7 +27,7 @@ import { MAP_TOWN } from './sim/expandedMap.ts';
 import { initMapPick, initTownPick, type MapPick } from './ui/mapPick.ts';
 import { startZombies } from './sim/zombies.ts';
 import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
-import { materialBuildDetail } from './ui/materials.ts';
+import { BuildPlanner, BUILD_TIP, type PlanCmd } from './ui/buildPlanner.ts';
 import { setDamageDetails, setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
 import { setStreets } from './render/battle.ts';
 import { setVegetation } from './render/vegetation.ts';
@@ -104,29 +103,6 @@ let audioPageActive = true, audioHelpActive = false;
 function syncBattleAudio() {
   battleAudio?.setActive(phase === 'battle' && !paused && !reportShown && !audioHelpActive && !document.hidden && audioPageActive);
 }
-type PlanCmd = BuildCmd | TrenchCmd;
-let plan: PlanCmd[] = [], pickKind = BK_COTTAGE, pickRot = 0, buildHint = '';
-let pickTrench = -1, trenchRot = 0;
-const TRENCH_LABEL = ['直段', '折線', '交通壕', '加固段'];
-const TRENCH_SHAPE = ['2格直線', '3格L形', '4格直線', '2格加固'];
-const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡', [BK_WALL_BRICK]: '矮磚牆', [BK_WALL_STONE]: '石牆', [BK_WALL_CONCRETE]: '混凝土牆', [BK_WIRE]: '鐵絲網' };
-const BUILD_WHY: Record<string, string> = {
-  tick: '已經開戰，不能再蓋', map: '超出地圖', foreign: '那是敵方半場（紅色）；只能蓋在我方半場（藍色）',
-  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: V.r118 ? '那裡已有房子或戰壕' : '那裡已經有房子',
-  trench: '那裡已經有戰壕', unit: '有單位站在那裡', blocked: '會堵死通路', gap: '太靠近別的房子（要隔一格）',
-};
-const BUILD_TIP = '布陣：點藍色地面蓋房子當掩體、擋視線；點蓋好的房子拿掉；蓋好按「開戰」';
-
-// 預覽＝真的世界的複本套上這次的布陣（同一支 applyBuild／applyTrench，規則只有一份）
-function previewWorld(): World {
-  const pv = structuredClone(w);
-  for (const c of plan) { if (c.t === 'trench') applyTrench(pv, c); else applyBuild(pv, c); }
-  pv.events = [];
-  return pv;
-}
-function refreshPreview() { if (phase === 'build') view.setWorld(previewWorld(), SIDE_PLAYER); }
-const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + ((c.t === 'trench' ? trenchKind(c.kind) : buildKind(c.kind))?.cost ?? 0), 0);
-
 let large = V.r043 && q.get('map') === '64';
 let expanded = V.r130 && q.get('map') === '96';
 document.body.classList.toggle('r130', V.r130);
@@ -136,6 +112,10 @@ let townPick: MapPick | undefined;
 let zombiesPick: ZombiesPick | undefined;
 document.body.classList.toggle('r045', V.r045);
 const BUILD_KINDS_NOW = V.r024 ? BUILD_KINDS_24 : BUILD_KINDS;
+// R062 布陣計畫（src/ui/buildPlanner.ts）：計畫、選中的種類、建材、提示
+const planner = new BuildPlanner({
+  world: () => w, view: () => view, building: () => phase === 'build', simT: () => simT(), ui: () => ui(), hud: () => hud?.update(), size: () => [innerWidth, innerHeight],
+}, { trenches: V.r118, walls: V.r120, wire: V.r121, materials: V.r105, kinds: BUILD_KINDS_NOW });
 document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
 const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}) });
 let prodBar: ProdBar | undefined;
@@ -158,12 +138,12 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   if (w.map === MAP_TOWN) view.target.set(87, 0, 87);
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
-  plan = []; buildHint = ''; phase = build ? 'build' : 'battle';
+  planner.clear(); phase = build ? 'build' : 'battle';
   battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
   if (sandbox) paused = true;
   if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}) });
   if (zombies) issue({ t: 'zombies' });
-  if (build) { paused = true; refreshPreview(); }
+  if (build) { paused = true; planner.refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(ecoCmd());
     if (ai && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
@@ -212,12 +192,12 @@ function sandboxPlaceAt(cx: number, cy: number) {
 // 開戰：我方布陣＋敵方布陣都寫進指令紀錄（第 0 步），馬上走第一步讓房子落地（中間不畫任何一幀，不會閃）
 function startBattle() {
   if (phase !== 'build') return;
-  const pv = previewWorld(), enemy = w.zombies ? [] : enemyPlan(pv, BUILD_KINDS_NOW);
-  for (const c of plan) issue(c);
+  const pv = planner.previewWorld(), enemy = w.zombies ? [] : enemyPlan(pv, BUILD_KINDS_NOW);
+  for (const c of planner.plan) issue(c);
   for (const c of enemy) issue(c);
   if (V.r019) issue(ecoCmd());
   if (V.r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
-  phase = 'battle'; plan = []; buildHint = '';
+  phase = 'battle'; planner.clear();
   if (V.r016) { if (V.r041) startOrder(); else startBanner(); }
   view.setWorld(w, -1);
   tick();
@@ -226,40 +206,6 @@ function startBattle() {
   ui();
 }
 
-function placeAt(cx: number, cy: number) {
-  // 點到已經放好的房子＝拿掉它（只認這次布陣的，地圖上原本的房子不算）
-  const hitB = view.buildingAt(cx, cy, innerWidth, innerHeight);
-  if (hitB) {
-    const k = plan.findIndex(c => { if (c.t !== 'build') return false; const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return hitB[0] >= c.x && hitB[1] >= c.z && hitB[0] < c.x + fw && hitB[1] < c.z + fd; });
-    if (k >= 0) { plan.splice(k, 1); buildHint = '拿掉了一棟'; refreshPreview(); ui(); return; }
-  }
-  const p = view.groundAt(cx, cy, innerWidth, innerHeight);
-  if (!p) return;
-  const gx = Math.floor(p.x), gz = Math.floor(p.z);
-  if (gx < 0 || gz < 0 || gx >= w.n || gz >= w.n) return;
-  // 圍牆模型窄於佔地：點任一佔地格仍能拿掉整段，不必精準命中薄牆表面。
-  const wallIndex = plan.findIndex(c => { if (c.t !== 'build' || !(isWallKind(c.kind) || c.kind === BK_WIRE)) return false; const kd = buildKind(c.kind)!, fw = c.rot ? kd.d : kd.w, fd = c.rot ? kd.w : kd.d; return gx >= c.x && gz >= c.z && gx < c.x + fw && gz < c.z + fd; });
-  if (wallIndex >= 0) { plan.splice(wallIndex, 1); buildHint = '拿掉了一段障礙'; refreshPreview(); ui(); return; }
-  // 一段壕溝的任一實際格都能拿掉整段；L形空角不是戰壕。
-  const trenchIndex = plan.findIndex(c => c.t === 'trench' && trenchCells(c).some(([x, z]) => x === gx && z === gz));
-  if (trenchIndex >= 0) { plan.splice(trenchIndex, 1); buildHint = '拿掉了一段戰壕'; refreshPreview(); ui(); return; }
-  const kd = buildKind(pickKind)!, rot = kd.w !== kd.d ? pickRot : 0;
-  const cmd: PlanCmd = pickTrench >= 0
-    ? { t: 'trench', side: SIDE_PLAYER, kind: pickTrench, x: gx, z: gz, rot: trenchRot }
-    : { t: 'build', side: SIDE_PLAYER, kind: pickKind, x: gx, z: gz, ...(rot ? { rot } : {}) };
-  const label = cmd.t === 'trench' ? TRENCH_LABEL[cmd.kind] : BUILD_LABEL[cmd.kind];
-  const cost = cmd.t === 'trench' ? trenchKind(cmd.kind)!.cost : kd.cost;
-  const pv = previewWorld(), err = cmd.t === 'trench' ? trenchError(pv, cmd) : buildError(pv, cmd);
-  if (err) {
-    buildHint = err === 'points' ? `建材不夠（剩 ${pointsLeft()}，${label}要 ${cost}）` : BUILD_WHY[err] ?? '這裡不能蓋';
-    view.setMarker(gx + 0.5, gz + 0.5, simT(), true);
-  } else {
-    plan.push(cmd); buildHint = `${label}蓋好了，剩建材 ${pointsLeft()}`;
-    view.setMarker(gx + 0.5, gz + 0.5, simT(), false);
-    refreshPreview();
-  }
-  ui();
-}
 
 function issue(cmd: Command) {
   log.push({ tick: w.sandbox ? commandTick(w) : w.tick, cmd });
@@ -315,7 +261,7 @@ function clearBattleHint() {
 function order(cx: number, cy: number) {
   if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
   if (V.r109) clearBattleHint();
-  if (phase === 'build') { placeAt(cx, cy); return; }
+  if (phase === 'build') { planner.placeAt(cx, cy); return; }
   const route = routeBattleOrder(w, selected, fireMode, ammo, {
     unit: pickUnit(cx, cy),
     building: view.buildingAt(cx, cy, innerWidth, innerHeight),
@@ -339,7 +285,7 @@ function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {
     hud?.update();
     return;
   }
-  if (phase === 'build') { placeAt(cx, cy); return; }
+  if (phase === 'build') { planner.placeAt(cx, cy); return; }
   order(cx, cy);
 }
 
@@ -476,7 +422,7 @@ hud = initHud({
     const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);
     return {
       tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: V.r010,
-      build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : battleHint,
+      build: phase === 'build', hint: phase === 'build' ? planner.buildHint || BUILD_TIP : battleHint,
       mine: mine.length, theirs: theirs.length, ai: V.r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
@@ -527,18 +473,7 @@ if (V.r015) minimap = initMinimap({
   tap: (x, z) => { fling.stop(); if (V.r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
 const help = initHelp({ open: () => { if (V.r109) clearGestureInput(); audioHelpActive = true; pausedBeforeHelp = paused; paused = true; syncBattleAudio(); hud?.update(); }, close: () => { audioHelpActive = false; paused = pausedBeforeHelp; syncBattleAudio(); hud?.update(); } }, V.r109);
-buildBar = initBuildBar([...(V.r121 ? [WIRE_KIND] : []), ...BUILD_KINDS_NOW].map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(k.kind === BK_WIRE ? { detail: `建材 ${k.cost} · 耐久 ${bldMaxHp(k.kind, k.w, k.d, k.floors)} · 徒步繞行／車輛通過 · 不擋射線、不提供掩護 · 榴彈砲可清除` } : V.r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
-  state: () => {
-    const kd = buildKind(pickKind)!;
-    return { visible: phase === 'build', kind: pickKind, trench: pickTrench >= 0 ? pickTrench : undefined, rot: pickTrench >= 0 ? trenchRot : pickRot, rotatable: pickTrench >= 0 || kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };
-  },
-  pick: kind => { pickTrench = -1; pickKind = kind; buildHint = `${BUILD_LABEL[kind]}（建材 ${buildKind(kind)!.cost}）：點藍色地面放下`; hud?.update(); },
-  pickTrench: kind => { pickTrench = kind; trenchRot = 0; buildHint = `${TRENCH_LABEL[kind]}（建材 ${trenchKind(kind)!.cost}）：點藍色地面放下；再點任一壕格整段移除`; hud?.update(); },
-  rotate: () => { if (pickTrench >= 0) trenchRot = (trenchRot + 1) % 4; else pickRot = 1 - pickRot; hud?.update(); },
-  undo: () => { if (plan.pop()) { buildHint = '拿掉了最後一項'; refreshPreview(); hud?.update(); } },
-  start: () => startBattle(),
-}, V.r118 ? TRENCH_KINDS.map(k => ({ kind: k.kind, label: TRENCH_LABEL[k.kind], cost: k.cost, detail: `${TRENCH_SHAPE[k.kind]} · 建材 ${k.cost} · 承傷 ${k.cover}%` })) : [],
-V.r120 ? WALL_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, detail: `建材 ${k.cost} · 耐久 ${bldMaxHp(k.kind, k.w, k.d, k.floors)} · 可破壞建築 · 不可射越 · 可駐守` })) : []);
+buildBar = initBuildBar(planner.barItems(), planner.barActions(() => startBattle()), planner.barTrenches(), planner.barWalls());
 
 // R117：背景／離頁即清尾音；BFCache只暫停，真正離開才關閉context。
 if (battleAudio) {
@@ -711,7 +646,7 @@ const rts = {
   },
   cellOf: (p: number) => cellOf(p),
   phase: () => phase,
-  plan: () => JSON.parse(JSON.stringify(plan)) as PlanCmd[],
+  plan: () => JSON.parse(JSON.stringify(planner.plan)) as PlanCmd[],
   startBattle: () => startBattle(),
   sandbox: () => w.sandbox ? { ...w.sandbox, count: w.units.length } : null,
 };

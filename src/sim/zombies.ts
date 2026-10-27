@@ -1,5 +1,5 @@
 // R045 可選波次防守。只有 World 有狀態，亂數只抽 World.rng；舊世界不走這裡。
-import { SUB, SIDE_PLAYER, SIDE_ENEMY, UK_ZOMBIE, UNIT_KINDS, BK_WIRE, ORD_IDLE, ORD_MOVE, cellOf, cellIdx, center, blocks, bldAt, wireBlocks, type World, type Unit, type Building } from './world.ts';
+import { SUB, HALF, SIDE_PLAYER, SIDE_ENEMY, UK_ZOMBIE, UNIT_KINDS, BK_WIRE, ORD_IDLE, ORD_MOVE, cellOf, cellIdx, center, blocks, bldAt, wireBlocks, type World, type Unit, type Building } from './world.ts';
 import { findPath } from './path.ts';
 import { randInt } from './rng.ts';
 import { dist } from './math.ts';
@@ -39,17 +39,22 @@ export function zombieAim(w: World, u: Unit, sees: ZombieVision): ZombieAim | nu
     else return { x: t.x, z: t.z, unit: t, bld: null };
   }
   const hq = headquarters(w), [gx, gz] = destination(w);
+  // 先拆指揮部；否則只打往目標方向真正擋路的障礙，不在路過時無故拆房。
+  const blocked = u.pathIdx >= u.path.length && (u.tx !== 0 || u.tz !== 0);
+  // R064：一格一格先篩：離房子超過 m 格（m 照近身距離算，寧多不少）一定碰不到，不必算距離——結果逐位不變，96 圖上省掉大半時間
+  const cx = cellOf(u.x), cz = cellOf(u.z), m = Math.floor((reach + HALF) / SUB) + 1;
   let best: ZombieAim | null = null, score = Number.MAX_SAFE_INTEGER;
-  for (const b of [...w.blds, ...(w.wires?.segments ?? [])]) {
-    if (b.hp <= 0) continue;
+  const consider = (b: Building) => {
+    if (b.hp <= 0 || cx < b.x - m || cz < b.z - m || cx > b.x + b.w - 1 + m || cz > b.z + b.d - 1 + m) return;
     const [x, z] = near(b, u);
-    if (dist(u.x, u.z, x, z) > reach) continue;
-    // 先拆指揮部；否則只打往目標方向真正擋路的障礙，不在路過時無故拆房。
-    const blocked = u.pathIdx >= u.path.length && (u.tx !== 0 || u.tz !== 0);
-    if (b !== hq && !blocked) continue;
+    if (dist(u.x, u.z, x, z) > reach) return;
+    if (b !== hq && !blocked) return;
     const d = b === hq ? -1 : dist(x, z, t?.x ?? gx, t?.z ?? gz);
     if (d < score) { score = d; best = { x, z, unit: null, bld: b, ...(b.kind === BK_WIRE ? { wire: true } : {}) }; }
-  }
+  };
+  // 沒被擋住時只有指揮部可能被選，不必掃全鎮的房子
+  if (!blocked) { if (hq) consider(hq); }
+  else { for (const b of w.blds) consider(b); for (const b of w.wires?.segments ?? []) consider(b); }
   return best;
 }
 
