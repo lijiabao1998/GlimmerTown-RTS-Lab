@@ -2,6 +2,8 @@
 
 業主 2026-10-16 開線。**先讀 `AGENTS.md` 全文**：那份是所有寫入者的規則，Claude 一樣受約束。這裡只補 Claude 的職責。
 
+> **Grok 線（業主 2026-10-28，R900）：** Grok 在 `grok/<主題>` 分支工作，卡號 R900–R999；CI（含 `smoke`）在最新提交綠燈後可自己合自己的 PR（squash、`--match-head-commit`）。細節見 `AGENTS.md` 第 1 節。
+
 ## Claude 的職責
 
 1. **規則、守衛、CI 的維護者。** 受保護檔案（`AGENTS.md` 第 4 節的清單）只由 Claude 改；改動照樣出卡（R001–R099），影響 GPT 車道的改動在卡面寫清楚。業主 2026-10-17 23:43 授權 Claude 自己合自己的 PR、也可以直推 `main`：平常照樣「分支 → PR → CI 綠 → squash 合併（`--match-head-commit`）」，直推 `main` 只留給緊急撤回；合完看 `main` 的 ci 與 Pages；`main` 永遠要能建置、守衛與黃金雜湊全綠。
