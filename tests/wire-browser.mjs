@@ -26,8 +26,8 @@ const summary=[];const record=s=>{summary.push(s);console.log(s)};
 const instrumentation=`
 const hydrateWireFixture = ${hydrate.toString()};
 (window as any).__wiretest={
- inspect:()=>({hash:hashWorld(w),tick:w.tick,plan:structuredClone(plan),log:structuredClone(log),shownHash:hashWorld(view.world),wires:structuredClone(view.world.wires??null),left:pointsLeft(),pickKind,pickRot,vertices:(view as any).town.geometry.attributes.position.count}),
- load:(s:any)=>{reset(1944,false,false,false,false,false);w=hydrateWireFixture(s);phase='battle';pending=[];log=[];plan=[];acc=0;paused=true;view.setWorld(w,-1);view.snapshot();stats=newStats(w);ui();},
+ inspect:()=>({hash:hashWorld(w),tick:w.tick,plan:structuredClone(planner.plan),log:structuredClone(log),shownHash:hashWorld(view.world),wires:structuredClone(view.world.wires??null),left:planner.pointsLeft(),pickKind:planner.pickKind,pickRot:planner.pickRot,vertices:(view as any).town.geometry.attributes.position.count}),
+ load:(s:any)=>{reset(1944,false,false,false,false,false);w=hydrateWireFixture(s);phase='battle';pending=[];log=[];planner.plan=[];acc=0;paused=true;view.setWorld(w,-1);view.snapshot();stats=newStats(w);ui();},
  damage:(hp:number)=>{for(const b of w.wires?.segments??[])b.hp=hp;w.events=[{e:'wire'}];view.onEvents(w.events,simT());},
 };`;
 async function main(){

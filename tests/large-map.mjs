@@ -211,7 +211,7 @@ group('main', () => {
       V: { r006: false, r018: false, r019: false, r026: rye, r109: false }, large: true, expanded: false, townPick: undefined,
       q: new URLSearchParams(), fxOn: true, selected: new Set(), view: undefined, battleAudio: undefined, reportView: undefined,
       BattleView: class { constructor() { return { dispose() {}, target: { set(...p) { c.focus = p; } } }; } },
-      newStats: () => ({}), ui() {}, syncBattleAudio() {}, issue(cmd) { c.log.push({ tick: c.w.tick, cmd }); },
+      newStats: () => ({}), ui() {}, planner: { clear() {}, refreshPreview() {} }, syncBattleAudio() {}, issue(cmd) { c.log.push({ tick: c.w.tick, cmd }); },
     });
     vm.runInContext(reset + makeView, c); c.reset();
     assert.equal(c.w.n, 64, '選大圖不受 noR026 影響');

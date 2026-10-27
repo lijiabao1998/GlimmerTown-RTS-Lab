@@ -160,7 +160,7 @@ ${audioFixture.toString()}
     visible: { units: w.units.map(u => view.visibleUnit(u)), near: view.visibleAt(8.5 * SUB, 8.5 * SUB), far: view.visibleAt(24.5 * SUB, 24.5 * SUB) } }),
   fixture: (name: string, rate = 1) => {
     battleAudio?.reset(); help.close(); reportView?.hide(); reportShown = false; endT0 = -1; endFrom = null;
-    w = audioFixture(name); phase = 'battle'; plan = []; pending = []; log = []; selected.clear(); paused = false; speed = rate;
+    w = audioFixture(name); phase = 'battle'; planner.plan = []; pending = []; log = []; selected.clear(); paused = false; speed = rate;
     stats = newStats(w); view.setWorld(w, -1); view.snapshot(); minimap?.dirty();
     (window as any).__r117Events = []; (window as any).__r117Wanted = name === 'burst' ? 3 : 1; (window as any).__r117Limit = 0;
     acc = 0; lastT = performance.now(); syncBattleAudio(); ui();
