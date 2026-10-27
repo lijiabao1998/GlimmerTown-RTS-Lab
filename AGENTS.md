@@ -1,6 +1,6 @@
 # 微光小鎮·二戰 RTS 實驗線 — 給所有 AI 寫入者的規則
 
-> **English summary.** This is `lijiabao1998/GlimmerTown-RTS-Lab`, a WWII tactical RTS (TypeScript + three.js, single-file HTML on GitHub Pages). Read this file, `docs/迭代不改壞標準.md` and `docs/DECISIONS.md` before any change. Never force-push and never rewrite `main`'s history. Claude may merge its own PRs once CI is green and may also push directly to `main` (owner 2026-10-17 23:43); nobody other than Claude pushes directly to `main` (GPT gets work into `main` only by merging PRs, see below). GPT (OpenAI dots + Codex) works on `gpt/<topic>` branches under section 4; it opens PRs as drafts and, once every merge condition in section 4 holds (CI incl. `smoke` and `gpt-lane` green on the latest commit, not a draft, no hold label/title, branch contains latest `main`; no daily limit since R035), may merge them itself with `gh pr merge --squash --match-head-commit <sha>` (owner 2026-10-17); the `gpt-merge` workflow (after each CI run and hourly) checks the exact same conditions and stays as the fallback merger. GPT may only touch an allow-list of paths (`src/` except `src/render/post.ts`, `index.html`, its own cards, the to-do part of `docs/GPT-方向.md`, `tests/*.mjs`, `tools/golden.json`, `LOG.md`, `README.md`). The switch in `docs/GPT-方向.md` on `main` stops everything: anything other than exactly **運行** on the first line under `## 開關` blocks GPT merges. Never generate hate symbols (swastika, SS runes) or real Nazi leaders; insignia are procedural and generic.
+> **English summary.** This is `lijiabao1998/GlimmerTown-RTS-Lab`, a WWII tactical RTS (TypeScript + three.js, single-file HTML on GitHub Pages). Read this file, `docs/迭代不改壞標準.md` and `docs/DECISIONS.md` before any change. Never force-push and never rewrite `main`'s history. Claude may merge its own PRs once CI is green and may also push directly to `main` (owner 2026-10-17 23:43); nobody other than Claude pushes directly to `main` (GPT gets work into `main` only by merging PRs, see below). GPT (OpenAI dots + Codex) works on `gpt/<topic>` branches under section 4; it opens PRs as drafts and, once every merge condition in section 4 holds (CI incl. `smoke` and `gpt-lane` green on the latest commit, not a draft, no hold label/title, branch contains latest `main`; no daily limit since R035), may merge them itself with `gh pr merge --squash --match-head-commit <sha>` (owner 2026-10-17); the `gpt-merge` workflow (after each CI run and hourly) checks the exact same conditions and stays as the fallback merger. GPT may only touch an allow-list of paths (`src/` except `src/render/post.ts`, `index.html`, its own cards, the to-do part of `docs/GPT-方向.md`, `tests/*.mjs`, `tools/golden.json`, `LOG.md`, `README.md`). The switch in `docs/GPT-方向.md` on `main` stops everything: anything other than exactly **運行** on the first line under `## 開關` blocks GPT merges. Grok works on `grok/<topic>` branches, uses cards R900–R999, and may merge its own PRs with `gh pr merge --squash --match-head-commit <sha>` once CI incl. `smoke` is green on the latest commit (owner 2026-10-28). Never generate hate symbols (swastika, SS runes) or real Nazi leaders; insignia are procedural and generic.
 
 業主 2026-10-16 開線。Claude 讀 `CLAUDE.md`（內容一致，另加 Claude 的職責）；GPT、Codex、Grok 等其他工具讀這份。
 
@@ -8,7 +8,7 @@
 
 - **第四條線：二戰戰術 RTS。** 同一座城的第四種時間：戰爭（願景見 `docs/R000-願景.md`）。
 - 另外三條線只讀，業主明說才能動：主線 `GlimmerTown`、2D 實驗線 `GlimmerTown-lab`、3D 實驗線 `GlimmerTown3D-lab`。從那邊搬程式、規則、數字過來，寫明出處（倉庫@commit 路徑）。那三條線的規矩不會自動適用這裡。
-- **卡號 R 開頭**：Claude 用 R001–R099；GPT 車道用 R100–R899。不借 D、T 號（兩條 2D 線在 T578–T589 撞過號）。
+- **卡號 R 開頭**：Claude 用 R001–R099；GPT 車道用 R100–R899；Grok 用 R900–R999（業主 2026-10-28）。不借 D、T 號（兩條 2D 線在 T578–T589 撞過號）。
 - 業主的決定記在 `docs/DECISIONS.md`，定了的不重問，沒定的不替業主決定。
 
 ## 1. 誰寫哪裡
@@ -17,7 +17,8 @@
 |---|---|---|
 | Claude | 雲端 session 指定的分支，或 `claude/<主題>` | CI 綠燈後 Claude 自己合（squash、`--match-head-commit`）；也可以直推 `main`（業主 2026-10-17 23:43） |
 | GPT（dots＋Codex） | `gpt/<主題>` | 第 4 節的合併條件全部成立時，GPT 自己合（squash、`--match-head-commit`）；`gpt-merge` 工作流照同樣的條件自動合，當後備（業主 2026-10-17） |
-| 其他（Grok 等） | `<名字>/<主題>` | 開 PR，業主點頭才合 |
+| Grok | `grok/<主題>` | CI（含 `smoke`）在最新提交綠燈後，Grok 自己合自己的 PR（squash、`--match-head-commit`）（業主 2026-10-28，R900） |
+| 其他 | `<名字>/<主題>` | 開 PR，業主點頭才合 |
 
 所有人：不准 `--force`、不改寫 `main` 的既有歷史、不改寫別人分支的歷史；Claude 以外的人不准直推 `main`；推分支用明確 refspec（`git push origin HEAD:refs/heads/gpt/x`）。
 
