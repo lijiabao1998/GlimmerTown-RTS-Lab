@@ -44,10 +44,16 @@ class Heap {
 // 回傳從起點下一格到終點的格索引；終點走不到時，走到離終點最近（啟發值最小）的可達格。
 export function findPath(w: World, sx: number, sz: number, gx: number, gz: number, enterBuilding = 0, exitBuilding = 0, unitKind = UK_TANK): number[] {
   if (!inGrid(w, sx, sz) || !inGrid(w, gx, gz)) return [];
-  const blocked = (x: number, z: number) => wireBlocks(w, x, z, unitKind) || (blocks(w, x, z) && w.occ[cellIdx(w, x, z)] !== enterBuilding && w.occ[cellIdx(w, x, z)] !== exitBuilding);
   const start = cellIdx(w, sx, sz), goal = cellIdx(w, gx, gz);
   if (start === goal) return [];
   const n = w.n, K = n * n;
+  // R064：每格擋不擋，一次搜尋只算一次（原本每格最多被問十次，鐵絲網還要每次從頭找）；只在格內問，結果逐位不變
+  const memo = new Uint8Array(K);   // 0＝還沒算、1＝可走、2＝擋
+  const blocked = (x: number, z: number) => {
+    const i = z * n + x;
+    if (!memo[i]) memo[i] = wireBlocks(w, x, z, unitKind) || (blocks(w, x, z) && w.occ[i] !== enterBuilding && w.occ[i] !== exitBuilding) ? 2 : 1;
+    return memo[i] === 2;
+  };
   const g = new Int32Array(K).fill(-1), came = new Int32Array(K).fill(-1), done = new Uint8Array(K);
   const open = new Heap();
   g[start] = 0;
