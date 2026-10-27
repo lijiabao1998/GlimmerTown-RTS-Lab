@@ -113,6 +113,8 @@ function plugin(broken, hits) {
     const rel = path.relative(ROOT, id.split('?')[0]).replaceAll('\\', '/');
     const replace = (from, to, label) => { assert.equal(code.split(from).length-1,1,`unique R118 isolated anchor: ${label}`);code=code.replace(from,to);hits.add(label); };
     if (rel === 'src/main.ts') {
+      const need = (mod, names) => { const miss = names.filter(n => !new RegExp(`import \\{[^}]*\\b${n}\\b[^}]*\\} from '${mod.replace(/[./]/g, '\\$&')}'`).test(code)); if (miss.length) code = `import { ${miss.join(', ')} } from '${mod}';\n` + code; };   // R062：布陣搬出 main.ts 後 main 不再 import 這些；注入的觀測程式還要用，缺的才補
+      need('./sim/trenches.ts', ['applyTrench']);
       if (broken) {
         replace("const V = valves(q);", "const V = Object.defineProperty(valves(q), 'r118', { get: () => q.get('__r118mutant') === 'valve' || q.get('noR118') !== '1' });", 'valve');   // R060：閥從閥表來
         replace('for (const c of planner.plan) issue(c);', `for (const c of planner.plan) if (!(c.t === 'trench' && (${is('record')}))) issue(c);`, 'record');

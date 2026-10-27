@@ -121,9 +121,10 @@ function isolatedPlugin(hits) {
     const replace=(from,to,label)=>{assert.equal(code.split(from).length-1,1,`fixture: unique R120 anchor ${label}`);code=code.replace(from,to);hits.add(label);};
     if(rel==='src/main.ts'){
       replace("const V = valves(q);","const V = Object.defineProperty(valves(q), 'r120', { get: () => q.get('__r120mutant') === 'valve' || q.get('noR120') !== '1' });",'valve');   // R060：閥從閥表來
-      code = "import { isWallKind as __isWall } from './sim/world.ts';\n" + code;   // R062：布陣搬出 main.ts 後 main 不再 import isWallKind
-      replace('for (const c of planner.plan) issue(c);',`for (const c of planner.plan) if (!(c.t==='build' && __isWall(c.kind) && (${is('record')}))) issue(c);`,'record');
-      replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }',"while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r120mutant') === 'replay' && !V.r120 && lg[i].cmd.t === 'build' && __isWall((lg[i].cmd as BuildCmd).kind))) issue(lg[i].cmd); i++; }",'replay');
+      const need = (mod, names) => { const miss = names.filter(n => !new RegExp(`import \\{[^}]*\\b${n}\\b[^}]*\\} from '${mod.replace(/[./]/g, '\\$&')}'`).test(code)); if (miss.length) code = `import { ${miss.join(', ')} } from '${mod}';\n` + code; };   // R062：布陣搬出 main.ts 後 main 不再 import 這些；注入的觀測程式還要用，缺的才補
+      need('./sim/world.ts', ['isWallKind']); need('./sim/build.ts', ['applyBuild']);
+      replace('for (const c of planner.plan) issue(c);',`for (const c of planner.plan) if (!(c.t==='build' && isWallKind(c.kind) && (${is('record')}))) issue(c);`,'record');
+      replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }',"while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r120mutant') === 'replay' && !V.r120 && lg[i].cmd.t === 'build' && isWallKind((lg[i].cmd as BuildCmd).kind))) issue(lg[i].cmd); i++; }",'replay');
       code+=instrumentation;hits.add('observation');
     }
     if(rel==='src/ui/buildPlanner.ts'){   // R062：布陣計畫搬出 main.ts

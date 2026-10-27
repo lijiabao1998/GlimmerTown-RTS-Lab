@@ -185,6 +185,8 @@ function plugin(broken, hits) {
         code = code.replace(from, to); hits.add(label);
       };
       if (rel === 'src/main.ts') {
+        const need = (mod, names) => { const miss = names.filter(n => !new RegExp(`import \\{[^}]*\\b${n}\\b[^}]*\\} from '${mod.replace(/[./]/g, '\\$&')}'`).test(code)); if (miss.length) code = `import { ${miss.join(', ')} } from '${mod}';\n` + code; };   // R062：布陣搬出 main.ts 後 main 不再 import 這些；注入的觀測程式還要用，缺的才補
+        need('./sim/world.ts', ['BK_COTTAGE']);
         replace('while (acc >= 1 / TICK_HZ && steps < 8)', "while (acc >= 1 / TICK_HZ && steps < 8 && ((window as any).__r117Limit == null || w.tick < (window as any).__r117Limit))", 'bounded-real-loop');
         replace('  step(w, now, sandboxPlacementResults);', `  step(w, now, sandboxPlacementResults);\n  (window as any).__r117Events?.push({ tick: w.tick, hash: hashWorld(w), rng: w.rng, events: JSON.parse(JSON.stringify(w.events)) });`, 'real-step-observer');
         if (broken) {
