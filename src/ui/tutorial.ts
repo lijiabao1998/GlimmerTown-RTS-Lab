@@ -11,8 +11,8 @@ export interface TutorialHandle { frame: (now: number) => void; visible: () => b
 
 const CSS = `
 #tutorial { position: fixed; z-index: 4; box-sizing: border-box; display: flex; flex-direction: column;
-  left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 152px);
-  width: min(220px, calc(100vw - 188px)); max-height: min(230px, 42vh); overflow: hidden; padding: 8px 10px 8px;
+  left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 208px);
+  width: min(180px, calc(50vw - 24px)); max-height: min(168px, 42vh, calc(100vh - 470px)); overflow: hidden; padding: 8px 10px 8px;
   pointer-events: auto; background: rgba(24, 28, 22, 0.94); border: 2px solid #6c8fb8; border-radius: 8px;
   color: #f3eedf; font-size: 13px; line-height: 1.4; }
 #tutorial[hidden] { display: none; }
@@ -21,6 +21,7 @@ const CSS = `
 #tutorial h2 { margin: 0; font-size: 15px; letter-spacing: 0.06em; }
 #tutorial p { margin: 6px 0; }
 #tutorial #tutorial-clock { font-variant-numeric: tabular-nums; opacity: 0.8; }
+#tutorial .row { display: flex; flex: 0 0 auto; flex-direction: column; }
 #tutorial .acts { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 #tutorial button { box-sizing: border-box; min-width: 44px; min-height: 44px; height: 44px; padding: 0 8px;
   border: 1px solid #6c745f; border-radius: 5px; background: #3c4535; color: #f3eedf; font: inherit; cursor: pointer; touch-action: manipulation; }
@@ -28,6 +29,19 @@ const CSS = `
 #tutorial #tutorial-skip { background: #2a2e26; }
 #tutorial #tutorial-ok { background: #2f5f9a; border-color: #9cc6ff; font-weight: 700; }
 #tutorial button[hidden] { display: none; }
+@media (max-height: 500px) {
+  #tutorial { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: 44px minmax(0, 1fr);
+    align-items: center; column-gap: 6px; top: calc(max(8px, env(safe-area-inset-top)) + 106px);
+    width: min(392px, calc(100vw - 16px)); max-height: 100px; padding: 0 6px 2px; }
+  #tutorial #tutorial-clock { display: none; }
+  #tutorial h2 { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #tutorial p { margin: 0; }
+  #tutorial .hd { grid-area: 1 / 1; min-width: 0; }
+  #tutorial .copy { grid-area: 2 / 1 / auto / -1; margin-left: 128px; }
+  #tutorial .row { display: contents; }
+  #tutorial .acts { grid-area: 1 / 2; margin-top: 0; flex-wrap: nowrap; }
+  #tutorial #tutorial-skip, #tutorial #tutorial-ok { grid-area: 1 / 3; width: auto; margin: 0; }
+}
 `;
 
 const ACTS = [
@@ -69,9 +83,11 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
       <p id="tutorial-body"></p>
       <p id="tutorial-status"></p>
     </div>
-    <div class="acts"><button type="button" id="tutorial-a"></button><button type="button" id="tutorial-b"></button></div>
-    <button type="button" id="tutorial-skip">跳過</button>
-    <button type="button" id="tutorial-ok" hidden>知道了</button>`;
+    <div class="row">
+      <div class="acts"><button type="button" id="tutorial-a"></button><button type="button" id="tutorial-b"></button></div>
+      <button type="button" id="tutorial-skip">跳過</button>
+      <button type="button" id="tutorial-ok" hidden>知道了</button>
+    </div>`;
   host.appendChild(root);
   const q = (sel: string) => {
     const n = root.querySelector(sel);
