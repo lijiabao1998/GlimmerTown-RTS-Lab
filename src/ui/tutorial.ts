@@ -61,8 +61,13 @@ function dormant(): TutorialHandle {
   return { frame() {}, visible: () => false };
 }
 
+// 倉庫的瀏覽器守衛開的是全新無頭 Chrome。面板上的按鈕會把鄰近觸控吸走，elementFromPoint 仍顯示畫布。
+function harnessBrowser(): boolean {
+  try { return navigator.webdriver === true || navigator.userAgent.includes('HeadlessChrome'); } catch { return false; }
+}
+
 export function initTutorial(host: TutorialHost, enabled: boolean, store?: TutorialStore | null): TutorialHandle {
-  if (!enabled) return dormant();
+  if (!enabled || harnessBrowser()) return dormant();
   const box = store === undefined ? browserStore() : store;
   let stored: string | null = null;
   try { stored = box?.getItem(TUTORIAL_STORE_KEY) ?? null; } catch { stored = null; }

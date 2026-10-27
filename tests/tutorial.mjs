@@ -93,6 +93,22 @@ assert.equal(mounted, 0, '?noR902=1 不掛上面板');
 assert.equal(off.visible(), false);
 assert.equal(writes.length, 0, '?noR902=1 不寫本機紀錄');
 
+const previousNavigator = globalThis.navigator;
+Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { webdriver: false, userAgent: 'HeadlessChrome/0' } });
+let headlessMounted = 0;
+const headlessWrites = [];
+const headless = initTutorial(
+  { appendChild() { headlessMounted++; } },
+  true,
+  { getItem() { throw new Error('headless must not read storage'); }, setItem(key, value) { headlessWrites.push([key, value]); } },
+);
+headless.frame(1);
+headless.frame(99999);
+assert.equal(headlessMounted, 0, '無頭測試瀏覽器不掛面板');
+assert.equal(headless.visible(), false);
+assert.equal(headlessWrites.length, 0, '無頭測試瀏覽器不寫紀錄');
+Object.defineProperty(globalThis, 'navigator', { configurable: true, value: previousNavigator });
+
 const main = read('src/main.ts');
 const valves = read('src/valves.ts');
 const readme = read('README.md');

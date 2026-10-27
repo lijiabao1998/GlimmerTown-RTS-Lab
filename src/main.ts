@@ -559,7 +559,7 @@ renderer.setAnimationLoop(() => {
   }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
-  if (typeof tutorial !== 'undefined') tutorial.frame(t);
+  tutorial.frame(t);
   commandMenu?.frame(); // R137：只更新選單，不補跑其他 HUD 的刷新路徑。
   prodBar?.update();
   minimap?.frame(t);
