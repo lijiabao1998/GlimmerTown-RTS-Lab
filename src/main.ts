@@ -18,6 +18,7 @@ import { STYLE_A, type Style } from './render/post.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
 import { Gestures, inSelectionRect, type SelectionRect } from './ui/gestures.ts';
+import { initMobileChrome, touchBoxArmed } from './ui/mobileChrome.ts';
 import { initCommandMenu, bombardCommand, bombardTarget, type CommandMenu } from './ui/commandMenu.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
@@ -301,6 +302,7 @@ function selectInBox(rect: SelectionRect) {
 const selectionBox = V.r109 ? document.createElement('div') : null;
 if (selectionBox) { selectionBox.id = 'selection-box'; selectionBox.hidden = true; document.body.appendChild(selectionBox); }
 const gestures = V.r109 ? new Gestures({
+  touchBox: () => typeof touchBoxArmed === 'function' && touchBoxArmed(),
   enabled: () => phase === 'battle' && (!w.sandbox || sandboxTool === null) && w.winner < 0 && !help.visible() && !reportView?.visible(),
   box: rect => {
     if (!selectionBox) return;
@@ -446,6 +448,7 @@ hud = initHud({
   restart: () => w.sandbox ? sandboxAction({ t: 'sandboxReset' }) : reset(),
   help: () => help.open(),
 });
+if (V.r901) initMobileChrome(canvas);
 reportView = initReportView({ again: () => reset() });
 prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []),
   ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
