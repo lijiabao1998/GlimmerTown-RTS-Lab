@@ -160,7 +160,7 @@ ${audioFixture.toString()}
     visible: { units: w.units.map(u => view.visibleUnit(u)), near: view.visibleAt(8.5 * SUB, 8.5 * SUB), far: view.visibleAt(24.5 * SUB, 24.5 * SUB) } }),
   fixture: (name: string, rate = 1) => {
     battleAudio?.reset(); help.close(); reportView?.hide(); reportShown = false; endT0 = -1; endFrom = null;
-    w = audioFixture(name); phase = 'battle'; plan = []; pending = []; log = []; selected.clear(); paused = false; speed = rate;
+    w = audioFixture(name); phase = 'battle'; planner.plan = []; pending = []; log = []; selected.clear(); paused = false; speed = rate;
     stats = newStats(w); view.setWorld(w, -1); view.snapshot(); minimap?.dirty();
     (window as any).__r117Events = []; (window as any).__r117Wanted = name === 'burst' ? 3 : 1; (window as any).__r117Limit = 0;
     acc = 0; lastT = performance.now(); syncBattleAudio(); ui();
@@ -185,6 +185,8 @@ function plugin(broken, hits) {
         code = code.replace(from, to); hits.add(label);
       };
       if (rel === 'src/main.ts') {
+        const need = (mod, names) => { const miss = names.filter(n => !new RegExp(`import \\{[^}]*\\b${n}\\b[^}]*\\} from '${mod.replace(/[./]/g, '\\$&')}'`).test(code)); if (miss.length) code = `import { ${miss.join(', ')} } from '${mod}';\n` + code; };   // R062：布陣搬出 main.ts 後 main 不再 import 這些；注入的觀測程式還要用，缺的才補
+        need('./sim/world.ts', ['BK_COTTAGE']);
         replace('while (acc >= 1 / TICK_HZ && steps < 8)', "while (acc >= 1 / TICK_HZ && steps < 8 && ((window as any).__r117Limit == null || w.tick < (window as any).__r117Limit))", 'bounded-real-loop');
         replace('  step(w, now, sandboxPlacementResults);', `  step(w, now, sandboxPlacementResults);\n  (window as any).__r117Events?.push({ tick: w.tick, hash: hashWorld(w), rng: w.rng, events: JSON.parse(JSON.stringify(w.events)) });`, 'real-step-observer');
         if (broken) {

@@ -69,9 +69,9 @@ function controller(visual = true) {
     UNIT_KINDS: {}, N, SUB, SCRIPT_SEED: 1944, SCRIPT_TICKS: 1200, SCRIPT: [],
     q,
     w: null, view: mockView(), selected: new Set(), fireMode: false, ammo: 'he', paused: false, phase: 'battle',
-    log: [], pending: [], acc: 0, speed: 1, newStats: () => ({}), reportView: { hide() {} }, ui() {}, refreshPreview() {},
+    log: [], pending: [], acc: 0, speed: 1, newStats: () => ({}), reportView: { hide() {} }, ui() {},
     innerWidth: 412, innerHeight: 860, issue: cmd => issued.push(cmd), simT: () => 0,
-    pickUnit: () => 0, placeAt: (...p) => placements.push(p), performance: { now: () => 1000 }, lastTap: {},
+    pickUnit: () => 0, planner: { buildHint: '', clear() {}, refreshPreview() {}, placeAt: (...p) => placements.push(p) }, performance: { now: () => 1000 }, lastTap: {},
     hud: { update() {} }, window: {},
     battleAudio: undefined, syncBattleAudio() {}, // R117 is absent in this legacy controller fixture.
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },

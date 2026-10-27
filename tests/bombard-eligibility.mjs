@@ -201,7 +201,7 @@ for (const disabled of [false, true]) {
       Object.assign(f.c, { Gestures, MAP_LARGE, MAP_TOWN, selectInBox() {},
         fling: { stop() {} }, glide: { stop() {} }, dragged: false, pinchD: 0, dragV: { vx: 0, vy: 0, t: 0 },
         fxOn: true,
-        newStats: () => ({}), ui() {}, BattleView: class { constructor() { return f.c.view; } },
+        newStats: () => ({}), ui() {}, planner: { clear() {}, refreshPreview() {} }, BattleView: class { constructor() { return f.c.view; } },
       });
       f.c.view.dispose = () => {};
       vm.runInContext(section(mainPlain, 'function clearBattleHint()', '\nfunction order('), f.c);

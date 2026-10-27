@@ -16,18 +16,18 @@ import { step, runLog } from '../src/sim/step.ts';
 import { materialBuildDetail } from '../src/ui/materials.ts';
 
 const read = p => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
-const sources = { ui: read('../src/ui/build.ts'), main: read('../src/main.ts'), css: read('../index.html') };
+const sources = { ui: read('../src/ui/build.ts'), main: read('../src/main.ts'), planner: read('../src/ui/buildPlanner.ts'), css: read('../index.html') };
 const mutations = {
   picker: ['controls', 'ui', 'a.pickTrench?.(it.kind)', 'a.pickTrench?.(0)', 'controls: each native shape button selects its own kind'],
   hidden_shapes: ['controls', 'ui', "$('bb-trenches').hidden = s.trench === undefined;", "$('bb-trenches').hidden = true;", 'controls: selecting trenches exposes shapes'],
-  rotation: ['controls', 'main', '(trenchRot + 1) % 4', '(trenchRot + 1) % 2', 'controls: four clockwise quarter turns'],
-  preview: ['preview', 'main', "if (c.t === 'trench') applyTrench(pv, c);", "if (c.t === 'trench') void c;", 'preview: all four trench kinds exist in cloned world'],
-  refund: ['budget', 'main', "(c.t === 'trench' ? trenchKind(c.kind) : buildKind(c.kind))?.cost", "(c.t === 'trench' ? { cost: 0 } : buildKind(c.kind))?.cost", 'budget: building and trench share eight points'],
-  partial_pick: ['removal', 'main', 'trenchCells(c).some(([x, z]) => x === gx && z === gz)', 'c.x === gx && c.z === gz', 'removal: clicking a non-anchor occupied cell removes the whole bend'],
-  reordered: ['start', 'main', 'for (const c of plan) issue(c);', 'for (const c of [...plan].reverse()) issue(c);', 'start: exact mixed command order survives formal issue'],
-  leaked_picker: ['valve', 'main', '}, V.r118 ? TRENCH_KINDS.map', '}, true ? TRENCH_KINDS.map', 'valve: disabled presentation has no trench choice or shape row'],
+  rotation: ['controls', 'planner', '(this.trenchRot + 1) % 4', '(this.trenchRot + 1) % 2', 'controls: four clockwise quarter turns'],
+  preview: ['preview', 'planner', "if (c.t === 'trench') applyTrench(pv, c);", "if (c.t === 'trench') void c;", 'preview: all four trench kinds exist in cloned world'],
+  refund: ['budget', 'planner', "(c.t === 'trench' ? trenchKind(c.kind) : buildKind(c.kind))?.cost", "(c.t === 'trench' ? { cost: 0 } : buildKind(c.kind))?.cost", 'budget: building and trench share eight points'],
+  partial_pick: ['removal', 'planner', 'trenchCells(c).some(([x, z]) => x === gx && z === gz)', 'c.x === gx && c.z === gz', 'removal: clicking a non-anchor occupied cell removes the whole bend'],
+  reordered: ['start', 'main', 'for (const c of planner.plan) issue(c);', 'for (const c of [...planner.plan].reverse()) issue(c);', 'start: exact mixed command order survives formal issue'],
+  leaked_picker: ['valve', 'planner', 'return this.opts.trenches ? TRENCH_KINDS.map', 'return true ? TRENCH_KINDS.map', 'valve: disabled presentation has no trench choice or shape row'],
   stale_minimap: ['dirty', 'main', " || e.e === 'trench'", '', 'dirty: trench event invalidates minimap immediately'],
-  stale_plan: ['reset', 'main', "  plan = []; buildHint = ''; phase = build ? 'build' : 'battle';", "  buildHint = ''; phase = build ? 'build' : 'battle';", 'reset: previous mixed preview is discarded'],
+  stale_plan: ['reset', 'main', "  planner.clear(); phase = build ? 'build' : 'battle';", "  planner.buildHint = ''; phase = build ? 'build' : 'battle';", 'reset: previous mixed preview is discarded'],
   undersized: ['layout', 'css', '#buildbar button { min-height: 44px;', '#buildbar button { min-height: 38px;', 'layout: all build controls retain 44px touch height'],
 };
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
@@ -37,6 +37,9 @@ if (mutant) {
   sources[m[1]] = sources[m[1]].replace(m[2], m[3]);
 }
 const { initBuildBar } = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(sources.ui)).toString('base64')}`);
+// R062：布陣計畫搬到 src/ui/buildPlanner.ts；從（可能被故意弄壞的）原文載入，相對 import 換成絕對路徑
+const plannerBase = new URL('../src/ui/buildPlanner.ts', import.meta.url);
+const { BuildPlanner } = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(sources.planner).replace(/from '([^']+)'/g, (_, spec) => `from '${new URL(spec, plannerBase).href}'`)).toString('base64')}`);
 const plain = stripTypeScriptTypes(sources.main);
 const fn = name => { const text = plain.match(new RegExp(`function ${name}\\([^]*?\\n\\}`))?.[0]; assert.ok(text, `function ${name} present`); return text; };
 const json = value => JSON.parse(JSON.stringify(value));
@@ -70,14 +73,17 @@ function controller(visual = true) {
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },
     initBuildBar(items, actions, trenches, walls) { c.actions = actions; c.items = items; c.trenches = trenches; return initBuildBar(items, actions, trenches, walls); },
   });
-  for (const key of ['TRENCH_LABEL', 'TRENCH_SHAPE', 'BUILD_LABEL', 'BUILD_WHY', 'BUILD_TIP', 'sandboxPlacementResults']) {
+  // R062：真的布陣計畫；守衛照舊讀寫 c.plan、c.pickKind……（代理到計畫上）
+  const planner = c.planner = new BuildPlanner({ world: () => c.w, view: () => c.view, building: () => c.phase === 'build', simT: () => c.simT(), ui: () => c.ui(), hud: () => c.hud.update(), size: () => [c.innerWidth, c.innerHeight] },
+    { trenches: c.V.r118, walls: c.V.r120, wire: c.V.r121, materials: c.V.r105, kinds: c.BUILD_KINDS_NOW });
+  for (const key of ['plan', 'pickKind', 'pickRot', 'pickTrench', 'trenchRot', 'buildHint']) Object.defineProperty(c, key, { get: () => planner[key], set: v => { planner[key] = v; } });
+  for (const key of ['previewWorld', 'refreshPreview', 'placeAt', 'pointsLeft']) c[key] = (...a) => planner[key](...a);
+  for (const key of ['sandboxPlacementResults']) {
     const source = plain.match(new RegExp(`const ${key}\\s*= [^]*?;`))?.[0]; assert.ok(source, `${key} source`); vm.runInContext(source, c);
   }
   const start = plain.indexOf('buildBar = initBuildBar('), end = plain.indexOf('\n\n// R117', start);
   assert.ok(start >= 0 && end > start, 'actual main build callbacks found');
-  const points = plain.match(/const pointsLeft = [^]*?;\n/)?.[0]; assert.ok(points);
-  const refresh = plain.match(/function refreshPreview\(\)[^\n]+/)[0];
-  vm.runInContext(`${points}\n${fn('previewWorld')}\n${refresh}\n${fn('placeAt')}\n${fn('issue')}\n${fn('tick')}\n${fn('startBattle')}\n${fn('reset')}\n${fn('makeView')}\n${plain.slice(start, end)}`, c);
+  vm.runInContext(`${fn('issue')}\n${fn('tick')}\n${fn('startBattle')}\n${fn('reset')}\n${fn('makeView')}\n${plain.slice(start, end)}`, c);
   return { c, root, views, displayWorlds, left: () => vm.runInContext('pointsLeft()', c), close() { for (const [k, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[k]; else globalThis[k] = value; } } };
 }
 const trench = (kind, x = 20, z = 20, rot = 0) => ({ t: 'trench', side: SIDE_PLAYER, kind, x, z, rot });

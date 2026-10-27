@@ -69,7 +69,7 @@ function mainFixture(enabled = true) {
     battleAudio: undefined, syncBattleAudio() {}, // Preserve the original gesture assertions without an audio engine.
     hud: { update() { layout.push('hud'); } }, prodBar: { update() { layout.push('production'); } }, help: { visible: () => helpVisible }, reportView: { visible: () => reportVisible, hide() {} },
     fling: { stop() { stops.push('fling'); }, start: (...a) => flings.push(a) }, glide: { stop() { stops.push('glide'); }, start: (...a) => glides.push(a) }, dragV: { vx: 0, vy: 0, t: 0 }, lastTap: { id: 0, t: -1e9 },
-    innerWidth: 412, innerHeight: 860, SIDE_PLAYER, SIDE_ENEMY, SUB, routeBattleOrder, bombardCommand, bombardTarget, issue: cmd => issued.push(json(cmd)), simT: () => 0, placeAt() {},
+    innerWidth: 412, innerHeight: 860, SIDE_PLAYER, SIDE_ENEMY, SUB, routeBattleOrder, bombardCommand, bombardTarget, issue: cmd => issued.push(json(cmd)), simT: () => 0, planner: { buildHint: '', clear() {}, refreshPreview() {}, placeAt() {} },
     initCommandMenu: a => { menuActions = a; return { open: t => { layout.push('menu'); menuOpen = true; menuTarget = { ...t }; }, close: () => { menuOpen = false; }, isOpen: () => menuOpen, contains: target => target === 'menu' }; },
   });
   vm.runInContext(plain.slice(plain.indexOf('const pointers ='), plain.indexOf('\nreset();')), c);

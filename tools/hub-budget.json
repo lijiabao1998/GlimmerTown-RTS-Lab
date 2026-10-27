@@ -1,5 +1,5 @@
 {
   "note": "R061 總機行數上限：只准往下調，不准往上調（tools/ 只有 Claude 改）。上限＝整理後的行數＋20 行接線空間；Claude 把總機變短時，同一個 PR 把上限調低。",
-  "src/main.ts": 738,
+  "src/main.ts": 673,
   "src/render/battle.ts": 1453
 }

@@ -15,24 +15,24 @@ import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench } from 
 import { step, runLog } from '../src/sim/step.ts';
 import { materialBuildDetail } from '../src/ui/materials.ts';
 const read = p => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
-const sources = { ui: read('../src/ui/build.ts'), main: read('../src/main.ts'), css: read('../index.html') };
+const sources = { ui: read('../src/ui/build.ts'), main: read('../src/main.ts'), planner: read('../src/ui/buildPlanner.ts'), css: read('../index.html') };
 const mutations = {
   picker: ['controls', 'ui', '() => a.pick(it.kind)', '() => a.pick(items[0].kind)', 'controls: each native wall button selects its own kind'],
   propagation: ['controls', 'ui', 'e.stopPropagation(); f();', 'f();', 'controls: wall clicks stop propagation'],
   hidden: ['rows', 'ui', "$('bb-walls').hidden = !wallSelected;", "$('bb-walls').hidden = true;", 'rows: choosing wall opens wall styles'],
   stacked: ['rows', 'ui', 's.trench === undefined && walls.some', 'walls.some', 'rows: trench selection hides wall styles'],
-  rotation: ['controls', 'main', 'pickRot = 1 - pickRot', 'pickRot = 0', 'controls: wall rotates through both footprints'],
-  warning: ['details', 'main', ' · 不可射越 · 可駐守', ' · 可駐守', 'details: wall restriction is visible, including with materials disabled'],
-  garrison: ['details', 'main', ' · 不可射越 · 可駐守', ' · 不可射越', 'details: inherited garrison rule is visible'],
-  preview: ['preview', 'main', 'else applyBuild(pv, c);', 'else if (!isWallKind(c.kind)) applyBuild(pv, c);', 'preview: all three wall kinds exist in cloned world'],
-  budget: ['budget', 'main', '(c.t === \'trench\' ? trenchKind(c.kind) : buildKind(c.kind))?.cost', '(c.t === \'trench\' ? trenchKind(c.kind) : isWallKind(c.kind) ? { cost: 0 } : buildKind(c.kind))?.cost', 'budget: walls, cottage and trench share exactly eight points'],
-  ground_remove: ['removal', 'main', 'if (wallIndex >= 0)', 'if (false && wallIndex >= 0)', 'removal: either rotated footprint cell removes the complete wall'],
-  surface_remove: ['surface', 'main', "plan.splice(k, 1); buildHint = '拿掉了一棟'", "void k; buildHint = '拿掉了一棟'", 'surface: direct building hit still removes the complete wall'],
-  undo: ['undo', 'main', 'if (plan.pop())', 'if (plan.at(-1))', 'undo: native undo removes only the last complete item'],
-  start: ['start', 'main', 'for (const c of plan) issue(c);', 'for (const c of [...plan].reverse()) issue(c);', 'start: native start preserves exact mixed command order'],
-  picker_valve: ['valve', 'main', 'V.r120 ? WALL_KINDS.map', 'true ? WALL_KINDS.map', 'valve: disabled wall presentation exposes no wall category or styles'],
+  rotation: ['controls', 'planner', 'this.pickRot = 1 - this.pickRot', 'this.pickRot = 0', 'controls: wall rotates through both footprints'],
+  warning: ['details', 'planner', ' · 不可射越 · 可駐守', ' · 可駐守', 'details: wall restriction is visible, including with materials disabled'],
+  garrison: ['details', 'planner', ' · 不可射越 · 可駐守', ' · 不可射越', 'details: inherited garrison rule is visible'],
+  preview: ['preview', 'planner', 'else applyBuild(pv, c);', 'else if (!isWallKind(c.kind)) applyBuild(pv, c);', 'preview: all three wall kinds exist in cloned world'],
+  budget: ['budget', 'planner', '(c.t === \'trench\' ? trenchKind(c.kind) : buildKind(c.kind))?.cost', '(c.t === \'trench\' ? trenchKind(c.kind) : isWallKind(c.kind) ? { cost: 0 } : buildKind(c.kind))?.cost', 'budget: walls, cottage and trench share exactly eight points'],
+  ground_remove: ['removal', 'planner', 'if (wallIndex >= 0)', 'if (false && wallIndex >= 0)', 'removal: either rotated footprint cell removes the complete wall'],
+  surface_remove: ['surface', 'planner', "this.plan.splice(k, 1); this.buildHint = '拿掉了一棟'", "void k; this.buildHint = '拿掉了一棟'", 'surface: direct building hit still removes the complete wall'],
+  undo: ['undo', 'planner', 'if (this.plan.pop())', 'if (this.plan.at(-1))', 'undo: native undo removes only the last complete item'],
+  start: ['start', 'main', 'for (const c of planner.plan) issue(c);', 'for (const c of [...planner.plan].reverse()) issue(c);', 'start: native start preserves exact mixed command order'],
+  picker_valve: ['valve', 'planner', 'return this.opts.walls ? WALL_KINDS.map', 'return true ? WALL_KINDS.map', 'valve: disabled wall presentation exposes no wall category or styles'],
   renderer_valve: ['valve', 'main', 'setWalls(V.r120);', 'setWalls(true);', 'valve: real query flag reaches the renderer'],
-  reset: ['reset', 'main', "plan = []; buildHint = ''; phase = build ? 'build' : 'battle';", "buildHint = ''; phase = build ? 'build' : 'battle';", 'reset: new game discards all prior mixed plans'],
+  reset: ['reset', 'main', "planner.clear(); phase = build ? 'build' : 'battle';", "planner.buildHint = ''; phase = build ? 'build' : 'battle';", 'reset: new game discards all prior mixed plans'],
   enemy: ['enemy', 'main', 'const BUILD_KINDS_NOW = V.r024 ? BUILD_KINDS_24 : BUILD_KINDS;', 'const BUILD_KINDS_NOW = [...(V.r024 ? BUILD_KINDS_24 : BUILD_KINDS), ...WALL_KINDS];', 'enemy: player walls never join enemy build kinds'],
   size: ['layout', 'css', '#buildbar button { min-height: 44px;', '#buildbar button { min-height: 38px;', 'layout: every wall button inherits at least 44px height'],
 };
@@ -42,6 +42,9 @@ if (mutant) {
   assert.equal(sources[m[1]].split(m[2]).length - 1, 1, `mutation anchor unique: ${mutant}`);
   sources[m[1]] = sources[m[1]].replace(m[2], m[3]);
 }
+// R062：布陣計畫搬到 src/ui/buildPlanner.ts；從（可能被故意弄壞的）原文載入，相對 import 換成絕對路徑
+const plannerBase = new URL('../src/ui/buildPlanner.ts', import.meta.url);
+const { BuildPlanner } = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(sources.planner).replace(/from '([^']+)'/g, (_, spec) => `from '${new URL(spec, plannerBase).href}'`)).toString('base64')}`);
 const { initBuildBar } = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(sources.ui)).toString('base64')}`);
 const plain = stripTypeScriptTypes(sources.main), json = v => JSON.parse(JSON.stringify(v));
 const fn = name => { const s = plain.match(new RegExp(`function ${name}\\([^]*?\\n\\}`))?.[0]; assert.ok(s, `actual ${name} found`); return s; };
@@ -79,11 +82,15 @@ function controller(query = '') {
   });
   const flag = plain.match(/^setWalls\([^)\n]*\);$/m)?.[0]; assert.ok(flag, 'main sets the wall renderer flag');   // R060：閥從閥表來（V.r120）
   vm.runInContext(flag, c);
-  for (const key of ['TRENCH_LABEL', 'TRENCH_SHAPE', 'BUILD_LABEL', 'BUILD_WHY', 'BUILD_TIP', 'BUILD_KINDS_NOW', 'sandboxPlacementResults']) vm.runInContext(constant(key), c);
+  for (const key of ['BUILD_KINDS_NOW', 'sandboxPlacementResults']) vm.runInContext(constant(key), c);
+  // R062：真的布陣計畫；守衛照舊讀寫 c.plan、c.pickKind……（代理到計畫上）
+  const planner = c.planner = new BuildPlanner({ world: () => c.w, view: () => c.view, building: () => c.phase === 'build', simT: () => c.simT(), ui: () => c.ui(), hud: () => c.hud.update(), size: () => [c.innerWidth, c.innerHeight] },
+    { trenches: c.V.r118, walls: c.V.r120, wire: c.V.r121, materials: c.V.r105, kinds: vm.runInContext('BUILD_KINDS_NOW', c) });
+  for (const key of ['plan', 'pickKind', 'pickRot', 'pickTrench', 'trenchRot', 'buildHint']) Object.defineProperty(c, key, { get: () => planner[key], set: v => { planner[key] = v; } });
+  for (const key of ['previewWorld', 'refreshPreview', 'placeAt', 'pointsLeft']) c[key] = (...a) => planner[key](...a);
   const start = plain.indexOf('buildBar = initBuildBar('), end = plain.indexOf('\n\n// R117', start);
   assert.ok(start >= 0 && end > start, 'actual main callbacks found');
-  const points = plain.match(/const pointsLeft = [^]*?;\n/)?.[0], refresh = plain.match(/function refreshPreview\(\)[^\n]+/)?.[0]; assert.ok(points && refresh);
-  vm.runInContext(`${points}\n${fn('previewWorld')}\n${refresh}\n${fn('placeAt')}\n${fn('issue')}\n${fn('tick')}\n${fn('startBattle')}\n${fn('reset')}\n${fn('makeView')}\n${plain.slice(start, end)}\n${plain.slice(plain.indexOf('const rts = {'))}`, c);
+  vm.runInContext(`${fn('issue')}\n${fn('tick')}\n${fn('startBattle')}\n${fn('reset')}\n${fn('makeView')}\n${plain.slice(start, end)}\n${plain.slice(plain.indexOf('const rts = {'))}`, c);
   return { c, root, displayWorlds, wallFlags, enemyArgs, left: () => vm.runInContext('pointsLeft()', c), close() { for (const [k, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[k]; else globalThis[k] = value; } } };
 }
 function using(query, f) { const h = controller(query); try { f(h); } finally { h.close(); } }
