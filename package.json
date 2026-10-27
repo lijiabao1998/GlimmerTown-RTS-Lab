@@ -4,6 +4,9 @@
   "version": "0.0.1",
   "description": "微光小鎮 RTS 實驗線：二戰戰術即時戰略（three.js）",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
