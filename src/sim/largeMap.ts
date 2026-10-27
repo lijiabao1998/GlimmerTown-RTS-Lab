@@ -3,27 +3,22 @@
 // 河從東北斜到西南、兩格寬，路蓋過河＝橋（十字大街、兩條村路各一座）。雙方出生角落（我方右下、敵方左上）各留 12×12 不蓋房子。
 // 雙方起手兵力對稱（點對稱）：中坦克 6、輕坦克 2、重坦克 2、榴彈砲 3、觀測員 2；單位 id 從 1 起，我方 1–15、敵方 16–30。
 import { randInt } from './rng.ts';
+import { ARMOUR_FORCE, SPAWN_CORNER } from './mapCommon.ts';
 import { VEG_HEDGE, VEG_WOOD, VEGETATION_VERSION, VEGETATION_MAX } from './vegetation.ts';
 import {
   cellIdx, inGrid, center, cellOf, bldMaxHp, SUB, UNIT_KINDS, ORD_IDLE, SIDE_PLAYER, SIDE_ENEMY,
   TER_GRASS, TER_ROAD, TER_FIELD, TER_MUD, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP,
-  UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_LIGHT, UK_HEAVY, type World,
+  type World,
 } from './world.ts';
 
 export const MAP_LARGE = 2;
 export const LARGE_N = 64;
 export const LARGE_POP = 40;      // 大地圖有指揮部時，每方同時活著的上限（一般 16）
-export const LARGE_CORNER = 12;   // 出生角落邊長（不蓋房子、不長植被）
+export const LARGE_CORNER = SPAWN_CORNER;   // 出生角落邊長（不蓋房子、不長植被）
 const TOWN_LO = 19, TOWN_HI = 44;  // 市鎮範圍（含兩端）
 
-// 我方起手（格）；敵方是點對稱 (63−x, 63−z)。順序就是 id 順序。
-export const LARGE_FORCE: [number, number, number][] = [
-  [UK_TANK, 52, 56], [UK_TANK, 54, 54], [UK_TANK, 56, 52], [UK_TANK, 53, 59], [UK_TANK, 59, 53], [UK_TANK, 56, 56],
-  [UK_LIGHT, 52, 61], [UK_LIGHT, 61, 52],
-  [UK_HEAVY, 55, 58], [UK_HEAVY, 58, 55],
-  [UK_HOWITZER, 60, 60], [UK_HOWITZER, 62, 57], [UK_HOWITZER, 57, 62],
-  [UK_OBSERVER, 53, 52], [UK_OBSERVER, 52, 53],
-];
+// 我方起手（格）；敵方是點對稱 (63−x, 63−z)。順序就是 id 順序。定義在 mapCommon.ts（R130 河鎮共用）。
+export const LARGE_FORCE = ARMOUR_FORCE;
 
 export const inSpawnCorner = (x: number, z: number): boolean =>
   (x < LARGE_CORNER && z < LARGE_CORNER) || (x >= LARGE_N - LARGE_CORNER && z >= LARGE_N - LARGE_CORNER);

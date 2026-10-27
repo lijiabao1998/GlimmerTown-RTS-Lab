@@ -1,6 +1,6 @@
 // R130：新 96×96 河鎮，獨立生成；不改 R026／R043 的亂數順序或資料。
 import { randInt } from './rng.ts';
-import { LARGE_FORCE, LARGE_CORNER } from './largeMap.ts';
+import { ARMOUR_FORCE, SPAWN_CORNER } from './mapCommon.ts';
 import { VEG_HEDGE, VEG_WOOD, VEGETATION_VERSION, VEGETATION_MAX } from './vegetation.ts';
 import {
   cellIdx, inGrid, center, cellOf, bldMaxHp, SUB, UNIT_KINDS, ORD_IDLE, SIDE_PLAYER, SIDE_ENEMY,
@@ -11,7 +11,7 @@ export const MAP_TOWN = 3, TOWN_N = 96;
 export const TOWN_CENTRE = { lo: 24, hi: 71 } as const;
 export const TOWN_VILLAGES = [[18, 18], [76, 22], [16, 60]] as const;
 export const inTownSpawn = (x: number, z: number): boolean =>
-  (x < LARGE_CORNER && z < LARGE_CORNER) || (x >= TOWN_N - LARGE_CORNER && z >= TOWN_N - LARGE_CORNER);
+  (x < SPAWN_CORNER && z < SPAWN_CORNER) || (x >= TOWN_N - SPAWN_CORNER && z >= TOWN_N - SPAWN_CORNER);
 
 export function applyExpandedTown(w: World, vegetation?: number): void {
   if (w.tick !== 0 || w.map || w.sandbox || w.trenches?.segments.length || w.wires?.segments.length) return;
@@ -86,7 +86,7 @@ export function applyExpandedTown(w: World, vegetation?: number): void {
     if (x >= 22 && x <= 73 && z >= 22 && z <= 73) continue;
     place(k % 3 === 0 ? BK_BARN : BK_COTTAGE, x, z, 2, k % 3 === 0 ? 2 : 1, 1);
   }
-  for (const side of [SIDE_PLAYER, SIDE_ENEMY]) for (const [kind, px, pz] of LARGE_FORCE) {
+  for (const side of [SIDE_PLAYER, SIDE_ENEMY]) for (const [kind, px, pz] of ARMOUR_FORCE) {
     const cx = side === SIDE_PLAYER ? px + 32 : n - 1 - px - 32, cz = side === SIDE_PLAYER ? pz + 32 : n - 1 - pz - 32;
     const k = UNIT_KINDS[kind], d = side === SIDE_PLAYER ? -SUB : SUB;
     w.units.push({ id: w.units.length + 1, side, kind, x: center(cx), z: center(cz), hp: k.hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: d, aimZ: d, ...(k.armored ? { hullX: d, hullZ: d } : {}) });
