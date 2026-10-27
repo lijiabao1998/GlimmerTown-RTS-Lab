@@ -11,7 +11,8 @@ import { applyMap } from '../src/sim/maps.ts';
 import { buildError, applyBuild, pointsUsed } from '../src/sim/build.ts';
 import { applyTrench } from '../src/sim/trenches.ts';
 import { Geo } from '../src/render/geo.ts';
-const paths = { buildings: '../src/render/buildings.ts', battle: '../src/render/battle.ts' };
+// R063：彈孔畫法搬到 wallMarks.ts、血條搬到 healthBars.ts；兩個都讀 buildings.ts，載入時接到同一份（setWalls 的狀態才一致）。
+const paths = { buildings: '../src/render/buildings.ts', battle: '../src/render/battle.ts', marks: '../src/render/wallMarks.ts', bars: '../src/render/healthBars.ts' };
 const sources = Object.fromEntries(Object.entries(paths).map(([k, p]) => [k, fs.readFileSync(new URL(p, import.meta.url), 'utf8')]));
 const mutations = {
   absent_wall: { group: 'shape', file: 'buildings', from: 'if (wallShown(b)) { boundaryWall(g, b, false); return; }', to: 'if (wallShown(b)) return;', message: 'shape: each kind has a solid roofless wall body at the independently specified height' },
@@ -25,12 +26,12 @@ const mutations = {
   invisible_fallback: { group: 'fallback', file: 'buildings', from: 'if (!wallsOn && isWallKind(b.kind)) b = { ...b, kind: BK_HOUSE };', to: 'if (!wallsOn && isWallKind(b.kind)) return g;', message: 'fallback: every recorded wall and damage stage draws the exact ordinary-house fallback' },
   fallback_roof: { group: 'fallback_height', file: 'buildings', from: 'ROOF_RISE[visibleKind(kind)] ?? 0.32', to: 'ROOF_RISE[kind] ?? 0.32', message: 'fallback_height: disabled walls use ordinary wall and roof heights in every battle consumer' },
   world_write: { group: 'readonly', file: 'buildings', from: 'export function buildTown(w: World, skip?: (b: Building) => boolean, lod = 0): Geo {', to: 'export function buildTown(w: World, skip?: (b: Building) => boolean, lod = 0): Geo { w.rng ^= 1;', message: 'readonly: all rendering paths preserve the complete world including RNG' },
-  marks_off_surface: { group: 'marks_surface', file: 'battle', from: 'const { x0, x1, z0, z1 } = wallBounds(b);', to: 'const x0=b.x+.1, x1=b.x+b.w-.1, z0=b.z+.1, z1=b.z+b.d-.1;', message: 'marks_surface: AP and HE centers lie on the actual wall face for both rotations and all directions' },
-  marks_overflow: { group: 'marks_clip', file: 'battle', from: 'if (wallShown(b)) {\n      // AP', to: 'if (false) {\n      // AP', message: 'marks_clip: the complete AP outer rim and HE stain fit the narrow face and conservative damaged height' },
-  retained_rim: { group: 'marks_prune', file: 'battle', from: '(wallShown(b) && H.kind[i] === 0 ? 1.55 : 1)', to: '1', message: 'marks_prune: damage removes every AP rim above the surviving wall and rubble removes all marks' },
+  marks_off_surface: { group: 'marks_surface', file: 'marks', from: 'const { x0, x1, z0, z1 } = wallBounds(b);', to: 'const x0=b.x+.1, x1=b.x+b.w-.1, z0=b.z+.1, z1=b.z+b.d-.1;', message: 'marks_surface: AP and HE centers lie on the actual wall face for both rotations and all directions' },
+  marks_overflow: { group: 'marks_clip', file: 'marks', from: 'if (wallShown(b)) {\n      // AP', to: 'if (false) {\n      // AP', message: 'marks_clip: the complete AP outer rim and HE stain fit the narrow face and conservative damaged height' },
+  retained_rim: { group: 'marks_prune', file: 'marks', from: '(wallShown(b) && H.kind[i] === 0 ? 1.55 : 1)', to: '1', message: 'marks_prune: damage removes every AP rim above the surviving wall and rubble removes all marks' },
   smoke_wide: { group: 'smoke', file: 'battle', from: 'const fx = bounds?.x0 ?? b.x, fz = bounds?.z0 ?? b.z, fw = bounds ? bounds.x1 - bounds.x0 : b.w, fd = bounds ? bounds.z1 - bounds.z0 : b.d;', to: 'const fx = b.x, fz = b.z, fw = b.w, fd = b.d;', message: 'smoke: fire and smoke origins stay inside the narrow damaged wall surface' },
   startup_smoke_tall: { group: 'startup_smoke', file: 'battle', from: 'wallHeight(b) * (bounds ? 0.72 : 1)', to: 'wallHeight(b)', message: 'startup_smoke: a loaded damaged wall reconstructs smoke below its broken top' },
-  bars_tall: { group: 'bars', file: 'battle', from: 'wallShown(b) && stageOf(b) === STAGE_ROOFLESS ? 0.72 : 1', to: 'false ? 0.72 : 1', message: 'bars: actual health-bar matrix follows the low damaged wall without a phantom roof' },
+  bars_tall: { group: 'bars', file: 'bars', from: 'wallShown(b) && stageOf(b) === STAGE_ROOFLESS ? 0.72 : 1', to: 'false ? 0.72 : 1', message: 'bars: actual health-bar matrix follows the low damaged wall without a phantom roof' },
   phantom_roof: { group: 'ghosts', file: 'buildings', from: '[BK_WALL_BRICK]: 0, [BK_WALL_STONE]: 0, [BK_WALL_CONCRETE]: 0', to: '[BK_WALL_BRICK]: 0.32, [BK_WALL_STONE]: 0.32, [BK_WALL_CONCRETE]: 0.32', message: 'ghosts: rising wall uses its exact intact height without an imaginary roof' },
   stale_preview: { group: 'lifecycle', file: 'battle', from: 'this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry();', to: 'this.town.geometry.dispose();', message: 'lifecycle: preview geometry exactly matches a fresh rendering of the draft world' },
   garrison_ground: { group: 'garrison', file: 'battle', from: 'const height = ray.intersectObject(this.pickTown ?? this.town, false)[0]?.point.y ?? 0;', to: 'const height = wallShown(b) ? 0 : ray.intersectObject(this.pickTown ?? this.town, false)[0]?.point.y ?? 0;', message: 'garrison: inherited roof indicator sits on the actual low or broken wall surface' },
@@ -50,7 +51,8 @@ function moduleURL(key, aliases = {}) {
 }
 const buildingsURL = moduleURL('buildings');
 const { buildingGeo, buildTown, bldColors, wallHeight, roofRise, smokeSources, setWalls, setMaterials, setFacades } = await import(buildingsURL);
-const { BattleView } = await import(moduleURL('battle', { './buildings.ts': buildingsURL }));
+const painters = { './wallMarks.ts': moduleURL('marks', { './buildings.ts': buildingsURL }), './healthBars.ts': moduleURL('bars', { './buildings.ts': buildingsURL }) };
+const { BattleView } = await import(moduleURL('battle', { './buildings.ts': buildingsURL, ...painters }));
 const KINDS = [7, 8, 9], HEIGHT = [0.3, 0.48, 0.56], THICK = [0.28, 0.38, 0.34], WALL_COLOR = [0xa5644c, 0xb2aea0, 0x9c998e], TRIM = [0xd2b397, 0x716f63, 0x74746e];
 const STAGES = [STAGE_INTACT, STAGE_ROOFLESS, STAGE_RUBBLE];
 const near = (a, b, eps = 0.00001) => Math.abs(a - b) <= eps;
