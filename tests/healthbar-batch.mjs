@@ -7,28 +7,30 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { createWorld, UNIT_KINDS, UK_TANK, SIDE_PLAYER, ORD_FIRE_AT, SUB } from '../src/sim/world.ts';
-const url = new URL('../src/render/battle.ts', import.meta.url);
-const source = fs.readFileSync(url, 'utf8');
+// R063：血條畫法搬到 src/render/healthBars.ts；建不建、釋放還在 battle.ts。突變套在哪個檔寫在第五欄。
+const url = new URL('../src/render/battle.ts', import.meta.url), barsUrl = new URL('../src/render/healthBars.ts', import.meta.url);
+const sources = { battle: fs.readFileSync(url, 'utf8'), bars: fs.readFileSync(barsUrl, 'utf8') };
 const mutations = {
-  extra_mesh: ['topology', 'if (!r123) { this.barFill', 'if (true) { this.barFill', 'batch owns only one healthbar mesh'],
-  missing_matrices: ['overlap', 'bg.instanceMatrix.array.copyWithin(this.nb9 * 16, offset * 16, (offset + this.nf9) * 16);', 'void 0;', 'overlapping bars preserve background-then-fill matrices'],
-  missing_colors: ['ghost', 'bg.instanceColor.array.copyWithin(this.nb9 * 3, offset * 3, (offset + this.nf9) * 3);', 'void 0;', 'damage ghosts preserve background-then-fill colors'],
-  notch_removed: ['building', 'if (notch > 0 && this.nf9 < capF)', 'if (false && notch > 0 && this.nf9 < capF)', 'one targeted building adds one fill and one threshold notch'],
-  dead_included: ['casualties', 'if (!u.alive || (u.hp >= max', 'if (false || (u.hp >= max', 'dead units have no healthbar'],
-  ignored_r009: ['valves', 'if (r009) {', 'if (true) {', 'noR009 allocates no healthbar meshes'],
-  stale_count: ['repeat', 'bg.count = this.nb9 + this.nf9;', 'bg.count = Math.max(bg.count, this.nb9 + this.nf9);', 'empty frames clear the physical batch count'],
-  short_capacity: ['capacity', '(r123 ? 3 : 1) * (MAX_UNITS + 64)', '(r123 ? 2 : 1) * (MAX_UNITS + 64)', 'batch reserves backgrounds plus two fills per logical bar'],
-  lost_dispose: ['disposal', 'this.scene.traverse(o => {', 'this.scene.traverse(o => { if (o === this.barBg) return;', 'batch mesh geometry and material are disposed exactly once'],
-  world_write: ['readonly', 'this.nb9 = 0; this.nf9 = 0; dbg.n = 0;', 'this.w.rng ^= 1; this.nb9 = 0; this.nf9 = 0; dbg.n = 0;', 'healthbar updates preserve every World field'],
+  extra_mesh: ['topology', 'if (!r123) { this.fill', 'if (true) { this.fill', 'batch owns only one healthbar mesh', 'bars'],
+  missing_matrices: ['overlap', 'bg.instanceMatrix.array.copyWithin(this.nb9 * 16, offset * 16, (offset + this.nf9) * 16);', 'void 0;', 'overlapping bars preserve background-then-fill matrices', 'bars'],
+  missing_colors: ['ghost', 'bg.instanceColor.array.copyWithin(this.nb9 * 3, offset * 3, (offset + this.nf9) * 3);', 'void 0;', 'damage ghosts preserve background-then-fill colors', 'bars'],
+  notch_removed: ['building', 'if (notch > 0 && this.nf9 < capF)', 'if (false && notch > 0 && this.nf9 < capF)', 'one targeted building adds one fill and one threshold notch', 'bars'],
+  dead_included: ['casualties', 'if (!u.alive || (u.hp >= max', 'if (false || (u.hp >= max', 'dead units have no healthbar', 'bars'],
+  ignored_r009: ['valves', 'if (r009) this.bars9.build(', 'if (true) this.bars9.build(', 'noR009 allocates no healthbar meshes', 'battle'],
+  stale_count: ['repeat', 'bg.count = this.nb9 + this.nf9;', 'bg.count = Math.max(bg.count, this.nb9 + this.nf9);', 'empty frames clear the physical batch count', 'bars'],
+  short_capacity: ['capacity', '(r123 ? 3 : 1) * (MAX_UNITS + 64)', '(r123 ? 2 : 1) * (MAX_UNITS + 64)', 'batch reserves backgrounds plus two fills per logical bar', 'bars'],
+  lost_dispose: ['disposal', 'this.scene.traverse(o => {', 'this.scene.traverse(o => { if (o === this.barBg) return;', 'batch mesh geometry and material are disposed exactly once', 'battle'],
+  world_write: ['readonly', 'this.nb9 = 0; this.nf9 = 0; dbg.n = 0;', 'w.rng ^= 1; this.nb9 = 0; this.nf9 = 0; dbg.n = 0;', 'healthbar updates preserve every World field', 'bars'],
 };
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
 const selectedGroup = process.env.R123_BAR_GROUP;
 async function load() {
   if (!mutant) return import(url.href);
-  const [, from, to] = mutations[mutant];
-  assert.equal(source.split(from).length, 2, `${mutant}: unique source anchor`);
-  const js = stripTypeScriptTypes(source.replace(from, to)).replace(/from '([^']+)'/g, (_, spec) => `from '${spec.startsWith('.') ? new URL(spec, url).href : import.meta.resolve(spec)}'`);
-  return import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+  const [, from, to, , file] = mutations[mutant];
+  assert.equal(sources[file].split(from).length, 2, `${mutant}: unique source anchor`);
+  const code = { ...sources, [file]: sources[file].replace(from, to) };
+  const data = (src, base, aliases = {}) => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(src).replace(/from '([^']+)'/g, (_, spec) => `from '${aliases[spec] ?? (spec.startsWith('.') ? new URL(spec, base).href : import.meta.resolve(spec))}'`)).toString('base64')}`;
+  return import(data(code.battle, url, file === 'bars' ? { './healthBars.ts': data(code.bars, barsUrl) } : {}));
 }
 const { BattleView } = await load();
 let groups = 0;
@@ -146,10 +148,10 @@ group('capacity', () => {
     f.update(1); f.both(w => { for (const u of w.units) u.hp = Math.floor(UNIT_KINDS[UK_TANK].hp / 2); }); f.update(2);
     assert.deepEqual(f.batch.bars, { bg: 400, fill: 800 }); compare(f, 'overlapping staging ranges');
     // Stress the bounded writer separately from the simulation's unit limit.
-    for (const v of [f.batch, f.old]) {
-      v.nb9 = 0; v.nf9 = 0; v.barDbg.n = 0;
+    for (const v of [f.batch.bars9, f.old.bars9]) {   // R063：血條的寫入器在 healthBars.ts 的小畫家上
+      v.nb9 = 0; v.nf9 = 0; v.dbg.n = 0;
       for (let i = 0; i < cap + 9; i++) v.bar9(i, i, 1, 0, 0.5, 0.4, 1, new THREE.Color(0xff0000), 0);
-      assert.equal(v.nb9, cap); assert.equal(v.nf9, cap * 2); assert.equal(v.barDbg.n, cap);
+      assert.equal(v.nb9, cap); assert.equal(v.nf9, cap * 2); assert.equal(v.dbg.n, cap);
     }
     assert.deepEqual(Array.from(f.batch.barBg.instanceMatrix.array.subarray(cap * 16)), Array.from(f.old.barFill.instanceMatrix.array), 'full staging capacity retains every fill matrix');
     assert.deepEqual(Array.from(f.batch.barBg.instanceColor.array.subarray(cap * 3)), Array.from(f.old.barFill.instanceColor.array), 'full staging capacity retains every fill color');

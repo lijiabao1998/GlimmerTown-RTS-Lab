@@ -17,6 +17,9 @@ import { MultiRangePreview } from './multiRange.ts';
 import { RangePreview } from './rangePreview.ts';
 import { VegetationView } from './vegetation.ts';
 import { TrenchRaster } from './trenches.ts';
+import { HealthBars } from './healthBars.ts';
+import { OrderLines } from './orderLines.ts';
+import { WallMarks } from './wallMarks.ts';
 
 // R027 人行道與黑白路緣（只有手排地圖；畫面開關）
 let streets27 = true;
@@ -25,10 +28,6 @@ const PX = 8;                       // 地面貼圖：每格 8×8 像素
 const MAX_UNITS = 512, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
 const C_ZOMBIE = new THREE.Color(0x8d9b72), C_ZOMBIE_BODY = new THREE.Color(0x5c6650);
 export const TURRET_RATE = 3;        // R008 砲塔最大轉速（弧度／秒）
-const HOLE_CAP = 160;                 // R014 牆上痕跡最多幾個（滿了丟最舊的）
-const C_HOLE = 0x1b1713, C_SOOT = 0x2a2521;
-const DASH_CAP = 900;                 // R011 地上短線最多幾段
-const DK_PATH = 0, DK_ATTACK = 1, DK_FIRE = 2, DK_END = 3, DK_CROSS = 4;
 const MEN_CAP = 1600, BODY_CAP = 300;   // R021 小兵實例上限、倒下的人上限
 // R023 坦克的網格縮放（輕坦克小一號、重坦克大一號；中坦克原樣）
 const TANK_SCALE23: Record<number, number> = { [UK_LIGHT]: 0.8, [UK_HEAVY]: 1.18 };
@@ -63,8 +62,6 @@ const E_FIRE = 0, E_SMOKE = 1, E_WRECKFIRE = 2, E_WRECKSMOKE = 3, E_DUST = 4;
 const E_LIFE = [1.5, 3.6, 1.5, 3.4, 2.2];            // 這種發射器的粒子最多活幾秒（跳過太舊的發射時間用）
 type Emitter = { kind: number; id: number; x: number; z: number; w: number; d: number; h: number; t0: number; until: number; every: number; next: number; fog: boolean };
 type Toss = { t0: number; vx: number; vz: number; spin: number; yaw: number; tilt: number };
-const C_BAR_BG = new THREE.Color(0x15130f), C_BAR_HI = new THREE.Color(0x63d65a), C_BAR_MID = new THREE.Color(0xf2c23a), C_BAR_LO = new THREE.Color(0xe8402a);
-const C_BLD_HI = new THREE.Color(0xdcc08a), C_BLD_LO = new THREE.Color(0xe08a3a);
 const C_ARMOR_FRONT = new THREE.Color(0x63d65a), C_ARMOR_REAR = new THREE.Color(0xe8402a);
 const C_WHITE = new THREE.Color(1, 1, 1), C_HE_SHELL = new THREE.Color(0x2d2d2d), C_AP_SHELL = new THREE.Color(0xffd27a), C_SEL = new THREE.Color(0xffe066);
 const DIRT = [0x5a4636, 0x6b5440, 0x3e3226], STEEL = [0x3a3c3e, 0x55575a, 0x2c2a26];
@@ -189,40 +186,27 @@ export class BattleView {
   private fire44 = new Float64Array(MAX_UNITS + 1).fill(-99);   // R044 每台最後一次開火的模擬時間（戰鬥室要不要對著目標）
   private cFlash = new THREE.Color();
 
-  // ---- R009 血條（?noR009=1 時不畫）----
-  private r9 = false;
-  private barBg: THREE.InstancedMesh | null = null;
-  private barFill: THREE.InstancedMesh | null = null;
-  private barRight = new THREE.Vector3();
-  private barQ = new THREE.Quaternion();
-  private nb9 = 0;
-  private nf9 = 0;
-  private barHp = new Int32Array(MAX_UNITS + 1);
-  private barFrom = new Float64Array(MAX_UNITS + 1);
-  private barHitT = new Float64Array(MAX_UNITS + 1).fill(-99);
-  private barColor = new THREE.Color();
-  // 守衛用：上一幀畫了哪些血條（預配，不每幀配置）
-  readonly barDbg = { n: 0, id: new Int32Array(MAX_UNITS + 64), frac: new Float32Array(MAX_UNITS + 64), ghost: new Float32Array(MAX_UNITS + 64), r: new Float32Array(MAX_UNITS + 64), g: new Float32Array(MAX_UNITS + 64) };
+  // ---- R063 小畫家：血條（R009／R123）、指令線（R011）、牆上彈孔（R014／R139）各自一個檔；下面的名字給守衛照舊讀 ----
+  readonly bars9 = new HealthBars(MAX_UNITS, this.tmp);
+  readonly orders11 = new OrderLines(this.tmp);
+  readonly marks14 = new WallMarks(MAX_SHELLS, this.tmp);
+  get barBg() { return this.bars9.bg; }
+  get barFill() { return this.bars9.fill; }
+  get barDbg() { return this.bars9.dbg; }
+  get bars() { return this.bars9.counts; }
+  get dash() { return this.orders11.mesh; }
+  get dashDbg() { return this.orders11.dbg; }
+  get dashes() { return this.orders11.mesh ? this.orders11.mesh.count : 0; }
+  get holes() { return this.marks14.holes; }
+  get holeCount() { return this.marks14.count; }
+  get holeInstances() { return this.marks14.mesh ? this.marks14.mesh.count : 0; }
+  get rubbleMarkGuard() { return this.marks14.rubbleMarkGuard; }
+  set rubbleMarkGuard(on: boolean) { this.marks14.rubbleMarkGuard = on; }
 
-  // ---- R011 指令回饋（?noR011=1 時不畫）----
-  private dash: THREE.InstancedMesh | null = null;
-  private nd11 = 0;
-  // 守衛用：上一幀畫了哪些短線（預配）
-  readonly dashDbg = { n: 0, x: new Float32Array(DASH_CAP), z: new Float32Array(DASH_CAP), kind: new Uint8Array(DASH_CAP), unit: new Int32Array(DASH_CAP) };
-
-  // ---- R014 牆上的彈孔（?noR014=1 時不畫）----
   // ---- R016 開戰時布陣的房子從地面升起（?noR016=1 時直接出現）----
   private r16 = false;
   private rising = new Map<number, number>();   // 建築 id → 升完的模擬時間
   private skipRising = (b: Building) => this.rising.has(b.id);
-  private holeMesh: THREE.InstancedMesh | null = null;
-  // 痕跡：環狀覆寫最舊的；kind 0＝彈孔（深色孔＋淺色碎灰泥兩片）、1＝燻黑
-  readonly holes = { next: 0, live: new Uint8Array(HOLE_CAP), bld: new Int32Array(HOLE_CAP), kind: new Uint8Array(HOLE_CAP), x: new Float32Array(HOLE_CAP), y: new Float32Array(HOLE_CAP), z: new Float32Array(HOLE_CAP), nx: new Int8Array(HOLE_CAP), nz: new Int8Array(HOLE_CAP), w: new Float32Array(HOLE_CAP), h: new Float32Array(HOLE_CAP), r: new Float32Array(HOLE_CAP), g: new Float32Array(HOLE_CAP), b: new Float32Array(HOLE_CAP) };
-  private holesDirty = false;
-  private holeSeq = 0;
-  rubbleMarkGuard = true; // R139：只管瓦礫彈痕；與既有 R014 開關獨立。
-  // 每一步之前記下在飛、會打中建築的穿甲彈（彈著事件沒有射手位置）
-  private apSnap = { n: 0, sx: new Float64Array(MAX_SHELLS), sz: new Float64Array(MAX_SHELLS), ex: new Float64Array(MAX_SHELLS), ez: new Float64Array(MAX_SHELLS), bld: new Int32Array(MAX_SHELLS) };
 
   readonly trench118: TrenchRaster;
   readonly vegetation116: VegetationView;
@@ -236,7 +220,7 @@ export class BattleView {
     const o = this.opts = viewOptions(options);
     const { fx: fxOn, fog: fogOn, observerDetails, r004, r008, r009, r011, r014, r016, r107, r113, r118, r104, r123 } = o;
     this.rubbleMarkGuard = o.rubbleMarks; this.multiRangeEnabled = o.multiRange;
-    this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
+    this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r16 = r016; this.r107 = r107;
     this.trench118 = new TrenchRaster(r118); this.trench118.sync(w);
     this.range113 = r113 ? new RangePreview() : null;
     if (this.range113) this.scene.add(this.range113.mesh);
@@ -286,33 +270,12 @@ export class BattleView {
     this.discs = inst(new THREE.CircleGeometry(0.27, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_UNITS, false);
     this.rings = inst(new THREE.RingGeometry(0.3, 0.37, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial(), MAX_RINGS, false);
     if (r104 && fxOn) this.armorArcs = inst(new THREE.RingGeometry(0.45, 0.53, 8, 1, -Math.PI / 4, Math.PI / 2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ depthWrite: false }), MAX_RINGS * 2, false);
-    if (r014) {
-      const mat = toon({ polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
-      this.holeMesh = inst(new THREE.PlaneGeometry(1, 1), mat, HOLE_CAP * 2, false);
-      this.holeMesh.receiveShadow = true;
-    }
-    if (r011) {
-      // 地上的短線片（加色＝在地上發亮，越淡＝顏色越暗），會被房子擋住（測深度、不寫深度）
-      this.dash = inst(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }), DASH_CAP, false);
-    }
-    if (r009) {
-      // 血條：一片從 x=0 往右長的四邊形；畫在所有東西上面（不測深度、不寫深度＝沒有描邊），朝著鏡頭
-      const quad = new THREE.PlaneGeometry(1, 1).translate(0.5, 0, 0);
-      const mat = (c: number) => new THREE.MeshBasicMaterial({ color: c, depthTest: false, depthWrite: false, toneMapped: false });
-      // R123: preserve all backgrounds before every fill, but submit one mesh.
-      // The upper fixed-capacity segment stages fills until the background count is known.
-      this.barBg = inst(quad, mat(0xffffff), (r123 ? 3 : 1) * (MAX_UNITS + 64), false); this.barBg.renderOrder = 10;
-      if (!r123) { this.barFill = inst(quad.clone(), mat(0xffffff), 2 * (MAX_UNITS + 64), false); this.barFill.renderOrder = 11; }
-      // 鏡頭角度固定（45°／30°），血條的朝向算一次就好
-      const probe = new THREE.Object3D(), dir = new THREE.Vector3(Math.cos(ELEV) * Math.SQRT1_2, Math.sin(ELEV), Math.cos(ELEV) * Math.SQRT1_2);
-      probe.position.copy(dir); probe.lookAt(0, 0, 0); probe.rotateY(Math.PI);
-      this.barQ.copy(probe.quaternion);
-      this.barRight.set(1, 0, 0).applyQuaternion(this.barQ);
-      this.r9 = true;
-    }
+    if (r014) this.marks14.build(inst, toon({ polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+    if (r011) this.orders11.build(inst);
+    if (r009) this.bars9.build(inst, r123, ELEV);
     this.shells = inst(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshBasicMaterial(), MAX_SHELLS, false);
     this.fxMesh = inst(new THREE.IcosahedronGeometry(1, 1), toon(), MAX_FX, false);
-    for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); this.turretYaw[u.id] = this.yaw[u.id]; this.lastHp[u.id] = u.hp; this.barHp[u.id] = u.hp; this.barFrom[u.id] = u.hp; }
+    for (const u of w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = Math.atan2(-u.aimZ, u.aimX); this.turretYaw[u.id] = this.yaw[u.id]; this.lastHp[u.id] = u.hp; this.bars9.seed(u); }
     if (fxOn && r004) {
       this.r4 = true;
       const add = () => new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false });
@@ -505,10 +468,7 @@ export class BattleView {
   // ---- 每一步之前記下位置（插值用）；之後吃事件 ----
   snapshot() {
     for (const u of this.w.units) { this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; }
-    if (this.holeMesh) {   // R014：記下會打中建築的穿甲彈從哪裡打來
-      const a = this.apSnap; a.n = 0;
-      for (const sh of this.w.shells) if (sh.kind === SHELL_AP && sh.hitBld && a.n < MAX_SHELLS) { a.sx[a.n] = sh.sx; a.sz[a.n] = sh.sz; a.ex[a.n] = sh.ex; a.ez[a.n] = sh.ez; a.bld[a.n] = sh.hitBld; a.n++; }
-    }
+    if (this.marks14.mesh) this.marks14.snapshot(this.w);   // R014：記下會打中建築的穿甲彈從哪裡打來
   }
 
   onEvents(events: SimEvent[], simT: number) {
@@ -518,7 +478,7 @@ export class BattleView {
     for (const e of events) if (e.e === 'spawn') { const u = this.w.units[e.unit - 1]; this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; }
     if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory); // tick0 的 map 重播要同步城鎮與地面。
     if (this.n !== this.w.n) this.setWorld(this.w, this.territory);   // R042：同一個世界在 tick0 換了大小，緩衝照新的 w.n 重配
-    if (this.holeMesh) this.holes14(events);
+    if (this.marks14.mesh) this.marks14.onEvents(this.w, events, this);
     for (const e of events) if (e.e === 'fire') this.fire44[e.unit] = simT;
     if (this.r8) this.vehicles8(events, simT);
     if (this.r4) { this.frameNo++; for (const e of events) this.fx4(e, simT); }   // 世界剛走一步：可見度快取作廢
@@ -588,10 +548,10 @@ export class BattleView {
     this.lastMen = grow(this.lastMen, -1); this.prevX = grow(this.prevX); this.prevZ = grow(this.prevZ); this.yaw = grow(this.yaw);
     this.trackLast = grow(this.trackLast, -1, 2); this.recoilT0 = grow(this.recoilT0, -99); this.flashT0 = grow(this.flashT0, -99);
     this.lastHp = grow(this.lastHp); this.turretYaw = grow(this.turretYaw); this.fire44 = grow(this.fire44, -99);
-    this.barHp = grow(this.barHp); this.barFrom = grow(this.barFrom); this.barHitT = grow(this.barHitT, -99);
+    const B = this.bars9; B.hp = grow(B.hp); B.from = grow(B.from); B.hitT = grow(B.hitT, -99);
     for (const u of this.w.units) if (u.id >= old) {
       this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; this.yaw[u.id] = this.turretYaw[u.id] = Math.atan2(-u.aimZ, u.aimX);
-      this.lastHp[u.id] = this.barHp[u.id] = this.barFrom[u.id] = u.hp;
+      this.lastHp[u.id] = u.hp; B.seed(u);
     }
   }
   // 爆炸：一團火光＋幾朵煙；dust＝塵土色（打在建築上）
@@ -612,7 +572,7 @@ export class BattleView {
   // ---- 每一幀 ----
   update(alpha: number, simT: number, selected: Set<number>, showRanges = true) {
     const w = this.w, m = this.tmp;
-    this.alpha9 = alpha; this.menDbg.alive = 0;
+    this.menDbg.alive = 0;
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
@@ -739,8 +699,9 @@ export class BattleView {
       if (done) { this.clearRegionTown(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); this.prepareRegionTown(); this.observerHeights.clear(); }
     }
     if (this.r4) this.updateFx(simT);
-    if (this.r9) this.bars9(simT, selected);
-    if (this.dash) this.orders11(selected);
+    const at = { prevX: this.prevX, prevZ: this.prevZ, alpha };
+    if (this.bars9.on) this.bars9.paint(w, simT, selected, at, this);
+    if (this.orders11.mesh) this.orders11.paint(w, selected, at, this);
     this.range113?.update(w, selected, showRanges);
     this.multi122.update(w, selected, showRanges && this.multiRangeEnabled);
     nm = this.bodies21(nm);
@@ -1064,227 +1025,8 @@ export class BattleView {
     return this.engaged44(u, t) ? aim : this.yaw[u.id];
   }
 
-  // ======== R009 血條與耐久條 ========
-  // 單位：受過傷或被選取才畫；扣血時白色殘影從舊血量縮到新血量（0.5 秒）。敵方只在看得到時畫（R100）。
-  // 建築：我方單位正在砲擊的那棟畫耐久條，標出「空殼」門檻（70%）。
-  private bars9(t: number, selected: Set<number>) {
-    const w = this.w, dbg = this.barDbg;
-    this.nb9 = 0; this.nf9 = 0; dbg.n = 0;
-    for (const u of w.units) {
-      const max = UNIT_KINDS[u.kind].hp;
-      if (u.hp < this.barHp[u.id]) { this.barFrom[u.id] = this.ghost9(u.id, t); this.barHitT[u.id] = t; }
-      this.barHp[u.id] = u.hp;
-      if (!u.alive || (u.hp >= max && !selected.has(u.id)) || !this.visibleUnit(u)) continue;
-      const frac = Math.max(0, u.hp / max), ghost = this.ghost9(u.id, t) / max;
-      // 綠（滿）→ 黃（一半）→ 紅（快死）
-      if (frac > 0.5) this.barColor.copy(C_BAR_MID).lerp(C_BAR_HI, (frac - 0.5) * 2); else this.barColor.copy(C_BAR_LO).lerp(C_BAR_MID, frac * 2);
-      const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * this.alpha9) / SUB, z = (this.prevZ[u.id] + (u.z - this.prevZ[u.id]) * this.alpha9) / SUB;
-      this.bar9(u.id, x, this.unitHeight(u) + (u.kind === UK_OBSERVER ? 0.85 : 0.55), z, u.kind === UK_OBSERVER ? 0.34 : 0.5, frac, Math.max(frac, Math.min(1, ghost)), this.barColor, 0);
-    }
-    // 我方正在砲擊的建築（同一棟只畫一次）
-    for (const u of w.units) {
-      if (!u.alive || u.side !== SIDE_PLAYER || u.order !== ORD_FIRE_AT || u.target > 0) continue;
-      const id = w.occ[cellIdx(w, u.tx, u.tz)], b = id ? w.blds[id - 1] : null;
-      if (!b || b.hp <= 0) continue;
-      let dup = false;
-      for (let i = 0; i < dbg.n; i++) if (dbg.id[i] === -b.id) dup = true;
-      if (dup) continue;
-      const frac = b.hp / b.maxHp;
-      this.barColor.copy(frac > 0.7 ? C_BLD_HI : C_BLD_LO);
-      const h = wallHeight(b) * (wallShown(b) && stageOf(b) === STAGE_ROOFLESS ? 0.72 : 1);
-      this.bar9(-b.id, b.x + b.w / 2, h + roofRise(b.kind) + 0.35, b.z + b.d / 2, Math.min(1.2, 0.5 + 0.25 * Math.max(b.w, b.d)), frac, frac, this.barColor, 0.7);
-    }
-    const bg = this.barBg!, fill = this.barFill;
-    if (fill) {
-      bg.count = this.nb9; fill.count = this.nf9;
-      fill.instanceMatrix.needsUpdate = true;
-      if (fill.instanceColor) fill.instanceColor.needsUpdate = true;
-    } else {
-      const offset = MAX_UNITS + 64;
-      // copyWithin handles overlap and allocates nothing; retain original fill ordering.
-      bg.instanceMatrix.array.copyWithin(this.nb9 * 16, offset * 16, (offset + this.nf9) * 16);
-      if (bg.instanceColor) bg.instanceColor.array.copyWithin(this.nb9 * 3, offset * 3, (offset + this.nf9) * 3);
-      bg.count = this.nb9 + this.nf9;
-    }
-    bg.instanceMatrix.needsUpdate = true;
-    if (bg.instanceColor) bg.instanceColor.needsUpdate = true;
-  }
-  // 一條血條：底（黑框）、白色殘影、填色、門檻刻度；左端對齊、往鏡頭的右邊長
-  private bar9(id: number, cx: number, y: number, cz: number, L: number, frac: number, ghost: number, col: THREE.Color, notch: number) {
-    const R = this.barRight, x0 = cx - R.x * L / 2, y0 = y - R.y * L / 2, z0 = cz - R.z * L / 2, capB = MAX_UNITS + 64, capF = 2 * capB, dbg = this.barDbg, fill = this.barFill ?? this.barBg!, offset = this.barFill ? 0 : capB;
-    if (this.nb9 < capB) this.put9(this.barBg!, this.nb9++, x0 - R.x * 0.02, y0 - R.y * 0.02, z0 - R.z * 0.02, L + 0.04, 0.085, C_BAR_BG);
-    if (ghost > frac && this.nf9 < capF) this.put9(fill, offset + this.nf9++, x0, y0, z0, L * ghost, 0.05, C_WHITE);
-    if (frac > 0 && this.nf9 < capF) this.put9(fill, offset + this.nf9++, x0, y0, z0, L * frac, 0.05, col);
-    if (notch > 0 && this.nf9 < capF) this.put9(fill, offset + this.nf9++, x0 + R.x * L * notch, y0 + R.y * L * notch, z0 + R.z * L * notch, 0.025, 0.07, C_BAR_BG);
-    if (dbg.n < dbg.id.length) { dbg.id[dbg.n] = id; dbg.frac[dbg.n] = frac; dbg.ghost[dbg.n] = ghost; dbg.r[dbg.n] = col.r; dbg.g[dbg.n] = col.g; dbg.n++; }
-  }
-  private put9(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, len: number, h: number, col: THREE.Color) {
-    const m = this.tmp;
-    m.position.set(x, y, z); m.quaternion.copy(this.barQ); m.scale.set(Math.max(0.0001, len), h, 1); m.updateMatrix();
-    mesh.setMatrixAt(i, m.matrix); mesh.setColorAt(i, col);
-  }
-  private alpha9 = 0;
-  // 白色殘影目前停在多少血（0.5 秒內從扣血前縮到現在的血量）
-  private ghost9(id: number, t: number): number {
-    const k = (t - this.barHitT[id]) / 0.5, now = this.barHp[id];
-    return k >= 1 || k < 0 ? now : now + (this.barFrom[id] - now) * (1 - k);
-  }
-  get bars() { return this.r9 ? { bg: this.nb9, fill: this.nf9 } : { bg: 0, fill: 0 }; }
-
-
-  // ======== R011 指令回饋 ========
-  // 只畫被選取的我方單位：剩下的路（綠／紅／橘，越遠越淡）、終點方塊、攻擊線（看得到畫到目標身上，看不到畫到最後已知位置）、砲擊準星
-  private orders11(selected: Set<number>) {
-    const w = this.w, dbg = this.dashDbg;
-    this.nd11 = 0; dbg.n = 0;
-    for (const id of selected) {
-      const u = id >= 1 && id <= w.units.length ? w.units[id - 1] : null;
-      if (!u || !u.alive || u.side !== SIDE_PLAYER) continue;
-      const x = (this.prevX[u.id] + (u.x - this.prevX[u.id]) * this.alpha9) / SUB, z = (this.prevZ[u.id] + (u.z - this.prevZ[u.id]) * this.alpha9) / SUB;
-      const col = u.order === ORD_ATTACK ? 0xff5040 : u.order === ORD_FIRE_AT ? 0xffa030 : 0x6cff70;
-      // 剩下的路：沿折線每 0.3 格一段
-      let px = x, pz = z, walked = 0, ex = x, ez = z;
-      for (let i = u.pathIdx; i < u.path.length && this.nd11 < DASH_CAP; i++) {
-        const c = u.path[i], cx = (c % w.n) + 0.5, cz = (c - (c % w.n)) / w.n + 0.5;
-        walked = this.dashes11(u.id, DK_PATH, px, pz, cx, cz, col, walked);
-        px = cx; pz = cz; ex = cx; ez = cz;
-      }
-      if (u.pathIdx < u.path.length) this.dash11(u.id, DK_END, ex, ez, 0.16, 0.16, 0, col, 1);
-      if (u.order === ORD_ATTACK) {
-        const t = w.units[u.target - 1];
-        const seen = !!t && t.alive && this.visibleUnit(t);
-        const tx = seen ? (this.prevX[t.id] + (t.x - this.prevX[t.id]) * this.alpha9) / SUB : u.tx / SUB, tz = seen ? (this.prevZ[t.id] + (t.z - this.prevZ[t.id]) * this.alpha9) / SUB : u.tz / SUB;
-        this.dashes11(u.id, DK_ATTACK, x, z, tx, tz, 0xff4030, 0);
-      } else if (u.order === ORD_FIRE_AT) {
-        const tx = u.tx + 0.5, tz = u.tz + 0.5;
-        this.dashes11(u.id, DK_FIRE, x, z, tx, tz, 0xff9a20, 0);
-        this.dash11(u.id, DK_CROSS, tx, tz, 0.6, 0.06, Math.PI / 4, 0xffb040, 1);
-        this.dash11(u.id, DK_CROSS, tx, tz, 0.6, 0.06, -Math.PI / 4, 0xffb040, 1);
-      }
-    }
-    const d = this.dash!;
-    d.count = this.nd11; d.instanceMatrix.needsUpdate = true;
-    if (d.instanceColor) d.instanceColor.needsUpdate = true;
-  }
-  // 一條線段上的虛線；walked＝之前已經走了多遠（讓整條路的虛線間距連續、越遠越淡）；回傳走到哪
-  private dashes11(id: number, kind: number, ax: number, az: number, bx: number, bz: number, col: number, walked: number): number {
-    const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz), yaw = Math.atan2(-dz, dx), STEP = 0.3;
-    if (len < 1e-6) return walked;
-    let s = (STEP - (walked % STEP)) % STEP;
-    for (; s < len && this.nd11 < DASH_CAP; s += STEP) {
-      const fade = Math.max(0.3, 1 - (walked + s) / 14);
-      this.dash11(id, kind, ax + (dx * s) / len, az + (dz * s) / len, 0.13, 0.045, yaw, col, fade);
-    }
-    return walked + len;
-  }
-  private dash11(id: number, kind: number, x: number, z: number, sx: number, sz: number, yaw: number, col: number, fade: number) {
-    if (this.nd11 >= DASH_CAP) return;
-    const m = this.tmp, dbg = this.dashDbg;
-    m.position.set(x, 0.03, z); m.rotation.set(0, yaw, 0); m.scale.set(sx, 1, sz); m.updateMatrix();
-    this.dash!.setMatrixAt(this.nd11, m.matrix);
-    this.dash!.setColorAt(this.nd11, this.barColor.setHex(col).multiplyScalar(fade));
-    dbg.x[dbg.n] = x; dbg.z[dbg.n] = z; dbg.kind[dbg.n] = kind; dbg.unit[dbg.n] = id; dbg.n++;
-    this.nd11++;
-  }
-  get dashes() { return this.dash ? this.dash.count : 0; }
-
-
-  // ======== R014 牆上的彈孔 ========
-  private holes14(events: SimEvent[]) {
-    const w = this.w, H = this.holes;
-    for (const e of events) {
-      if (e.e === 'impact' && e.kind === SHELL_AP && e.bld) {
-        const b = w.blds[e.bld - 1], a = this.apSnap;
-        if (!b || !this.visibleAt(e.x, e.z)) continue;          // 看不到的命中不留痕跡（方向會洩漏射手位置）
-        for (let i = 0; i < a.n; i++) {
-          if (a.bld[i] !== e.bld || a.ex[i] !== e.x || a.ez[i] !== e.z) continue;
-          this.mark14(b, 0, a.sx[i] / SUB, a.sz[i] / SUB, e.x / SUB, e.z / SUB);
-          break;
-        }
-      } else if (e.e === 'impact' && e.kind === SHELL_HE) {
-        if (!this.visibleAt(e.x, e.z)) continue;
-        const R = (e.r ?? UNIT_KINDS[UK_HOWITZER].splash) / SUB, ix = e.x / SUB, iz = e.z / SUB;
-        for (const b of w.blds) {
-          if (b.hp <= 0) continue;
-          const cx = Math.max(b.x, Math.min(b.x + b.w, ix)), cz = Math.max(b.z, Math.min(b.z + b.d, iz));
-          if (Math.hypot(cx - ix, cz - iz) > R + 0.5) continue;
-          this.mark14(b, 1, ix, iz, b.x + b.w / 2, b.z + b.d / 2);
-        }
-      } else if (e.e === 'stage') {
-        const b = w.blds[e.bld - 1];
-        const keepBelow = e.stage === STAGE_RUBBLE ? -1 : wallHeight(b) * 0.72 * 0.7;   // 空殼的牆頂是鋸齒（七成到十成）
-        for (let i = 0; i < HOLE_CAP; i++) if (H.live[i] && H.bld[i] === b.id && H.y[i] + H.h[i] / 2 * (wallShown(b) && H.kind[i] === 0 ? 1.55 : 1) > keepBelow) { H.live[i] = 0; this.holesDirty = true; }
-      }
-    }
-    if (this.holesDirty) this.rebuild14();
-  }
-
-  // 從 (sx,sz) 往 (ex,ez) 的直線打進建築的牆（模型的牆內縮 0.1 格；教堂只算中殿），落在進入的那一面
-  private mark14(b: Building, kind: number, sx: number, sz: number, ex: number, ez: number) {
-    const { x0, x1, z0, z1 } = wallBounds(b);
-    if (wallShown(b) && b.hp <= 0) return;
-    const dx = ex - sx, dz = ez - sz;
-    let tIn = -Infinity, tOut = Infinity, axis = -1;
-    for (const [s0, d, lo, hi, ax] of [[sx, dx, x0, x1, 0], [sz, dz, z0, z1, 1]] as const) {
-      if (Math.abs(d) < 1e-9) { if (s0 < lo || s0 > hi) return; continue; }
-      let t1 = (lo - s0) / d, t2 = (hi - s0) / d;
-      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
-      if (t1 > tIn) { tIn = t1; axis = ax; }
-      tOut = Math.min(tOut, t2);
-    }
-    if (axis < 0 || tIn > tOut || tIn < 0) return;                 // 射手在牆裡面、或打不到這棟
-    const seq = this.holeSeq++, hh = (k: number) => hash2(b.id * 977 + seq, k, 141);
-    // R139：保留既有有效射線的序號，後續存活建築彈痕不變；瓦礫不再佔用痕跡池。
-    if (this.rubbleMarkGuard && b.hp <= 0) return;
-    let px = sx + dx * tIn, pz = sz + dz * tIn;
-    const nx = axis === 0 ? (dx > 0 ? -1 : 1) : 0, nz = axis === 1 ? (dz > 0 ? -1 : 1) : 0;
-    // 沿牆面錯開一點（同一個方向連打不會疊成一個點），夾在牆面內
-    if (axis === 0) pz = Math.max(z0 + 0.08, Math.min(z1 - 0.08, pz + (hh(1) - 0.5) * 0.3)); else px = Math.max(x0 + 0.08, Math.min(x1 - 0.08, px + (hh(1) - 0.5) * 0.3));
-    const top = stageOf(b) === STAGE_INTACT ? wallHeight(b) : wallHeight(b) * 0.72 * 0.7;
-    const H = this.holes, i = H.next;
-    H.next = (H.next + 1) % HOLE_CAP;
-    H.live[i] = 1; H.bld[i] = b.id; H.kind[i] = kind; H.x[i] = px; H.z[i] = pz; H.nx[i] = nx; H.nz[i] = nz;
-    if (kind === 0) { H.w[i] = 0.13 + 0.05 * hh(2); H.h[i] = 0.1 + 0.04 * hh(3); H.y[i] = 0.1 + hh(4) * Math.max(0.02, top - 0.2); }
-    else { H.w[i] = 0.28 + 0.12 * hh(2); H.h[i] = Math.min(0.24, top * 0.6); H.y[i] = H.h[i] / 2 + 0.01; }
-    if (wallShown(b)) {
-      // AP 外圈也必須留在窄牆端面／低矮缺口內，不能只夾住中心點。
-      const scale = kind === 0 ? 1.55 : 1, lo = axis === 0 ? z0 : x0, hi = axis === 0 ? z1 : x1;
-      H.w[i] = Math.min(H.w[i], (hi - lo - 0.012) / scale); H.h[i] = Math.min(H.h[i], (top - 0.012) / scale);
-      const half = H.w[i] * scale / 2 + 0.006;
-      if (axis === 0) H.z[i] = Math.max(lo + half, Math.min(hi - half, H.z[i])); else H.x[i] = Math.max(lo + half, Math.min(hi - half, H.x[i]));
-      H.y[i] = Math.max(H.h[i] * scale / 2 + 0.006, Math.min(top - H.h[i] * scale / 2 - 0.006, H.y[i]));
-    }
-    const wall = bldColors(b.kind).wall;
-    H.r[i] = wall.r + (1 - wall.r) * 0.35; H.g[i] = wall.g + (1 - wall.g) * 0.35; H.b[i] = wall.b + (1 - wall.b) * 0.35;   // 碎掉的灰泥：牆色偏亮
-    this.holesDirty = true;
-  }
-
-  // 痕跡有變才重寫實例（不是每幀）：彈孔兩片（外圈淺色碎灰泥、裡面深色孔），燻黑一片
-  private rebuild14() {
-    const H = this.holes, m = this.tmp, mesh = this.holeMesh!;
-    let n = 0;
-    for (let k = 0; k < HOLE_CAP; k++) {
-      const i = (H.next + k) % HOLE_CAP;                              // 從最舊的開始畫，新的疊在上面
-      if (!H.live[i]) continue;
-      const yaw = H.nx[i] ? (H.nx[i] > 0 ? Math.PI / 2 : -Math.PI / 2) : (H.nz[i] > 0 ? 0 : Math.PI);
-      const layers = H.kind[i] === 0 ? 2 : 1;
-      for (let l = 0; l < layers; l++) {
-        const off = 0.006 + 0.003 * l, sc = H.kind[i] === 0 && l === 0 ? 1.55 : 1;
-        m.position.set(H.x[i] + H.nx[i] * off, H.y[i], H.z[i] + H.nz[i] * off); m.rotation.set(0, yaw, 0); m.scale.set(H.w[i] * sc, H.h[i] * sc, 1); m.updateMatrix();
-        mesh.setMatrixAt(n, m.matrix);
-        if (H.kind[i] === 1) this.barColor.setHex(C_SOOT); else if (l === 0) this.barColor.setRGB(H.r[i], H.g[i], H.b[i]); else this.barColor.setHex(C_HOLE);
-        mesh.setColorAt(n, this.barColor);
-        n++;
-      }
-    }
-    mesh.count = n; mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    this.holesDirty = false;
-  }
   get risingCount() { return this.rising.size; }
   get ghostCount() { return this.ghosts ? this.ghosts.count : 0; }
-  get holeCount() { let c = 0; for (let i = 0; i < HOLE_CAP; i++) c += this.holes.live[i]; return c; }
-  get holeInstances() { return this.holeMesh ? this.holeMesh.count : 0; }
 
 
   // ======== R021 步兵班 ========
