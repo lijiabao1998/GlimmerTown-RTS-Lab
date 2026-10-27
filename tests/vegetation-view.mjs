@@ -2,6 +2,7 @@ import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R116: actual merged geometry, BattleView/cache, minimap and HUD; Node is not a pixel test.
 // --mutations isolates production mutants and requires the named semantic assertion as first red.
 import assert from 'node:assert/strict';
+import { valves } from '../src/valves.ts';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { MAP_LARGE } from '../src/sim/largeMap.ts';
@@ -65,7 +66,7 @@ function field(entries = [[8, 8, 1], [10, 8, 2]]) {
   for (const [x, z, kind] of entries) w.vegetation.cells[idx(x, z)] = kind;
   return w;
 }
-function view(w) { setVegetation(true); return new BattleView(w, false); }
+function view(w) { setVegetation(true); return new BattleView(w, { fx: false }); }
 function budget(v) {
   let calls = 0, triangles = 0;
   v.scene.traverse(o => {
@@ -120,8 +121,8 @@ function mainFixture() {
   const mockView = () => ({ dispose() {}, setWorld() {}, vegetation116: { mesh: null, cells: 0, triangles: 0, builds: 0 } });
   const c = vm.createContext({ ...sim, applyMap, MAP_RYE, runLog, SCRIPT, SCRIPT_SEED, SCRIPT_TICKS, seed: 1944,
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // Default village and legacy replay; large maps are checked separately.
-    r006: false, r018: false, r019: false, r026: false, r109: false, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true,
-    r116: false, r118: true, r104: true, fxOn: true, q: new URLSearchParams('noR116=1'),
+    // R060：閥從閥表來（網址 noR116=1）；布陣、電腦、補給、萊伊、快捷手勢在這個夾具裡關掉
+    V: { ...valves(new URLSearchParams('noR116=1')), r006: false, r018: false, r019: false, r026: false, r109: false }, fxOn: true, q: new URLSearchParams('noR116=1'),
     w: undefined, view: mockView(), selected: new Set(), log: [], pending: [], paused: true, phase: 'battle', window: {},
     battleAudio: undefined, syncBattleAudio() {}, // Explicit absent optional audio for extracted replay/reset code.
     newStats() { return {}; }, reportView: undefined, ui() {}, refreshPreview() {},
@@ -154,16 +155,16 @@ const groups = {
     assert.deepEqual(w, before, 'readonly: full world including events and RNG remains unchanged'); assert.equal(hashWorld(w), hash);
   },
   valve() {
-    const w = field(), before = structuredClone(w); setVegetation(false); const off = new BattleView(w, false);
+    const w = field(), before = structuredClone(w); setVegetation(false); const off = new BattleView(w, { fx: false });
     assert.equal(off.scene.children.filter(o => o.name === 'vegetation-r116').length + (off.vegetationInfo ? 1 : 0), 0, 'valve: off has no foliage scene objects or hint');
-    const legacy = createWorld(1944); setVegetation(true); const oldOn = new BattleView(legacy, false); setVegetation(false); const oldOff = new BattleView(legacy, false);
+    const legacy = createWorld(1944); setVegetation(true); const oldOn = new BattleView(legacy, { fx: false }); setVegetation(false); const oldOff = new BattleView(legacy, { fx: false });
     assert.equal(oldOn.scene.children.length, oldOff.scene.children.length, 'valve: old worlds have exactly the legacy scene count');
     assert.deepEqual([...oldOn.groundPx], [...oldOff.groundPx]); assert.deepEqual(w, before); off.dispose(); oldOn.dispose(); oldOff.dispose(); setVegetation(true);
   },
   budget() {
     for (const map of [0, 1]) {
       const w = createWorld(1944); applyMap(w, map, 1); const on = view(w); on.update(0, 0, new Set());
-      setVegetation(false); const off = new BattleView(w, false); off.update(0, 0, new Set());
+      setVegetation(false); const off = new BattleView(w, { fx: false }); off.update(0, 0, new Set());
       const a = budget(on), b = budget(off);
       assert.equal(a.calls - b.calls, 1, 'budget: foliage adds exactly one draw call including the shadow pass');
       assert(a.calls <= 20 && a.triangles <= 80000, 'budget: opening structural scene stays within existing mobile budget');
@@ -209,7 +210,7 @@ const groups = {
     // Reproduce the real preview/start route and its same tick-0 map/build/eco log, with R016
     // disabled just as the browser replay comparison does. The enemy barn touches Rye roads.
     const native = createWorld(1944); applyMap(native, 1, 1); setVegetation(true);
-    const makeView = w => new BattleView(w, true, true, true, true, true, true, true, true, false, true, true);
+    const makeView = w => new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: false, r107: true, r113: true });
     const a = makeView(native), command = { t: 'build', side: SIDE_PLAYER, kind: BK_COTTAGE, x: 30, z: 12 };
     const preview = structuredClone(native); assert.equal(applyBuild(preview, command), null, 'build_replay: actual preview placement is legal');
     a.setWorld(preview, SIDE_PLAYER); a.setWorld(native, -1);

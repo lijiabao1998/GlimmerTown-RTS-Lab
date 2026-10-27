@@ -73,7 +73,7 @@ const plugin=mutant=>({name:'r124-browser-observation',enforce:'pre',transform(c
   setCoverValve: (enabled: boolean) => { if(enabled)q.delete('noR124');else q.set('noR124','1');hud?.update(); },
 };`);
     if(mutant){
-      replace("q.get('noR124') !== '1'","(q.get('__r124mutant') === 'valve' || q.get('noR124') !== '1')",3);
+      replace("V.r124","(q.get('__r124mutant') === 'valve' || V.r124)",3);   // R060：閥從閥表來
       replace('if (coverInfo !== lastCoverInfo)',"if (q.get('__r124mutant') !== 'freshness' && coverInfo !== lastCoverInfo)");
     }
   }

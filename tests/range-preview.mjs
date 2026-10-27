@@ -312,7 +312,7 @@ group('readonly_pool', () => {
 
 group('integration', () => {
   const f = fixture(), { w, selected, gun } = f;
-  const view = new BattleView(w, true), off = new BattleView(w, true, true, true, true, true, true, true, true, true, true, false);
+  const view = new BattleView(w, { fx: true }), off = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true, r113: false });
   const before = structuredClone(w);
   view.update(0, w.tick / 20, selected);
   assert.equal(view.range113?.solution.count, 3, 'BattleView updates the formal range overlay');
@@ -324,7 +324,7 @@ group('integration', () => {
   const geometry = snapshotGeometry(view.range113);
   view.update(0.9, 12345, selected);
   assert.deepEqual(snapshotGeometry(view.range113), geometry, 'alpha/display time cannot change the range solution');
-  const noFog = new BattleView(w, true, false); noFog.update(0, 0, selected);
+  const noFog = new BattleView(w, { fx: true, fog: false }); noFog.update(0, 0, selected);
   assert.deepEqual(noFog.range113.solution, view.range113.solution, 'noR100 visual visibility cannot change true spotting scatter');
   gun.path = [idx(4, 4)]; view.update(0, 0, selected);
   assert.match(view.rangeInfo, /移動/, 'same-tick movement updates the legend without a one-second wait');

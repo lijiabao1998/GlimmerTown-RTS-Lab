@@ -12,7 +12,7 @@ const {Geo}=await imp('src/render/geo.ts');
 const {buildingGeo,setDamageDetails}=await imp('src/render/buildings.ts');
 const samples=[];
 for(const on of [false,true]){
- setDamageDetails(on);const w=createWorld(1944),v=new BattleView(w,true,false);
+ setDamageDetails(on);const w=createWorld(1944),v=new BattleView(w, { fx: true, fog: false });
  try{
   for(let i=0;i<180;i++){v.snapshot();step(w,i===0?[{t:'fireAt',side:0,ids:[1,2,3,4],x:18,z:9}]:[]);v.onEvents(w.events,w.tick/20);v.update(0,w.tick/20,new Set());}
   const b=w.blds[11],H=v.holes;assert.equal(stageOf(b),1,'fixture: real roofless building after fireAt replay');

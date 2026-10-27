@@ -11,7 +11,7 @@ function check(ok, name, detail = '') {
 const W = 1280, H = 800;
 
 { // 1. 縮放時游標下的地面點不動（放大、縮小；四角與中心）；縮放範圍夾在 0.55–3
-  const v = new BattleView(createWorld(1944), false, true, true, true, true, true, true);
+  const v = new BattleView(createWorld(1944), { fx: false, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true });
   let worst = 0;
   for (const [cx, cy] of [[640, 400], [60, 60], [1220, 60], [60, 740], [1220, 740], [900, 300]]) {
     for (const f of [1.12, 1 / 1.12, 1.5, 0.7]) {
@@ -60,7 +60,7 @@ const W = 1280, H = 800;
   check(mono && done < 0.01 && !gl.active, '平滑移動：0.4 秒到達目標（誤差 < 0.01 格）、中途單調接近', `最後距離 ${done.toExponential(2)}`);
 }
 { // 4. 慣性推鏡頭不會出地圖（照 main.ts：每幀 pan，碰邊就停）
-  const v = new BattleView(createWorld(1944), false, true, true, true, true, true, true), f = new Fling(), out = { x: 0, z: 0 };
+  const v = new BattleView(createWorld(1944), { fx: false, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true }), f = new Fling(), out = { x: 0, z: 0 };
   v.target.set(2, 0, 2);
   f.start(-5000, -5000);
   let outside = false, frames = 0;

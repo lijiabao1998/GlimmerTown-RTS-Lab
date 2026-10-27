@@ -10,7 +10,7 @@ function check(ok, name, detail = '') {
   if (!ok) fails.push(name);
 }
 const drawn = v => { const d = v.barDbg, out = []; for (let i = 0; i < d.n; i++) out.push({ id: d.id[i], frac: d.frac[i], ghost: d.ghost[i], r: d.r[i], g: d.g[i] }); return out; };
-const mk = (r009 = true) => { const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, r009); return { w, v }; };
+const mk = (r009 = true) => { const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: r009 }); return { w, v }; };
 const tank = w => w.units.find(u => u.kind === UK_TANK && u.side === SIDE_PLAYER);
 const MAX = UNIT_KINDS[UK_TANK].hp;
 
@@ -51,7 +51,7 @@ const MAX = UNIT_KINDS[UK_TANK].hp;
 }
 { // 4. 畫面只讀世界（整場腳本戰鬥、全選我方）；?noR009 時 0 條
   const run = r009 => {
-    const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, r009), sel = new Set(w.units.filter(u => u.side === SIDE_PLAYER).map(u => u.id));
+    const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: r009 }), sel = new Set(w.units.filter(u => u.side === SIDE_PLAYER).map(u => u.id));
     let i = 0, most = 0;
     while (w.tick < 1200) {
       const now = []; while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) now.push(SCRIPT[i].cmd); i++; }

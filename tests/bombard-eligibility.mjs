@@ -13,7 +13,7 @@ import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 import { Gestures } from '../src/ui/gestures.ts';
 const { createWorld, hashWorld, SUB, SIDE_PLAYER, SIDE_ENEMY, ORD_IDLE, ORD_MOVE, UNIT_KINDS,
   UK_TANK, UK_HOWITZER, UK_MORTAR, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_ZOMBIE } = world;
-const paths = { menu: '../src/ui/commandMenu.ts', main: '../src/main.ts' };
+const paths = { menu: '../src/ui/commandMenu.ts', main: '../src/main.ts', valves: '../src/valves.ts' };
 const sources = Object.fromEntries(Object.entries(paths).map(([k, p]) => [k, fs.readFileSync(new URL(p, import.meta.url), 'utf8')]));
 const cases = {}, mutations = {}, aim = { x: 18, z: 17 };
 const readStart = '  const ids = [...selected];';
@@ -154,29 +154,29 @@ test('reopen', 'reopen: canceled menus use fresh selection and target', 'menu', 
 function section(source, start, end) { const a = source.indexOf(start), b = source.indexOf(end, a + start.length); assert(a >= 0 && b > a, 'source boundaries ' + start); return source.slice(a, b); }
 function mainFixture(query = '') {
   const f = fixture(); add(f); add(f, UK_MORTAR); const { hud: domHud, document } = dom(); let render, hudUpdates = 0, hudFrames = 0; const issued = [];
-  const c = vm.createContext({ ...world, ...f, q: new URLSearchParams(query), initCommandMenu, bombardCommand, commandMenu: undefined,
+  const q = new URLSearchParams(query);
+  const c = vm.createContext({ ...world, ...f, q, V: fixtureValves(q, { r015: false, r115: false, r010: false }), initCommandMenu, bombardCommand, commandMenu: undefined,
     document, addEventListener() {}, phase: 'battle', battleHint: undefined, help: { visible: () => false }, reportView: undefined,
     issue: cmd => issued.push(structuredClone(cmd)), simT: () => 0, clearGestureInput() {}, canvas: {}, pointers: new Map(),
     view: { setMarker() {}, update() {}, render() {}, rangeInfo: 'unchanged', vegetationInfo: '' },
     hud: { update: () => hudUpdates++, frame: () => hudFrames++ }, performance: { now: () => 1000 }, lastT: 1000,
-    paused: true, speed: 1, acc: 0, r010: false, endT0: -1, endFrom: null, reportShown: false, stats: {}, slowmoFactor: () => 1,
+    paused: true, speed: 1, acc: 0, endT0: -1, endFrom: null, reportShown: false, stats: {}, slowmoFactor: () => 1,
     syncBattleAudio() {}, battleAudio: undefined, tick: () => step(c.w, []), TICK_HZ: 30, devicePixelRatio: 1, innerWidth: 412, innerHeight: 860,
     fling: { active: false }, glide: { active: false }, style: {}, lastRangeInfo: 'unchanged', lastCoverInfo: '', lastReloadInfo: '', lastVehicleInfo: '', lastVegetationInfo: '',
     coverDurability: () => '', reloadStatus: () => '', vehicleDurability: () => '', counterbatteryHint: () => '', lastCounterbatteryInfo: '', lastCounterbatteryWorld: f.w,
-    r015: false, r115: false, prodBar: undefined, minimap: undefined,
+    prodBar: undefined, minimap: undefined,
     renderer: { setAnimationLoop: callback => { render = callback; }, setPixelRatio() {}, setSize() {} } });
-  vm.runInContext(mainPlain.match(/const r109 = [^;]+;/)[0] + mainPlain.match(/const r137 = [^;]+;/)[0], c);
-  vm.runInContext(section(mainPlain, 'if (r109) {\n  commandMenu = ', '\n// R037：'), c);
+  vm.runInContext(section(mainPlain, 'if (V.r109) {\n  commandMenu = ', '\n// R037：'), c);
   vm.runInContext(section(mainPlain, 'renderer.setAnimationLoop(() => {', '\n// R040：'), c);
   const root = domHud.children.get('command-menu'), $ = id => root?.querySelector('#' + id);
   return { ...f, c, root, $, issued, frame: () => render(), updates: () => hudUpdates, frames: () => hudFrames,
     open: () => c.commandMenu.open(aim, 206, 430), labels: () => [$('cm-he').textContent, $('cm-smoke').textContent] };
 }
-test('main_valve', 'noR137: actual main wiring restores old menu', 'main', '}, () => r137 ? { world: w, selected } : undefined);', '}, () => ({ world: w, selected }));', message => {
+test('main_valve', 'noR137: actual main wiring restores old menu', 'main', '}, () => V.r137 ? { world: w, selected } : undefined);', '}, () => ({ world: w, selected }));', message => {
   const f = mainFixture('noR137=1'); f.open(); f.frame(); eq(f.root.innerHTML, oldHTML, message);
   f.$('cm-he').dispatch('click'); eq(f.issued, [{ t: 'fireAt', side: SIDE_PLAYER, ids: [1, 2], ...aim }], 'rollback preserves HE command');
 });
-test('r109_valve', 'noR109: original gesture valve still prevents menu creation', 'main', "const r109 = q.get('noR109') !== '1';", 'const r109 = true;', message => {
+test('r109_valve', 'noR109: original gesture valve still prevents menu creation', 'valves', "get r109() { return on('109'); }", 'get r109() { return true; }', message => {
   const f = mainFixture('noR109=1'); f.frame(); eq(f.root, undefined, message); eq(f.issued, [], 'noR109 never sends new commands');
 });
 test('frame_selection', 'frame: current selection updates while paused without a HUD refresh', 'main', frameCall, '', message => {
@@ -185,7 +185,7 @@ test('frame_selection', 'frame: current selection updates while paused without a
 test('frame_death', 'frame: destroyed guns disappear while the menu stays open', 'main', frameCall, '', message => {
   const f = mainFixture(); f.open(); f.w.units[0].alive = false; f.w.units[0].hp = 0; f.frame(); eq(f.labels(), [heLabel(1), smokeLabel(0)], message); assert(f.c.commandMenu.isOpen(), 'death alone does not cancel existing menu');
 });
-test('frame_world', 'frame: replacing a world does not retain old counts', 'main', '() => r137 ? { world: w, selected } : undefined', '(() => { const original = w; return () => r137 ? { world: original, selected } : undefined; })()', message => {
+test('frame_world', 'frame: replacing a world does not retain old counts', 'main', '() => V.r137 ? { world: w, selected } : undefined', '(() => { const original = w; return () => V.r137 ? { world: original, selected } : undefined; })()', message => {
   const f = mainFixture(); f.open(); f.c.w = structuredClone(f.w); f.c.w.units = []; f.c.lastCounterbatteryWorld = f.c.w; f.frame(); eq(f.labels(), [heLabel(0), smokeLabel(0)], message);
 });
 test('frame_no_hud_rescue', 'frame: eligibility never invokes general HUD refresh', 'main', frameCall, frameCall + ' hud?.update();', message => {
@@ -196,16 +196,16 @@ test('frame_no_hud_rescue', 'frame: eligibility never invokes general HUD refres
 for (const disabled of [false, true]) {
   const name = disabled ? 'reset_off' : 'reset_on';
   test(name, `reset ${disabled ? 'off' : 'on'}: original reset cleanup closes the real command menu`, 'main',
-    '  if (r109) clearGestureInput();\n  battleAudio?.reset();', '  battleAudio?.reset();', message => {
+    '  if (V.r109) clearGestureInput();\n  battleAudio?.reset();', '  battleAudio?.reset();', message => {
       const f = mainFixture(disabled ? 'noR137=1' : '');
       Object.assign(f.c, { Gestures, MAP_LARGE, MAP_TOWN, selectInBox() {},
         fling: { stop() {} }, glide: { stop() {} }, dragged: false, pinchD: 0, dragV: { vx: 0, vy: 0, t: 0 },
-        fxOn: true, r004: false, r008: false, r009: false, r011: false, r014: false, r016: false, r107: true, r118: true, r104: true,
+        fxOn: true,
         newStats: () => ({}), ui() {}, BattleView: class { constructor() { return f.c.view; } },
       });
       f.c.view.dispose = () => {};
       vm.runInContext(section(mainPlain, 'function clearBattleHint()', '\nfunction order('), f.c);
-      vm.runInContext(section(mainPlain, 'const selectionBox = ', 'if (r109) {\n  commandMenu = '), f.c);
+      vm.runInContext(section(mainPlain, 'const selectionBox = ', 'if (V.r109) {\n  commandMenu = '), f.c);
       vm.runInContext(section(mainPlain, 'function reset(', '\nfunction ui()'), f.c);
       f.open(); assert(f.c.commandMenu.isOpen(), 'reset fixture begins with real visible menu');
       eq(f.labels(), disabled ? ['高爆砲擊', '煙幕（榴彈砲）'] : [heLabel(2), smokeLabel(1)], 'reset fixture verifies requested R137 valve');
@@ -247,6 +247,9 @@ if (mutant) {
 const js = stripTypeScriptTypes(sources.menu).replace(/from '([^']+)'/g, (_, spec) => `from '${new URL(spec, new URL(paths.menu, import.meta.url)).href}'`);
 const { bombardEligibility, bombardCommand, initCommandMenu } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 const mainPlain = stripTypeScriptTypes(sources.main);
+// R060：閥表也從（可能被故意弄壞的）原文載入；fixture 可以蓋掉個別閥
+const { valves } = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(sources.valves)).toString('base64')}`);
+const fixtureValves = (q, over = {}) => Object.defineProperties(valves(q), Object.fromEntries(Object.entries(over).map(([k, value]) => [k, { value, writable: true }])));
 let count = 0;
 for (const [name, run] of Object.entries(cases)) {
   if (only && name !== only) continue;

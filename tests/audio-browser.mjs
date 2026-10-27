@@ -188,7 +188,7 @@ function plugin(broken, hits) {
         replace('while (acc >= 1 / TICK_HZ && steps < 8)', "while (acc >= 1 / TICK_HZ && steps < 8 && ((window as any).__r117Limit == null || w.tick < (window as any).__r117Limit))", 'bounded-real-loop');
         replace('  step(w, now, sandboxPlacementResults);', `  step(w, now, sandboxPlacementResults);\n  (window as any).__r117Events?.push({ tick: w.tick, hash: hashWorld(w), rng: w.rng, events: JSON.parse(JSON.stringify(w.events)) });`, 'real-step-observer');
         if (broken) {
-          replace("const r117 = fxOn && q.get('noR117') !== '1';", "const r117 = q.get('__r117mutant') === 'valve' || (fxOn && q.get('noR117') !== '1');", 'valve');
+          replace("const battleAudio = fxOn && V.r117 ? new BattleAudio(", "const battleAudio = q.get('__r117mutant') === 'valve' || (fxOn && V.r117) ? new BattleAudio(", 'valve');   // R060：閥從閥表來
           replace('battleAudio?.enqueue(w, w.events, view);', `if (!(${is('wiring')})) battleAudio?.enqueue(w, w.events, ${is('fog')} ? { visibleUnit: () => true, visibleAt: () => true } : view);`, 'wiring-fog');
           replace("  battleAudio?.setActive(phase === 'battle' && !paused && !reportShown && !audioHelpActive && !document.hidden && audioPageActive);", `  if (!(${is('cleanup')})) battleAudio?.setActive(phase === 'battle' && !paused && !reportShown && !audioHelpActive && !document.hidden && audioPageActive);`, 'cleanup');
           replace('syncBattleAudio(); battleAudio.toggleFromGesture();', `syncBattleAudio(); if (!(${is('mute')})) battleAudio.toggleFromGesture();`, 'mute');

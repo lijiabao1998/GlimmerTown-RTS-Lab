@@ -60,7 +60,7 @@ const plugin = {
     }`, 'precision and hidden movement');
     }
     if (rel === 'src/main.ts') {
-      replace("const r115 = q.get('noR115') !== '1';", "const r115 = q.get('__r115mutant') === 'valve' || q.get('noR115') !== '1';", 'valve');
+      replace("const V = valves(q);", "const V = Object.defineProperty(valves(q), 'r115', { get: () => q.get('__r115mutant') === 'valve' || q.get('noR115') !== '1' });", 'valve');   // R060：閥從閥表來
       replace('if (w !== lastCounterbatteryWorld || counterbatteryInfo !== lastCounterbatteryInfo)', "if ((q.get('__r115mutant') !== 'hint' && w !== lastCounterbatteryWorld) || counterbatteryInfo !== lastCounterbatteryInfo)", 'same-tick HUD');
     }
     return code;

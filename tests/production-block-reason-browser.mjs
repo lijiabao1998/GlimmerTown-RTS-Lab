@@ -32,7 +32,7 @@ const plugin=mutants=>({name:'r126-test-only',enforce:'pre',transform(code,id){
  population: () => { const u=w.units.find(u=>u.side===0)!; while(w.units.filter(u=>u.alive&&u.side===0).length<${ECO_POP}) w.units.push({...structuredClone(u),id:w.units.length+1}); },
  exit: () => { const h=w.blds[w.eco!.hq[0]-1]; for(let z=h.z-1;z<=h.z+h.d;z++)for(let x=h.x-1;x<=h.x+h.w;x++)if(x>=0&&z>=0&&x<32&&z<32)w.occ[z*32+x]=h.id; }
 };`);
-    if(mutants)replace("blockReason: q.get('noR126') !== '1' ?",`blockReason: (${M('valve')} || q.get('noR126') !== '1') ?`);
+    if(mutants)replace("blockReason: V.r126 ?",`blockReason: (${M('valve')} || V.r126) ?`);
   }
   if(mutants&&rel==='src/ui/productionBlockReason.ts'){
     replace('const e = w.eco;',`const e = w.eco;

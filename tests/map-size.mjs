@@ -319,7 +319,7 @@ await group('render', () => {
   const w = field(), PX = 8;
   const a = addUnit(w, SIDE_PLAYER, UK_TANK, 50, 50), b = addUnit(w, SIDE_PLAYER, UK_TANK, 51, 50);
   addUnit(w, SIDE_ENEMY, UK_TANK, 10, 10);
-  const v = new BattleView(w, true);
+  const v = new BattleView(w, { fx: true });
   const sized = (view, n, label) => {
     assert.equal(view.groundTex.image.width, n * PX, `${label}: ground texture width`); assert.equal(view.groundTex.image.height, n * PX);
     assert.equal(view.groundPx.length, n * PX * n * PX * 4, `${label}: ground pixels`); assert.equal(view.tracks.length, n * PX * n * PX, `${label}: track buffer`);

@@ -1,3 +1,4 @@
+import { valves } from '../src/valves.ts';
 import { vehicleDurability } from '../src/ui/vehicleDurability.ts';
 import { coverDurability } from '../src/ui/coverDurability.ts';
 import { reloadStatus } from '../src/ui/reloadStatus.ts';
@@ -18,12 +19,12 @@ import { Gestures, inSelectionRect } from '../src/ui/gestures.ts';
 const read = p => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const sources = { main: read('../src/main.ts'), hud: read('../src/ui/hud.ts') };
 const mutations = {
-  order_refresh: { group: 'orders', file: 'main', from: 'function order(cx: number, cy: number) {\n  if (r109) clearBattleHint();', to: 'function order(cx: number, cy: number) {\n  if (r109) battleHint = undefined;' },
-  tap_refresh: { group: 'taps', file: 'main', from: 'function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {\n  if (r109) clearBattleHint();', to: 'function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {\n  if (r109) battleHint = undefined;' },
-  clear_after_route: { group: 'early_returns', file: 'main', from: 'if (r109) clearBattleHint();\n  if (phase', to: 'if (r109 && selected.size && view.groundAt(cx, cy, innerWidth, innerHeight)) clearBattleHint();\n  if (phase' },
+  order_refresh: { group: 'orders', file: 'main', from: 'function order(cx: number, cy: number) {\n  if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }\n  if (V.r109) clearBattleHint();', to: 'function order(cx: number, cy: number) {\n  if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }\n  if (V.r109) battleHint = undefined;' },
+  tap_refresh: { group: 'taps', file: 'main', from: 'function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {\n  if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }\n  if (V.r109) clearBattleHint();', to: 'function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {\n  if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }\n  if (V.r109) battleHint = undefined;' },
+  clear_after_route: { group: 'early_returns', file: 'main', from: 'if (V.r109) clearBattleHint();\n  if (phase', to: 'if (V.r109 && selected.size && view.groundAt(cx, cy, innerWidth, innerHeight)) clearBattleHint();\n  if (phase' },
   gesture_refresh: { group: 'cancellation', file: 'main', from: 'dragV = { vx: 0, vy: 0, t: 0 }; clearBattleHint();', to: 'dragV = { vx: 0, vy: 0, t: 0 }; battleHint = undefined;' },
   blur_cleanup: { group: 'event_cleanup', file: 'main', from: "addEventListener('blur', clearGestureInput);", to: "addEventListener('blur', () => {});" },
-  release_capture: { group: 'gesture_compatibility', file: 'main', from: 'if (r109 && pointers.has(e.pointerId)) clearGestureInput();', to: 'if (r109) clearGestureInput();' },
+  release_capture: { group: 'gesture_compatibility', file: 'main', from: 'if (V.r109 && pointers.has(e.pointerId)) clearGestureInput();', to: 'if (V.r109) clearGestureInput();' },
   redundant_update: { group: 'no_hint', file: 'main', from: 'if (battleHint === undefined) return;', to: 'if (false) return;' },
   absent_hud: { group: 'initialization', file: 'main', from: 'if (battleHint === undefined) return;', to: 'if (battleHint === undefined || !hud) return;' },
   frame_update: { group: 'throttle', file: 'hud', from: 'if (sec !== lastSec)', to: 'if (true)' },
@@ -37,6 +38,8 @@ if (mutant) {
   sources[m.file] = sources[m.file].replace(m.from, m.to);
 }
 const plain = stripTypeScriptTypes(sources.main);
+// R060：閥從閥表來；fixture 蓋掉個別閥
+const fixtureValves = (q, over = {}) => Object.defineProperties(valves(q), Object.fromEntries(Object.entries(over).map(([k, value]) => [k, { value, writable: true }])));
 function between(start, end) {
   const a = plain.indexOf(start), b = plain.indexOf(end, a + start.length);
   assert(a >= 0 && b > a, `source boundaries exist: ${start}`);
@@ -93,11 +96,12 @@ function fixture({ hud = true, enabled = true } = {}) {
   const commands = [], markers = [], placements = [], selected = new Set([tank.id, gun.id]);
   let menuOpen = false;
   const menu = { isOpen: () => menuOpen, open() { menuOpen = true; }, close() { menuOpen = false; }, contains: target => target === menu };
+  const q = new URLSearchParams('noR123=1&noR124=1&noR135=1'); // Isolate original paused-hint refresh guard.
   const c = vm.createContext({
-    q: new URLSearchParams('noR123=1&noR124=1&noR135=1'), // Isolate original paused-hint refresh guard.
+    q, V: fixtureValves(q, { r109: enabled, r009: true, r010: false, r012: false, r018: false, r015: true, r115: true }),
     w, selected, battleHint: undefined, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he',
     battleAudio: undefined, syncBattleAudio() {}, // This guard exercises the original no-audio HUD/input path.
-    r109: enabled, r009: true, r010: false, r012: false, r018: false, r015: true, r115: true, reloadStatus, coverDurability, vehicleDurability, counterbatteryHint: () => '', buildHint: '', BUILD_TIP: '布陣說明',
+    reloadStatus, coverDurability, vehicleDurability, counterbatteryHint: () => '', buildHint: '', BUILD_TIP: '布陣說明',
     SIDE_PLAYER, SIDE_ENEMY, SUB, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UNIT_KINDS,
     routeBattleOrder, bombardCommand, bombardTarget, inSelectionRect, document, canvas,
     pointers: new Map(), dragged: false, pinchD: 0, dragV: { vx: 2, vy: 3, t: 4 }, lastTap: { id: 0, t: 0 },

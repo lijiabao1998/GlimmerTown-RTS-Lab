@@ -27,7 +27,7 @@ function run(w, v, n, cmds0 = []) {
 { // 1. 坦克從西邊對房子連打：每發都留彈孔；都在西面牆上（x = 牆面 − 0.006 以內）、朝西、高度在牆內
   const w = blank(), b = addBld(w, 12, 10, 2, 2), me = addUnit(w, 0, 6, 11);
   addUnit(w, 1, 30, 30);
-  const v = new BattleView(w, true, true, true, true, true, true, true, true);
+  const v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true });
   const hits = run(w, v, 400, [{ t: 'fireAt', side: 0, ids: [me.id], x: 12, z: 11 }]);
   const hs = live(v), wallX = b.x + 0.1, top = wallHeight(b);
   const onWall = hs.every(h => h.kind === 0 && h.nx === -1 && h.nz === 0 && Math.abs(h.x - wallX) < 0.02 && h.y > 0 && h.y < top && h.z > b.z && h.z < b.z + b.d);
@@ -37,7 +37,7 @@ function run(w, v, n, cmds0 = []) {
 { // 2. 看不到的命中不留：射手被設成看不到（敵方打敵方的房子在霧裡）——用敵方坦克在玩家看不到的地方打
   const w = blank(), b = addBld(w, 4, 4, 2, 2), foe = addUnit(w, 1, 1, 5);
   addUnit(w, 0, 30, 30);   // 我方離得很遠，看不到
-  const v = new BattleView(w, true, true, true, true, true, true, true, true);
+  const v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true });
   const hits = run(w, v, 300, [{ t: 'fireAt', side: 1, ids: [foe.id], x: 4, z: 5 }]);
   check(hits >= 2 && live(v).length === 0, '看不到的命中不留痕跡', `命中 ${hits}、痕跡 ${live(v).length}`);
   v.dispose();
@@ -45,7 +45,7 @@ function run(w, v, n, cmds0 = []) {
 { // 3. 高爆彈落在房子東邊：東面牆有一塊燻黑
   const w = blank(), b = addBld(w, 10, 10, 2, 2);
   addUnit(w, 0, 16, 11);   // 看得到
-  const v = new BattleView(w, true, true, true, true, true, true, true, true);
+  const v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true });
   const ex = center(12) + 60, ez = center(11);
   w.units.push({ id: 2, side: 0, kind: 1, x: center(30), z: center(30), hp: 60, alive: true, order: 0, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 1e9, aimX: SUB, aimZ: 0 });
   w.shells = [{ id: 1, side: 0, kind: SHELL_HE, shooter: 2, sx: center(30), sz: center(30), ex, ez, t: 0, T: 1, target: 0, hitBld: 0 }];
@@ -57,7 +57,7 @@ function run(w, v, n, cmds0 = []) {
 { // 4. 換階段：空殼清掉高處的、留下低處的；瓦礫全部清掉
   const w = blank(), b = addBld(w, 12, 10, 2, 2, 3), me = addUnit(w, 0, 6, 11);
   addUnit(w, 1, 30, 30);
-  const v = new BattleView(w, true, true, true, true, true, true, true, true);
+  const v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true });
   run(w, v, 900, [{ t: 'fireAt', side: 0, ids: [me.id], x: 12, z: 11 }]);
   const before = live(v), cut = wallHeight(b) * 0.72 * 0.7;
   v.onEvents([{ e: 'stage', bld: b.id, stage: 1 }], w.tick / 20);
@@ -68,7 +68,7 @@ function run(w, v, n, cmds0 = []) {
   v.dispose();
 }
 { // 5. 上限、決定性、閥關
-  const mk = r014 => { const w = createWorld(1944); return { w, v: new BattleView(w, true, false, true, true, true, true, true, r014) }; };
+  const mk = r014 => { const w = createWorld(1944); return { w, v: new BattleView(w, { fx: true, fog: false, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: r014 }) }; };
   const pump = ({ w, v }) => {
     for (let k = 0; k < 2000; k++) {
       const b = w.blds[k % w.blds.length], tx = center(b.x), tz = center(b.z);
@@ -82,7 +82,7 @@ function run(w, v, n, cmds0 = []) {
   check(a.n > 0 && a.n <= 320 && a.d === b.d && off.n === 0, '灌 2,000 發：實例數不超過容量；同一串事件痕跡一模一樣；?noR014 時 0 個', `實例 ${a.n}（上限 320）；閥關 ${off.n}`);
 }
 { // 6. 畫面只讀世界（整場腳本）
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, true, true, true);
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true });
   let i = 0, most = 0;
   while (w.tick < 1200) {
     const now = []; while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) now.push(SCRIPT[i].cmd); i++; }

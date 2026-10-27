@@ -199,21 +199,21 @@ group('main', () => {
   // Run the actual reset with real maps: noR026 disables Rye, not the independent large-map selection.
   const source = fs.readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   let reset = stripTypeScriptTypes(source).match(/function reset\([^]*?\n\}/)?.[0];
+  const makeView = stripTypeScriptTypes(source).match(/function makeView\([^]*?\n\}/)?.[0];   // R060：reset 建畫面走這裡
   assert(reset, '實際 reset 存在');
   if (process.argv.includes('--mutant=rye-gate')) {
-    assert(reset.includes('map = r026 || large'), '選圖突變錨點存在');
-    reset = reset.replace('map = r026 || large', 'map = r026');
+    assert(reset.includes('map = V.r026 || large'), '選圖突變錨點存在');
+    reset = reset.replace('map = V.r026 || large', 'map = V.r026');
   }
   for (const rye of [true, false]) {
     const c = vm.createContext({
       createWorld, createSandboxWorld, applyMap, MAP_RYE, MAP_LARGE, MAP_TOWN, seed: 1944,
-      r006: false, r018: false, r019: false, r026: rye, large: true, expanded: false, townPick: undefined, r109: false,
-      r004: true, r008: true, r009: true, r011: true, r014: true, r016: true, r107: true, r118: true, r104: true,
+      V: { r006: false, r018: false, r019: false, r026: rye, r109: false }, large: true, expanded: false, townPick: undefined,
       q: new URLSearchParams(), fxOn: true, selected: new Set(), view: undefined, battleAudio: undefined, reportView: undefined,
       BattleView: class { constructor() { return { dispose() {}, target: { set(...p) { c.focus = p; } } }; } },
       newStats: () => ({}), ui() {}, syncBattleAudio() {}, issue(cmd) { c.log.push({ tick: c.w.tick, cmd }); },
     });
-    vm.runInContext(reset, c); c.reset();
+    vm.runInContext(reset + makeView, c); c.reset();
     assert.equal(c.w.n, 64, '選大圖不受 noR026 影響');
     assert.equal(c.w.map, 2, '預覽真的套用 map id 2');
     assert.deepEqual(Array.from(c.focus), [55, 0, 55], '開局鏡頭對準裝甲連');

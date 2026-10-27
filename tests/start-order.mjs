@@ -24,8 +24,8 @@ try {
   assert.ok(/prefers-reduced-motion:\s*reduce\)\s*\{\s*#start-order/.test(css), '減少動態效果時不滑');
 
   const main = read('src/main.ts');
-  assert.ok(main.includes("if (r016) { if (r041) startOrder(); else startBanner(); }"), 'startBattle：開著 R041 出命令條、?noR041=1 出舊大字、?noR016=1 兩種都不出');
-  assert.ok(/const r041 = q\.get\('noR041'\) !== '1'/.test(main), '逃生閥 ?noR041=1');
+  assert.ok(main.includes("if (V.r016) { if (V.r041) startOrder(); else startBanner(); }"), 'startBattle：開著 R041 出命令條、?noR041=1 出舊大字、?noR016=1 兩種都不出');
+  assert.ok(/get r041\(\) \{ return on\('041'\); \}/.test(read('src/valves.ts')), '逃生閥 ?noR041=1（R060 閥表）');
   const body = main.slice(main.indexOf('function startOrder()'), main.indexOf('function startBanner()'));
   assert.ok(body.includes('r019') && body.includes('r018') && !/w\.eco|w\.ai/.test(body), '命令條看開局開關（開戰這一刻 eco／ai 指令還沒套用），不看世界');
   console.log('OK R041 開戰命令條：文字、樣式、逃生閥');

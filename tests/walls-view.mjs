@@ -66,7 +66,7 @@ function blank(bs = []) {
   const w = createWorld(1944); w.ter.fill(0); w.occ.fill(0); w.crater.fill(0); w.blds = bs; w.units = []; w.events = []; w.shells = [];
   bs.forEach((b, i) => { b.id = i + 1; for (let z = b.z; z < b.z + b.d; z++) for (let x = b.x; x < b.x + b.w; x++) w.occ[idx(x, z)] = b.id; }); return w;
 }
-const view = (w, fx = false, rise = false, holes = true) => new BattleView(w, fx, false, true, true, true, true, true, holes, rise);
+const view = (w, fx = false, rise = false, holes = true) => new BattleView(w, { fx: fx, fog: false, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: holes, r016: rise });
 function addUnit(w, kind = UK_TANK, x = 7, z = 12) {
   const u = { id: w.units.length + 1, side: 0, kind, x: center(x), z: center(z), hp: UNIT_KINDS[kind].hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 99999, aimX: SUB, aimZ: 0 }; w.units.push(u); return u;
 }

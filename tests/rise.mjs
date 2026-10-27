@@ -14,7 +14,7 @@ function check(ok, name, detail = '') {
 const cmds = [{ t: 'build', side: 0, kind: 0, x: 23, z: 20 }, ...enemyPlan(createWorld(1944))];
 const ghostTop = v => { const g = v.ghosts?.mesh.geometry, n = g ? g.drawRange.count : 0, p = g?.attributes.position.array; let top = -Infinity; for (let i = 0; i < n; i++) top = Math.max(top, p[i * 3 + 1]); return { n, top }; };
 function play(r016) {
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, true, true, true, r016);
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: r016 });
   v.snapshot(); step(w, cmds); v.onEvents(w.events, w.tick / 20);
   return { w, v };
 }

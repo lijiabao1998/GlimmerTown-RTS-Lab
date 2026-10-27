@@ -77,6 +77,27 @@ function toonRamp(): THREE.DataTexture {
   return t;
 }
 
+// R060 畫面設定：沒寫的欄位一律開（跟原本建構子的預設值一樣）。main.ts 由 src/valves.ts 的閥填。
+export interface ViewOptions {
+  fx?: boolean;              // ?fx=off：不產生爆炸、煙
+  fog?: boolean;             // R100 迷霧（沙盒不用）
+  observerDetails?: boolean; // R101 觀測員細節
+  r004?: boolean; r008?: boolean; r009?: boolean; r011?: boolean; r014?: boolean; r016?: boolean;
+  r107?: boolean; r113?: boolean; r118?: boolean; r104?: boolean; r123?: boolean;
+  rubbleMarks?: boolean;     // R139 瓦礫不再長出牆面彈痕
+  multiRange?: boolean;      // R122 多選射程圈
+}
+const VIEW_DEFAULTS: Required<ViewOptions> = {
+  fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true,
+  r107: true, r113: true, r118: true, r104: true, r123: true, rubbleMarks: true, multiRange: true,
+};
+// 寫成 undefined 的欄位照預設（跟原本位置參數傳 undefined 會用預設值一樣）
+export function viewOptions(options: ViewOptions): Required<ViewOptions> {
+  const o = { ...VIEW_DEFAULTS };
+  for (const k of Object.keys(VIEW_DEFAULTS) as (keyof ViewOptions)[]) if (options[k] !== undefined) o[k] = options[k]!;
+  return o;
+}
+
 export class BattleView {
   scene = new THREE.Scene();
   cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
@@ -86,7 +107,7 @@ export class BattleView {
   fxOn: boolean;
 
   private w: World;
-  private readonly fresh: (world: World) => BattleView;
+  readonly opts: Required<ViewOptions>;   // R060：建這個畫面用的設定；recreate() 沿用同一份
   private mapId: number | undefined;
   private fogOn: boolean;
   private ramp = toonRamp();
@@ -211,8 +232,10 @@ export class BattleView {
   readonly range113: RangePreview | null;
   get rangeInfo(): string { return this.multi122.solution.legend || this.range113?.solution.legend || ''; }
 
-  constructor(w: World, fxOn: boolean, fogOn = true, observerDetails = true, r004 = true, r008 = true, r009 = true, r011 = true, r014 = true, r016 = true, r107 = true, r113 = true, r118 = true, r104 = true, r123 = true) {
-    this.fresh = world => new BattleView(world, fxOn, fogOn, observerDetails, r004, r008, r009, r011, r014, r016, r107, r113, r118, r104, r123);
+  constructor(w: World, options: ViewOptions = {}) {
+    const o = this.opts = viewOptions(options);
+    const { fx: fxOn, fog: fogOn, observerDetails, r004, r008, r009, r011, r014, r016, r107, r113, r118, r104, r123 } = o;
+    this.rubbleMarkGuard = o.rubbleMarks; this.multiRangeEnabled = o.multiRange;
     this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r9 = r009; this.r16 = r016; this.r107 = r107;
     this.trench118 = new TrenchRaster(r118); this.trench118.sync(w);
     this.range113 = r113 ? new RangePreview() : null;
@@ -357,7 +380,7 @@ export class BattleView {
   get world(): World { return this.w; }
   // R128：重置視覺狀態時沿用同一組已解析的閥值，不另讀 URL 或複製設定規則。
   recreate(w: World): BattleView {
-    const next = this.fresh(w);
+    const next = new BattleView(w, this.opts);
     next.rubbleMarkGuard = this.rubbleMarkGuard;
     next.target.copy(this.target); next.zoom = this.zoom; next.multiRangeEnabled = this.multiRangeEnabled;
     return next;

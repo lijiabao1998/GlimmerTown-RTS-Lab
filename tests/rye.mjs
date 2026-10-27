@@ -50,7 +50,7 @@ const cellOfU = u => idx(Math.floor(u.x / SUB), Math.floor(u.z / SUB));
   const a = hashWorld(runLog(createWorld(1944), log, 2500)), b = hashWorld(runLog(createWorld(1944), JSON.parse(JSON.stringify(log)), 2500));
   const half = runLog(createWorld(1944), log, 1200), copy = structuredClone(half);
   runLog(half, log, 2500); runLog(copy, log, 2500);
-  const w = rye(), v = new BattleView(w, true, true, true, true, true, true, true, true, true);
+  const w = rye(), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true });
   let i = 0;
   while (w.tick < 2500) { const now = []; while (i < log.length && log[i].tick <= w.tick) { if (log[i].tick === w.tick) now.push(log[i].cmd); i++; } v.snapshot(); step(w, now); v.onEvents(w.events, w.tick / 20); v.update(0, w.tick / 20, new Set()); }
   check(a === b && hashWorld(half) === a && hashWorld(copy) === a && hashWorld(w) === a, '決定性：含 map 的紀錄重跑、JSON、深拷貝相同；先套地圖再畫（瀏覽器的做法）也相同', `${a}／${b}／${hashWorld(half)}／${hashWorld(copy)}／${hashWorld(w)}`);

@@ -33,7 +33,7 @@ console.log('visibility: 12 assertions passed');
 const { BattleView } = await import('../src/render/battle.ts');
 const { hashWorld } = await import('../src/sim/world.ts');
 a.alive = true; w.blds[0].hp = 100;
-const before = hashWorld(w), fog = new BattleView(w, false), open = new BattleView(w, false, false);
+const before = hashWorld(w), fog = new BattleView(w, { fx: false }), open = new BattleView(w, { fx: false, fog: false });
 fog.update(0, 0, new Set()); open.update(0, 0, new Set());
 assert.equal(fog.hull.count, 1, 'hidden hull omitted');
 assert.equal(fog.turret.count, 1, 'hidden turret omitted');

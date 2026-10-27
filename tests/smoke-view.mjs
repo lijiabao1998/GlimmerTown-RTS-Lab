@@ -14,7 +14,7 @@ const group = (name, fn) => {
   try { fn(); console.log(`OK smoke-view: ${name}`); }
   catch (error) { console.error(`NG smoke-view: ${name}`); throw error; }
 };
-const view = (w, { fx = true, fog = true, r4 = true, r107 = true } = {}) => new BattleView(w, fx, fog, true, r4, true, true, true, true, true, r107);
+const view = (w, { fx = true, fog = true, r4 = true, r107 = true } = {}) => new BattleView(w, { fx: fx, fog: fog, observerDetails: true, r004: r4, r008: true, r009: true, r011: true, r014: true, r016: true, r107: r107 });
 const marker = v => {
   const mesh = v.puff?.mesh ?? v.fxMesh, n = v.smokeCounts.puffs;
   return { counts: v.smokeCounts, matrix: [...mesh.instanceMatrix.array.slice(0, n * 16)], colors: [...mesh.instanceColor.array.slice(0, n * 3)] };

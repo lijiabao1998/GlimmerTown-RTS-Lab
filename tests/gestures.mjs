@@ -27,9 +27,9 @@ const mutations = {
   compatibility: { group: 'compatibility', file: 'main', from: 'else tap(e.clientX, e.clientY, e.shiftKey, t);', to: 'else tap(e.clientX, e.clientY, false, t);' },
   geometry: { group: 'geometry', file: 'main', from: 'hud?.update(); prodBar?.update();\n    if (target) commandMenu?.open', to: 'hud?.update();\n    if (target) commandMenu?.open' },
   dispatch: { group: 'dispatch', file: 'main', from: 'if (gestures?.up(e))', to: 'if (false && gestures?.up(e))' },
-  capture: { group: 'lifecycle', file: 'main', from: 'if (r109 && pointers.has(e.pointerId)) clearGestureInput();', to: 'if (r109) clearGestureInput();' },
-  reset: { group: 'reset', file: 'main', from: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {\n  if (r109) clearGestureInput();", to: "function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large, vegetation = true, sandbox = false) {" },
-  valve: { group: 'valve', file: 'main', from: 'const gestures = r109 ? new Gestures', to: 'const gestures = true ? new Gestures' },
+  capture: { group: 'lifecycle', file: 'main', from: 'if (V.r109 && pointers.has(e.pointerId)) clearGestureInput();', to: 'if (V.r109) clearGestureInput();' },
+  reset: { group: 'reset', file: 'main', from: "function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026 || large || expanded, vegetation = true, sandbox = false) {\n  if (V.r109) clearGestureInput();", to: "function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026 || large || expanded, vegetation = true, sandbox = false) {" },
+  valve: { group: 'valve', file: 'main', from: 'const gestures = V.r109 ? new Gestures', to: 'const gestures = true ? new Gestures' },
 };
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
 if (mutant) { const m = mutations[mutant]; assert.ok(m); assert.ok(sources[m.file].includes(m.from), `${mutant}: production anchor`); sources[m.file] = sources[m.file].replace(m.from, m.to); }
@@ -62,7 +62,7 @@ function mainFixture(enabled = true) {
   };
   const c = vm.createContext({
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // This fixture exercises the existing small-map controller.
-    r109: enabled, r012: true, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
+    V: { r109: enabled, r012: true }, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
     commandMenu: undefined, battleHint: undefined, document: { createElement: () => ({ id: '', hidden: false, style: {} }), body: { appendChild: el => elements.push(el) }, addEventListener: (t, f) => docEvents.set(t, f) },
     addEventListener: (t, f) => globalEvents.set(t, f), canvas, performance: { now: clock.now },
     view, w: createWorld(1944), selected: new Set(), phase: 'battle', fireMode: false, ammo: 'he', paused: false,
@@ -208,13 +208,13 @@ const groups = {
   },
   reset() {
     const m = mainFixture();
-    Object.assign(m.c, { seed: 1944, r006: false, r018: false, r019: false, r026: false, createWorld, fxOn: true, r004: false, r008: false, r009: false, r011: false, r014: false, r016: false, r107: true, r118: true, r104: true, q: new URLSearchParams(), newStats: () => ({}), ui() {}, BattleView: class { constructor() { return m.c.view; } } });
-    vm.runInContext(extract('reset'), m.c);
+    Object.assign(m.c, { seed: 1944, createWorld, fxOn: true, q: new URLSearchParams(), newStats: () => ({}), ui() {}, BattleView: class { constructor() { return m.c.view; } } });
+    vm.runInContext(extract('reset') + extract('makeView'), m.c);
     for (const elapsed of [499, 500]) { m.send('pointerdown', touch()); m.clock.advance(elapsed); m.c.reset(1944, false, false, false, false, false); m.clock.advance(1000); m.send('pointerup', touch()); assert.equal(m.menu(), false, 'reset/replay clears pending and open gestures'); assert.equal(m.issued.length, 0); }
     for (const name of ['runScript', 'playLog', 'playScript']) assert.match(plain.slice(plain.indexOf(`  ${name}:`), plain.indexOf(`  ${name}:`) + 200), /reset\(/, `${name} reuses reset cleanup`);
-    assert.match(plain, /const help = initHelp\(\{ open: \(\) => \{ if \(r109\) clearGestureInput\(\)/);
-    assert.match(plain, /if \(r109 && priorWinner < 0 && w\.winner >= 0\) clearGestureInput\(\)/);
-    assert.match(plain, /since >= SLOWMO_MS\) \{ if \(r109\) clearGestureInput\(\)/);
+    assert.match(plain, /const help = initHelp\(\{ open: \(\) => \{ if \(V\.r109\) clearGestureInput\(\)/);
+    assert.match(plain, /if \(V\.r109 && priorWinner < 0 && w\.winner >= 0\) clearGestureInput\(\)/);
+    assert.match(plain, /since >= SLOWMO_MS\) \{ if \(V\.r109\) clearGestureInput\(\)/);
   },
   valve() {
     const m = mainFixture(false); assert.equal(m.elements.length, 0, 'valve creates no new DOM'); m.send('pointerdown', point()); m.clock.advance(20); m.send('pointermove', point(120)); m.send('pointerup', point(120)); assert.equal(m.pans.length, 1, 'valve restores Shift-drag pan'); assert.equal(m.flings.length, 1);
