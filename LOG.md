@@ -5,6 +5,7 @@
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
 | R062 | 2026-10-27 | Claude | 布陣計畫（計畫、種類與方向、預覽、點地面放下／拿掉、提示、布陣列設定）搬到 src/ui/buildPlanner.ts，main.ts 只接線；main.ts 718→653 行 | trenches-ui、walls-ui 改建真的 BuildPlanner（突變 11＋18 個照舊紅在原句）；17 支守衛跟著改；黃金雜湊不變 | 待 PR | 開戰、開局、指令紀錄還在 main.ts；九支守衛的假 planner 是手寫的 |
+| R064 | 2026-10-27 | Claude | 96 圖喪屍卡頓：喪屍挑房子沒被擋住時只看指揮部、擋住時先用格子篩；A* 每格擋不擋一次搜尋只算一次；結果逐位不變 | 參考舊 A* 600 問逐格相同、挑房子 1,704 位置相同、64／96 圖 3000 步雜湊凍結；負控 2；壓力局 96 圖 p99 18.9→7.1ms、64 圖 4.0→1.5ms；golden eea1d59b | 待開 PR | 波次冒出那一步 96 圖仍約 40ms；手機未量 |
 | R060 | 2026-10-27 | Claude | 逃生閥收成一張表 src/valves.ts（52 個，每次讀看網址當下）；BattleView 收設定物件；main.ts 只有 makeView 一處建畫面；main.ts 761→718 行 | 新守衛 valves；50 支守衛改用閥表／設定物件，順手修好 gestures、paused-hint 失效的突變錨點；72 支讀原文的守衛原本綠的全綠；golden eea1d59b | [#91](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/91) | reset 仍是七個位置參數；R040 載入畫面的閥留在 index.html |
 | R137 | 2026-10-25 | GPT | 待辦37：原砲擊選單高爆／煙幕適用數，資格非射程或立即可射擊，noR137回退 | 585ef8e完整CI40169483640綠；47／47、9瀏覽器負控、十功能原圖＋四R127回歸圖；四標準圖等同R136 | [#83](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/83)；收尾head／發布另核 | README、橫向增高、負控超時首紅保留；Android未驗、MSAA未做 |
 | R136 | 2026-10-25 | GPT | 沙盒雙方存活／殘骸／可放名額，只讀原32上限，noR136回退 | 10組／11負控；7d3b8a2完整CI40163832309綠；三視口37原圖，on/off完整世界與預算同 | #82；收尾head／發布另核 | 首紅橫向高度、JSON型別、節流frame等待與鏡頭落點皆保留；原守衛不改；Android未驗、MSAA未做 |
