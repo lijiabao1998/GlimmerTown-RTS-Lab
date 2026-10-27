@@ -6,10 +6,16 @@ export interface Style {
   pixelCss: number;   // 每個渲染像素佔幾個 CSS 像素（>1＝低解析度＋最近鄰放大）
   outline: boolean;
   quant: number;      // 調色盤量化階數（0＝不量化）
+  msaa?: number;      // R065 渲染目標的多重取樣數（0＝不取樣＝?noR065=1）；實際不超過顯示卡上限
 }
 
 // 3D-lab 的畫風 A 是 pixelCss 3。RTS 的單位比建築小很多，預設先用 2（業主未定，見 docs/DECISIONS.md），網址 ?px=3 可以對照。
-export const STYLE_A: Style = { pixelCss: 2, outline: true, quant: 12 };
+export const STYLE_A: Style = { pixelCss: 2, outline: true, quant: 12, msaa: 4 };
+
+// R065：渲染目標要幾倍取樣——設定值，但不超過顯示卡上限（WebGL2 的 MAX_SAMPLES）
+export function msaaSamples(style: Style, maxSamples: number): number {
+  return Math.max(0, Math.min(style.msaa ?? 0, maxSamples | 0));
+}
 
 const FRAG = /* glsl */ `
 uniform sampler2D tColor;
@@ -63,6 +69,9 @@ export class Pipeline {
     const w = style.pixelCss > 1 ? Math.max(1, Math.floor(cssW / style.pixelCss)) : Math.max(1, Math.floor(cssW * dpr));
     const h = style.pixelCss > 1 ? Math.max(1, Math.floor(cssH / style.pixelCss)) : Math.max(1, Math.floor(cssH * dpr));
     if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);
+    // R065：畫之前確認取樣數；變了才重建渲染目標（釋放後這一次畫就照新取樣數重配；深度一樣解析出來給描邊用）
+    const samples = msaaSamples(style, renderer.capabilities.maxSamples);
+    if (this.rt.samples !== samples) { this.rt.samples = samples; this.rt.dispose(); }
     renderer.setRenderTarget(this.rt);
     renderer.render(scene, cam);
     // three.js 每次 render 都會把統計歸零；這裡記下場景這一趟的數字，否則讀到的是後製四邊形（1 次呼叫、2 個三角形）
@@ -77,6 +86,7 @@ export class Pipeline {
   }
 
   get size() { return [this.rt.width, this.rt.height]; }
+  get samples() { return this.rt.samples; }
   dispose() {
     this.rt.dispose(); this.rt.depthTexture?.dispose(); this.mat.dispose();
     this.quadScene.traverse(o => (o as THREE.Mesh).geometry?.dispose());

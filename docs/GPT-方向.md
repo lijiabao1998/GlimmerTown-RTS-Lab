@@ -38,7 +38,7 @@
 
 | 項目 | 狀態 | 原因 | 卡／PR |
 |---|---|---|---|
-| 35 建築抗鋸齒剩餘 MSAA | 未完成；交 Claude 授權路徑 | R134 建築細節、隱面優化與板牆修正已發布；MSAA 需要受保護 post.ts，本線不繞過 gpt-lane，也不將局部細節算作抗鋸齒完成。 | R131／R134、[#80](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/80) |
+| 35 建築抗鋸齒剩餘 MSAA | Claude 已接手做完（R065），等業主看圖 | 受保護 post.ts 由 Claude 改：後製渲染目標 4 倍多重取樣，畫風（1/2 解析度、描邊、12 階量化）不變；`?noR065=1` 逐位回到原本。業主看開／關對照圖決定留不留；GPT 不用再處理這一項。 | R131／R134、R065（Claude） |
 | 17 電網防禦 | 卡住；考據不足，未施工、未完成 | 2026-10-20：1943 年美軍情報記載德軍在法、荷、比有少量帶電鐵絲網，不能外推為 1940 英國本土防衛常規。現有資料不足以支持本作的致傷電網；改成步兵電擊會碰 Claude 分工，改成探照燈供電又需夜戰／全局光照決策。不偷換成普通鐵絲網的 R121，也不宣稱史上不存在。待有英國相符史料或業主明確決定改編範圍。來源：[1943 年原始情報轉錄](https://ww2.lonesentry.com/articles/barbedwire/index.html)、[RAF Museum 英國防衛背景](https://www.rafmuseum.org.uk/research/online-exhibitions/history-of-the-battle-of-britain/british-defences) | 研究狀態，沒有功能卡 |
 
 ## 已完成（最新在上）
