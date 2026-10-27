@@ -50,9 +50,9 @@ const plugin = {
     };
     if (!changes[rel]) return;
     if (rel === 'src/main.ts') {
-      const from = "r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');";
-      assert.equal(code.split(from).length - 1, 2, 'both reset constructors retain the range valve');
-      code = code.replaceAll(from, "r016, r107, q.get('__r113mutant') === 'valve' || q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');");
+      const from = "r113: V.r113,";   // R060：建畫面只剩 makeView 一處（開局與 runScript 共用）
+      assert.equal(code.split(from).length - 1, 1, 'the single view constructor retains the range valve');
+      code = code.replaceAll(from, "r113: q.get('__r113mutant') === 'valve' || V.r113,");
       hit.add('constructor valve');
     }
     for (const [from, to] of changes[rel]) {

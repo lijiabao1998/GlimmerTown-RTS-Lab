@@ -62,7 +62,7 @@ const hit = (w, shooter, target) => { w.shells = [{ id: 1, side: shooter.side, k
 }
 { // 4. 畫面：小兵數＝血量÷10 無條件進位；少一個人多一個倒下的；畫面只讀世界
   const w = blank(), inf = add(w, 0, UK_INFANTRY, 10, 10); inf.cooldown = 1e9;
-  const v = new BattleView(w, true, true, true, true, true, true, true, true, true);
+  const v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true });
   v.update(0, 1, new Set()); const a = v.menDbg.alive, b0 = v.bodies.n;
   inf.hp = 41; v.update(0, 1.1, new Set()); const b = v.menDbg.alive, b1 = v.bodies.n;
   inf.hp = 0; inf.alive = false; v.update(0, 1.2, new Set()); const c = v.menDbg.alive, b2 = v.bodies.n;
@@ -74,7 +74,7 @@ const hit = (w, shooter, target) => { w.shells = [{ id: 1, side: shooter.side, k
   const a = hashWorld(runLog(createWorld(1944), log, 3000)), b = hashWorld(runLog(createWorld(1944), JSON.parse(JSON.stringify(log)), 3000));
   const half = runLog(createWorld(1944), log, 1500), copy = structuredClone(half);
   runLog(half, log, 3000); runLog(copy, log, 3000);
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, true, true, true, true);
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true });
   let i = 0;
   while (w.tick < 3000) { const now = []; while (i < log.length && log[i].tick <= w.tick) { if (log[i].tick === w.tick) now.push(log[i].cmd); i++; } v.snapshot(); step(w, now); v.onEvents(w.events, w.tick / 20); v.update(0, w.tick / 20, new Set()); }
   check(a === b && hashWorld(half) === a && hashWorld(copy) === a && hashWorld(w) === a, '決定性：含步兵的紀錄重跑、JSON、深拷貝相同；畫面只讀世界', `${a}／${b}／${hashWorld(half)}／${hashWorld(copy)}／${hashWorld(w)}`);

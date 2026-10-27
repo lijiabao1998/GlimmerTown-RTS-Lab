@@ -50,7 +50,7 @@ const worlds=[createWorld(1944),createWorld(1944)]; applyMap(worlds[1],MAP_RYE);
  assert.equal(materialBuildDetail(BK_PILLBOX,1,1,1),'混凝土 · 耐久 400');
  const ui=fs.readFileSync(new URL('../src/ui/build.ts',import.meta.url),'utf8'),main=fs.readFileSync(new URL('../src/main.ts',import.meta.url),'utf8');
  assert.ok(ui.includes("$('bb-detail').textContent = detail")&&ui.includes("it.kind === s.kind"));
- assert.ok(main.includes("q.get('noR105') !== '1'")&&main.includes('setMaterials(r105)')&&main.includes('r105 ? { detail: materialBuildDetail'));
+ assert.ok(fs.readFileSync(new URL('../src/valves.ts',import.meta.url),'utf8').includes("get r105() { return on('105'); }")&&main.includes('setMaterials(V.r105)')&&main.includes('V.r105 ? { detail: materialBuildDetail'));
  check(true,'布陣選中項讀共用材質／耐久，noR105 同時關配色與提示');
 }
 console.log('materials-view: all OK');

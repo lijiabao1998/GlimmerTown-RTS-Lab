@@ -61,7 +61,7 @@ function field(segments = []) {
   return w;
 }
 const command = (kind, x = 24, z = 24, rot = 0) => ({ t: 'trench', side: 0, kind, x, z, rot });
-const view = (w, enabled = true) => new BattleView(w, false, true, true, true, true, true, true, true, false, true, true, enabled);
+const view = (w, enabled = true) => new BattleView(w, { fx: false, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: false, r107: true, r113: true, r118: enabled });
 const bytes = data => Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 const sameBytes = (a, b) => bytes(a).equals(bytes(b));
 function pixel(v, x, z, px, py) { const o = ((z * 8 + py) * N * 8 + x * 8 + px) * 4; return (v.groundPx[o] << 16) | (v.groundPx[o + 1] << 8) | v.groundPx[o + 2]; }

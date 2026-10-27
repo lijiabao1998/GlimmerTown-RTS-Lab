@@ -42,7 +42,7 @@ const plugin={name:'r128-probe-and-semantic-mutants',enforce:'pre',transform(cod
   replace('if (starting) battleAudio?.enqueueInteraction(w, w.events, view);',`if (starting && !(${M129('audio-dispatch')})) battleAudio?.enqueueInteraction(w, w.events, view);`);
   replace('if (starting) { paused = false; syncBattleAudio(); }',`if (starting && !(${M129('audio-active')})) { paused = false; syncBattleAudio(); }`);
   replace('else if (sandboxPlacementResults.length) sandboxHint = sandboxPlacementFeedback(sandboxPlacementResults);',`else if (sandboxPlacementResults.length && !(${M129('placement')})) sandboxHint = sandboxPlacementFeedback(sandboxPlacementResults);`);
-  replace('if (r128) sandboxBar = initSandbox({',`if (r128 || ${M('valve')}) sandboxBar = initSandbox({`);
+  replace('if (V.r128) sandboxBar = initSandbox({',`if (V.r128 || ${M('valve')}) sandboxBar = initSandbox({`);
   replace('w = sandbox ? createSandboxWorld(s) : createWorld(s);',`w = sandbox && !(${M('entry')}) ? createSandboxWorld(s) : createWorld(s);`);
   replace('issue(cmd);\n  // 運行中放兵',`if (!(${M('dispatch')}) || cmd.t !== 'sandboxPlace') issue(cmd);
   // 運行中放兵`);

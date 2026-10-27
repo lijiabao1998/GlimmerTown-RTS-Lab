@@ -18,7 +18,7 @@ const plugin=mutant=>({name:'r125-test-only',enforce:'pre',transform(code,id){
   if(rel==='src/main.ts'){
     replace('(window as unknown as { __rts: typeof rts }).__rts = rts;',`(window as unknown as { __rts: typeof rts }).__rts = rts;
 (window as any).__r125 = { world: () => JSON.stringify(w), patch: (progress: number, queue: number[] = [0]) => { w.eco!.queue[0]=queue; w.eco!.prog[0]=progress; }, destroyHQ: () => {w.blds[w.eco!.hq[0]-1].hp=0;}, finish: () => {w.winner=0;}, speed: () => {speed=2;} };`);
-    if(mutant)replace("  countdown: q.get('noR125') !== '1',","  countdown: q.get('__r125mutant') === 'valve' || q.get('noR125') !== '1',");
+    if(mutant)replace("  countdown: V.r125,","  countdown: q.get('__r125mutant') === 'valve' || V.r125,");
   }
   if(mutant&&rel==='src/ui/production.ts'){
     replace("const text = s.visible ? (s.countdown ?? '') : '';","const text = new URLSearchParams(location.search).get('__r125mutant') === 'hidden' ? '過期' : s.visible ? (s.countdown ?? '') : '';");

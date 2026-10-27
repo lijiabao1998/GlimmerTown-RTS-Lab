@@ -26,7 +26,7 @@ const plugin = {
     const rel = path.relative(ROOT, id.split('?')[0]).replaceAll('\\', '/');
     const changes = {
       'src/ui/minimap.ts': ['if (w !== baseWorld) baseDirty = true;', "if (!location.search.includes('__r112mutant=cache') && w !== baseWorld) baseDirty = true;"],
-      'src/main.ts': ["const r015 = q.get('noR015') !== '1';", "const r015 = location.search.includes('__r112mutant=valve') || q.get('noR015') !== '1';"],
+      'src/main.ts': ["const V = valves(q);", "const V = Object.defineProperty(valves(q), 'r015', { get: () => location.search.includes('__r112mutant=valve') || q.get('noR015') !== '1' });"],   // R060：閥從閥表來
     };
     if (changes[rel]) {
       const [from, to] = changes[rel];

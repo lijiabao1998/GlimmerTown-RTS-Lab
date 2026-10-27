@@ -1,3 +1,4 @@
+import { valves } from '../src/valves.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R118: execute actual build-bar DOM and main-controller functions. This is not browser layout evidence.
 // --mutations proves each semantic negative fails its designated assertion, never a startup error.
@@ -24,7 +25,7 @@ const mutations = {
   refund: ['budget', 'main', "(c.t === 'trench' ? trenchKind(c.kind) : buildKind(c.kind))?.cost", "(c.t === 'trench' ? { cost: 0 } : buildKind(c.kind))?.cost", 'budget: building and trench share eight points'],
   partial_pick: ['removal', 'main', 'trenchCells(c).some(([x, z]) => x === gx && z === gz)', 'c.x === gx && c.z === gz', 'removal: clicking a non-anchor occupied cell removes the whole bend'],
   reordered: ['start', 'main', 'for (const c of plan) issue(c);', 'for (const c of [...plan].reverse()) issue(c);', 'start: exact mixed command order survives formal issue'],
-  leaked_picker: ['valve', 'main', '}, r118 ? TRENCH_KINDS.map', '}, true ? TRENCH_KINDS.map', 'valve: disabled presentation has no trench choice or shape row'],
+  leaked_picker: ['valve', 'main', '}, V.r118 ? TRENCH_KINDS.map', '}, true ? TRENCH_KINDS.map', 'valve: disabled presentation has no trench choice or shape row'],
   stale_minimap: ['dirty', 'main', " || e.e === 'trench'", '', 'dirty: trench event invalidates minimap immediately'],
   stale_plan: ['reset', 'main', "  plan = []; buildHint = ''; phase = build ? 'build' : 'battle';", "  buildHint = ''; phase = build ? 'build' : 'battle';", 'reset: previous mixed preview is discarded'],
   undersized: ['layout', 'css', '#buildbar button { min-height: 44px;', '#buildbar button { min-height: 38px;', 'layout: all build controls retain 44px touch height'],
@@ -49,19 +50,22 @@ class Element {
   click() { let stopped = false; this.events.get('click')?.({ stopPropagation() { stopped = true; } }); return stopped; }
 }
 function emptyWorld() { const w = createWorld(1944); w.ter.fill(0); w.occ.fill(0); w.crater.fill(0); w.units = []; w.blds = []; w.events = []; return w; }
+// R060：閥從閥表來；fixture 蓋掉個別閥
+const fixtureValves = (q, over = {}) => Object.defineProperties(valves(q), Object.fromEntries(Object.entries(over).map(([k, value]) => [k, { value, writable: true }])));
 function controller(visual = true) {
   let root; const views = [], displayWorlds = [];
   const previous = { document: globalThis.document, innerHeight: globalThis.innerHeight };
   globalThis.innerHeight = 860;
   globalThis.document = { createElement: () => new Element(), getElementById: id => id === 'hint' ? { getBoundingClientRect: () => ({ top: 800 }) } : null, body: { appendChild: el => { root = el; } } };
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
+  const q = new URLSearchParams(visual ? '' : 'noR118=1');
   const c = vm.createContext({
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // Existing construction fixture; large-map behavior has its own guards.
     structuredClone, createWorld, hashWorld, isWallKind, bldMaxHp, buildKind, buildError, applyBuild, enemyPlan, TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, step, runLog, materialBuildDetail,
     BK_WIRE, WIRE_KIND, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_KINDS_NOW: BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
     w: emptyWorld(), view: mockView(), phase: 'build', plan: [], pickKind: BK_COTTAGE, pickRot: 0, pickTrench: -1, trenchRot: 0, buildHint: '', log: [], pending: [], selected: new Set(), acc: 0,
-    r121: false, r120: true, r118: visual, r105: true, r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true, r104: true,
-    q: new URLSearchParams(visual ? '' : 'noR118=1'), seed: 1944, fxOn: true, battleAudio: undefined, stats: {}, reportView: undefined, minimap: undefined, startBanner() {}, syncBattleAudio() {},
+    V: fixtureValves(q, { r121: false, r120: true, r118: visual, r105: true, r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true, r104: true }),
+    q, seed: 1944, fxOn: true, battleAudio: undefined, stats: {}, reportView: undefined, minimap: undefined, startBanner() {}, syncBattleAudio() {},
     newStats: () => ({}), statsStep() {}, ecoCmd: () => ({ t: 'eco' }), aiLevel: 2, innerWidth: 412, innerHeight: 860, simT: () => 0, hud: { update() {} }, ui() { c.buildBar?.update(); },
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },
     initBuildBar(items, actions, trenches, walls) { c.actions = actions; c.items = items; c.trenches = trenches; return initBuildBar(items, actions, trenches, walls); },
@@ -73,7 +77,7 @@ function controller(visual = true) {
   assert.ok(start >= 0 && end > start, 'actual main build callbacks found');
   const points = plain.match(/const pointsLeft = [^]*?;\n/)?.[0]; assert.ok(points);
   const refresh = plain.match(/function refreshPreview\(\)[^\n]+/)[0];
-  vm.runInContext(`${points}\n${fn('previewWorld')}\n${refresh}\n${fn('placeAt')}\n${fn('issue')}\n${fn('tick')}\n${fn('startBattle')}\n${fn('reset')}\n${plain.slice(start, end)}`, c);
+  vm.runInContext(`${points}\n${fn('previewWorld')}\n${refresh}\n${fn('placeAt')}\n${fn('issue')}\n${fn('tick')}\n${fn('startBattle')}\n${fn('reset')}\n${fn('makeView')}\n${plain.slice(start, end)}`, c);
   return { c, root, views, displayWorlds, left: () => vm.runInContext('pointsLeft()', c), close() { for (const [k, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[k]; else globalThis[k] = value; } } };
 }
 const trench = (kind, x = 20, z = 20, rot = 0) => ({ t: 'trench', side: SIDE_PLAYER, kind, x, z, rot });
@@ -139,9 +143,11 @@ const groups = {
   valve() { for (const visual of [true, false]) using(visual, ({ c, root, views }) => {
     if (!visual) { assert.equal(root.querySelector('#bb-trench'), null, 'valve: disabled presentation has no trench choice or shape row'); assert.equal(root.querySelector('#bb-trenches'), null); assert.equal(root.html.includes('戰壕'), false, 'valve: old tooltips contain no new trench explanation'); }
     const cmds = [trench(0, 20, 20), cottage(18, 18)]; c.plan = structuredClone(cmds); c.startBattle(); const expected = emptyWorld(); runLog(expected, cmds.map(cmd => ({ tick: 0, cmd })), 1); assert.equal(hashWorld(c.w), hashWorld(expected), 'valve never filters recorded trench commands');
-    c.reset(1944, false, false, false, false, false); assert.equal(views.at(-1)[12], visual, 'reset forwards presentation valve');   // R118 stays at constructor argument 12; later presentation flags must not shift its meaning.
-    const viewCalls = [...plain.matchAll(/new BattleView\([^;]+;/g)].map(m => m[0]); assert.equal(viewCalls.length, 2); assert.ok(viewCalls.every(call => /, r118, r104, q\.get\('noR123'\) !== '1'\);$/.test(call)), 'script replacement also forwards valve');
-    assert.match(plain, /trenches: r118,/); assert.match(plain, /const r118 = q.get\('noR118'\) !== '1'/);
+    c.reset(1944, false, false, false, false, false); assert.equal(views.at(-1)[1].r118, visual, 'reset forwards presentation valve');   // R060：畫面設定物件的 r118 欄位
+    // R060：建畫面只剩 makeView 一處，開局與 runScript 都呼叫它
+    const viewCalls = [...plain.matchAll(/new BattleView\([^;]+;/g)].map(m => m[0]); assert.equal(viewCalls.length, 1); assert.match(viewCalls[0], /r118: V\.r118,/);
+    assert.equal((plain.match(/\bmakeView\(\);/g) ?? []).length, 2, 'script replacement also forwards valve');
+    assert.match(plain, /trenches: V\.r118,/); assert.match(fs.readFileSync(new URL('../src/valves.ts', import.meta.url), 'utf8'), /get r118\(\) \{ return on\('118'\); \}/);
   }); },
   dirty() { using(true, ({ c }) => {
     let dirty = 0; c.minimap = { dirty() { dirty++; } }; c.step = w => { w.events = [{ e: 'trench' }]; w.tick++; }; c.tick(); assert.equal(dirty, 1, 'dirty: trench event invalidates minimap immediately');

@@ -14,7 +14,7 @@ const sel = new Set();
 const sum = p => p.puff + p.glow + p.debris + p.ring + p.ghost;
 // 跑腳本戰鬥 900 步，第 600 步加一條射擊指令把 #12 轟成瓦礫；每一步把事件餵給畫面、畫一幀
 function play(r004) {
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, r004);
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: r004 });
   const log = [...SCRIPT, { tick: 600, cmd: { t: 'fireAt', side: 0, ids: [2, 4], x: 18, z: 9 } }].sort((a, b) => a.tick - b.tick);
   let i = 0, maxSeen = 0, over = '';
   const caps = v.poolCaps;
@@ -41,7 +41,7 @@ function play(r004) {
   a.v.dispose(); b.v.dispose(); c.v.dispose();
 }
 { // 4. 壓力：10,000 個事件（彈著、開火、換階段、擊毀、布陣）一口氣灌進去，池照樣不超量、世界不變
-  const w = runScript(600), h0 = hashWorld(w), v = new BattleView(w, true, true, true, true), caps = v.poolCaps;
+  const w = runScript(600), h0 = hashWorld(w), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true }), caps = v.poolCaps;
   let over = '', maxSeen = 0, t = 30;
   for (let i = 0; i < 10000; i++) {
     const r = i % 5, x = ((i * 37) % 32) * SUB + 128, z = ((i * 53) % 32) * SUB + 128;

@@ -120,7 +120,7 @@ const show = r => `第 ${r.tick} 步、甲方剩血 ${r.a.join('/')}、乙方剩
   const a = hashWorld(runLog(createWorld(1944), log, T)), b = hashWorld(runLog(createWorld(1944), JSON.parse(JSON.stringify(log)), T));
   const half = runLog(createWorld(1944), log, T / 2), copy = structuredClone(half);
   runLog(half, log, T); runLog(copy, log, T);
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, true, true, true, true);
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true });
   v.update(0, 0, new Set()); const objs0 = v.scene.children.length;
   let i = 0; const kinds = new Set();
   while (w.tick < T) {
@@ -159,7 +159,7 @@ const show = r => `第 ${r.tick} 步、甲方剩血 ${r.a.join('/')}、乙方剩
     const foe = how === 'side' ? add(w, SIDE_ENEMY, UK_TANK, 6, 10 + r + 4) : add(w, SIDE_ENEMY, UK_TANK, 16, 10 + r - 3);
     foe.cooldown = 1e9; foe.hp = 1e6;   // 只當靶
     const cmd = how === 'side' ? { t: 'move', side: SIDE_ENEMY, ids: [foe.id], x: 6, z: 10 + r - 3 } : { t: 'move', side: SIDE_PLAYER, ids: [me.id], x: 28, z: 10 };
-    const v = new BattleView(w, true, false), out = [];
+    const v = new BattleView(w, { fx: true, fog: false }), out = [];
     v.update(0, 0, new Set());
     while (w.tick < 40 * TICK_HZ) {
       v.snapshot(); step(w, w.tick ? [] : [cmd]); v.onEvents(w.events, w.tick / TICK_HZ);

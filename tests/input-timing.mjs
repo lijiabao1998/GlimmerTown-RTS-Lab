@@ -16,7 +16,7 @@ let main = fs.readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
 const gesturesSrc = fs.readFileSync(new URL('../src/ui/gestures.ts', import.meta.url), 'utf8');
 const mutations = {
   // 事件時間整個不看：處理得晚就吃掉慣性與雙擊
-  handlerTime: { group: 'late', from: 'e.timeStamp > 0 && r037 ? e.timeStamp : performance.now()', to: 'performance.now()' },
+  handlerTime: { group: 'late', from: 'e.timeStamp > 0 && V.r037 ? e.timeStamp : performance.now()', to: 'performance.now()' },
   // 放手只有慣性那一行改回處理時間
   releaseClock: { group: 'late', from: 't - dragV.t < 80', to: 'performance.now() - dragV.t < 80' },
   // 雙擊沒把放手的事件時間傳進去
@@ -26,7 +26,7 @@ const mutations = {
   // 滑過去的動畫改用事件時間起算（事件時間可能早於現在，鏡頭會跳）
   glideClock: { group: 'glide', from: 'u.z / SUB, performance.now() / 1000);', to: 'u.z / SUB, t / 1000);' },
   // 逃生閥失效
-  valve: { group: 'valve', from: 'e.timeStamp > 0 && r037 ?', to: 'e.timeStamp > 0 ?' },
+  valve: { group: 'valve', from: 'e.timeStamp > 0 && V.r037 ?', to: 'e.timeStamp > 0 ?' },
 };
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
 if (mutant) { const m = mutations[mutant]; assert.ok(m, mutant); assert.ok(main.includes(m.from), `${mutant}: production anchor`); main = main.replace(m.from, m.to); }
@@ -49,7 +49,7 @@ function fixture(r037 = true) {
     pan: (x, y) => { view.target.x += x / 10; view.target.z += y / 10; }, zoomAt() {}, zoomBy() {}, setMarker() {}, dispose() {}, setWorld() {} };
   let menuOpen = false;
   const c = vm.createContext({
-    r109: true, r012: true, r037, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
+    V: { r109: true, r012: true, r037 }, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
     commandMenu: undefined, battleHint: undefined,
     document: { createElement: () => ({ id: '', hidden: false, style: {} }), body: { appendChild() {} }, addEventListener() {} },
     addEventListener() {}, canvas, performance: { now: clock.now },
@@ -113,10 +113,11 @@ const groups = {
     // 沒有時間戳的假事件（舊的 Node 守衛）：退回處理當下的時間，跟 ?noR037=1 一樣；r037 根本不會被讀到
     const f = fixture(true); drag(f, [1000, 1100, 1200], [undefined, undefined, undefined]); assert.equal(f.flings.length, 0, '沒有時間戳：照處理時間，不滑');
     const g = fixture(true); drag(g, [1000, 1016, 1030], [undefined, undefined, undefined]); assert.equal(g.flings.length, 1, '沒有時間戳、處理準時：滑');
-    const c = fixture(true); delete c.c.r037; doubleTap(c, [1000, 1060, 1180, 1240], [undefined, undefined, undefined, undefined]); assert.equal(c.glides.length, 1, '沒有時間戳：照處理時間算雙擊，不需要 r037');
+    const c = fixture(true); delete c.c.V.r037; doubleTap(c, [1000, 1060, 1180, 1240], [undefined, undefined, undefined, undefined]); assert.equal(c.glides.length, 1, '沒有時間戳：照處理時間算雙擊，不需要 r037');
   },
   valve() {
-    assert.match(main, /const r037 = q\.get\('noR037'\) !== '1';/, '逃生閥 ?noR037=1');
+    assert.match(fs.readFileSync(new URL('../src/valves.ts', import.meta.url), 'utf8'), /get r037\(\) \{ return on\('037'\); \}/, '逃生閥 ?noR037=1（R060 閥表）');
+    assert.match(main, /e\.timeStamp > 0 && V\.r037 \?/, '輸入時間讀閥表的 R037');
     // 閥關著時，就算事件有時間戳也照處理時間（上面 late 已經測了慣性與雙擊）；閥開著，準時處理的結果跟關著一樣
     for (const r037 of [true, false]) { const f = fixture(r037); drag(f, [1000, 1016, 1024], [1000, 1016, 1024]); assert.equal(f.flings.length, 1, `處理準時：開關 ${r037} 都滑`); }
     const off = fixture(false); drag(off, [1000, 1100, 1200], [1000, 1016, 1024]); assert.equal(off.flings.length, 0, '?noR037=1 不看事件時間');

@@ -8,7 +8,7 @@ import {setDamageDetails,setWalls} from '../src/render/buildings.ts';
 const log=[{tick:0,cmd:{t:'fireAt',side:0,ids:[1,2,3,4],x:18,z:9}}];
 const marks=v=>Array.from(v.holes.live).flatMap((live,i)=>live?[Object.fromEntries(['bld','kind','x','y','z','nx','nz','w','h','r','g','b'].map(k=>[k,v.holes[k][i]]))]:[]);
 function replay(on,r014=true,r138=true,r120=true,commands=log,recreate=false){
- setDamageDetails(r138);setWalls(r120);const w=createWorld(1944);let v=new BattleView(w,true,false,true,true,true,true,true,r014,true,true,true,true,true,true);v.rubbleMarkGuard=on;
+ setDamageDetails(r138);setWalls(r120);const w=createWorld(1944);let v=new BattleView(w, { fx: true, fog: false, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: r014, r016: true, r107: true, r113: true, r118: true, r104: true, r123: true });v.rubbleMarkGuard=on;
  if(recreate){const previous=v;v=v.recreate(w);previous.dispose();}
  const saved={},events=[];let clone;
  try{for(let k=0;k<600;k++){

@@ -21,7 +21,7 @@ function check(ok, name, detail = '') {
   check(rx > cx && Math.abs(ry - cy) < 1e-9 && uy < cy && Math.abs(ux - cx) < 1e-9, '小地圖的右與上跟主畫面一樣', `右 (${(rx - cx).toFixed(2)},${(ry - cy).toFixed(2)})，上 (${(ux - cx).toFixed(2)},${(uy - cy).toFixed(2)})`);
 }
 { // 3. 點的清單：我方全部活著的；敵方只有看得到的；死掉的不畫
-  const w = createWorld(1944), v = new BattleView(w, false, true, true, true, true, true, true, true);
+  const w = createWorld(1944), v = new BattleView(w, { fx: false, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true });
   const mine = w.units.filter(u => u.side === SIDE_PLAYER);
   mine[0].alive = false;
   const dots = miniDots(w, u => v.visibleUnit(u));

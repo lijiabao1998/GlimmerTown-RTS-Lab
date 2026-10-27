@@ -48,7 +48,7 @@ const groups = {
   },
   help(s) {
     const begin=s.indexOf('const help = initHelp('),end=s.indexOf('\nbuildBar =',begin);assert(begin>=0&&end>begin);
-    const calls=[],c=vm.createContext({r109:true,audioHelpActive:false,pausedBeforeHelp:false,paused:false,clearGestureInput:()=>calls.push('gesture'),hud:{update:()=>calls.push('hud')},syncBattleAudio:()=>calls.push(`sync:${c.audioHelpActive}:${c.paused}`),initHelp:a=>{c.actions=a;return a;}});
+    const calls=[],c=vm.createContext({V:{r109:true},audioHelpActive:false,pausedBeforeHelp:false,paused:false,clearGestureInput:()=>calls.push('gesture'),hud:{update:()=>calls.push('hud')},syncBattleAudio:()=>calls.push(`sync:${c.audioHelpActive}:${c.paused}`),initHelp:a=>{c.actions=a;return a;}});
     vm.runInContext(plain(s.slice(begin,end)),c);c.actions.open();
     assert.equal(c.audioHelpActive,true,'help: opening sets an independent audio gate before synchronization');
     assert.deepEqual(calls,['gesture','sync:true:true','hud'],'help: existing gesture cleanup precedes gated sound synchronization');

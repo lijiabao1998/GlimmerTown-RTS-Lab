@@ -46,7 +46,7 @@ const duel = (a, b) => { const w = blank(); return hit(w, add(w, 0, a, 5, 5), ad
   const a = hashWorld(runLog(createWorld(1944), log, 3000)), b = hashWorld(runLog(createWorld(1944), JSON.parse(JSON.stringify(log)), 3000));
   const half = runLog(createWorld(1944), log, 1500), copy = structuredClone(half);
   runLog(half, log, 3000); runLog(copy, log, 3000);
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, true, true, true, true);
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true });
   v.update(0, 0, new Set()); const objs0 = v.scene.children.length;
   let i = 0, kinds = new Set();
   while (w.tick < 3000) { const now = []; while (i < log.length && log[i].tick <= w.tick) { if (log[i].tick === w.tick) now.push(log[i].cmd); i++; } v.snapshot(); step(w, now); v.onEvents(w.events, w.tick / 20); v.update(0, w.tick / 20, new Set()); for (const u of w.units) if (u.side === 0 && (u.kind === UK_LIGHT || u.kind === UK_HEAVY)) kinds.add(u.kind); }

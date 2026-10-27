@@ -120,7 +120,7 @@ function isolatedPlugin(hits) {
     const rel=path.relative(ROOT,id.split('?')[0]).replaceAll('\\','/');
     const replace=(from,to,label)=>{assert.equal(code.split(from).length-1,1,`fixture: unique R120 anchor ${label}`);code=code.replace(from,to);hits.add(label);};
     if(rel==='src/main.ts'){
-      replace("const r120 = q.get('noR120') !== '1';","const r120 = q.get('__r120mutant') === 'valve' || q.get('noR120') !== '1';",'valve');
+      replace("const V = valves(q);","const V = Object.defineProperty(valves(q), 'r120', { get: () => q.get('__r120mutant') === 'valve' || q.get('noR120') !== '1' });",'valve');   // R060：閥從閥表來
       replace('pickRot = 1 - pickRot;',`pickRot = ${is('rotation')} ? pickRot : 1 - pickRot;`,'rotation');
       replace('plan.splice(k, 1);',`if (!(${is('remove')})) plan.splice(k, 1);`,'remove-mesh');
       replace('plan.splice(wallIndex, 1);',`if (!(${is('remove')})) plan.splice(wallIndex, 1);`,'remove-footprint');

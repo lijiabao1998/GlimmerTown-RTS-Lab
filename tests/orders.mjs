@@ -11,7 +11,7 @@ function check(ok, name, detail = '') {
 }
 const N = 32;
 const drawn = v => { const d = v.dashDbg, out = []; for (let i = 0; i < d.n; i++) out.push({ x: d.x[i], z: d.z[i], kind: d.kind[i], unit: d.unit[i] }); return out; };
-const mk = (r011 = true) => { const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, true, r011); return { w, v }; };
+const mk = (r011 = true) => { const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: r011 }); return { w, v }; };
 const frame = (v, w, sel) => { v.snapshot(); v.update(0, w.tick / 20, sel); };
 
 { // 1. 路線：每段虛線都在剩下路徑經過的格子（含相鄰半格）；終點標記在路徑終點；沒選取 0 段
@@ -64,7 +64,7 @@ const frame = (v, w, sel) => { v.snapshot(); v.update(0, w.tick / 20, sel); };
   v.dispose(); off.v.dispose();
 }
 { // 4. 畫面只讀世界：整場腳本、全選我方
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, true, true, true, true), sel = new Set(w.units.filter(u => u.side === 0).map(u => u.id));
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true }), sel = new Set(w.units.filter(u => u.side === 0).map(u => u.id));
   let i = 0, most = 0;
   while (w.tick < 1200) {
     const now = []; while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) now.push(SCRIPT[i].cmd); i++; }

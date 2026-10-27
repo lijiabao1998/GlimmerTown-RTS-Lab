@@ -41,7 +41,7 @@ function fixture(n = 2, options = {}) {
   const w = createWorld(1944), template = w.units.find(u => u.kind === UK_TANK && u.side === SIDE_PLAYER);
   w.units = Array.from({ length: n }, (_, i) => ({ ...structuredClone(template), id: i + 1, x: 8 * SUB, z: 8 * SUB, hp: UNIT_KINDS[UK_TANK].hp }));
   const oldWorld = structuredClone(w);
-  const make = (world, enabled) => new BattleView(world, options.fx ?? true, false, true, false, false, options.r009 ?? true, false, false, false, false, false, false, false, enabled);
+  const make = (world, enabled) => new BattleView(world, { fx: options.fx ?? true, fog: false, observerDetails: true, r004: false, r008: false, r009: options.r009 ?? true, r011: false, r014: false, r016: false, r107: false, r113: false, r118: false, r104: false, r123: enabled });
   const batch = make(w, true), old = make(oldWorld, false), selected = new Set(w.units.map(u => u.id));
   return { w, oldWorld, batch, old, selected, update(t = 1) { batch.update(1, t, selected, false); old.update(1, t, selected, false); }, both(fn) { fn(w); fn(oldWorld); }, dispose() { batch.dispose(); old.dispose(); } };
 }
