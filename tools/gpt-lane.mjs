@@ -67,6 +67,9 @@ const ALLOWED = [
   /^(LOG|README)\.md$/,
 ];
 for (const f of files) if (!ALLOWED.some(re => re.test(f))) no(`改到白名單以外的檔案 ${f}：GPT 車道不准改（規則、守衛、CI、工具鏈、後製）。要改請 PR 標「等業主」並在卡面說明，交業主或 Claude。`);
+// R061：Claude 的結構守衛（總機長度、閥表）GPT 不改；上限檔在 tools/ 本來就改不到
+const CLAUDE_TESTS = /^tests\/(hub-budget|valves)\.mjs$/;
+for (const f of files) if (CLAUDE_TESTS.test(f)) no(`改到 Claude 的結構守衛 ${f}：總機行數上限與閥表守衛只有 Claude 改。總機放不下就先把東西搬出去；新閥加在 src/valves.ts 一行。`);
 
 // 4. 卡面：一張新卡；卡號比 main 上出現過的都大；第一個提交只放卡；卡頭機讀欄；驗收段落沒被改；卡之外真的有施工
 if (!statusOnly) {
