@@ -50,14 +50,14 @@ const move = (u,x,z) => ({t:'move',side:u.side,ids:[u.id],x,z});
  assert.equal(hashWorld(a),hashWorld(b),'observer command replay');
  const c=runLog(createWorld(1944),log,150),d=structuredClone(c);runLog(c,log,300);runLog(d,log,300);
  assert.equal(hashWorld(c),hashWorld(a));assert.equal(hashWorld(d),hashWorld(a));
- const h=hashWorld(a),v=new BattleView(a,false,true,true),off=new BattleView(a,false,true,false);
+ const h=hashWorld(a),v=new BattleView(a, { fx: false, fog: true, observerDetails: true }),off=new BattleView(a, { fx: false, fog: true, observerDetails: false });
  v.update(0,0,new Set([9]));off.update(0,0,new Set([9]));assert(v.observerMesh.count>=1);assert.equal(hashWorld(a),h,'detail valve is render-only');
  assert(v.observerMesh.geometry.attributes.position.count>off.observerMesh.geometry.attributes.position.count,'detail valve removes detail');v.dispose();off.dispose();
 }
 console.log('observer: spawn, sight, entry/exit, noncombat, cover/collapse, artillery, replay and render valve passed');
 
 {
- const w=blank(),o=activate(w,9,6,6),b=house(w,6,6,1,1),v=new BattleView(w,false);
+ const w=blank(),o=activate(w,9,6,6),b=house(w,6,6,1,1),v=new BattleView(w, { fx: false });
  assert(Math.abs(v.unitHeight(o)-0.78)<1e-5,'garrison marker feet meet actual house ridge');
  b.hp=70;v.onEvents([{e:'stage',bld:1,stage:1}],0);
  assert(v.unitHeight(o)<0.2,'roof loss moves marker to actual interior floor/beam');

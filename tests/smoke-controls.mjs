@@ -1,3 +1,4 @@
+import { valves } from '../src/valves.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 import { reloadStatus } from '../src/ui/reloadStatus.ts';
 // R107 UI guards. Real pure routing + main-controller snippets + a deliberately small DOM mock.
@@ -21,7 +22,7 @@ const mutations = {
   compatibility: { group: 'compatibility', file: 'route', from: "...(smoke ? { ammo:", to: "...(true ? { ammo:" },
   controller: { group: 'controller', file: 'main', from: 'routeBattleOrder(w, selected, fireMode, ammo,', to: "routeBattleOrder(w, selected, fireMode, 'he'," },
   reset: { group: 'lifecycle', file: 'main', from: "selected.clear(); fireMode = false; ammo = 'he';", to: "selected.clear(); fireMode = false;" },
-  valve: { group: 'lifecycle', file: 'main', from: "r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');", to: "r009, r011, r014, r016, true, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');" },
+  valve: { group: 'lifecycle', file: 'main', from: "r107: V.r107,", to: "r107: true," },
   hud: { group: 'hud', file: 'hud', from: "const smoke = s.ammo === 'smoke';", to: 'const smoke = false;' },
   layout: { group: 'layout', file: 'css', from: 'width: 44px; height: 44px; padding: 0;', to: 'width: 44px; height: 36px; padding: 0;' },
 };
@@ -53,17 +54,20 @@ function fixture() {
   w.occ.fill(0);
   return { w, gun, tank, observer, foe, enemyGun, mortar, infantry, deadGun };
 }
+// R060：閥從閥表來；fixture 蓋掉個別閥
+const fixtureValves = (q, over = {}) => Object.defineProperties(valves(q), Object.fromEntries(Object.entries(over).map(([k, value]) => [k, { value, writable: true }])));
 function controller(visual = true) {
   const views = [], issued = [], placements = [];
   const mockView = () => ({ dispose() {}, setWorld() {}, visibleUnit: () => true, buildingAt: () => null, groundAt: () => ({ x: 16.2, z: 15.8 }), setMarker(...p) { this.marker = p; } });
+  const q = new URLSearchParams(visual ? '' : 'noR107=1');
   const c = vm.createContext({
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // Keep this legacy controller on its original small map.
     createWorld, hashWorld, runLog, routeBattleOrder: route,
-    seed: 1944, r006: false, r018: false, r019: false, r026: false, r109: false, r015: true, r115: true, r118: true, reloadStatus, counterbatteryHint: () => '', battleHint: undefined,
-    r004: true, r008: true, r009: false, r010: false, r011: true, r012: false, r014: true, r016: true, r104: true, fxOn: true,
+    seed: 1944, V: fixtureValves(q, { r006: false, r018: false, r019: false, r026: false, r109: false, r015: true, r115: true, r118: true, r004: true, r008: true, r009: false, r010: false, r011: true, r012: false, r014: true, r016: true, r104: true }), reloadStatus, counterbatteryHint: () => '', battleHint: undefined,
+    fxOn: true,
     SIDE_PLAYER, SIDE_ENEMY, UK_HOWITZER, UK_TANK, UK_OBSERVER, UK_INFANTRY, UK_ATGUN: 4, UK_MORTAR,
     UNIT_KINDS: {}, N, SUB, SCRIPT_SEED: 1944, SCRIPT_TICKS: 1200, SCRIPT: [],
-    q: new URLSearchParams(visual ? '' : 'noR107=1'),
+    q,
     w: null, view: mockView(), selected: new Set(), fireMode: false, ammo: 'he', paused: false, phase: 'battle',
     log: [], pending: [], acc: 0, speed: 1, newStats: () => ({}), reportView: { hide() {} }, ui() {}, refreshPreview() {},
     innerWidth: 412, innerHeight: 860, issue: cmd => issued.push(cmd), simT: () => 0,
@@ -72,8 +76,7 @@ function controller(visual = true) {
     battleAudio: undefined, syncBattleAudio() {}, // R117 is absent in this legacy controller fixture.
     BattleView: class { constructor(...args) { views.push(args); return mockView(); } },
   });
-  vm.runInContext(plain.match(/const r107 = [^\n]+/)[0], c);
-  vm.runInContext(`${fn('reset')}\n${fn('order')}\n${fn('tap')}`, c);
+  vm.runInContext(`${fn('reset')}\n${fn('makeView')}\n${fn('order')}\n${fn('tap')}`, c);
   vm.runInContext(plain.slice(plain.indexOf('const rts = {')), c);
   // Capture the actual main callbacks rather than reimplementing their state transitions.
   c.initHud = a => { c.actions = a; return c.hud; };
@@ -155,7 +158,7 @@ const groups = {
         action();
         assert.equal(c.ammo, 'he', 'fresh/reset/replay resets ammo'); assert.equal(c.fireMode, false); assert.equal(c.selected.size, 0);
         assert.ok(views.length > old);
-        for (const args of views.slice(old)) assert.equal(args[10], visual, 'every constructed BattleView receives noR107');
+        for (const args of views.slice(old)) assert.equal(args[1].r107, visual, 'every constructed BattleView receives noR107');
       }
       c.actions.toggleAmmo(); assert.equal(c.ammo, 'smoke', 'visual valve leaves smoke commands available');
       c.selected.add(4); c.order(200, 300); assert.equal(issued.at(-1).ammo, 'smoke', 'visual valve does not suppress smoke routing');

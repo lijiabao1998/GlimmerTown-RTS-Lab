@@ -30,7 +30,7 @@ const mutations = {
   readonly: ['src/ui/commandMenu.ts', '    const counts = bombardEligibility(state.world, state.selected, aim);', "    if (location.search.includes('__r137mutant=readonly')) state.world.rng = (state.world.rng + 1) >>> 0;\n    const counts = bombardEligibility(state.world, state.selected, aim);"],
   routing: ['src/main.ts', 'bombardCommand(w, selected, target, chosen)', "bombardCommand(w, selected, target, location.search.includes('__r137mutant=routing') ? 'he' : chosen)"],
   close: ['src/ui/commandMenu.ts', 'const target = { ...aim }; close(); on.choose', "const target = { ...aim }; if (!location.search.includes('__r137mutant=close')) close(); on.choose"],
-  valve: ['src/main.ts', "const r137 = q.get('noR137') !== '1';", "const r137 = location.search.includes('__r137mutant=valve') || q.get('noR137') !== '1';"],
+  valve: ['src/main.ts', "const V = valves(q);", "const V = Object.defineProperty(valves(q), 'r137', { get: () => location.search.includes('__r137mutant=valve') || q.get('noR137') !== '1' });"],   // R060：閥從閥表來
 };
 const applied = new Set();
 function plugin(negative = false) {

@@ -114,11 +114,11 @@ function plugin(broken, hits) {
     const replace = (from, to, label) => { assert.equal(code.split(from).length-1,1,`unique R118 isolated anchor: ${label}`);code=code.replace(from,to);hits.add(label); };
     if (rel === 'src/main.ts') {
       if (broken) {
-        replace("const r118 = q.get('noR118') !== '1';", "const r118 = q.get('__r118mutant') === 'valve' || q.get('noR118') !== '1';", 'valve');
+        replace("const V = valves(q);", "const V = Object.defineProperty(valves(q), 'r118', { get: () => q.get('__r118mutant') === 'valve' || q.get('noR118') !== '1' });", 'valve');   // R060：閥從閥表來
         replace("if (trenchIndex >= 0) { plan.splice(trenchIndex, 1);", `if (trenchIndex >= 0) { if (!(${is('remove')})) plan.splice(trenchIndex, 1);`, 'remove');
         replace('trenchRot = (trenchRot + 1) % 4;', `trenchRot = (trenchRot + (${is('rotation')} ? 0 : 1)) % 4;`, 'rotation');
         replace('for (const c of plan) issue(c);', `for (const c of plan) if (!(c.t === 'trench' && (${is('record')}))) issue(c);`, 'record');
-        replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }', "while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r118mutant') === 'replay' && !r118 && lg[i].cmd.t === 'trench')) issue(lg[i].cmd); i++; }", 'replay');
+        replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }', "while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r118mutant') === 'replay' && !V.r118 && lg[i].cmd.t === 'trench')) issue(lg[i].cmd); i++; }", 'replay');
       }
       code += instrumentation; hits.add('observation');
     }

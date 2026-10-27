@@ -32,7 +32,7 @@ const plugin=mutants=>({name:'r127-test-only',enforce:'pre',transform(code,id){
  multi: () => { const targets=w.blds.filter(b=>b.kind!==5).slice(0,3); const arms=w.units.filter(u=>u.side===0&&(UNIT_KINDS[u.kind].armored||[1,4,5].includes(u.kind))); selected.clear(); for(const u of w.units.filter(u=>u.side===0&&u.alive))selected.add(u.id); for(let i=0;i<targets.length;i++)Object.assign(targets[i],{hp:[900,400,1][i],maxHp:1000}); for(let i=0;i<arms.length;i++)Object.assign(arms[i],{order:3,target:0,tx:targets[i%3].x,tz:targets[i%3].z}); fireMode=true; ui(); },
  speed: () => { speed=2; }
 };`);
-    if(mutants)replace("hq: q.get('noR127') !== '1',",`hq: ${M('valve')} || q.get('noR127') !== '1',`);
+    if(mutants)replace("hq: V.r127,",`hq: ${M('valve')} || V.r127,`);
   }
   if(mutants&&rel==='src/ui/hqDurability.ts'){
     replace('w.eco.hq[SIDE_PLAYER]',`w.eco.hq[${M('enemy')} ? 1 : SIDE_PLAYER]`);

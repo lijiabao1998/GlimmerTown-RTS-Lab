@@ -40,9 +40,9 @@ const plugin = {
     if (rel==='src/main.ts') {
       replace('  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));', "  if (q.get('__r122mutant') === 'paint' && view.multi122) view.multi122.mesh.visible = false;\n  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));");
       // Source anchors are asserted so a refactor cannot silently disable a negative control.
-      replace("q.get('noR122') !== '1'", "(q.get('__r122mutant') === 'valve' || q.get('noR122') !== '1')", 2);
-      // Isolate only the second (runScript) constructor's valve assignment.
-      replace("  view.multiRangeEnabled = (q.get('__r122mutant') === 'valve' || q.get('noR122') !== '1');\n    return hashWorld(w);", "  if (q.get('__r122mutant') !== 'replayValve') view.multiRangeEnabled = (q.get('__r122mutant') === 'valve' || q.get('noR122') !== '1');\n    return hashWorld(w);");
+      replace("multiRange: V.r122", "multiRange: (q.get('__r122mutant') === 'valve' || V.r122)");   // R060：建畫面只剩 makeView 一處
+      // Isolate only the runScript path: its rebuilt view forgets the valve.
+      replace("    makeView();\n    return hashWorld(w);", "    makeView(); if (q.get('__r122mutant') === 'replayValve') view.multiRangeEnabled = true;\n    return hashWorld(w);");
       replace('if (rangeInfo !== lastRangeInfo)', "if (q.get('__r122mutant') !== 'freshness' && rangeInfo !== lastRangeInfo)");
     }
     if (rel==='src/render/multiRange.ts') {

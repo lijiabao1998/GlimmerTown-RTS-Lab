@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import * as world from '../src/sim/world.ts';
 import { initProduction } from '../src/ui/production.ts';
 const { createWorld, hashWorld, N, SUB, SIDE_PLAYER, SIDE_ENEMY } = world;
-const paths = { ui: '../src/ui/counterbattery.ts', mini: '../src/ui/minimap.ts', hud: '../src/ui/hud.ts', main: '../src/main.ts', sim: '../src/sim/counterbattery.ts' };
+const paths = { ui: '../src/ui/counterbattery.ts', mini: '../src/ui/minimap.ts', hud: '../src/ui/hud.ts', main: '../src/main.ts', sim: '../src/sim/counterbattery.ts', valves: '../src/valves.ts' };
 const sources = Object.fromEntries(Object.entries(paths).map(([key, path]) => [key, fs.readFileSync(new URL(path, import.meta.url), 'utf8')]));
 const mutations = {
   wrong_projection: { group: 'projection', file: 'ui', from: '(area.z + circle[1] * area.rz) / SUB', to: '(area.z - circle[1] * area.rz) / SUB' },
@@ -34,8 +34,8 @@ const mutations = {
   overwrite_priority: { group: 'hud', file: 'hud', from: 's.hint === undefined && s.counterbatteryInfo', to: 's.counterbatteryInfo' },
   missing_refresh: { group: 'hint_refresh', file: 'main', from: 'lastCounterbatteryWorld = w; lastCounterbatteryInfo = counterbatteryInfo; hud?.update();', to: 'lastCounterbatteryWorld = w; lastCounterbatteryInfo = counterbatteryInfo;' },
   replay_identity: { group: 'replay_refresh', file: 'main', from: 'w !== lastCounterbatteryWorld || counterbatteryInfo !== lastCounterbatteryInfo', to: 'counterbatteryInfo !== lastCounterbatteryInfo' },
-  disconnected_valve: { group: 'wiring', file: 'main', from: 'counterbattery: r115,', to: 'counterbattery: true,' },
-  hidden_minimap_hint: { group: 'wiring', file: 'main', from: "counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115)", to: "counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r115)" },
+  disconnected_valve: { group: 'wiring', file: 'main', from: 'counterbattery: V.r115,', to: 'counterbattery: true,' },
+  hidden_minimap_hint: { group: 'wiring', file: 'main', from: "counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && V.r015 && V.r115)", to: "counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && V.r115)" },
   absent_suffix: { group: 'layout', file: 'hud', from: "    if (s.hint === undefined && s.counterbatteryInfo) $('hint').textContent += `。${s.counterbatteryInfo}`;", to: '' },
   replaced_slot: { group: 'buffer_reuse', file: 'sim', from: 'projectArea(r, buffer.areas[buffer.count], zones);', to: 'buffer.areas[buffer.count] = projectArea(r, { x: 0, z: 0, rx: 0, rz: 0, level: 0 }, zones);' },
   stale_count: { group: 'buffer_reuse', file: 'sim', from: '  buffer.count = 0;', to: '  if (w.counterbattery?.length) buffer.count = 0;' },
@@ -64,6 +64,9 @@ const uiURL = moduleURL('ui', { '../sim/counterbattery.ts': simURL }), { drawCou
 const { initMinimap, miniGeo, toMini } = await import(moduleURL('mini', { './counterbattery.ts': uiURL }));
 const { initHud } = await import(moduleURL('hud'));
 const plain = stripTypeScriptTypes(sources.main);
+// R060：閥從閥表來；fixture 可以蓋掉個別閥
+const { valves } = await import(moduleURL('valves'));
+const fixtureValves = (q, over = {}) => Object.defineProperties(valves(q), Object.fromEntries(Object.entries(over).map(([k, value]) => [k, { value, writable: true }])));
 const INFO = '小地圖橙虛線：疑似敵砲，非精確位置';
 const makeBuffer = () => ({ areas: Array.from({ length: 8 }, () => ({ x: 0, z: 0, rx: 0, rz: 0, level: 0 })), count: 0 });
 const publicStubURL = dataURL(`export const hasCounterbattery = (w, side) => globalThis.__r115PublicAreas(side).length > 0;
@@ -140,16 +143,16 @@ function section(start, end) { const a = plain.indexOf(start), b = plain.indexOf
 function mainFixture(query = '', w = fixtureWorld()) {
   const document = dom(); w.units = [];
   const metrics = { updates: 0, minimaps: 0 }; let actions;
+  const q = new URLSearchParams(`${query}&noR135=1`);
   const c = vm.createContext({ ...world, reloadStatus, coverDurability, vehicleDurability, document, w, selected: new Set(), paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
     battleAudio: undefined, syncBattleAudio() {}, // R117 stays outside this counterbattery-only fixture.
-    r009: false, r010: true, r018: false, r012: false, buildHint: '', BUILD_TIP: '布陣說明', q: new URLSearchParams(`${query}&noR135=1`),
+    V: fixtureValves(q, { r009: false, r010: true, r018: false, r012: false }), buildHint: '', BUILD_TIP: '布陣說明', q,
     view: { rangeInfo: '', visibleUnit: () => false }, counterbatteryHint, hud: undefined, minimap: undefined, lastCounterbatteryInfo: '', lastCounterbatteryWorld: undefined,
     initHud(a) { actions = a; const actual = initHud(a); return { frame: actual.frame, update() { metrics.updates++; actual.update(); } }; },
     initMinimap(a) { c.miniActions = a; metrics.minimaps++; return {}; },
   });
-  for (const name of ['r015', 'r115', 'r118']) vm.runInContext(plain.match(new RegExp(`const ${name} = [^\\n]+`))[0], c);
   vm.runInContext(section('hud = initHud({', '\nreportView = initReportView'), c);
-  vm.runInContext(section('if (r015) minimap = initMinimap({', '\nconst help = '), c);
+  vm.runInContext(section('if (V.r015) minimap = initMinimap({', '\nconst help = '), c);
   const frameSource = section('  const counterbatteryInfo = ', '\n  view.render(');
   return { c, document, metrics, actions, hint: () => document.getElementById('hint'), refresh: () => vm.runInContext(`{${frameSource}}`, c) };
 }

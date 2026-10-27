@@ -39,50 +39,23 @@ import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
 import { showStartOrder, startOrderText } from './ui/startOrder.ts';
+import { valves } from './valves.ts';
 
 const q = new URLSearchParams(location.search);
+const V = valves(q);   // R060 逃生閥表：所有 ?noR<號> 都在 src/valves.ts
 const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
 const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)) };
 // 逃生閥：?fx=off 或 window.__noFx＝true 時不產生爆炸、煙（AGENTS.md：新效果都要關得掉）
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
-const r117 = fxOn && q.get('noR117') !== '1';
-// R004 破壞的重量：倒塌、碎片、火與曳光。逃生閥 ?noR004=1＝舊效果（模擬雜湊不變）
-const r004 = q.get('noR004') !== '1';
-// R008 車輛有重量：車轍、揚塵、後座、砲塔轉向、受擊閃光。逃生閥 ?noR008=1
-const r008 = q.get('noR008') !== '1';
-// R009 血條與戰況。逃生閥 ?noR009=1
-const r009 = q.get('noR009') !== '1';
-// R010 結局與戰報：最後一擊慢動作、鏡頭移到最後一擊、戰報。逃生閥 ?noR010=1＝原本的橫幅
-const r010 = q.get('noR010') !== '1';
-// R012 鏡頭手感：縮放對準手指／游標、拖曳慣性、雙擊單位鏡頭跟過去。逃生閥 ?noR012=1
-const r012 = q.get('noR012') !== '1';
 // R037 手勢計時看事件自己的時間戳（手指真的動、真的放的時刻），不看程式處理到事件的時間：
-// 畫面卡一下（手機掉幀、CI 機器忙）時，快速拖曳放手照樣滑出去、雙擊照樣跟過去。逃生閥 ?noR037=1＝回到處理當下的時間
-const r037 = q.get('noR037') !== '1';
+// 畫面卡一下（手機掉幀、CI 機器忙）時，快速拖曳放手照樣滑出去、雙擊照樣跟過去（見下面的 eventT）。
 const fling = new Fling(), glide = new Glide(), camStep = { x: 0, z: 0 };
 let dragV = { vx: 0, vy: 0, t: 0 }, lastTap = { id: 0, t: -1e9 };
 let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: number } | null = null, reportShown = false, reportView: ReportView | undefined;
-// R011 指令回饋：選取單位的路線、攻擊線、砲擊準星。逃生閥 ?noR011=1
-const r011 = q.get('noR011') !== '1';
-// R014 牆上的彈孔與燻黑。逃生閥 ?noR014=1
-const r014 = q.get('noR014') !== '1';
-// R015 小地圖。逃生閥 ?noR015=1
-const r015 = q.get('noR015') !== '1';
-const r116 = q.get('noR116') !== '1';
-const r118 = q.get('noR118') !== '1'; // 只關戰壕選項與呈現；舊紀錄中的指令照常執行
-const r120 = q.get('noR120') !== '1'; // 只關圍牆選項與外形；紀錄中的牆仍是可見、可破壞建築
-setWalls(r120);
-const r121 = q.get('noR121') !== '1';
-setWireDetail(r121);
-setVegetation(r116); // 只關模型與提示；新局地形仍由明確的 map 指令啟用
-const r115 = q.get('noR115') !== '1'; // 只關估計區與提示，不改情報模擬
+setWalls(V.r120);
+setWireDetail(V.r121);
+setVegetation(V.r116); // 只關模型與提示；新局地形仍由明確的 map 指令啟用
 let minimap: Minimap | undefined;
-// R016 開戰儀式：布陣的房子從地面升起、「開戰！」大字。逃生閥 ?noR016=1
-const r016 = q.get('noR016') !== '1';
-const r104 = q.get('noR104') !== '1'; // 裝甲弧提示；只關畫面，不改模擬
-const r109 = q.get('noR109') !== '1';
-const r137 = q.get('noR137') !== '1'; // 只關砲擊選單的適用數，不改原按鈕與下令資格
-const r128 = q.get('noR128') !== '1';
 let sandboxBar: SandboxBar | undefined, sandboxTool: number | null = UK_TANK, sandboxSide = SIDE_PLAYER, sandboxHint = '';
 let lastRangeInfo = '';
 let lastCoverInfo = ''; // R124：同 tick 傷害／換選／重播也重算
@@ -93,18 +66,14 @@ let lastCounterbatteryInfo = '';
 let lastCounterbatteryWorld: World | undefined;
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
-const r107 = q.get('noR107') !== '1'; // 只關煙團畫面；煙幕指令與視線模擬保持啟用
-const r105 = q.get('noR105') !== '1';
-setMaterials(r105); // R105 材質視覺提示；只關畫面，模擬不變
-setBuildingDetails(q.get('noR134') !== '1' && q.get('noR131') !== '1');
-setDamageDetails(q.get('noR138') !== '1');
-setFacades(q.get('noR028') !== '1');
-setStreets(q.get('noR027') !== '1');   // R027 人行道與燈火管制路緣；逃生閥 ?noR027=1   // R028 外牆細節（木構、掛瓦、護牆板）；逃生閥 ?noR028=1＝全部紅磚原樣
-// R041 開戰命令條（取代上面的發光大字）。逃生閥 ?noR041=1＝回到 R016 的「開戰！」
-const r041 = q.get('noR041') !== '1';
+setMaterials(V.r105); // R105 材質視覺提示；只關畫面，模擬不變
+setBuildingDetails(V.r134 && V.r131);
+setDamageDetails(V.r138);
+setFacades(V.r028);
+setStreets(V.r027);
 function startOrder() {
-  // 開戰這一刻 eco／ai 指令還在佇列裡沒套用：看同一組開關（r019 指揮部、r018 電腦），不看世界
-  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, r019, r018 ? AI_NAME[aiLevel] : undefined, !!w.zombies));
+  // 開戰這一刻 eco／ai 指令還在佇列裡沒套用：看同一組開關（V.r019 指揮部、V.r018 電腦），不看世界
+  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, V.r019, V.r018 ? AI_NAME[aiLevel] : undefined, !!w.zombies));
 }
 function startBanner() {
   const el = document.createElement('div');
@@ -128,10 +97,9 @@ const selected = new Set<number>();
 const SPEEDS = [1, 2, 4];
 
 // ---- R006 布陣：開頁先停在第 0 步，玩家在我方半場蓋房子，按「開戰」才開打。逃生閥 ?noR006=1＝直接開打（R102 的流程）----
-const r006 = q.get('noR006') !== '1';
 let phase: 'build' | 'battle' = 'battle';
 // R117：預設靜音。只有原生音效鍵會建立／解鎖 context；模擬與重播不碰它。
-const battleAudio = r117 ? new BattleAudio(() => hud?.update()) : undefined;
+const battleAudio = fxOn && V.r117 ? new BattleAudio(() => hud?.update()) : undefined;
 let audioPageActive = true, audioHelpActive = false;
 function syncBattleAudio() {
   battleAudio?.setActive(phase === 'battle' && !paused && !reportShown && !audioHelpActive && !document.hidden && audioPageActive);
@@ -144,7 +112,7 @@ const TRENCH_SHAPE = ['2格直線', '3格L形', '4格直線', '2格加固'];
 const BUILD_LABEL: Record<number, string> = { [BUILD_KINDS[0].kind]: '農舍', [BUILD_KINDS[1].kind]: '磚房', [BUILD_KINDS[2].kind]: '穀倉', [BUILD_KINDS_24[3].kind]: '碉堡', [BK_WALL_BRICK]: '矮磚牆', [BK_WALL_STONE]: '石牆', [BK_WALL_CONCRETE]: '混凝土牆', [BK_WIRE]: '鐵絲網' };
 const BUILD_WHY: Record<string, string> = {
   tick: '已經開戰，不能再蓋', map: '超出地圖', foreign: '那是敵方半場（紅色）；只能蓋在我方半場（藍色）',
-  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: r118 ? '那裡已有房子或戰壕' : '那裡已經有房子',
+  neutral: '那是中間的無人帶；只能蓋在我方半場（藍色）', mud: '不能蓋在泥灘上', road: '不能蓋在路上', occupied: V.r118 ? '那裡已有房子或戰壕' : '那裡已經有房子',
   trench: '那裡已經有戰壕', unit: '有單位站在那裡', blocked: '會堵死通路', gap: '太靠近別的房子（要隔一格）',
 };
 const BUILD_TIP = '布陣：點藍色地面蓋房子當掩體、擋視線；點蓋好的房子拿掉；蓋好按「開戰」';
@@ -159,49 +127,33 @@ function previewWorld(): World {
 function refreshPreview() { if (phase === 'build') view.setWorld(previewWorld(), SIDE_PLAYER); }
 const pointsLeft = () => BUILD_POINTS - plan.reduce((p, c) => p + ((c.t === 'trench' ? trenchKind(c.kind) : buildKind(c.kind))?.cost ?? 0), 0);
 
-// R018 電腦對手：開戰時送 ai 指令（記在指令紀錄裡，重播自動一致）。?ai=1|2|3 選難度；逃生閥 ?noR018=1＝敵人原地還擊
-const r018 = q.get('noR018') !== '1';
-// R019 生產與補給：開戰時送 eco（雙方指揮部、補給、打掉指揮部才贏）。逃生閥 ?noR019=1
-const r019 = q.get('noR019') !== '1';
-// R021 步兵班：eco 帶 inf＝1（雙方各一班、可出步兵）。逃生閥 ?noR021=1
-const r021 = q.get('noR021') !== '1';
-const r022 = q.get('noR022') !== '1';   // R022 反戰車砲、迫擊砲（關掉＝eco 不帶 guns：生產列沒有、電腦不出）
-const r026 = q.get('noR026') !== '1';   // R026 Rye 1940 手排地圖（關掉＝亂數村莊）
-// R043 大地圖：布陣時左上「地圖」鍵在萊伊 32×32 與鄉間 64×64 之間換；?map=64 直接開。逃生閥 ?noR043=1＝沒有這顆鍵、不認 ?map=64
-const r043 = q.get('noR043') !== '1';
-let large = r043 && q.get('map') === '64';
-const r130 = q.get('noR130') !== '1';
-let expanded = r130 && q.get('map') === '96';
-document.body.classList.toggle('r130', r130);
-document.body.classList.toggle('r043', r043);   // 說明面板的大地圖那一句只在開著時出現（index.html 的 body.r043）
+let large = V.r043 && q.get('map') === '64';
+let expanded = V.r130 && q.get('map') === '96';
+document.body.classList.toggle('r130', V.r130);
+document.body.classList.toggle('r043', V.r043);   // 說明面板的大地圖那一句只在開著時出現（index.html 的 body.r043）
 let mapPick: MapPick | undefined;
 let townPick: MapPick | undefined;
 let zombiesPick: ZombiesPick | undefined;
-document.body.classList.toggle('r045', q.get('noR045') !== '1');
-const r024 = q.get('noR024') !== '1';   // R024 碉堡（關掉＝布陣列沒有碉堡、敵方布陣也不蓋）
-const BUILD_KINDS_NOW = r024 ? BUILD_KINDS_24 : BUILD_KINDS;
-const r023 = q.get('noR023') !== '1';   // R023 輕坦克、重坦克（關掉＝eco 不帶 tanks：生產列沒有、電腦不出）
-const r044 = q.get('noR044') !== '1';   // R044 裝甲車、驅逐戰車、突擊砲（關掉＝eco 不帶 armor2：生產列沒有、電腦不出）
-document.body.classList.toggle('r044', r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
-const ecoCmd = (): Command => ({ t: 'eco', ...(r021 ? { inf: 1 } : {}), ...(r022 ? { guns: 1 } : {}), ...(r023 ? { tanks: 1 } : {}), ...(r044 ? { armor2: 1 } : {}) });
+document.body.classList.toggle('r045', V.r045);
+const BUILD_KINDS_NOW = V.r024 ? BUILD_KINDS_24 : BUILD_KINDS;
+document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
+const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}) });
 let prodBar: ProdBar | undefined;
+// R018 電腦難度：?ai=1|2|3
 const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
-function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large || expanded, vegetation = true, sandbox = false) {
-  if (r109) clearGestureInput();
+function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026 || large || expanded, vegetation = true, sandbox = false) {
+  if (V.r109) clearGestureInput();
   battleAudio?.reset();
   w = sandbox ? createSandboxWorld(s) : createWorld(s);
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
   const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : MAP_RYE) : 0;
   if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
-  const zombies = !sandbox && (map || vegetation) && q.get('noR045') !== '1' && q.get('mode') === 'zombies';
+  const zombies = !sandbox && (map || vegetation) && V.r045 && q.get('mode') === 'zombies';
   if (zombies) startZombies(w);
-  view?.dispose();
-  view = new BattleView(w, fxOn, !w.sandbox && q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
-  view.rubbleMarkGuard = q.get('noR139') !== '1';
-  view.multiRangeEnabled = q.get('noR122') !== '1';
+  makeView();
   if (w.map === MAP_LARGE) view.target.set(55, 0, 55);   // R043：大地圖開局鏡頭對準我方裝甲連（右下角落）
   if (w.map === MAP_TOWN) view.target.set(87, 0, 87);
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
@@ -218,6 +170,14 @@ function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || larg
   }
   ui();
   syncBattleAudio();
+}
+// R060 建畫面只寫這一處（開局、守衛的 runScript 都走這裡）：設定全部來自閥表
+function makeView() {
+  view?.dispose();
+  view = new BattleView(w, {
+    fx: fxOn, fog: !w.sandbox && V.r100, observerDetails: V.r101, r004: V.r004, r008: V.r008, r009: V.r009, r011: V.r011, r014: V.r014,
+    r016: V.r016, r107: V.r107, r113: V.r113, r118: V.r118, r104: V.r104, r123: V.r123, rubbleMarks: V.r139, multiRange: V.r122,
+  });
 }
 function ui() { hud?.update(); buildBar?.update(); prodBar?.update(); sandboxBar?.update(); mapPick?.update(); townPick?.update(); zombiesPick?.update(); }
 
@@ -255,10 +215,10 @@ function startBattle() {
   const pv = previewWorld(), enemy = w.zombies ? [] : enemyPlan(pv, BUILD_KINDS_NOW);
   for (const c of plan) issue(c);
   for (const c of enemy) issue(c);
-  if (r019) issue(ecoCmd());
-  if (r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
+  if (V.r019) issue(ecoCmd());
+  if (V.r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel });
   phase = 'battle'; plan = []; buildHint = '';
-  if (r016) { if (r041) startOrder(); else startBanner(); }
+  if (V.r016) { if (V.r041) startOrder(); else startBanner(); }
   view.setWorld(w, -1);
   tick();
   paused = false;
@@ -324,7 +284,7 @@ function tick() {
     if (!w.sandbox.running || now.some(c => c.t === 'sandboxPlace' || c.t === 'sandboxReset')) view.snapshot(); // 新 ID 不從 (0,0) 插值；運行時仍保留既有移動插值。
     sandboxBar?.update();
   }
-  if (r109 && priorWinner < 0 && w.winner >= 0) clearGestureInput();
+  if (V.r109 && priorWinner < 0 && w.winner >= 0) clearGestureInput();
   view.onEvents(w.events, simT());
   if (minimap && (priorMap !== w.map || w.events.some(e => e.e === 'stage' || e.e === 'build' || e.e === 'trench' || (e.e === 'impact' && e.kind === SHELL_HE)))) minimap.dirty();   // R015 地形變了才重畫底圖
   statsStep(stats, w, w.events);
@@ -354,7 +314,7 @@ function clearBattleHint() {
 
 function order(cx: number, cy: number) {
   if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
-  if (r109) clearBattleHint();
+  if (V.r109) clearBattleHint();
   if (phase === 'build') { placeAt(cx, cy); return; }
   const route = routeBattleOrder(w, selected, fireMode, ammo, {
     unit: pickUnit(cx, cy),
@@ -368,11 +328,11 @@ function order(cx: number, cy: number) {
 
 function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {
   if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
-  if (r109) clearBattleHint();
+  if (V.r109) clearBattleHint();
   const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
     // 雙擊：鏡頭跟過去。兩次放手的間隔用事件時間量（R037）；滑過去的動畫照樣用現在的時間起算
-    if (r012 && lastTap.id === u.id && t - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, performance.now() / 1000);
+    if (V.r012 && lastTap.id === u.id && t - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, performance.now() / 1000);
     lastTap = { id: u.id, t };
     if (!additive) selected.clear();
     if (additive && selected.has(u.id)) selected.delete(u.id); else selected.add(u.id);
@@ -392,9 +352,9 @@ function selectInBox(rect: SelectionRect) {
   }
   battleHint = undefined; hud?.update();
 }
-const selectionBox = r109 ? document.createElement('div') : null;
+const selectionBox = V.r109 ? document.createElement('div') : null;
 if (selectionBox) { selectionBox.id = 'selection-box'; selectionBox.hidden = true; document.body.appendChild(selectionBox); }
-const gestures = r109 ? new Gestures({
+const gestures = V.r109 ? new Gestures({
   enabled: () => phase === 'battle' && (!w.sandbox || sandboxTool === null) && w.winner < 0 && !help.visible() && !reportView?.visible(),
   box: rect => {
     if (!selectionBox) return;
@@ -422,7 +382,7 @@ function clearGestureInput() {
   gestures?.cancel(); pointers.clear(); dragged = true; pinchD = 0;
   fling.stop(); glide.stop(); dragV = { vx: 0, vy: 0, t: 0 }; clearBattleHint();
 }
-if (r109) {
+if (V.r109) {
   commandMenu = initCommandMenu({
     choose: (chosen, target) => {
       if (phase !== 'battle' || w.winner >= 0 || help.visible() || reportView?.visible()) {
@@ -436,7 +396,7 @@ if (r109) {
       hud?.update();
     },
     cancel: () => { battleHint = undefined; hud?.update(); },
-  }, () => r137 ? { world: w, selected } : undefined);
+  }, () => V.r137 ? { world: w, selected } : undefined);
   // HUD／小地圖仍照原本操作；它們不能留下地圖上的長按計時或框。
   document.addEventListener('pointerdown', e => {
     if (e.target !== canvas && (!commandMenu?.contains(e.target) || pointers.size > 0)) clearGestureInput();
@@ -445,8 +405,8 @@ if (r109) {
   addEventListener('resize', clearGestureInput);
 }
 
-// R037：慣性的 80 毫秒、雙擊的 350 毫秒用這個時間量。沒有時間戳的假事件（Node 守衛用的）退回處理當下的時間，不碰 r037。
-const eventT = (e: Event) => e.timeStamp > 0 && r037 ? e.timeStamp : performance.now();
+// R037：慣性的 80 毫秒、雙擊的 350 毫秒用這個時間量。沒有時間戳的假事件（Node 守衛用的）退回處理當下的時間，不碰 V.r037。
+const eventT = (e: Event) => e.timeStamp > 0 && V.r037 ? e.timeStamp : performance.now();
 canvas.addEventListener('pointerdown', e => {
   const dismissOnly = !!commandMenu?.isOpen();
   if (dismissOnly) { commandMenu?.close(); battleHint = undefined; hud?.update(); }
@@ -473,7 +433,7 @@ canvas.addEventListener('pointermove', e => {
     }
   } else if (pointers.size === 2) {
     const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinchD > 0) { if (r012) view.zoomAt(d / pinchD, (a.x + b.x) / 2, (a.y + b.y) / 2, innerWidth, innerHeight); else view.zoomBy(d / pinchD); }
+    if (pinchD > 0) { if (V.r012) view.zoomAt(d / pinchD, (a.x + b.x) / 2, (a.y + b.y) / 2, innerWidth, innerHeight); else view.zoomBy(d / pinchD); }
     pinchD = d;
   }
 });
@@ -482,18 +442,18 @@ const up = (e: PointerEvent) => {
   pointers.delete(e.pointerId);
   if (gestures?.up(e)) { dragV = { vx: 0, vy: 0, t: 0 }; return; }
   // R012：單指拖曳放手（最後一次移動在 80 毫秒內）＝帶著速度滑出去
-  if (r012 && p && dragged && !pointers.size && t - dragV.t < 80) fling.start(dragV.vx, dragV.vy);
+  if (V.r012 && p && dragged && !pointers.size && t - dragV.t < 80) fling.start(dragV.vx, dragV.vy);
   if (!p || dragged || pointers.size) return;
   if (e.button === 2) order(e.clientX, e.clientY); else tap(e.clientX, e.clientY, e.shiftKey, t);
 };
 canvas.addEventListener('pointerup', up);
-canvas.addEventListener('pointercancel', e => { if (r109) clearGestureInput(); else { pointers.delete(e.pointerId); dragged = true; } });
+canvas.addEventListener('pointercancel', e => { if (V.r109) clearGestureInput(); else { pointers.delete(e.pointerId); dragged = true; } });
 // 正常 pointerup 後瀏覽器會自動失去 capture，不能把剛開的選單關掉。
-canvas.addEventListener('lostpointercapture', e => { if (r109 && pointers.has(e.pointerId)) clearGestureInput(); });
+canvas.addEventListener('lostpointercapture', e => { if (V.r109 && pointers.has(e.pointerId)) clearGestureInput(); });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; if (r012) view.zoomAt(f, e.clientX, e.clientY, innerWidth, innerHeight); else view.zoomBy(f); }, { passive: false });
+canvas.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; if (V.r012) view.zoomAt(f, e.clientX, e.clientY, innerWidth, innerHeight); else view.zoomBy(f); }, { passive: false });
 addEventListener('keydown', e => {
-  if (e.key === 'Escape') { if (r109) clearGestureInput(); selected.clear(); fireMode = false; ammo = 'he'; hud?.update(); }
+  if (e.key === 'Escape') { if (V.r109) clearGestureInput(); selected.clear(); fireMode = false; ammo = 'he'; hud?.update(); }
   if (e.key === ' ') { e.preventDefault(); if (!e.repeat && phase === 'battle') setPaused(!paused); }   // 布陣中不能用空白鍵開打（要按「開戰」）
 });
 
@@ -513,20 +473,20 @@ hud = initHud({
   state: () => {
     const mine = w.units.filter(u => u.side === SIDE_PLAYER && u.alive), theirs = w.units.filter(u => u.side === SIDE_ENEMY && u.alive && view.visibleUnit(u));
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
-    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');
+    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);
     return {
-      tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: r010,
+      tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: V.r010,
       build: phase === 'build', hint: phase === 'build' ? buildHint || BUILD_TIP : battleHint,
-      mine: mine.length, theirs: theirs.length, ai: r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
+      mine: mine.length, theirs: theirs.length, ai: V.r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
-      info: r009 && sel.length ? selInfo(sel, !vehicleInfo) : undefined,
+      info: V.r009 && sel.length ? selInfo(sel, !vehicleInfo) : undefined,
       vehicleInfo,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
-      coverEnabled: phase === 'battle' && q.get('noR124') !== '1',
-      coverInfo: coverDurability(w, selected, phase === 'battle' && q.get('noR124') !== '1'),
-      reloadInfo: reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1'),
-      counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && r015 && r115),
+      coverEnabled: phase === 'battle' && V.r124,
+      coverInfo: coverDurability(w, selected, phase === 'battle' && V.r124),
+      reloadInfo: reloadStatus(w, selected, phase === 'battle' && V.r123),
+      counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && V.r015 && V.r115),
       vegetationInfo: view.vegetationInfo,
       audio: battleAudio?.status(),
     };
@@ -541,33 +501,33 @@ hud = initHud({
   help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
-prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []),
-  ...(r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
-  ...(r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : []),
-  ...(r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : [])], {
+prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []),
+  ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
+  ...(V.r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : []),
+  ...(V.r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : [])], {
   state: () => {
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
-    return { hq: phase === 'battle' ? hqDurability(w, q.get('noR127') !== '1') : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5, countdown: phase === 'battle' ? productionCountdown(w, q.get('noR125') !== '1') : '' };
+    return { hq: phase === 'battle' ? hqDurability(w, V.r127) : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5, countdown: phase === 'battle' ? productionCountdown(w, V.r125) : '' };
   },
   produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }),
-  hq: q.get('noR127') !== '1',
-  countdown: q.get('noR125') !== '1',
-  blockReason: q.get('noR126') !== '1' ? kind => productionBlockReason(w, kind, phase === 'battle') : undefined,
+  hq: V.r127,
+  countdown: V.r125,
+  blockReason: V.r126 ? kind => productionBlockReason(w, kind, phase === 'battle') : undefined,
 });
 // R013 說明面板：開著的時候暫停，關掉回到原來的暫停狀態
 let pausedBeforeHelp = false;
 // R015 小地圖：點哪裡鏡頭滑過去（有 R012 就平滑）
-if (r015) minimap = initMinimap({
-  counterbattery: r115,
-  vegetation: q.get('noR116') !== '1',
-  trenches: r118,
+if (V.r015) minimap = initMinimap({
+  counterbattery: V.r115,
+  vegetation: V.r116,
+  trenches: V.r118,
   world: () => view.world,
   visible: u => view.visibleUnit(u),
   view: () => { const out: [number, number][] = []; for (const [cx, cy] of [[0, 0], [innerWidth, 0], [innerWidth, innerHeight], [0, innerHeight]]) { const p = view.groundAt(cx, cy, innerWidth, innerHeight); if (p) out.push([p.x, p.z]); } return out; },
-  tap: (x, z) => { fling.stop(); if (r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
+  tap: (x, z) => { fling.stop(); if (V.r012) glide.start(view.target.x, view.target.z, x, z, performance.now() / 1000); else { view.target.x = x; view.target.z = z; } },
 });
-const help = initHelp({ open: () => { if (r109) clearGestureInput(); audioHelpActive = true; pausedBeforeHelp = paused; paused = true; syncBattleAudio(); hud?.update(); }, close: () => { audioHelpActive = false; paused = pausedBeforeHelp; syncBattleAudio(); hud?.update(); } }, r109);
-buildBar = initBuildBar([...(r121 ? [WIRE_KIND] : []), ...BUILD_KINDS_NOW].map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(k.kind === BK_WIRE ? { detail: `建材 ${k.cost} · 耐久 ${bldMaxHp(k.kind, k.w, k.d, k.floors)} · 徒步繞行／車輛通過 · 不擋射線、不提供掩護 · 榴彈砲可清除` } : r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
+const help = initHelp({ open: () => { if (V.r109) clearGestureInput(); audioHelpActive = true; pausedBeforeHelp = paused; paused = true; syncBattleAudio(); hud?.update(); }, close: () => { audioHelpActive = false; paused = pausedBeforeHelp; syncBattleAudio(); hud?.update(); } }, V.r109);
+buildBar = initBuildBar([...(V.r121 ? [WIRE_KIND] : []), ...BUILD_KINDS_NOW].map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, ...(k.kind === BK_WIRE ? { detail: `建材 ${k.cost} · 耐久 ${bldMaxHp(k.kind, k.w, k.d, k.floors)} · 徒步繞行／車輛通過 · 不擋射線、不提供掩護 · 榴彈砲可清除` } : V.r105 ? { detail: materialBuildDetail(k.kind, k.w, k.d, k.floors) } : {}) })), {
   state: () => {
     const kd = buildKind(pickKind)!;
     return { visible: phase === 'build', kind: pickKind, trench: pickTrench >= 0 ? pickTrench : undefined, rot: pickTrench >= 0 ? trenchRot : pickRot, rotatable: pickTrench >= 0 || kd.w !== kd.d, left: pointsLeft(), total: BUILD_POINTS, planned: plan.length };
@@ -577,8 +537,8 @@ buildBar = initBuildBar([...(r121 ? [WIRE_KIND] : []), ...BUILD_KINDS_NOW].map(k
   rotate: () => { if (pickTrench >= 0) trenchRot = (trenchRot + 1) % 4; else pickRot = 1 - pickRot; hud?.update(); },
   undo: () => { if (plan.pop()) { buildHint = '拿掉了最後一項'; refreshPreview(); hud?.update(); } },
   start: () => startBattle(),
-}, r118 ? TRENCH_KINDS.map(k => ({ kind: k.kind, label: TRENCH_LABEL[k.kind], cost: k.cost, detail: `${TRENCH_SHAPE[k.kind]} · 建材 ${k.cost} · 承傷 ${k.cover}%` })) : [],
-r120 ? WALL_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, detail: `建材 ${k.cost} · 耐久 ${bldMaxHp(k.kind, k.w, k.d, k.floors)} · 可破壞建築 · 不可射越 · 可駐守` })) : []);
+}, V.r118 ? TRENCH_KINDS.map(k => ({ kind: k.kind, label: TRENCH_LABEL[k.kind], cost: k.cost, detail: `${TRENCH_SHAPE[k.kind]} · 建材 ${k.cost} · 承傷 ${k.cover}%` })) : [],
+V.r120 ? WALL_KINDS.map(k => ({ kind: k.kind, label: BUILD_LABEL[k.kind], cost: k.cost, detail: `建材 ${k.cost} · 耐久 ${bldMaxHp(k.kind, k.w, k.d, k.floors)} · 可破壞建築 · 不可射越 · 可駐守` })) : []);
 
 // R117：背景／離頁即清尾音；BFCache只暫停，真正離開才關閉context。
 if (battleAudio) {
@@ -587,23 +547,23 @@ if (battleAudio) {
   addEventListener('pageshow', () => { audioPageActive = true; syncBattleAudio(); });
 }
 
-if (r128) sandboxBar = initSandbox({
-  state: () => ({ active: !!w.sandbox, running: !!w.sandbox?.running, count: w.units.length, tool: sandboxTool, side: sandboxSide, hint: sandboxHint, summary: sandboxCapacity(w, q.get('noR136') !== '1') }),
+if (V.r128) sandboxBar = initSandbox({
+  state: () => ({ active: !!w.sandbox, running: !!w.sandbox?.running, count: w.units.length, tool: sandboxTool, side: sandboxSide, hint: sandboxHint, summary: sandboxCapacity(w, V.r136) }),
   enter: () => { sandboxTool = UK_TANK; sandboxSide = SIDE_PLAYER; speed = 1; reset(seed, false, false, false, false, false, true); },
   exit: () => { sandboxTool = null; sandboxSide = SIDE_PLAYER; speed = 1; paused = false; reset(); },
   run: () => setPaused(!paused), reset: () => sandboxAction({ t: 'sandboxReset' }),
   pick: kind => { clearGestureInput(); sandboxTool = kind; sandboxHint = ''; selected.clear(); fireMode = false; ammo = 'he'; ui(); },
   side: side => { sandboxSide = side; sandboxHint = ''; },
 });
-if (r043) mapPick = initMapPick({
-  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: r026, expanded }),
+if (V.r043) mapPick = initMapPick({
+  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: V.r026, expanded }),
   toggle: () => { if (expanded) { expanded = false; large = false; } else large = !large; reset(); },
 });
-if (r130) townPick = initTownPick({
+if (V.r130) townPick = initTownPick({
   state: () => ({ show: phase === 'build' && !w.sandbox, expanded }),
   toggle: () => { expanded = !expanded; large = false; reset(); },
 });
-if (q.get('noR045') !== '1') zombiesPick = initZombiesPick({
+if (V.r045) zombiesPick = initZombiesPick({
   state: () => ({ show: phase === 'build' && !w.sandbox, active: !!w.zombies }),
   toggle: () => { if (w.zombies) q.delete('mode'); else q.set('mode', 'zombies'); reset(); },
 });
@@ -613,7 +573,7 @@ renderer.setAnimationLoop(() => {
   const t = performance.now(), dt = Math.min(0.25, (t - lastT) / 1000);
   lastT = t;
   // R010：勝負一出現，2.5 秒慢動作（0.25 倍）、鏡頭 1 秒內移到最後一擊並拉近；之後出戰報
-  if (r010 && w.winner >= 0 && endT0 < 0) { endT0 = t; endFrom = { x: view.target.x, z: view.target.z, zoom: view.zoom }; }
+  if (V.r010 && w.winner >= 0 && endT0 < 0) { endT0 = t; endFrom = { x: view.target.x, z: view.target.z, zoom: view.zoom }; }
   const since = endT0 < 0 ? -1 : t - endT0;
   if (!paused && phase === 'battle') acc += dt * speed * slowmoFactor(since);
   if (endFrom && stats.lastKill && since >= 0 && since <= 1200) {
@@ -622,7 +582,7 @@ renderer.setAnimationLoop(() => {
     view.target.z = endFrom.z + (stats.lastKill.z / SUB - endFrom.z) * e;
     view.zoom = endFrom.zoom + (Math.max(endFrom.zoom, 1.6) - endFrom.zoom) * e;
   }
-  if (r010 && !reportShown && since >= SLOWMO_MS) { if (r109) clearGestureInput(); reportShown = true; reportView?.show(makeReport(w, stats)); hud?.update(); }
+  if (V.r010 && !reportShown && since >= SLOWMO_MS) { if (V.r109) clearGestureInput(); reportShown = true; reportView?.show(makeReport(w, stats)); hud?.update(); }
   syncBattleAudio();
   let steps = 0;
   // 只在即時迴圈收新事件；所有同步stepN／playLog／SCRIPT都不會走這裡。
@@ -643,11 +603,11 @@ renderer.setAnimationLoop(() => {
   // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
   const rangeInfo = view.rangeInfo;
   if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
-  const coverInfo = coverDurability(w, selected, phase === 'battle' && q.get('noR124') !== '1');
+  const coverInfo = coverDurability(w, selected, phase === 'battle' && V.r124);
   if (coverInfo !== lastCoverInfo) { lastCoverInfo = coverInfo; hud?.update(); }
-  const reloadInfo = reloadStatus(w, selected, phase === 'battle' && q.get('noR123') !== '1');
+  const reloadInfo = reloadStatus(w, selected, phase === 'battle' && V.r123);
   if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
-  const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');
+  const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);
   // 只更新R135前綴，不替其他提示補跑其自身的刷新路徑。
   if (vehicleInfo !== lastVehicleInfo) {
     lastVehicleInfo = vehicleInfo; hud?.vehicleFrame(vehicleInfo);
@@ -655,7 +615,7 @@ renderer.setAnimationLoop(() => {
   const vegetationInfo = view.vegetationInfo;
   if (vegetationInfo !== lastVegetationInfo) { lastVegetationInfo = vegetationInfo; hud?.update(); }
   // 暫停／重播也檢查當前世界；同 tick 換世界不能沿用上一局的提示。
-  const counterbatteryInfo = counterbatteryHint(w, phase === 'battle' && r015 && r115);
+  const counterbatteryInfo = counterbatteryHint(w, phase === 'battle' && V.r015 && V.r115);
   if (w !== lastCounterbatteryWorld || counterbatteryInfo !== lastCounterbatteryInfo) {
     lastCounterbatteryWorld = w; lastCounterbatteryInfo = counterbatteryInfo; hud?.update();
   }
@@ -689,10 +649,7 @@ const rts = {
   runScript: (ticks = SCRIPT_TICKS) => {
     reset(SCRIPT_SEED, false, false, false, false, false);
     runLog(w, SCRIPT, ticks);
-    view.dispose();
-    view = new BattleView(w, fxOn, q.get('noR100') !== '1', q.get('noR101') !== '1', r004, r008, r009, r011, r014, r016, r107, q.get('noR113') !== '1', r118, r104, q.get('noR123') !== '1');
-    view.rubbleMarkGuard = q.get('noR139') !== '1';
-  view.multiRangeEnabled = q.get('noR122') !== '1';
+    makeView();
     return hashWorld(w);
   },
   screenOf: (id: number) => { const u = w.units[id - 1]; return view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight); },
@@ -700,7 +657,7 @@ const rts = {
   screenOfPoint: (x: number, y: number, z: number) => view.screenOf(x, y, z, innerWidth, innerHeight),
   blds: () => w.blds.map(b => ({ ...b })),
   focus: (x: number, z: number, zoom = 1) => { view.target.set(x, 0, z); view.zoom = zoom; },
-  info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, town: view.townRegion, fx: fxOn, px: style.pixelCss, r004: fxOn && r004, pools: view.pools }),
+  info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, town: view.townRegion, fx: fxOn, px: style.pixelCss, r004: fxOn && V.r004, pools: view.pools }),
   armorArcs: () => view.armorArcCount,
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,

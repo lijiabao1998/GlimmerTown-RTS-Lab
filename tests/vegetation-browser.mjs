@@ -145,13 +145,13 @@ function plugin(broken, hits) {
       };
       if (rel === 'src/main.ts') {
         if (broken) {
-          replace("const r116 = q.get('noR116') !== '1';", "const r116 = q.get('__r116mutant') === 'valve' || q.get('noR116') !== '1';", 'valve');
+          replace("const V = valves(q);", "const V = Object.defineProperty(valves(q), 'r116', { get: () => q.get('__r116mutant') === 'valve' || q.get('noR116') !== '1' });", 'valve');   // R060：閥從閥表來
           replace('  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));',
             `  if (view.vegetation116.mesh) view.vegetation116.mesh.visible = !(${is('model')});\n  view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));`, 'model');
           replace('if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);',
             `if (map || vegetation) applyMap(w, mapId, vegetation && !(${is('generation')}) ? 1 : undefined);`, 'generation');
-          replace('function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large || expanded, vegetation = true, sandbox = false) {',
-            `function reset(s = seed, build = r006, ai = r018, eco = r019, map = r026 || large || expanded, vegetation = true, sandbox = false) {\n  if (${is('legacy')}) vegetation = true;`, 'legacy');
+          replace('function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026 || large || expanded, vegetation = true, sandbox = false) {',
+            `function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026 || large || expanded, vegetation = true, sandbox = false) {\n  if (${is('legacy')}) vegetation = true;`, 'legacy');
         }
         code += instrumentation; hits.add('observation');
       }

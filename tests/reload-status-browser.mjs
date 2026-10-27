@@ -76,7 +76,7 @@ const plugin = mutant => ({
   transition: (id: number, mode: string) => { const u = w.units.find(u => u.id === id)!; if (mode === 'dead') { u.alive = false; u.hp = 0; } else if (mode === 'enemy') u.side = SIDE_ENEMY; else throw Error('unknown test transition'); },
 };`);
       if (mutant) {
-        replace("q.get('noR123') !== '1'", "(q.get('__r123mutant') === 'valve' || q.get('noR123') !== '1')", 4);
+        replace("V.r123", "(q.get('__r123mutant') === 'valve' || V.r123)", 3);   // R060：閥從閥表來；建畫面只剩一處
         replace('if (reloadInfo !== lastReloadInfo)', "if (q.get('__r123mutant') !== 'freshness' && reloadInfo !== lastReloadInfo)");
       }
     }

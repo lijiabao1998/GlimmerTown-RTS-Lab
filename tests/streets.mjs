@@ -10,7 +10,7 @@ function check(ok, name, detail = '') {
 }
 const ORIG_FP = ['eabbe8a0', 'e619892e'];   // R027 之前的地面貼圖（亂數村莊、Rye）
 const PX = 8, W = 32 * PX;
-const ground = (map, on) => { setStreets(on); const w = createWorld(1944); if (map) applyMap(w, MAP_RYE); const h0 = hashWorld(w); const v = new BattleView(w, true, true, true, true, true, true, true, true, true); const px = v.groundPx.slice(), kids = v.scene.children.length; v.dispose(); setStreets(true); return { px, kids, same: hashWorld(w) === h0 }; };
+const ground = (map, on) => { setStreets(on); const w = createWorld(1944); if (map) applyMap(w, MAP_RYE); const h0 = hashWorld(w); const v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true }); const px = v.groundPx.slice(), kids = v.scene.children.length; v.dispose(); setStreets(true); return { px, kids, same: hashWorld(w) === h0 }; };
 const fp = a => { let h = 2166136261; for (let i = 0; i < a.length; i++) { h ^= a[i]; h = Math.imul(h, 16777619) >>> 0; } return h.toString(16); };
 const cell = (px, x, z) => { const out = []; for (let py = 0; py < PX; py++) { const row = []; for (let qx = 0; qx < PX; qx++) { const o = ((z * PX + py) * W + x * PX + qx) * 4; row.push(px[o]); } out.push(row); } return out; };
 

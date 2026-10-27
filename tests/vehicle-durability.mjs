@@ -1,4 +1,5 @@
 // R135: independent HP fixtures, actual HUD/main wiring, and isolated exact-first-red negatives.
+import { valves } from '../src/valves.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -142,10 +143,13 @@ class Element {
   setAttribute() {}
 }
 function section(source, start, end, after = 0) { const a = source.indexOf(start, after), b = source.indexOf(end, a + start.length); assert(a >= 0 && b > a, `source boundaries: ${start}`); return source.slice(a, b); }
+// R060：閥從閥表來；fixture 蓋掉個別閥（可再改）
+const fixtureValves = (q, over = {}) => Object.defineProperties(valves(q), Object.fromEntries(Object.entries(over).map(([k, value]) => [k, { value, writable: true }])));
 function uiFixture(read, query = '') {
   const f = fixture(); add(f); let stateCalls = 0, vehicleCalls = 0; const document = { body: new Element(), createElement: () => new Element() }; globalThis.document = document;
+  const q = new URLSearchParams(query);
   const c = vm.createContext({ ...world, ...f, vehicleDurability: read, reloadStatus, coverDurability, document, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
-    battleAudio: undefined, r009: true, r010: false, r018: false, r015: false, r115: false, buildHint: '', BUILD_TIP: '布陣說明', q: new URLSearchParams(query),
+    battleAudio: undefined, V: fixtureValves(q, { r009: true, r010: false, r018: false, r015: false, r115: false }), buildHint: '', BUILD_TIP: '布陣說明', q,
     view: { rangeInfo: '原射程', visibleUnit: () => true }, counterbatteryHint: () => '', lastVehicleInfo: '',
     initHud: actions => { const hud = initHud({ ...actions, state: () => { stateCalls++; return actions.state(); } }); return { ...hud, vehicleFrame: info => { vehicleCalls++; hud.vehicleFrame(info); } }; } });
   vm.runInContext(section(mainPlain, 'const ORD_NAME = ', '\nreportView = initReportView'), c);
@@ -161,11 +165,11 @@ test('no_average', 'exact vehicle durability replaces misleading average HP', 'm
   const f = uiFixture(read); add(f, UK_HEAVY, UNIT_KINDS[UK_HEAVY].hp / 4); f.c.hud.update();
   assert(!f.hint().includes('血量 '), message); assert(f.hint().startsWith(multiple(2, 25)), 'mixed selection exposes weakest ratio');
 });
-test('main_valve', 'noR135 restores the previous HUD without vehicle durability', 'main', "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');", "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle');", (read, message) => {
+test('main_valve', 'noR135 restores the previous HUD without vehicle durability', 'main', "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);", "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle');", (read, message) => {
   const f = uiFixture(read, 'noR135=1'); assert(!f.hint().includes('車輛耐久'), message); assert(f.hint().startsWith('血量 100%｜待命 1。'), 'old average restored'); assert(f.hint().includes('裝填完成 1'), 'old reload retained');
 });
-test('independent_valve', 'noR009 does not disable the independent vehicle durability summary', 'main', "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');", "    const vehicleInfo = vehicleDurability(w, selected, r009 && phase === 'battle' && q.get('noR135') !== '1');", (read, message) => {
-  const f = uiFixture(read); f.c.r009 = false; f.c.hud.update(); assert(f.hint().includes('車輛耐久'), message); assert(!f.hint().includes('待命 1'), 'R009 command summary remains independently disabled');
+test('independent_valve', 'noR009 does not disable the independent vehicle durability summary', 'main', "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);", "    const vehicleInfo = vehicleDurability(w, selected, V.r009 && phase === 'battle' && V.r135);", (read, message) => {
+  const f = uiFixture(read); f.c.V.r009 = false; f.c.hud.update(); assert(f.hint().includes('車輛耐久'), message); assert(!f.hint().includes('待命 1'), 'R009 command summary remains independently disabled');
 });
 test('priority', 'defined priority hints suppress durability without losing it afterward', 'hud', '!priorityHint && info', 'info', (read, message) => {
   const f = uiFixture(read); for (const hint of ['選擇這一格', '']) { f.c.battleHint = hint; f.c.hud.update(); eq(f.hint(), hint, message); }
@@ -179,7 +183,7 @@ test('frame_hp', 'same-tick frame damage updates the paused HUD immediately', 'm
   const writes = f.writes(); f.refresh(); eq(f.writes(), writes, 'unchanged frames add no DOM writes');
   f.selected.clear(); f.refresh(); assert(!f.hint().includes('車輛耐久'), 'same-tick clear removes old durability');
 });
-test('frame_replacement', 'replacement world reconstructs current vehicle durability', 'main', "  const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');\n  // 只更新R135", "  const vehicleInfo = vehicleDurability({ ...w, units: [] }, selected, phase === 'battle' && q.get('noR135') !== '1');\n  // 只更新R135", (read, message) => {
+test('frame_replacement', 'replacement world reconstructs current vehicle durability', 'main', "  const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);\n  // 只更新R135", "  const vehicleInfo = vehicleDurability({ ...w, units: [] }, selected, phase === 'battle' && V.r135);\n  // 只更新R135", (read, message) => {
   const f = uiFixture(read); f.refresh(); const fresh = structuredClone(f.w); fresh.units[0].hp = 1; f.c.w = fresh; f.refresh();
   assert(f.hint().startsWith(single(1, UNIT_KINDS[UK_TANK].hp)), message);
 });
@@ -209,7 +213,7 @@ test('frame_priority', 'vehicle-only frames preserve defined priority hints', 'h
   const f = uiFixture(read); f.c.battleHint = '選擇這一格'; f.c.hud.update(); f.w.units[0].hp--; f.refresh(); eq(f.hint(), '選擇這一格', message);
   f.c.battleHint = undefined; f.c.hud.update(); assert(f.hint().startsWith(single(f.w.units[0].hp, UNIT_KINDS[UK_TANK].hp)), 'cancel restores the current summary');
 });
-test('build_scope', 'build phase does not show battle durability', 'main', "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && q.get('noR135') !== '1');", "    const vehicleInfo = vehicleDurability(w, selected, q.get('noR135') !== '1');", (read, message) => {
+test('build_scope', 'build phase does not show battle durability', 'main', "    const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);", "    const vehicleInfo = vehicleDurability(w, selected, V.r135);", (read, message) => {
   const f = uiFixture(read); f.c.phase = 'build';
   // Read the real callback through a second initHud without adding test-only production exports.
   let state; f.c.initHud = actions => { state = actions.state(); return { update() {}, frame() {} }; };

@@ -1,3 +1,4 @@
+import { valves } from '../src/valves.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R120: run the real build-bar DOM and main callbacks, including semantic negative controls.
 // This fake DOM verifies behavior, not layout; walls-browser owns real Chrome hit testing.
@@ -29,10 +30,10 @@ const mutations = {
   surface_remove: ['surface', 'main', "plan.splice(k, 1); buildHint = '拿掉了一棟'", "void k; buildHint = '拿掉了一棟'", 'surface: direct building hit still removes the complete wall'],
   undo: ['undo', 'main', 'if (plan.pop())', 'if (plan.at(-1))', 'undo: native undo removes only the last complete item'],
   start: ['start', 'main', 'for (const c of plan) issue(c);', 'for (const c of [...plan].reverse()) issue(c);', 'start: native start preserves exact mixed command order'],
-  picker_valve: ['valve', 'main', 'r120 ? WALL_KINDS.map', 'true ? WALL_KINDS.map', 'valve: disabled wall presentation exposes no wall category or styles'],
-  renderer_valve: ['valve', 'main', 'setWalls(r120);', 'setWalls(true);', 'valve: real query flag reaches the renderer'],
+  picker_valve: ['valve', 'main', 'V.r120 ? WALL_KINDS.map', 'true ? WALL_KINDS.map', 'valve: disabled wall presentation exposes no wall category or styles'],
+  renderer_valve: ['valve', 'main', 'setWalls(V.r120);', 'setWalls(true);', 'valve: real query flag reaches the renderer'],
   reset: ['reset', 'main', "plan = []; buildHint = ''; phase = build ? 'build' : 'battle';", "buildHint = ''; phase = build ? 'build' : 'battle';", 'reset: new game discards all prior mixed plans'],
-  enemy: ['enemy', 'main', 'const BUILD_KINDS_NOW = r024 ? BUILD_KINDS_24 : BUILD_KINDS;', 'const BUILD_KINDS_NOW = [...(r024 ? BUILD_KINDS_24 : BUILD_KINDS), ...WALL_KINDS];', 'enemy: player walls never join enemy build kinds'],
+  enemy: ['enemy', 'main', 'const BUILD_KINDS_NOW = V.r024 ? BUILD_KINDS_24 : BUILD_KINDS;', 'const BUILD_KINDS_NOW = [...(V.r024 ? BUILD_KINDS_24 : BUILD_KINDS), ...WALL_KINDS];', 'enemy: player walls never join enemy build kinds'],
   size: ['layout', 'css', '#buildbar button { min-height: 44px;', '#buildbar button { min-height: 38px;', 'layout: every wall button inherits at least 44px height'],
 };
 const mutant = process.argv.find(a => a.startsWith('--mutant='))?.slice(9);
@@ -55,6 +56,8 @@ class Element {
   click() { let stopped = false; this.events.get('click')?.({ stopPropagation() { stopped = true; } }); return stopped; }
 }
 function emptyWorld() { const w = createWorld(1944); w.ter.fill(0); w.occ.fill(0); w.crater.fill(0); w.units = []; w.blds = []; w.events = []; return w; }
+// R060：閥從閥表來；fixture 蓋掉個別閥
+const fixtureValves = (q, over = {}) => Object.defineProperties(valves(q), Object.fromEntries(Object.entries(over).map(([k, value]) => [k, { value, writable: true }])));
 function controller(query = '') {
   let root; const displayWorlds = [], wallFlags = [], enemyArgs = [];
   const previous = { document: globalThis.document, innerHeight: globalThis.innerHeight };
@@ -68,19 +71,19 @@ function controller(query = '') {
     enemyPlan(w, kinds) { enemyArgs.push(kinds); return enemyPlan(w, kinds); }, setWalls: flag => wallFlags.push(flag),
     BK_WIRE, WIRE_KIND, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, WALL_KINDS, BUILD_KINDS, BUILD_KINDS_24, BUILD_POINTS, SIDE_PLAYER, SIDE_ENEMY, BK_COTTAGE, N, SHELL_HE,
     w: emptyWorld(), view: mockView(), phase: 'build', plan: [], pickKind: BK_COTTAGE, pickRot: 0, pickTrench: -1, trenchRot: 0, buildHint: '', log: [], pending: [], selected: new Set(), acc: 0,
-    r121: false, r118: q.get('noR118') !== '1', r105: q.get('noR105') !== '1', r024: q.get('noR024') !== '1', r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true, r104: true,
+    V: fixtureValves(q, { r121: false, r109: false, r006: true, r018: false, r019: false, r026: false, r016: false, r004: true, r008: true, r009: true, r011: true, r014: true, r107: true, r104: true }),
     q, seed: 1944, fxOn: true, battleAudio: undefined, stats: {}, reportView: undefined, minimap: undefined, startBanner() {}, syncBattleAudio() {}, window: {},
     newStats: () => ({}), statsStep() {}, ecoCmd: () => ({ t: 'eco' }), aiLevel: 2, innerWidth: 412, innerHeight: 860, simT: () => 0, hud: { update() {} }, ui() { c.buildBar?.update(); },
     BattleView: class { constructor() { return mockView(); } },
     initBuildBar(items, actions, trenches, walls) { c.actions = actions; c.items = items; c.wallItems = walls; return initBuildBar(items, actions, trenches, walls); },
   });
-  const flag = plain.slice(plain.indexOf('const r120 ='), plain.indexOf('setWalls(', plain.indexOf('const r120 =')) + 'setWalls(r120);'.length);
+  const flag = plain.match(/^setWalls\([^)\n]*\);$/m)?.[0]; assert.ok(flag, 'main sets the wall renderer flag');   // R060：閥從閥表來（V.r120）
   vm.runInContext(flag, c);
   for (const key of ['TRENCH_LABEL', 'TRENCH_SHAPE', 'BUILD_LABEL', 'BUILD_WHY', 'BUILD_TIP', 'BUILD_KINDS_NOW', 'sandboxPlacementResults']) vm.runInContext(constant(key), c);
   const start = plain.indexOf('buildBar = initBuildBar('), end = plain.indexOf('\n\n// R117', start);
   assert.ok(start >= 0 && end > start, 'actual main callbacks found');
   const points = plain.match(/const pointsLeft = [^]*?;\n/)?.[0], refresh = plain.match(/function refreshPreview\(\)[^\n]+/)?.[0]; assert.ok(points && refresh);
-  vm.runInContext(`${points}\n${fn('previewWorld')}\n${refresh}\n${fn('placeAt')}\n${fn('issue')}\n${fn('tick')}\n${fn('startBattle')}\n${fn('reset')}\n${plain.slice(start, end)}\n${plain.slice(plain.indexOf('const rts = {'))}`, c);
+  vm.runInContext(`${points}\n${fn('previewWorld')}\n${refresh}\n${fn('placeAt')}\n${fn('issue')}\n${fn('tick')}\n${fn('startBattle')}\n${fn('reset')}\n${fn('makeView')}\n${plain.slice(start, end)}\n${plain.slice(plain.indexOf('const rts = {'))}`, c);
   return { c, root, displayWorlds, wallFlags, enemyArgs, left: () => vm.runInContext('pointsLeft()', c), close() { for (const [k, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[k]; else globalThis[k] = value; } } };
 }
 function using(query, f) { const h = controller(query); try { f(h); } finally { h.close(); } }

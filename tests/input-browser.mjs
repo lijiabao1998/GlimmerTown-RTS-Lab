@@ -27,7 +27,7 @@ const MUTANTS = {
   cancel: ['src/ui/gestures.ts', 'if (this.points.size > 1) {\n      this.clearCandidate(); this.actions.dismiss();', "if (this.points.size > 1) {\n      this.clearCandidate(); if (!location.search.includes('__r109mutant=cancel')) this.actions.dismiss();"],
   cancelMain: ['src/main.ts', 'if (dismissOnly) { commandMenu?.close();', "if (dismissOnly && !location.search.includes('__r109mutant=cancel')) { commandMenu?.close();"],
   routing: ['src/main.ts', 'bombardCommand(w, selected, target, chosen)', "bombardCommand(w, selected, target, location.search.includes('__r109mutant=routing') ? 'he' : chosen)"],
-  valve: ['src/main.ts', "const r109 = q.get('noR109') !== '1';", "const r109 = location.search.includes('__r109mutant=valve') || q.get('noR109') !== '1';"],
+  valve: ['src/main.ts', "const V = valves(q);", "const V = Object.defineProperty(valves(q), 'r109', { get: () => location.search.includes('__r109mutant=valve') || q.get('noR109') !== '1' });"],   // R060：閥從閥表來
   productionLayout: ['src/ui/production.ts', '    if (key !== last) {', "    if (location.search.includes('__r109mutant=productionLayout') && key === last) return;\n    if (key !== last) {"],
   hint: ['src/main.ts', 'function clearBattleHint() {\n  if (battleHint === undefined) return;\n  battleHint = undefined;\n  hud?.update();\n}', "function clearBattleHint() {\n  if (battleHint === undefined) return;\n  battleHint = undefined;\n  if (!location.search.includes('__r109mutant=hint')) hud?.update();\n}"],
 };

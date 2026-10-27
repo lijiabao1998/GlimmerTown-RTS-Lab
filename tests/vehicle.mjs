@@ -15,7 +15,7 @@ const PX = 8, W = N * PX;
 
 // 腳本戰鬥 600 步，每一步餵畫面（跟瀏覽器裡 tick() 一樣：snapshot → step → onEvents → update）
 function play(r008) {
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, true, r008), crossed = new Uint8Array(N * N);
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: r008 }), crossed = new Uint8Array(N * N);
   let i = 0;
   while (w.tick < 600) {
     const now = []; while (i < SCRIPT.length && SCRIPT[i].tick <= w.tick) { if (SCRIPT[i].tick === w.tick) now.push(SCRIPT[i].cmd); i++; }
@@ -38,14 +38,14 @@ function play(r008) {
     if (a < b) { darker++; lum += b - a; }
   }
   check(darker > 200 && stray === 0, '車轍：坦克走過的地方地面變深，沒走過的格子一位元組都不變', `變深 ${darker} 像素（平均暗 ${(lum / Math.max(1, darker)).toFixed(1)}），走不到的地方變了 ${stray} 像素`);
-  const fresh = new BattleView(off.w, true, true, true, true, false);
+  const fresh = new BattleView(off.w, { fx: true, fog: true, observerDetails: true, r004: true, r008: false });
   check(Buffer.compare(Buffer.from(fresh.groundPx), Buffer.from(off.px)) === 0, '?noR008：地面貼圖跟同一個世界重新畫出來的逐位元組相同（沒有車轍）');
   check(hashWorld(on.w) === hashWorld(plain) && hashWorld(off.w) === hashWorld(plain), '畫面只讀世界：有車轍、沒車轍、沒有畫面，世界雜湊相同', `${hashWorld(on.w)} / ${hashWorld(off.w)} / ${hashWorld(plain)}`);
   on.v.dispose(); off.v.dispose(); fresh.dispose();
 }
 // 一輛我方坦克（第 0 個坦克實例）站著瞄準 +x
 function rig(r008 = true) {
-  const w = createWorld(1944), v = new BattleView(w, true, true, true, true, r008), u = w.units.find(x => x.kind === UK_TANK && x.side === 0);
+  const w = createWorld(1944), v = new BattleView(w, { fx: true, fog: true, observerDetails: true, r004: true, r008: r008 }), u = w.units.find(x => x.kind === UK_TANK && x.side === 0);
   u.aimX = SUB; u.aimZ = 0;
   v.update(0, 10, sel);
   return { w, v, u };

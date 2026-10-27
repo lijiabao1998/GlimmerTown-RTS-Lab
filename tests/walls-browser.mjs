@@ -120,14 +120,14 @@ function isolatedPlugin(hits) {
     const rel=path.relative(ROOT,id.split('?')[0]).replaceAll('\\','/');
     const replace=(from,to,label)=>{assert.equal(code.split(from).length-1,1,`fixture: unique R120 anchor ${label}`);code=code.replace(from,to);hits.add(label);};
     if(rel==='src/main.ts'){
-      replace("const r120 = q.get('noR120') !== '1';","const r120 = q.get('__r120mutant') === 'valve' || q.get('noR120') !== '1';",'valve');
+      replace("const V = valves(q);","const V = Object.defineProperty(valves(q), 'r120', { get: () => q.get('__r120mutant') === 'valve' || q.get('noR120') !== '1' });",'valve');   // R060：閥從閥表來
       replace('pickRot = 1 - pickRot;',`pickRot = ${is('rotation')} ? pickRot : 1 - pickRot;`,'rotation');
       replace('plan.splice(k, 1);',`if (!(${is('remove')})) plan.splice(k, 1);`,'remove-mesh');
       replace('plan.splice(wallIndex, 1);',`if (!(${is('remove')})) plan.splice(wallIndex, 1);`,'remove-footprint');
       replace('if (plan.pop())',`if (!(${is('undo')}) && plan.pop())`,'undo');
       replace('for (const c of plan) issue(c);',`for (const c of plan) if (!(c.t==='build' && isWallKind(c.kind) && (${is('record')}))) issue(c);`,'record');
       replace("pickTrench = -1; pickKind = kind;",`if(!(${is('selection')})) pickTrench = -1; pickKind = kind; if(${is('leak')}){const p=view.screenOf(20.5,0,26.5,innerWidth,innerHeight);placeAt(p[0],p[1]);}`,'leak');
-      replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }',"while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r120mutant') === 'replay' && !r120 && lg[i].cmd.t === 'build' && isWallKind((lg[i].cmd as BuildCmd).kind))) issue(lg[i].cmd); i++; }",'replay');
+      replace('while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick) issue(lg[i].cmd); i++; }',"while (i < lg.length && lg[i].tick <= w.tick) { if (lg[i].tick === w.tick && !(q.get('__r120mutant') === 'replay' && !V.r120 && lg[i].cmd.t === 'build' && isWallKind((lg[i].cmd as BuildCmd).kind))) issue(lg[i].cmd); i++; }",'replay');
       code+=instrumentation;hits.add('observation');
     }
     if(rel==='src/sim/step.ts')replace('if (b.hp <= 0 || dmg <= 0) return;',`if (b.hp <= 0 || dmg <= 0) return; if (${is('damage')} && b.kind===9) dmg >>= 2;`,'damage');
