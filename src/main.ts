@@ -43,7 +43,7 @@ import { valves } from './valves.ts';
 const q = new URLSearchParams(location.search);
 const V = valves(q);   // R060 逃生閥表：所有 ?noR<號> 都在 src/valves.ts
 const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
-const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)) };
+const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)), msaa: V.r065 ? STYLE_A.msaa : 0 };
 // 逃生閥：?fx=off 或 window.__noFx＝true 時不產生爆炸、煙（AGENTS.md：新效果都要關得掉）
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
 // R037 手勢計時看事件自己的時間戳（手指真的動、真的放的時刻），不看程式處理到事件的時間：
@@ -592,7 +592,7 @@ const rts = {
   screenOfPoint: (x: number, y: number, z: number) => view.screenOf(x, y, z, innerWidth, innerHeight),
   blds: () => w.blds.map(b => ({ ...b })),
   focus: (x: number, z: number, zoom = 1) => { view.target.set(x, 0, z); view.zoom = zoom; },
-  info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, townTris: view.townTriangles, town: view.townRegion, fx: fxOn, px: style.pixelCss, r004: fxOn && V.r004, pools: view.pools }),
+  info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, msaa: view.pipe.samples, townTris: view.townTriangles, town: view.townRegion, fx: fxOn, px: style.pixelCss, r004: fxOn && V.r004, pools: view.pools }),
   armorArcs: () => view.armorArcCount,
   fxDigest: () => view.fxDigest(),
   bars: () => view.bars,
