@@ -31,7 +31,14 @@ assert.match(css, /#r901-chrome[\s\S]*env\(safe-area-inset-left\)[\s\S]*env\(saf
 assert.match(css, /body\.r901-top-off #hud \.btns \{ display: none; \}/, 'collapsed toolbar is display none');
 assert.match(css, /body\.r901-bar-off #prodbar, body\.r901-bar-off #buildbar \{ display: none; \}/, 'collapsed build and production bars are display none');
 // R905：直向生產鍵是至少 44px 的小方鍵（名稱在上、補給在下），不用負邊距疊在一起；提示列不截斷（耐久、裝填等資訊要看得完整）
-assert.match(css, /@media \(max-width: 480px\) and \(orientation: portrait\) \{[\s\S]*body #hud #prodbar button \{[^}]*min-width: 44px;[^}]*height: 44px;[^}]*flex-direction: column;/, 'portrait production keys are 44px stacked keys');
+assert.match(css, /@media \(max-width: 480px\) and \(orientation: portrait\) \{[\s\S]*body\.r901 #hud #prodbar button \{[^}]*min-width: 44px;[^}]*height: 44px;[^}]*flex-direction: column;/, 'portrait production keys are 44px stacked keys');
+// R905 的生產鍵樣式只掛在 body.r901 上：?noR901=1 不跑 initMobileChrome，就回到舊排法（AGENTS.md 第 2 節第 7 條）
+{
+  const gated = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*#prodbar button[^{}]*)\{([^}]*)\}/g)].filter(m => /flex-direction|flex-basis|max-width/.test(m[2]));
+  assert.ok(gated.length >= 2, 'fixture: the portrait and 360px production key rules are found');
+  for (const m of gated) assert.match(m[1].trim(), /^body\.r901 /, `portrait production key layout "${m[1].trim()}" is not applied without the r901 valve`);
+}
+assert.match(read('../src/ui/mobileChrome.ts'), /initMobileChrome[\s\S]*document\.body\.classList\.add\('r901'\)/, 'mobile chrome marks the body so the valve gates the key layout');
 assert.equal(/#prodbar button \{[^}]*margin[^;}]*-\d/.test(css), false, 'production keys never overlap through negative margins');
 assert.equal(/#hud \.bottom \{[^}]*text-overflow: ellipsis/.test(css), false, 'status line is never cut with an ellipsis');
 for (const id of ['#sb-enter', '#map-pick', '#zombies-pick', '#town-pick']) {

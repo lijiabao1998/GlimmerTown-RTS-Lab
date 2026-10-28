@@ -107,6 +107,8 @@ async function main() {
       // 先在還沒送過觸控的新頁驗 noR901。本頁用過觸控再導頁時，Chrome 會把下一頁的 touchStart 變成滑鼠。
       await fresh('noR901=1'); await viewport(true);
       assertions(!await E('document.getElementById("r901-chrome")'), 'box: noR901 does not mount mobile chrome');
+      const oldKeys = await E('(()=>{const b=document.querySelector("#prodbar button");return b&&{dir:getComputedStyle(b).flexDirection,marked:document.body.classList.contains("r901")};})()');
+      assertions(oldKeys && oldKeys.dir === 'row' && !oldKeys.marked, `box: noR901 keeps the old production key layout ${JSON.stringify(oldKeys)}`);
       await hold();
       assertions((await state()).open, 'box: noR901 long press still opens the command menu');
       await button('#cm-cancel');
