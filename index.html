@@ -199,6 +199,10 @@
       body.r901-top-off #sb-enter, body.r901-top-off #sandbox-panel, body.r901-top-off #map-pick, body.r901-top-off #zombies-pick, body.r901-top-off #town-pick,
       body.r901-bar-off #sb-enter, body.r901-bar-off #sandbox-panel, body.r901-bar-off #map-pick, body.r901-bar-off #zombies-pick, body.r901-bar-off #town-pick { display: none; }
     }
+    /* Short portrait: keep all three chrome keys above the expanded hint/production stack. */
+    @media (max-width: 480px) and (max-height: 700px) and (orientation: portrait) {
+      #r901-chrome { flex-direction: row; }
+    }
   #town-pick{position:fixed;left:8px;top:164px;min-width:120px;min-height:44px;z-index:20;padding:8px;border:1px solid #929477;border-radius:4px;background:#353e2c;color:#eee7d5;font:inherit;cursor:pointer}#town-pick[hidden]{display:none}
 </style>
 </head>

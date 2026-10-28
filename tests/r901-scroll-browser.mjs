@@ -27,6 +27,9 @@ try {
       const hint = await E('(()=>{const h=document.querySelector("#hint"), old=h.textContent;h.textContent="測試";const short=h.getBoundingClientRect().height;h.textContent="長提示測試文字".repeat(30);const s=getComputedStyle(h), result={whiteSpace:s.whiteSpace, overflow:s.overflow, wraps:h.getBoundingClientRect().height>short, fits:h.scrollWidth<=h.clientWidth && h.scrollHeight<=h.clientHeight};window.__qaOriginalHint=old;return result})()');
       assert.equal(hint.whiteSpace, 'normal', `${width}: long hint wraps`);
       assert(hint.wraps && hint.fits && hint.overflow !== 'hidden', `${width}: long hint is not truncated`);
+      await frames();
+      const chromeClear = await E(`(()=>{const p=document.querySelector('#prodbar').getBoundingClientRect(),h=document.querySelector('#hint').getBoundingClientRect();return [...document.querySelectorAll('#r901-chrome button')].every(b=>{const r=b.getBoundingClientRect();return [p,h].every(o=>r.right<=o.left||r.left>=o.right||r.bottom<=o.top||r.top>=o.bottom)&&b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})})()`);
+      assert(chromeClear, `${width}x${height}: long hint/production does not overlap chrome keys`);
       await shot(page, path.join(root, 'shots', `r901-scroll-${width}x${height}-long-hint.png`));
       await E('document.querySelector("#hint").textContent=window.__qaOriginalHint;delete window.__qaOriginalHint');
       const before = await E('document.querySelector(".production-buttons").scrollLeft');
