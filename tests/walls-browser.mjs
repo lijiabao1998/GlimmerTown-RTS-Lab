@@ -19,6 +19,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r120-browser-'));
 const strictCI = process.env.GITHUB_ACTIONS === 'true' || !!process.env.GITHUB_RUN_ID || !!process.env.CI;
 const fixtureOnly = process.argv.includes('--fixture-only'), buildOnly = process.argv.includes('--build-only');
+// R068: the mobile pass runs here; the desktop pass and then every negative run in their own
+// process (walls-desktop-browser.mjs), in the original order, so the replay negative still uses
+// the desktop pass's recorded log. Same 110s deadline per process; assertions unchanged.
+const desktopPart = process.argv.includes('--desktop');
 const summary = [], record = s => { summary.push(s); console.log(s); };
 const digest = s => createHash('sha256').update(s).digest('hex');
 const canonical = commands => commands.map(c => ({ ...c, rot: c.rot ?? 0 }));
@@ -183,7 +187,7 @@ async function main(){
     const fallbackCheck=async()=>{const s=await inspect();assert(s.vertices>0,'fallback: recorded walls retain nonempty visible ordinary-building geometry');assert.deepEqual(s.blds.map(b=>b.kind),[7,8,9],'fallback: presentation keeps recorded material identities');};
     const valveCheck=async()=>assert(await E("!document.getElementById('bb-wall')&&!document.getElementById('bb-k7')&&!document.getElementById('bb-k8')&&!document.getElementById('bb-k9')"),'valve: noR120 removes only the wall construction choices');
     let recorded;
-    for(const mobile of [true,false]){
+    for(const mobile of desktopPart?[false]:[true]){
       const label=mobile?'mobile':'desktop',errors=page.errors.length;await viewport(mobile);await fresh();
       const pristine=await inspect();assert.equal(pristine.pickKind,BK_COTTAGE,'legacy: initial selected building remains cottage');assert.equal(pristine.hash,hashWorld(opening),'fixture: real opening matches Node');
       await button('bb-wall',mobile);await pickerLayout();
@@ -228,6 +232,7 @@ async function main(){
       assert.equal(page.errors.length,errors,label+': no unrelated runtime errors');record(`R120 ${label}: native three kinds/both rotations/connect/remove/undo/start/original replay/reset; all three AP/HE stages, noR120 visible fallback and existing valves`);
     }
     // Every negative must reach its named semantic assertion. Startup/JS errors never count.
+    if(desktopPart){
     await viewport(true);await fresh();
     const mutation=name=>E(`__r120test.mutation(${JSON.stringify(name)})`);
     const negative=async(name,run,prefix)=>{const errors=page.errors.length;let failure;try{await run();}catch(e){failure=e;}assert(failure instanceof assert.AssertionError&&failure.message.startsWith(prefix),`negative ${name}: expected semantic first red, got ${failure?.stack??'no failure'}`);assert.equal(page.errors.length,errors,`negative ${name}: runtime errors cannot count as a semantic red`);record('RED real Chrome '+name+': '+prefix);};
@@ -242,11 +247,12 @@ async function main(){
     await fresh('noR120=1');await mutation('fallback');await E('__r120test.gallery()');await negative('fallback',fallbackCheck,'fallback: recorded walls retain nonempty visible');
     await fresh('noR120=1&__r120mutant=valve');await negative('valve',valveCheck,'valve: noR120 removes only the wall');
     await fresh('noR120=1&__r120mutant=replay');await negative('replay',async()=>assert.equal(await E(`__rts.playLog(1944,${JSON.stringify(recorded.log)},${recorded.tick})`),recorded.hash,'valve: untouched original mixed log retains exact hash with noR120'),'valve: untouched original mixed log retains exact hash');
+    }
     assert(page.requests.every(r=>r.startsWith('http://127.0.0.1:8440/')||r.startsWith('data:')||r==='about:blank'),'resources: no external models, textures or fonts');
     assert.equal(page.errors.length,0,'runtime: complete positive and negative suite has zero unrelated errors');
   });
   record(`R120 real Chrome complete in ${Date.now()-started}ms; 120-second child limit unchanged`);
 }
-try{await main();fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots/r120-browser.txt'),summary.join('\n')+'\n');if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'\n### R120 wall browser guards\n'+summary.map(s=>'- '+s).join('\n')+'\n');}
+try{await main();fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,desktopPart?'shots/r120-browser-desktop.txt':'shots/r120-browser.txt'),summary.join('\n')+'\n');if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`\n### R120 wall browser guards (${desktopPart?'desktop + negatives':'mobile'})\n`+summary.map(s=>'- '+s).join('\n')+'\n');}
 catch(error){const message=String(error?.stack??error);if(/listen (?:EPERM|EACCES).*127\.0\.0\.1|socket\(\) failed: Operation not permitted/.test(message)&&!strictCI){console.error('NOT RUN R120 real Chrome guards: local socket restriction; CI must execute them.');console.error(error.message);process.exitCode=77;}else{console.error(error);console.error('R120 browser FAIL: '+String(error.message).split('\n')[0]);process.exitCode=1;}}
 finally{fs.rmSync(temp,{recursive:true,force:true});}

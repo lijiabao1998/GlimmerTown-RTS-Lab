@@ -17,6 +17,10 @@ const strictCI=process.env.GITHUB_ACTIONS==='true'||!!process.env.GITHUB_RUN_ID|
 const summary=[],record=s=>{summary.push(s);console.log(s);};
 // Reference mode keeps the previous cold-page/settle setup for interleaved measurements.
 const coldFixtures=process.argv.includes('--cold-fixtures'),fixtureStarted=Date.now();
+// R068: R129 (audio, placement batches, R129 negatives) runs here; R128 (sandbox flows,
+// layout, valve, R128 negatives) runs in its own process, sandbox-r128-browser.mjs.
+// Same build, same assertions; only the process boundary moved.
+const r128Only=process.argv.includes('--r128-only'),part=r128Only?'r128':'r129';
 const fixtureCost={navigations:0,nativeReturns:0,frameSettles:0};
 const M=name=>`new URLSearchParams(location.search).get('__r128mutant') === '${name}'`;
 const M129=name=>`new URLSearchParams(location.search).get('__r129mutant') === '${name}'`;
@@ -169,8 +173,7 @@ async function main(){
    assert.deepEqual(bad,[],'ui: controls fit viewport');
    for(const id of ['sb-run','sb-reset','sb-exit','sb-player','sb-enemy','sb-tank','sb-howitzer','sb-command']){const b=await E(`(()=>{const r=document.getElementById('${id}').getBoundingClientRect();return [r.width,r.height];})()`);assert(b[0]>=44&&b[1]>=44,'ui: 44px control '+id);}
   };
-  await repairChecks({open,page},{viewport,layout});
-  if(process.argv.includes('--repair-only'))return;
+  if(!r128Only){await repairChecks({open,page},{viewport,layout});return;}
   const placement=async(mutant='')=>{
    await enter(mutant);await at(24,26);assert.equal((await world()).units.length,1,'ui: placement dispatches through step');
    await click('sb-enemy');await at(26,26);await click('sb-howitzer');await at(22,24);await click('sb-player');await at(29,29);
@@ -253,4 +256,4 @@ async function main(){
  });
 }
 try{await main();}catch(error){const msg=String(error?.stack??error);record('FAIL '+msg);if(/listen (?:EPERM|EACCES).*127\.0\.0\.1|socket\(\) failed: Operation not permitted|找不到 Chrome/.test(msg)&&!strictCI){console.error('NOT RUN R128 Chrome: local browser/socket unavailable; CI required.');process.exitCode=77;}else{console.error(error);process.exitCode=1;}}
-finally{record('MEASURE sandbox fixtures '+JSON.stringify({mode:coldFixtures?'cold-reference':'native-return',...fixtureCost,elapsedMs:Date.now()-fixtureStarted}));fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,'shots/r128-browser.txt'),summary.join('\n')+'\n');if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'\n### R129 sandbox browser\n'+summary.map(s=>'- '+s).join('\n')+'\n');assert.equal(path.resolve(temp,'..'),path.resolve(os.tmpdir()),'cleanup: temporary directory stays inside OS temp');fs.rmSync(temp,{recursive:true,force:true});}
+finally{record('MEASURE sandbox fixtures '+JSON.stringify({part,mode:coldFixtures?'cold-reference':'native-return',...fixtureCost,elapsedMs:Date.now()-fixtureStarted}));fs.mkdirSync(path.join(ROOT,'shots'),{recursive:true});fs.writeFileSync(path.join(ROOT,`shots/${part}-browser.txt`),summary.join('\n')+'\n');if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`\n### ${part.toUpperCase()} sandbox browser\n`+summary.map(s=>'- '+s).join('\n')+'\n');assert.equal(path.resolve(temp,'..'),path.resolve(os.tmpdir()),'cleanup: temporary directory stays inside OS temp');fs.rmSync(temp,{recursive:true,force:true});}
