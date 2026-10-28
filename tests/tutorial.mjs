@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { hashWorld } from '../src/sim/world.ts';
 import { SCRIPT, runScript } from '../src/sim/script.ts';
 import {
-  TUTORIAL_BUILD, TUTORIAL_ENEMY, TUTORIAL_LESSONS, TUTORIAL_MOVE, TUTORIAL_SCRIPT, TUTORIAL_STEP_END, TUTORIAL_STORE_KEY, TUTORIAL_SUPPLY, TUTORIAL_TICKS,
+  TUTORIAL_BUILD, TUTORIAL_ENEMY, TUTORIAL_LESSONS, TUTORIAL_MOVE, TUTORIAL_SCRIPT, TUTORIAL_STEP_END, TUTORIAL_STORE_KEY, TUTORIAL_SUPPLY, TUTORIAL_SUPPLY_CELL, TUTORIAL_TICKS,
   createTutorial, runTutorial, tutorialAct, tutorialClock, tutorialHolding, tutorialMark, tutorialVisible,
 } from '../src/sim/tutorial.ts';
 import { initTutorial } from '../src/ui/tutorial.ts';
@@ -34,8 +34,8 @@ for (let i = 0; i < TUTORIAL_SCRIPT.length; i++) {
 
 const idle = createTutorial();
 tutorialClock(idle, 100000);
-assert.equal(idle.tick, 799, '什麼都不做就停在移動這一課的最後一步');
-assert.equal(idle.step, 0);
+assert.equal(idle.tick, TUTORIAL_TICKS, '時間走完停在三分鐘');
+assert.equal(idle.step, 0, '時間到不換課');
 assert.equal(tutorialHolding(idle), true);
 assert.equal(idle.flags, 0);
 
@@ -43,10 +43,49 @@ const moved = createTutorial();
 tutorialAct(moved, { t: 'select', id: 1 });
 tutorialAct(moved, { t: 'cell', x: TUTORIAL_MOVE.x, z: TUTORIAL_MOVE.z });
 assert.equal(moved.flags, 1);
+assert.equal(moved.step, 1, '做完移動立刻進採集');
 tutorialClock(moved, 100000);
-assert.equal(moved.step, 1, '只做完移動就停在採集');
-assert.equal(moved.tick, 1599);
+assert.equal(moved.step, 1, '之後時間再走也不跳過採集');
+assert.equal(moved.tick, TUTORIAL_TICKS);
 assert.equal(moved.supply, 0);
+
+{
+  const s = createTutorial();
+  const goals = [
+    () => { tutorialAct(s, { t: 'select', id: 1 }); tutorialAct(s, { t: 'cell', x: TUTORIAL_MOVE.x, z: TUTORIAL_MOVE.z }); },
+    () => { tutorialAct(s, { t: 'select', id: 1 }); tutorialAct(s, { t: 'cell', x: TUTORIAL_SUPPLY_CELL.x, z: TUTORIAL_SUPPLY_CELL.z }); },
+    () => { tutorialAct(s, { t: 'tool' }); tutorialAct(s, { t: 'cell', x: TUTORIAL_BUILD.x, z: TUTORIAL_BUILD.z }); },
+    () => { tutorialAct(s, { t: 'cell', x: TUTORIAL_ENEMY.x, z: TUTORIAL_ENEMY.z }); },
+  ];
+  for (let i = 0; i < 4; i++) {
+    assert.equal(s.step, i, `第 ${i + 1} 課從這一課開始`);
+    const tick = s.tick;
+    goals[i]();
+    assert.equal(s.step, i + 1, `做完第 ${i + 1} 課才前進`);
+    assert.equal((s.flags & (1 << i)) !== 0, true, `第 ${i + 1} 課旗標立起`);
+    tutorialClock(s, 50);
+    if (i < 3) {
+      assert.equal(s.step, i + 1, `第 ${i + 1} 課之後時間不自動換課`);
+      assert.equal(s.tick, tick + 50);
+    } else {
+      assert.equal(s.step, 4, '做完攻擊就結束');
+      assert.equal(s.tick, tick, '做完最後一課之後時鐘不再走');
+    }
+  }
+  assert.equal(s.step, 4);
+  assert.equal(s.flags, 15);
+}
+{
+  const s = createTutorial();
+  for (let i = 0; i < 4; i++) {
+    assert.equal(s.step, i, `下一步前停在第 ${i + 1} 課`);
+    tutorialAct(s, { t: 'next' });
+    assert.equal((s.flags & (1 << i)) === 0, true, `下一步不算做完第 ${i + 1} 課`);
+    assert.equal(s.step, i + 1, `下一步離開第 ${i + 1} 課`);
+  }
+  assert.equal(s.flags, 0);
+  assert.equal(tutorialMark(s), 'done');
+}
 
 const early = createTutorial();
 tutorialAct(early, { t: 'cell', x: TUTORIAL_ENEMY.x, z: TUTORIAL_ENEMY.z });
@@ -67,7 +106,7 @@ assert.equal(tutorialVisible(true, tutorialMark(skipped)), false);
 const done = runTutorial();
 const again = runTutorial();
 assert.equal(done.step, 4, '腳本走完四課');
-assert.equal(done.tick, TUTORIAL_TICKS);
+assert.equal(done.tick, 2800, '最後一課做完就結束，不等時間走完');
 assert.equal(done.flags, 15);
 assert.equal(done.skipped, 0);
 assert.equal(done.supply, TUTORIAL_SUPPLY);
@@ -118,8 +157,11 @@ const valves = read('src/valves.ts');
 const readme = read('README.md');
 assert.match(main, /initTutorial\(document\.getElementById\('hud'\) \?\? document\.body, V\.r902\)/);
 assert.match(main, /tutorial\.frame\(t\)/);
+assert.equal(main.includes("t: 'tutorial'"), false, '總機不再發教學停火指令');
 assert.equal(main.includes("q.get('noR"), false);
 assert.match(valves, /get r902\(\) \{ return on\('902'\); \}/);
 assert.equal(readme.includes('`?noR902=1`'), true, 'README 逃生閥對照要有這一閥');
+assert.equal(read('src/sim/step.ts').includes("t: 'tutorial'"), false, '模擬不再有教學停火指令');
+assert.equal(read('src/sim/world.ts').includes('tutorial?:'), false, '世界不再有教學停火欄位');
 
 console.log('OK tutorial: script completes, skip stops, valve mounts nothing, golden unchanged');

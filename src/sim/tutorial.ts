@@ -20,10 +20,10 @@ export const TUTORIAL_BUILD = { x: 1, z: 2 };
 export const TUTORIAL_ENEMY = { x: 2, z: 2 };
 
 export const TUTORIAL_LESSONS = [
-  { title: '移動', body: '點「選我方」，再點「移到空地」。戰場上同樣是先點自己的單位，再點地面。' },
-  { title: '採集', body: '點「選我方」，再點「採補給」。戰場上指揮部每秒進來 1 點補給，這一課把那件事做成可以採的一點。' },
-  { title: '建造', body: '點「選農舍」，再點「蓋在空地」。戰場上是布陣時在我方半場點地面蓋房子。' },
-  { title: '攻擊', body: '點「攻擊敵人」。戰場上是點敵方單位，下攻擊。' },
+  { title: '移動', body: '點「選我方」，再點「移到空地」。' },
+  { title: '採集', body: '點「選我方」，再點「採補給」。' },
+  { title: '建造', body: '點「選農舍」，再點「蓋在空地」。' },
+  { title: '攻擊', body: '點「攻擊敵人」。' },
 ] as const;
 
 export interface Tut {
@@ -44,6 +44,7 @@ export type TutAct =
   | { t: 'select'; id: number }
   | { t: 'cell'; x: number; z: number }
   | { t: 'tool' }
+  | { t: 'next' }
   | { t: 'skip' };
 
 export interface TutBeat { tick: number; act: TutAct }
@@ -78,8 +79,12 @@ export function tutorialMark(s: Tut): string {
 
 export function tutorialHolding(s: Tut): boolean {
   if (s.skipped || s.step >= 4) return false;
-  const end = TUTORIAL_STEP_END[s.step];
-  return s.tick + 1 >= end && (s.flags & (1 << s.step)) === 0;
+  return s.tick >= TUTORIAL_TICKS && (s.flags & (1 << s.step)) === 0;
+}
+
+function advanceLesson(s: Tut): void {
+  if (s.step >= 3) s.step = 4;
+  else s.step++;
 }
 
 export function tutorialStatus(s: Tut): string {
@@ -90,40 +95,35 @@ export function tutorialStatus(s: Tut): string {
   return `${who}　${tool}　我方 (${s.px},${s.pz})　補給 ${s.supply}　${built}　${hit}`;
 }
 
-// 往前 n 步。當前這一動還沒做，就停在該課最後一步。
+// 往前 n 步。時間走完不換課；換課只靠做完目標或「下一步」。
 export function tutorialClock(s: Tut, n: number): void {
   const steps = n | 0;
   for (let i = 0; i < steps; i++) {
-    if (s.skipped || s.step >= 4) return;
-    const end = TUTORIAL_STEP_END[s.step];
-    if (s.tick + 1 >= end && (s.flags & (1 << s.step)) === 0) return;
+    if (s.skipped || s.step >= 4 || s.tick >= TUTORIAL_TICKS) return;
     s.tick++;
-    if (s.tick >= end) {
-      if (s.step >= 3) { s.step = 4; return; }
-      s.step++;
-    }
   }
 }
 
 export function tutorialAct(s: Tut, a: TutAct): void {
   if (s.skipped || s.step >= 4) return;
   if (a.t === 'skip') { s.skipped = 1; return; }
+  if (a.t === 'next') { advanceLesson(s); return; }
   if (a.t === 'select') { s.sel = a.id === 1 || a.id === 2 ? a.id : 0; return; }
   if (a.t === 'tool') { if (s.step === 2) s.tool = 1; return; }
   if (a.t !== 'cell') return;
   const x = a.x | 0, z = a.z | 0;
   if (x < 0 || z < 0 || x >= TUTORIAL_W || z >= TUTORIAL_H) return;
   if (s.step === 0 && s.sel === 1 && x === TUTORIAL_MOVE.x && z === TUTORIAL_MOVE.z) {
-    s.px = x; s.pz = z; s.flags |= 1; return;
+    s.px = x; s.pz = z; s.flags |= 1; advanceLesson(s); return;
   }
   if (s.step === 1 && s.sel === 1 && x === TUTORIAL_SUPPLY_CELL.x && z === TUTORIAL_SUPPLY_CELL.z) {
-    s.supply += TUTORIAL_SUPPLY; s.flags |= 2; return;
+    s.supply += TUTORIAL_SUPPLY; s.flags |= 2; advanceLesson(s); return;
   }
   if (s.step === 2 && s.tool === 1 && x === TUTORIAL_BUILD.x && z === TUTORIAL_BUILD.z) {
-    s.built = 1; s.flags |= 4; return;
+    s.built = 1; s.flags |= 4; advanceLesson(s); return;
   }
   if (s.step === 3 && x === TUTORIAL_ENEMY.x && z === TUTORIAL_ENEMY.z) {
-    s.attacked = 1; s.sel = 2; s.flags |= 8;
+    s.attacked = 1; s.sel = 2; s.flags |= 8; advanceLesson(s);
   }
 }
 
