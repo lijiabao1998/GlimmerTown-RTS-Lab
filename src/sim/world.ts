@@ -205,6 +205,7 @@ export interface World extends RngState {
   counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
   sandbox?: { version: 1; running: boolean; frame: number }; // R128：frame 是指令步序，tick 仍只計戰鬥時間
   zombies?: { version: 1; wave: number; next: number; pending: number; spawned: number; killed: number; lost: number };
+  tutorial?: number; // R904：1＝教學開著，敵方不攻擊。沒設時不折進雜湊
 }
 
 // 舊守衛專用（32×32）：src/ 不再用，改用下面看世界的 cellIdx／inGrid／gridLimit（R042，tests/map-size.mjs 掃描）
@@ -400,5 +401,6 @@ export function hashWorld(w: World): string {
     f.int(0x4342).int(w.counterbattery.length);
     for (const r of w.counterbattery) f.int(r.side).int(r.zone).int(r.cell).int(r.shots).int(r.last);
   }
+  if (w.tutorial) f.int(0x5455).int(w.tutorial);
   return f.hex();
 }

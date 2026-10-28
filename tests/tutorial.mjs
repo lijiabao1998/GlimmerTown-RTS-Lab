@@ -1,10 +1,11 @@
 // R902：教學腳本走得完、跳得過、關得掉；既有腳本戰鬥的雜湊不動。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { hashWorld } from '../src/sim/world.ts';
+import { createWorld, hashWorld, ORD_ATTACK, ORD_IDLE, SIDE_ENEMY, SIDE_PLAYER, SUB } from '../src/sim/world.ts';
+import { step } from '../src/sim/step.ts';
 import { SCRIPT, runScript } from '../src/sim/script.ts';
 import {
-  TUTORIAL_BUILD, TUTORIAL_ENEMY, TUTORIAL_LESSONS, TUTORIAL_MOVE, TUTORIAL_SCRIPT, TUTORIAL_STEP_END, TUTORIAL_STORE_KEY, TUTORIAL_SUPPLY, TUTORIAL_TICKS,
+  TUTORIAL_BUILD, TUTORIAL_ENEMY, TUTORIAL_LESSONS, TUTORIAL_MOVE, TUTORIAL_SCRIPT, TUTORIAL_STEP_END, TUTORIAL_STORE_KEY, TUTORIAL_SUPPLY, TUTORIAL_SUPPLY_CELL, TUTORIAL_TICKS,
   createTutorial, runTutorial, tutorialAct, tutorialClock, tutorialHolding, tutorialMark, tutorialVisible,
 } from '../src/sim/tutorial.ts';
 import { initTutorial } from '../src/ui/tutorial.ts';
@@ -34,8 +35,8 @@ for (let i = 0; i < TUTORIAL_SCRIPT.length; i++) {
 
 const idle = createTutorial();
 tutorialClock(idle, 100000);
-assert.equal(idle.tick, 799, '什麼都不做就停在移動這一課的最後一步');
-assert.equal(idle.step, 0);
+assert.equal(idle.tick, TUTORIAL_TICKS, '時間走完停在三分鐘');
+assert.equal(idle.step, 0, '時間到不換課');
 assert.equal(tutorialHolding(idle), true);
 assert.equal(idle.flags, 0);
 
@@ -43,10 +44,49 @@ const moved = createTutorial();
 tutorialAct(moved, { t: 'select', id: 1 });
 tutorialAct(moved, { t: 'cell', x: TUTORIAL_MOVE.x, z: TUTORIAL_MOVE.z });
 assert.equal(moved.flags, 1);
+assert.equal(moved.step, 1, '做完移動立刻進採集');
 tutorialClock(moved, 100000);
-assert.equal(moved.step, 1, '只做完移動就停在採集');
-assert.equal(moved.tick, 1599);
+assert.equal(moved.step, 1, '之後時間再走也不跳過採集');
+assert.equal(moved.tick, TUTORIAL_TICKS);
 assert.equal(moved.supply, 0);
+
+{
+  const s = createTutorial();
+  const goals = [
+    () => { tutorialAct(s, { t: 'select', id: 1 }); tutorialAct(s, { t: 'cell', x: TUTORIAL_MOVE.x, z: TUTORIAL_MOVE.z }); },
+    () => { tutorialAct(s, { t: 'select', id: 1 }); tutorialAct(s, { t: 'cell', x: TUTORIAL_SUPPLY_CELL.x, z: TUTORIAL_SUPPLY_CELL.z }); },
+    () => { tutorialAct(s, { t: 'tool' }); tutorialAct(s, { t: 'cell', x: TUTORIAL_BUILD.x, z: TUTORIAL_BUILD.z }); },
+    () => { tutorialAct(s, { t: 'cell', x: TUTORIAL_ENEMY.x, z: TUTORIAL_ENEMY.z }); },
+  ];
+  for (let i = 0; i < 4; i++) {
+    assert.equal(s.step, i, `第 ${i + 1} 課從這一課開始`);
+    const tick = s.tick;
+    goals[i]();
+    assert.equal(s.step, i + 1, `做完第 ${i + 1} 課才前進`);
+    assert.equal((s.flags & (1 << i)) !== 0, true, `第 ${i + 1} 課旗標立起`);
+    tutorialClock(s, 50);
+    if (i < 3) {
+      assert.equal(s.step, i + 1, `第 ${i + 1} 課之後時間不自動換課`);
+      assert.equal(s.tick, tick + 50);
+    } else {
+      assert.equal(s.step, 4, '做完攻擊就結束');
+      assert.equal(s.tick, tick, '做完最後一課之後時鐘不再走');
+    }
+  }
+  assert.equal(s.step, 4);
+  assert.equal(s.flags, 15);
+}
+{
+  const s = createTutorial();
+  for (let i = 0; i < 4; i++) {
+    assert.equal(s.step, i, `下一步前停在第 ${i + 1} 課`);
+    tutorialAct(s, { t: 'next' });
+    assert.equal((s.flags & (1 << i)) === 0, true, `下一步不算做完第 ${i + 1} 課`);
+    assert.equal(s.step, i + 1, `下一步離開第 ${i + 1} 課`);
+  }
+  assert.equal(s.flags, 0);
+  assert.equal(tutorialMark(s), 'done');
+}
 
 const early = createTutorial();
 tutorialAct(early, { t: 'cell', x: TUTORIAL_ENEMY.x, z: TUTORIAL_ENEMY.z });
@@ -67,7 +107,7 @@ assert.equal(tutorialVisible(true, tutorialMark(skipped)), false);
 const done = runTutorial();
 const again = runTutorial();
 assert.equal(done.step, 4, '腳本走完四課');
-assert.equal(done.tick, TUTORIAL_TICKS);
+assert.equal(done.tick, 2800, '最後一課做完就結束，不等時間走完');
 assert.equal(done.flags, 15);
 assert.equal(done.skipped, 0);
 assert.equal(done.supply, TUTORIAL_SUPPLY);
@@ -116,10 +156,41 @@ assert.equal(ui.includes("root.addEventListener('click'"), false, '面板本體�
 const main = read('src/main.ts');
 const valves = read('src/valves.ts');
 const readme = read('README.md');
-assert.match(main, /initTutorial\(document\.getElementById\('hud'\) \?\? document\.body, V\.r902\)/);
+assert.match(main, /initTutorial\(document\.getElementById\('hud'\) \?\? document\.body, V\.r902, undefined, on => issue\(\{ t: 'tutorial', on: on \? 1 : 0 \}\)\)/);
 assert.match(main, /tutorial\.frame\(t\)/);
 assert.equal(main.includes("q.get('noR"), false);
 assert.match(valves, /get r902\(\) \{ return on\('902'\); \}/);
 assert.equal(readme.includes('`?noR902=1`'), true, 'README 逃生閥對照要有這一閥');
+
+{
+  const aimed = () => {
+    const w = createWorld(1944);
+    const me = w.units.find(u => u.side === SIDE_PLAYER && u.kind === 0);
+    const foe = w.units.find(u => u.side === SIDE_ENEMY && u.kind === 0);
+    foe.x = me.x + 2 * SUB; foe.z = me.z; foe.path = []; foe.pathIdx = 0; foe.cooldown = 0;
+    foe.order = ORD_ATTACK; foe.target = me.id; foe.tx = me.x; foe.tz = me.z;
+    return { w, me, foe };
+  };
+  const fires = w => w.events.filter(e => e.e === 'fire' && w.units[e.unit - 1].side === SIDE_ENEMY).length;
+  const held = aimed();
+  step(held.w, [{ t: 'tutorial', on: 1 }]);
+  assert.equal(held.w.tutorial, 1);
+  step(held.w, []);
+  assert.equal(fires(held.w), 0, '教學開著時敵方不開火');
+  const open = aimed();
+  step(open.w, []);
+  assert.equal(fires(open.w), 1, '沒開教學時同一姿勢敵方會開火');
+  const blocked = createWorld(1944);
+  const me = blocked.units.find(u => u.side === SIDE_PLAYER);
+  const foe = blocked.units.find(u => u.side === SIDE_ENEMY);
+  step(blocked, [{ t: 'tutorial', on: 1 }, { t: 'attack', side: SIDE_PLAYER, ids: [me.id], target: foe.id }, { t: 'attack', side: SIDE_ENEMY, ids: [foe.id], target: me.id }]);
+  assert.equal(me.order, ORD_ATTACK, '教學開著時我方攻擊仍生效');
+  assert.equal(foe.order, ORD_IDLE, '教學開著時敵方攻擊指令不生效');
+  step(blocked, [{ t: 'tutorial', on: 0 }]);
+  assert.equal(blocked.tutorial, undefined, '關掉教學就拿掉旗標');
+  step(blocked, [{ t: 'attack', side: SIDE_ENEMY, ids: [foe.id], target: me.id }]);
+  assert.equal(foe.order, ORD_ATTACK, '關掉教學後敵方又能攻擊');
+  assert.equal(hashWorld(runScript()), golden.hash, '教學旗標不進一般對戰雜湊');
+}
 
 console.log('OK tutorial: script completes, skip stops, valve mounts nothing, golden unchanged');

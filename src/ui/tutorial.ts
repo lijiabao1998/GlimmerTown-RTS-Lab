@@ -2,7 +2,7 @@
 // 不會自己彈出：玩家在說明裡點「新手教學」才打開。面板本體不接收點擊，只有裡面的按鈕吃得到。
 import {
   TUTORIAL_BUILD, TUTORIAL_ENEMY, TUTORIAL_LESSONS, TUTORIAL_MOVE, TUTORIAL_STORE_KEY, TUTORIAL_SUPPLY_CELL,
-  createTutorial, tutorialAct, tutorialClock, tutorialHolding, tutorialMark, tutorialStatus, tutorialVisible,
+  createTutorial, tutorialAct, tutorialClock, tutorialMark, tutorialStatus, tutorialVisible,
   type Tut,
 } from '../sim/tutorial.ts';
 
@@ -16,29 +16,27 @@ const CSS = `
   pointer-events: none; background: rgba(24, 28, 22, 0.94); border: 2px solid #6c8fb8; border-radius: 8px;
   color: #f3eedf; font-size: 13px; line-height: 1.4; }
 #tutorial[hidden] { display: none; }
-#tutorial .hd { display: flex; flex: 0 0 auto; justify-content: space-between; gap: 8px; align-items: baseline; }
+#tutorial .hd { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-start; gap: 2px; }
 #tutorial .copy { min-height: 0; overflow: auto; pointer-events: auto; }
-#tutorial h2 { margin: 0; font-size: 15px; letter-spacing: 0.06em; }
-#tutorial p { margin: 6px 0; }
-#tutorial #tutorial-clock { font-variant-numeric: tabular-nums; opacity: 0.8; }
+#tutorial h2 { margin: 0; font-size: 14px; letter-spacing: 0.06em; line-height: 1.2; }
+#tutorial p { margin: 4px 0; }
+#tutorial #tutorial-clock { white-space: nowrap; font-variant-numeric: tabular-nums; opacity: 0.8; line-height: 1.2; }
 #tutorial .row { display: flex; flex: 0 0 auto; flex-direction: column; }
-#tutorial .acts { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+#tutorial .acts, #tutorial .nav { display: flex; flex: 0 0 auto; flex-wrap: nowrap; gap: 4px; margin-top: 6px; }
 #tutorial button { box-sizing: border-box; min-width: 44px; min-height: 44px; height: 44px; padding: 0 6px; pointer-events: auto;
   border: 1px solid #6c745f; border-radius: 5px; background: #3c4535; color: #f3eedf; font: inherit; cursor: pointer; touch-action: manipulation; }
-#tutorial #tutorial-skip, #tutorial #tutorial-ok { flex: 0 0 auto; width: auto; align-self: flex-start; margin-top: 6px; }
+#tutorial #tutorial-next, #tutorial #tutorial-skip, #tutorial #tutorial-ok { flex: 0 0 auto; width: auto; align-self: flex-start; }
 #tutorial #tutorial-skip { background: #2a2e26; }
-#tutorial #tutorial-ok { background: #2f5f9a; border-color: #9cc6ff; font-weight: 700; }
+#tutorial #tutorial-ok { background: #2f5f9a; border-color: #9cc6ff; font-weight: 700; margin-top: 6px; }
 #tutorial button[hidden] { display: none; }
-/* 直向手機左側是 R901 的具／產／框（各 44px，貼著安全區）。面板從同一條安全區往右讓出 44+20。 */
+/* 直向手機左側是 R901 的具／產／框（各 44px，貼著安全區）。面板從同一條安全區往右讓出 44+20，上緣落在沙盒鍵下面。 */
 @media (max-width: 480px) and (orientation: portrait) {
   #tutorial { left: calc(max(8px, env(safe-area-inset-left)) + 64px);
     top: calc(max(8px, env(safe-area-inset-top)) + 220px); }
 }
-/* 入口放在說明遮罩裡、課文面板外面。說明收起時整層 display:none，不會躺在地圖上擋按鈕。 */
-#help #tutorial-open { position: absolute; left: 8px; bottom: 8px; z-index: 2; box-sizing: border-box;
-  width: auto; min-width: 44px; min-height: 44px; height: 44px; padding: 0 10px; pointer-events: auto;
-  border: 1px solid #9cc6ff; border-radius: 5px; background: #2f5f9a; color: #f3eedf; font: inherit; font-weight: 700;
-  cursor: pointer; touch-action: manipulation; }
+/* 入口放在說明框的按鈕列裡，不拉到框外。說明收起時整層 display:none。 */
+#help #tutorial-open { position: static; box-sizing: border-box; min-width: 44px; min-height: 44px; height: 44px; margin: 0 0 0 8px; padding: 0 10px;
+  border: 1px solid #9cc6ff; border-radius: 5px; background: #2f5f9a; color: #f3eedf; font: inherit; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 #help #tutorial-open[hidden] { display: none; }
 `;
 
@@ -58,7 +56,7 @@ function dormant(): TutorialHandle {
   return { frame() {}, visible: () => false };
 }
 
-export function initTutorial(host: TutorialHost, enabled: boolean, store?: TutorialStore | null): TutorialHandle {
+export function initTutorial(host: TutorialHost, enabled: boolean, store?: TutorialStore | null, onMode?: (on: boolean) => void): TutorialHandle {
   if (!enabled) return dormant();
   const box = store === undefined ? browserStore() : store;
   let stored: string | null = null;
@@ -84,7 +82,7 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
     </div>
     <div class="row">
       <div class="acts"><button type="button" id="tutorial-a"></button><button type="button" id="tutorial-b"></button></div>
-      <button type="button" id="tutorial-skip">跳過</button>
+      <div class="nav"><button type="button" id="tutorial-next">下一步</button><button type="button" id="tutorial-skip">跳過</button></div>
       <button type="button" id="tutorial-ok" hidden>知道了</button>
     </div>`;
   host.appendChild(root);
@@ -95,7 +93,7 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
   };
   const title = q('#tutorial-title'), clock = q('#tutorial-clock'), body = q('#tutorial-body'), status = q('#tutorial-status');
   const btnA = q('#tutorial-a') as HTMLButtonElement, btnB = q('#tutorial-b') as HTMLButtonElement;
-  const skip = q('#tutorial-skip') as HTMLButtonElement, ok = q('#tutorial-ok') as HTMLButtonElement;
+  const next = q('#tutorial-next') as HTMLButtonElement, skip = q('#tutorial-skip') as HTMLButtonElement, ok = q('#tutorial-ok') as HTMLButtonElement;
   const state: Tut = createTutorial();
   let saved = '';
   const persist = () => {
@@ -110,21 +108,19 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
       clock.textContent = clockLabel(state.tick);
       body.textContent = '移動、採集、建造、攻擊都走過了。';
       status.textContent = tutorialStatus(state);
-      btnA.hidden = true; btnB.hidden = true; skip.hidden = true; ok.hidden = false;
+      btnA.hidden = true; btnB.hidden = true; next.hidden = true; skip.hidden = true; ok.hidden = false;
       persist();
       return;
     }
     const lesson = TUTORIAL_LESSONS[state.step];
-    const done = (state.flags & (1 << state.step)) !== 0;
-    const extra = done ? '做對了。腳本時間到就進入下一課。' : tutorialHolding(state) ? '先完成這一動，腳本才會繼續。' : '';
-    title.textContent = `第 ${state.step + 1}／4 課　${lesson.title}`;
-    body.textContent = extra ? `${lesson.body}${extra}` : lesson.body;
+    title.textContent = `${state.step + 1}/4 ${lesson.title}`;
+    body.textContent = lesson.body;
     status.textContent = tutorialStatus(state);
     clock.textContent = clockLabel(state.tick);
     const labels = ACTS[state.step];
     btnA.hidden = !labels[0]; btnA.textContent = labels[0];
     btnB.hidden = !labels[1]; btnB.textContent = labels[1];
-    skip.hidden = false; ok.hidden = true;
+    next.hidden = false; skip.hidden = false; ok.hidden = true;
   };
   const press = (which: 'a' | 'b') => {
     if (state.step >= 4) return;
@@ -138,11 +134,14 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
     refresh();
   };
   const hide = () => {
+    const was = !root.hidden;
     root.hidden = true;
     const opener = document.getElementById('tutorial-open');
     if (opener) opener.hidden = true;
+    if (was) onMode?.(false);
   };
   let last = 0, acc = 0;
+  next.addEventListener('click', e => { e.stopPropagation(); tutorialAct(state, { t: 'next' }); refresh(); });
   btnA.addEventListener('click', e => { e.stopPropagation(); press('a'); });
   btnB.addEventListener('click', e => { e.stopPropagation(); press('b'); });
   skip.addEventListener('click', e => {
@@ -165,8 +164,10 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
       root.hidden = false;
       last = 0;
       acc = 0;
+      onMode?.(true);
     });
-    help.appendChild(open);
+    const slot = help.querySelector('.acts') ?? help;
+    slot.appendChild(open);
   }
   refresh();
 

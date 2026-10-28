@@ -110,6 +110,12 @@ async function main() {
     await frames();
     g = await layout();
     assert.equal(g.helpHidden, false, '問號打開說明');
+    const opener = await E(`(() => {
+      const b = document.getElementById('tutorial-open'), p = document.querySelector('#help .panel');
+      const br = b.getBoundingClientRect(), pr = p.getBoundingClientRect();
+      return { inside: br.top >= pr.top - 1 && br.bottom <= pr.bottom + 1 && br.left >= pr.left - 1 && br.right <= pr.right + 1 };
+    })()`);
+    assert.equal(opener.inside, true, '新手教學在說明框裡面');
     const openBtn = await centerOf('tutorial-open');
     await touchTap(page, openBtn.x, openBtn.y);
     await frames();
@@ -119,6 +125,10 @@ async function main() {
     assert.equal(g.phase, 'build', '打開教學不改布陣');
     assert.deepEqual(g.draws, before, '教學面板不增加繪製');
     assert(g.inside.some(b => b.id === 'tutorial-skip'), '面板上有跳過');
+    assert(g.inside.some(b => b.id === 'tutorial-next'), '面板上有下一步');
+    const clock = await E(`(() => { const e = document.getElementById('tutorial-clock'); return { n: e.getClientRects().length, text: e.textContent }; })()`);
+    assert.equal(clock.n, 1, '計時不換行');
+    assert.match(clock.text, /^\d+:\d{2}／3:00$/, '計時是一行的 0:00／3:00');
     for (const b of g.inside) {
       assert(b.left >= g.tut.left - 1 && b.right <= g.tut.right + 1 && b.top >= g.tut.top - 1 && b.bottom <= g.tut.bottom + 1, `${b.id} 留在面板裡面`);
     }

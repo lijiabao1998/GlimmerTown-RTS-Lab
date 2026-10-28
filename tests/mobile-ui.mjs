@@ -68,6 +68,9 @@ assert.equal(lines(read('../src/render/battle.ts')), 1175, 'battle.ts line count
       const inside = b.cx >= tut.left && b.cx <= tut.right && b.cy >= tut.top && b.cy <= tut.bottom;
       assert.equal(inside, false, `tutorial open: a click on ${b.id} is not inside the panel`);
     }
+    const sandbox = { left: edgeL, top: edgeT + 100, right: edgeL + 96, bottom: edgeT + 144 };
+    const sandboxGap = sep(tut, sandbox);
+    assert.ok(sandboxGap >= 16, `tutorial open: sandbox button stays clear with safe-area ${inset.left},${inset.top} (gap ${sandboxGap})`);
   }
 }
 

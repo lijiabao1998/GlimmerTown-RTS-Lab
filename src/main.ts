@@ -507,7 +507,7 @@ if (V.r045) zombiesPick = initZombiesPick({
   toggle: () => { if (w.zombies) q.delete('mode'); else q.set('mode', 'zombies'); reset(); },
 });
 
-const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
+const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902, undefined, on => issue({ t: 'tutorial', on: on ? 1 : 0 }));
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
