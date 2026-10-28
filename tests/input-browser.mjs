@@ -71,7 +71,13 @@ async function main() {
     const E = expr => page.evaluate(expr);
     const state = () => E('({log:__rts.log(),selected:__rts.selected(),cam:__rts.cam(),hash:__rts.hash(),open:!!document.querySelector("#command-menu:not([hidden])")})');
     const frames = () => E('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
-    const viewport = async mobile => { await page.send('Emulation.setDeviceMetricsOverride', { width: mobile ? 412 : 1280, height: mobile ? 860 : 800, deviceScaleFactor: 1, mobile }); await page.send('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: 5 }); await frames(); };
+    // 導頁之後 Chrome 仍記著「觸控模擬已開」，再送一次 true 不會綁到新頁，touchStart 會變成滑鼠。先關再開才綁得上。
+    const viewport = async mobile => {
+      await page.send('Emulation.setDeviceMetricsOverride', { width: mobile ? 412 : 1280, height: mobile ? 860 : 800, deviceScaleFactor: 1, mobile });
+      await page.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+      if (mobile) await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      await frames();
+    };
     const fresh = async (extra = '', selection = [1,4,9]) => {
       await open('noR018=1&noR006=1&noR016=1&' + extra);
       assertions(await E('!!window.__rts?.ready'), 'bootstrap: actual RTS ready');
@@ -95,6 +101,95 @@ async function main() {
       const r = await E(`(()=>{const e=document.querySelector(${JSON.stringify(selector)}),r=e?.getBoundingClientRect();return r&&{x:r.x+r.width/2,y:r.y+r.height/2,width:r.width,height:r.height,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===e};})()`);
       assertions(r?.hit, `fixture: ${selector} must be clickable at its measured center`); await touchTap(page, r.x, r.y); await frames(); return r;
     };
+    // R901：412×860 觸控。收合、框選拖曳、雙指縮放、長按下指令。放在既有框選斷言之後，舊的 box 負控制仍先紅在選取。
+    const r901Touch = async () => {
+      assertions(!await E('document.getElementById("r901-chrome")'), 'box: wide viewport does not mount mobile chrome');
+      // 先在還沒送過觸控的新頁驗 noR901。本頁用過觸控再導頁時，Chrome 會把下一頁的 touchStart 變成滑鼠。
+      await fresh('noR901=1'); await viewport(true);
+      assertions(!await E('document.getElementById("r901-chrome")'), 'box: noR901 does not mount mobile chrome');
+      await hold();
+      assertions((await state()).open, 'box: noR901 long press still opens the command menu');
+      await button('#cm-cancel');
+      await fresh(); await viewport(true); await E('__rts.focus(27,27,1)'); await frames();
+      const geom = await E(`(()=>{
+        const rect = e => { const r = e.getBoundingClientRect(); return { left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height }; };
+        const hit = e => { const r = e.getBoundingClientRect(); return e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); };
+        const css = [...document.styleSheets].flatMap(s => { try { return [...s.cssRules].map(r => r.cssText); } catch { return []; } }).join('\\n');
+        const chrome = ['r901-top','r901-bar','r901-box'].map(id => { const e = document.getElementById(id); return e && { id, ...rect(e), hit: hit(e) }; });
+        const obstacles = ['#hud .btns button','#minimap','#hint','#prodbar button','#buildbar button'].flatMap(s => [...document.querySelectorAll(s)]).filter(e => e.getBoundingClientRect().height).map(rect);
+        const disjoint = (a, b) => a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom;
+        return { chrome, obstacles, clear: chrome.every(c => c && obstacles.every(o => disjoint(c, o))), css };
+      })()`);
+      assertions(geom.chrome.every(b => b && b.hit && b.width >= 44 && b.height >= 44), 'box: phone chrome targets are at least 44px and hit-testable');
+      assertions(geom.clear, 'box: phone chrome does not cover open toolbar, minimap, hint, production or build buttons');
+      for (const key of ['safe-area-inset-top', 'safe-area-inset-right', 'safe-area-inset-bottom', 'safe-area-inset-left']) assertions(geom.css.includes('env(' + key + ')'), 'box: layout uses ' + key);
+      assertions(geom.css.includes('#r901-chrome') && geom.css.includes('env(safe-area-inset-left)') && geom.css.includes('env(safe-area-inset-top)'), 'box: mobile chrome is positioned in the safe area');
+      const spot = sel => E(`(()=>{const e=document.querySelector(${JSON.stringify(sel)}); const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2,id:e.id};})()`);
+      const topSpot = await spot('#b-help'), barSpot = await spot('#prodbar button');
+      const at = (p, tag) => E(`document.elementFromPoint(${p.x},${p.y})?.tagName===${JSON.stringify(tag)}`);
+      await button('#r901-top'); await button('#r901-bar'); await frames();
+      assertions(await at(topSpot, 'CANVAS'), 'box: collapsed top buttons give that point to the map');
+      assertions(await at(barSpot, 'CANVAS'), 'box: collapsed production bar gives that point to the map');
+      assertions(await E('getComputedStyle(document.querySelector("#hud .btns")).display==="none"'), 'box: collapsed toolbar is not displayed');
+      await E('document.getElementById("buildbar").hidden=false');
+      assertions(await E('getComputedStyle(document.querySelector("#prodbar")).display==="none" && getComputedStyle(document.querySelector("#buildbar")).display==="none"'), 'box: collapsed build and production bars are not displayed');
+      await E('document.getElementById("buildbar").hidden=true');
+      const draws = await E('__rts.info()');
+      const beforeHold = await state();
+      await hold();
+      assertions((await state()).open, 'box: long press still opens the command menu');
+      await button('#cm-he'); await frames();
+      const ordered = (await state()).log.slice(beforeHold.log.length).map(l => l.cmd);
+      assert.equal(ordered.length, 1, 'box: long-press menu issues one command');
+      assert.equal(ordered[0].t, 'fireAt', 'box: long-press command is the existing fireAt');
+      await button('#r901-box');
+      assertions(await E('document.getElementById("r901-box").getAttribute("aria-pressed")==="true"'), 'box: touch selection arms');
+      await E('__rts.focus(27,27,1);__rts.select([])'); await frames();
+      const all = await E('__rts.units().filter(u=>u.alive&&u.side===0).map(u=>({id:u.id,p:__rts.screenOf(u.id)}))');
+      const units = all.filter(u => u.p[0] > 70 && u.p[0] < 340 && u.p[1] > 210 && u.p[1] < 680);
+      assertions(units.length > 0, 'box: at least one friendly is on the open map');
+      const x0 = Math.floor(Math.min(...units.map(p => p.p[0]))) - 16, x1 = Math.ceil(Math.max(...units.map(p => p.p[0]))) + 16;
+      const y0 = Math.floor(Math.min(...units.map(p => p.p[1]))) - 16, y1 = Math.ceil(Math.max(...units.map(p => p.p[1]))) + 16;
+      assertions(await E(`document.elementFromPoint(${x0},${y0})?.tagName==='CANVAS'`), 'box: touch selection drag starts on the map');
+      const want = all.filter(u => u.p[0] >= x0 && u.p[0] <= x1 && u.p[1] >= y0 && u.p[1] <= y1).map(u => u.id).sort((a, b) => a - b);
+      const beforeBox = await state();
+      await touch('touchStart', [[x0, y0, 1]]);
+      await touch('touchMove', [[x1, y1, 1]]); await frames();
+      assertions(await E('!!document.querySelector("#selection-box:not([hidden])")'), 'box: armed touch drag shows the selection rectangle');
+      await touch('touchEnd', []); await frames();
+      const boxed = await state();
+      assert.deepEqual(boxed.selected.sort((a, b) => a - b), want, 'box: touch drag adds the living friendlies inside the rectangle');
+      assert.deepEqual(boxed.cam, beforeBox.cam, 'box: touch selection does not pan');
+      assert.deepEqual(boxed.log, beforeBox.log, 'box: touch selection does not issue a command');
+      await button('#r901-box');
+      assertions(await E('document.getElementById("r901-box").getAttribute("aria-pressed")==="false"'), 'box: second tap disarms touch selection');
+      const panFrom = await E(`(()=>{for (let y=300;y<560;y+=30) for (let x=90;x<300;x+=30) if (document.elementFromPoint(x,y)?.tagName==='CANVAS') return [x,y]; return null;})()`);
+      assertions(panFrom, 'box: pan has a canvas point');
+      const beforePan = await state();
+      await touch('touchStart', [[...panFrom, 1]]);
+      await touch('touchMove', [[panFrom[0] + 48, panFrom[1] + 20, 1]]);
+      await touch('touchEnd', []); await frames();
+      const panned = await state();
+      assertions(panned.cam.x !== beforePan.cam.x || panned.cam.z !== beforePan.cam.z, 'box: unarmed touch drag still pans');
+      assert.deepEqual(panned.log, beforePan.log, 'box: unarmed drag does not issue a command');
+      const pair = await E(`(()=>{const pts=[]; for (let y=240;y<640;y+=28) for (let x=80;x<360;x+=28) if (document.elementFromPoint(x,y)?.tagName==='CANVAS') pts.push([x,y]); for (const a of pts) for (const b of pts) { const d=Math.hypot(a[0]-b[0],a[1]-b[1]); if (d>90 && d<150) return [a,b]; } return null;})()`);
+      assertions(pair, 'box: pinch has two canvas points');
+      const beforePinch = await state();
+      await touch('touchStart', [[...pair[0], 1], [...pair[1], 2]]); await frames();
+      await touch('touchMove', [[pair[0][0] - 36, pair[0][1], 1], [pair[1][0] + 36, pair[1][1], 2]]); await frames();
+      await touch('touchEnd', []); await frames();
+      const pinched = await state();
+      assertions(Math.abs(pinched.cam.zoom - beforePinch.cam.zoom) > 0.0001, 'box: two-finger pinch changes zoom');
+      assert.deepEqual(pinched.log, beforePinch.log, 'box: pinch does not issue a command');
+      assert.deepEqual(pinched.selected, beforePinch.selected, 'box: pinch does not change selection');
+      await button('#r901-top'); await button('#r901-bar'); await frames();
+      assertions(await E(`(()=>{const e=document.elementFromPoint(${topSpot.x},${topSpot.y}); const r=e?.getBoundingClientRect(); return e?.id==='b-help'&&r.width>=44&&r.height>=44;})()`), 'box: expanded top button is at least 44px and hittable');
+      assertions(await E(`(()=>{const e=document.querySelector('#prodbar button'); const r=e.getBoundingClientRect(); return r.width>=44&&r.height>=44&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()`), 'box: expanded production button is at least 44px and hittable');
+      await E('__rts.focus(27,27,1);__rts.select([1,4,9])'); await frames();
+      const afterDraws = await E('__rts.info()');
+      assert.equal(afterDraws.calls, draws.calls, 'box: mobile chrome adds no draw call');
+      assertions(afterDraws.calls <= 22 && afterDraws.triangles <= 80000, 'box: phone view stays inside the battle draw budget');
+    };
     const cases = {
       async box() {
         await viewport(false); await E('__rts.focus(27,27,1);__rts.select([9])'); await frames();
@@ -112,6 +207,7 @@ async function main() {
           assert.deepEqual((await state()).selected.sort((a,b)=>a-b),want,'box: four directions add all live friendly projected units');
         }
         const after=await state(); assert.deepEqual(after.cam,before.cam,'box: drag does not pan or fling'); assert.deepEqual(after.log,before.log,'box: selection never issues a command'); assert.equal(after.hash,before.hash,'box: selection does not alter simulation');
+        await r901Touch();
       },
       async hold() {
         await viewport(true); const before=await state(); await E(`window.__r127HoldEvents=[];for(const type of ['pointerdown','pointerup','pointercancel','lostpointercapture','click'])document.addEventListener(type,e=>window.__r127HoldEvents.push({type,target:e.target?.id||e.target?.tagName,x:e.clientX,y:e.clientY}),true);`); const heldPoint=await hold(false); const heldGeometry=await E(`(()=>{const box=e=>{const r=e?.getBoundingClientRect();return r&&[r.x,r.y,r.width,r.height];},menu=document.getElementById('command-menu');return {events:window.__r127HoldEvents,menu:box(menu),hidden:menu?.hidden,buttons:[...document.querySelectorAll('#command-menu button')].map(e=>[e.id,box(e)]),hint:document.getElementById('hint')?.textContent,log:__rts.log()};})()` );
