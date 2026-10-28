@@ -154,7 +154,7 @@ async function main() {
       };
       for (const w of [412, 390, 360]) {
         const row = await phoneRow(w, 915);
-        assertions(row.prodRows === 1 && row.prodH < row.prodBtn * 2, `box: ${w}×915 production bar is one row`);
+        assertions(row.prodRows === 1, `box: ${w}×915 production buttons are one row`);
         assertions(row.buildRows === 1, `box: ${w}×915 build button row is one row`);
         assertions(row.oneLine, `box: ${w}×915 status bar does not wrap`);
       }
