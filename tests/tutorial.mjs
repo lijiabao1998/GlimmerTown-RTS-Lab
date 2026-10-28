@@ -1,8 +1,7 @@
 // R902：教學腳本走得完、跳得過、關得掉；既有腳本戰鬥的雜湊不動。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { createWorld, hashWorld, ORD_ATTACK, ORD_IDLE, SIDE_ENEMY, SIDE_PLAYER, SUB } from '../src/sim/world.ts';
-import { step } from '../src/sim/step.ts';
+import { hashWorld } from '../src/sim/world.ts';
 import { SCRIPT, runScript } from '../src/sim/script.ts';
 import {
   TUTORIAL_BUILD, TUTORIAL_ENEMY, TUTORIAL_LESSONS, TUTORIAL_MOVE, TUTORIAL_SCRIPT, TUTORIAL_STEP_END, TUTORIAL_STORE_KEY, TUTORIAL_SUPPLY, TUTORIAL_SUPPLY_CELL, TUTORIAL_TICKS,
@@ -156,53 +155,13 @@ assert.equal(ui.includes("root.addEventListener('click'"), false, '面板本體�
 const main = read('src/main.ts');
 const valves = read('src/valves.ts');
 const readme = read('README.md');
-assert.match(main, /initTutorial\(document\.getElementById\('hud'\) \?\? document\.body, V\.r902/);
-assert.match(main, /if \(phase === 'build'\) issue\(\{ t: 'tutorial', on: on \? 1 : 0 \}\)/);
-assert.match(main, /pending = pending\.filter\(c => c\.t !== 'tutorial'\)/);
-assert.match(main, /log = log\.filter\(e => e\.cmd\.t !== 'tutorial'\)/);
-assert.match(main, /delete w\.tutorial/);
+assert.match(main, /initTutorial\(document\.getElementById\('hud'\) \?\? document\.body, V\.r902\)/);
 assert.match(main, /tutorial\.frame\(t\)/);
+assert.equal(main.includes("t: 'tutorial'"), false, '總機不再發教學停火指令');
 assert.equal(main.includes("q.get('noR"), false);
 assert.match(valves, /get r902\(\) \{ return on\('902'\); \}/);
 assert.equal(readme.includes('`?noR902=1`'), true, 'README 逃生閥對照要有這一閥');
-
-{
-  const aimed = () => {
-    const w = createWorld(1944);
-    const me = w.units.find(u => u.side === SIDE_PLAYER && u.kind === 0);
-    const foe = w.units.find(u => u.side === SIDE_ENEMY && u.kind === 0);
-    foe.x = me.x + 2 * SUB; foe.z = me.z; foe.path = []; foe.pathIdx = 0; foe.cooldown = 0;
-    foe.order = ORD_ATTACK; foe.target = me.id; foe.tx = me.x; foe.tz = me.z;
-    return { w, me, foe };
-  };
-  const fires = w => w.events.filter(e => e.e === 'fire' && w.units[e.unit - 1].side === SIDE_ENEMY).length;
-  const held = aimed();
-  step(held.w, [{ t: 'tutorial', on: 1 }]);
-  assert.equal(held.w.tutorial, 1);
-  step(held.w, []);
-  assert.equal(fires(held.w), 0, '教學開著時敵方不開火');
-  const open = aimed();
-  step(open.w, []);
-  assert.equal(fires(open.w), 1, '沒開教學時同一姿勢敵方會開火');
-  const late = aimed();
-  step(late.w, []);
-  assert.equal(late.w.tick > 0, true, '這一步之後已經開戰');
-  late.foe.x = late.me.x + 2 * SUB; late.foe.z = late.me.z; late.foe.path = []; late.foe.pathIdx = 0; late.foe.cooldown = 0;
-  late.foe.order = ORD_ATTACK; late.foe.target = late.me.id; late.foe.tx = late.me.x; late.foe.tz = late.me.z;
-  step(late.w, [{ t: 'tutorial', on: 1 }]);
-  assert.equal(late.w.tutorial, undefined, '開戰後不接受教學停火');
-  assert.equal(fires(late.w), 1, '開戰後再打開教學，敵方照樣開火');
-  const blocked = createWorld(1944);
-  const me = blocked.units.find(u => u.side === SIDE_PLAYER);
-  const foe = blocked.units.find(u => u.side === SIDE_ENEMY);
-  step(blocked, [{ t: 'tutorial', on: 1 }, { t: 'attack', side: SIDE_PLAYER, ids: [me.id], target: foe.id }, { t: 'attack', side: SIDE_ENEMY, ids: [foe.id], target: me.id }]);
-  assert.equal(me.order, ORD_ATTACK, '教學開著時我方攻擊仍生效');
-  assert.equal(foe.order, ORD_IDLE, '教學開著時敵方攻擊指令不生效');
-  step(blocked, [{ t: 'tutorial', on: 0 }]);
-  assert.equal(blocked.tutorial, undefined, '關掉教學就拿掉旗標');
-  step(blocked, [{ t: 'attack', side: SIDE_ENEMY, ids: [foe.id], target: me.id }]);
-  assert.equal(foe.order, ORD_ATTACK, '關掉教學後敵方又能攻擊');
-  assert.equal(hashWorld(runScript()), golden.hash, '教學旗標不進一般對戰雜湊');
-}
+assert.equal(read('src/sim/step.ts').includes("t: 'tutorial'"), false, '模擬不再有教學停火指令');
+assert.equal(read('src/sim/world.ts').includes('tutorial?:'), false, '世界不再有教學停火欄位');
 
 console.log('OK tutorial: script completes, skip stops, valve mounts nothing, golden unchanged');

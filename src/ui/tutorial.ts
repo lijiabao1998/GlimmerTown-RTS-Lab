@@ -56,7 +56,7 @@ function dormant(): TutorialHandle {
   return { frame() {}, visible: () => false };
 }
 
-export function initTutorial(host: TutorialHost, enabled: boolean, store?: TutorialStore | null, onMode?: (on: boolean) => void): TutorialHandle {
+export function initTutorial(host: TutorialHost, enabled: boolean, store?: TutorialStore | null): TutorialHandle {
   if (!enabled) return dormant();
   const box = store === undefined ? browserStore() : store;
   let stored: string | null = null;
@@ -134,11 +134,9 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
     refresh();
   };
   const hide = () => {
-    const was = !root.hidden;
     root.hidden = true;
     const opener = document.getElementById('tutorial-open');
     if (opener) opener.hidden = true;
-    if (was) onMode?.(false);
   };
   let last = 0, acc = 0;
   next.addEventListener('click', e => { e.stopPropagation(); tutorialAct(state, { t: 'next' }); refresh(); });
@@ -164,7 +162,6 @@ export function initTutorial(host: TutorialHost, enabled: boolean, store?: Tutor
       root.hidden = false;
       last = 0;
       acc = 0;
-      onMode?.(true);
     });
     const slot = help.querySelector('.acts') ?? help;
     slot.appendChild(open);

@@ -139,7 +139,6 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   if (w.map === MAP_LARGE) view.target.set(55, 0, 55);   // R043：大地圖開局鏡頭對準我方裝甲連（右下角落）
   if (w.map === MAP_TOWN) view.target.set(87, 0, 87);
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
-  delete w.tutorial;
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   planner.clear(); phase = build ? 'build' : 'battle';
   battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
@@ -203,9 +202,6 @@ function startBattle() {
   phase = 'battle'; planner.clear();
   if (V.r016) { if (V.r041) startOrder(); else startBanner(); }
   view.setWorld(w, -1);
-  pending = pending.filter(c => c.t !== 'tutorial');
-  log = log.filter(e => e.cmd.t !== 'tutorial');
-  delete w.tutorial;
   tick();
   paused = false;
   syncBattleAudio();
@@ -511,7 +507,7 @@ if (V.r045) zombiesPick = initZombiesPick({
   toggle: () => { if (w.zombies) q.delete('mode'); else q.set('mode', 'zombies'); reset(); },
 });
 
-const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902, undefined, on => { if (phase === 'build') issue({ t: 'tutorial', on: on ? 1 : 0 }); });
+const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
