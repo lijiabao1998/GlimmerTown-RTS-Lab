@@ -30,6 +30,21 @@ for (const key of ['safe-area-inset-top', 'safe-area-inset-right', 'safe-area-in
 assert.match(css, /#r901-chrome[\s\S]*env\(safe-area-inset-left\)[\s\S]*env\(safe-area-inset-top\)[\s\S]*env\(safe-area-inset-right\)[\s\S]*env\(safe-area-inset-bottom\)/, 'chrome block names every safe-area inset');
 assert.match(css, /body\.r901-top-off #hud \.btns \{ display: none; \}/, 'collapsed toolbar is display none');
 assert.match(css, /body\.r901-bar-off #prodbar, body\.r901-bar-off #buildbar \{ display: none; \}/, 'collapsed build and production bars are display none');
+// R905：直向生產鍵是至少 44px 的小方鍵（名稱在上、補給在下），不用負邊距疊在一起；提示列不截斷（耐久、裝填等資訊要看得完整）
+assert.match(css, /@media \(max-width: 480px\) and \(orientation: portrait\) \{[\s\S]*body\.r901 #hud #prodbar button \{[^}]*min-width: 44px;[^}]*height: 44px;[^}]*flex-direction: column;/, 'portrait production keys are 44px stacked keys');
+// R905 的生產鍵樣式只掛在 body.r901 上：?noR901=1 不跑 initMobileChrome，就回到舊排法（AGENTS.md 第 2 節第 7 條）
+{
+  const gated = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*#prodbar button[^{}]*)\{([^}]*)\}/g)].filter(m => /flex-direction|flex-basis|max-width/.test(m[2]));
+  assert.ok(gated.length >= 2, 'fixture: the portrait and 360px production key rules are found');
+  for (const m of gated) assert.match(m[1].trim(), /^body\.r901 /, `portrait production key layout "${m[1].trim()}" is not applied without the r901 valve`);
+}
+assert.match(read('../src/ui/mobileChrome.ts'), /initMobileChrome[\s\S]*document\.body\.classList\.add\('r901'\)/, 'mobile chrome marks the body so the valve gates the key layout');
+assert.equal(/#prodbar button \{[^}]*margin[^;}]*-\d/.test(css), false, 'production keys never overlap through negative margins');
+assert.equal(/#hud \.bottom \{[^}]*text-overflow: ellipsis/.test(css), false, 'status line is never cut with an ellipsis');
+for (const id of ['#sb-enter', '#map-pick', '#zombies-pick', '#town-pick']) {
+  assert.match(css, new RegExp(`body\\.r901-top-off ${id.replace('#', '\\#')}`), `collapsed top hides ${id}`);
+  assert.match(css, new RegExp(`body\\.r901-bar-off ${id.replace('#', '\\#')}`), `collapsed bar hides ${id}`);
+}
 assert.match(css, /#r901-chrome button \{[^}]*width:\s*44px;\s*height:\s*44px/, 'chrome buttons are 44px');
 assert.match(valves, /get r901\(\) \{ return on\('901'\); \}/, 'valve r901 is on the table');
 assert.match(main, /touchBox: \(\) => typeof touchBoxArmed === 'function' && touchBoxArmed\(\)/, 'main asks the chrome whether touch box is armed');
@@ -95,6 +110,7 @@ const point = (x, y, extra = {}) => ({ pointerId: 1, pointerType: 'touch', butto
 function rig(touchBox) {
   const boxes = [], selected = [], holds = [];
   let dismissed = 0;
+  const c = clock();
   const g = new Gestures({
     enabled: () => true,
     box: r => boxes.push(r),
@@ -102,8 +118,8 @@ function rig(touchBox) {
     hold: (x, y) => holds.push([x, y]),
     dismiss: () => { dismissed++; },
     touchBox: () => touchBox,
-  }, clock());
-  return { g, boxes, selected, holds, dismissed: () => dismissed };
+  }, c);
+  return { g, boxes, selected, holds, dismissed: () => dismissed, clock: c };
 }
 {
   const f = rig(true);
@@ -115,6 +131,10 @@ function rig(touchBox) {
   f.g.down(point(10, 10));
   assert.equal(f.g.up(point(10, 10)), false, 'armed touch inside 8px is still a tap');
   assert.equal(f.holds.length, 0, 'armed touch does not open the long-press menu');
+  f.g.down(point(40, 50));
+  f.clock.advance(500);
+  assert.deepEqual(f.holds, [[40, 50]], 'armed stationary touch still long-presses at 500ms');
+  assert.equal(f.g.up(point(40, 50)), true, 'armed long-press release keeps the menu');
 }
 {
   const c = clock();

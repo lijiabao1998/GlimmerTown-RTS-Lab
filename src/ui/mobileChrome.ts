@@ -16,11 +16,12 @@ export function touchBoxArmed(): boolean { return armed; }
 
 export function initMobileChrome(canvas: HTMLCanvasElement): void {
   let state = chromeOpen();
+  document.body.classList.add('r901');   // R905 直向生產鍵的樣式掛在這個 class 上，?noR901=1 不掛就回到舊排法
   const root = document.createElement('div');
   root.id = 'r901-chrome';
   root.innerHTML = `<button type="button" id="r901-top" aria-expanded="true" title="收起或展開上方按鈕" aria-label="收起或展開上方按鈕">具</button>
     <button type="button" id="r901-bar" aria-expanded="true" title="收起或展開建造與生產列" aria-label="收起或展開建造與生產列">產</button>
-    <button type="button" id="r901-box" aria-pressed="false" title="框選：拖曳圈選我方；再按恢復單指平移。雙指仍縮放，未開框選時長按仍下指令" aria-label="框選">框</button>`;
+    <button type="button" id="r901-box" aria-pressed="false" title="框選：拖曳圈選我方；停住長按仍下指令。再按恢復單指平移。雙指仍縮放" aria-label="框選">框</button>`;
   const top = root.querySelector('#r901-top') as HTMLButtonElement;
   const bar = root.querySelector('#r901-bar') as HTMLButtonElement;
   const box = root.querySelector('#r901-box') as HTMLButtonElement;

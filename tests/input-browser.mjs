@@ -107,6 +107,8 @@ async function main() {
       // 先在還沒送過觸控的新頁驗 noR901。本頁用過觸控再導頁時，Chrome 會把下一頁的 touchStart 變成滑鼠。
       await fresh('noR901=1'); await viewport(true);
       assertions(!await E('document.getElementById("r901-chrome")'), 'box: noR901 does not mount mobile chrome');
+      const oldKeys = await E('(()=>{const b=document.querySelector("#prodbar button");return b&&{dir:getComputedStyle(b).flexDirection,marked:document.body.classList.contains("r901")};})()');
+      assertions(oldKeys && oldKeys.dir === 'row' && !oldKeys.marked, `box: noR901 keeps the old production key layout ${JSON.stringify(oldKeys)}`);
       await hold();
       assertions((await state()).open, 'box: noR901 long press still opens the command menu');
       await button('#cm-cancel');
@@ -124,10 +126,43 @@ async function main() {
       assertions(geom.clear, 'box: phone chrome does not cover open toolbar, minimap, hint, production or build buttons');
       for (const key of ['safe-area-inset-top', 'safe-area-inset-right', 'safe-area-inset-bottom', 'safe-area-inset-left']) assertions(geom.css.includes('env(' + key + ')'), 'box: layout uses ' + key);
       assertions(geom.css.includes('#r901-chrome') && geom.css.includes('env(safe-area-inset-left)') && geom.css.includes('env(safe-area-inset-top)'), 'box: mobile chrome is positioned in the safe area');
+      const phoneRow = async (w, h) => {
+        await page.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: true });
+        await page.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+        await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+        await frames();
+        return E(`(()=>{
+          // R905：生產鍵每顆至少 44×44、整顆在畫面裡、彼此不疊、中心點得到、名稱與補給沒被截；提示列不截斷
+          const prod = document.getElementById('prodbar'), hint = document.getElementById('hint');
+          const bs = [...prod.querySelectorAll('button')].filter(b => !b.hidden && b.getBoundingClientRect().height > 0).map(b => {
+            const r = b.getBoundingClientRect();
+            return { id: b.id, l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height, clip: b.scrollWidth > b.clientWidth + 1,
+              hit: b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) };
+          });
+          const overlap = bs.some((a, i) => bs.some((c, k) => k > i && a.l < c.r - 0.5 && c.l < a.r - 0.5 && a.t < c.b - 0.5 && c.t < a.b - 0.5));
+          return { n: bs.length, rows: new Set(bs.map(b => Math.round(b.t))).size, overlap, bs,
+            bad: bs.filter(b => b.w < 44 || b.h < 44 || b.l < 0 || b.r > innerWidth || b.t < 0 || b.b > innerHeight || b.clip || !b.hit).map(b => b.id),
+            hintCut: hint.scrollWidth > hint.clientWidth + 1 || hint.scrollHeight > hint.clientHeight + 1 };
+        })()`);
+      };
+      for (const w of [412, 390, 360]) {
+        const row = await phoneRow(w, 915);
+        assertions(row.n >= 7 && row.rows <= 2, `box: ${w}×915 production buttons fit in at most two rows (${row.n} buttons, ${row.rows} rows)`);
+        assertions(!row.overlap && row.bad.length === 0, `box: ${w}×915 every production button is a whole, unclipped, unobstructed 44px target ${JSON.stringify(row.bad)}`);
+        assertions(!row.hintCut, `box: ${w}×915 status line shows its full text`);
+      }
+      await viewport(true); await E('__rts.focus(27,27,1)'); await frames();
       const spot = sel => E(`(()=>{const e=document.querySelector(${JSON.stringify(sel)}); const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2,id:e.id};})()`);
       const topSpot = await spot('#b-help'), barSpot = await spot('#prodbar button');
       const at = (p, tag) => E(`document.elementFromPoint(${p.x},${p.y})?.tagName===${JSON.stringify(tag)}`);
+      const prebattle = ['sb-enter', 'map-pick', 'zombies-pick', 'town-pick'];
+      assertions(await E('getComputedStyle(document.getElementById("sb-enter")).display!=="none"'), 'box: sandbox entry is visible before collapse');
       await button('#r901-top'); await button('#r901-bar'); await frames();
+      const shown = await E(`(${JSON.stringify(prebattle)}).map(id => { const e = document.getElementById(id); return e ? e.hidden : null; })`);
+      await E(`(${JSON.stringify(prebattle)}).forEach(id => { const e = document.getElementById(id); if (e) e.hidden = false; })`);
+      const hiddenNow = await E(`(${JSON.stringify(prebattle)}).map(id => { const e = document.getElementById(id); return e ? getComputedStyle(e).display : 'missing'; })`);
+      assertions(hiddenNow.every(d => d === 'none'), 'box: collapsed chrome hides pre-battle rows ' + JSON.stringify(hiddenNow));
+      await E(`(${JSON.stringify(shown)}).forEach((hidden, i) => { const e = document.getElementById(${JSON.stringify(prebattle)}[i]); if (e && hidden !== null) e.hidden = hidden; })`);
       assertions(await at(topSpot, 'CANVAS'), 'box: collapsed top buttons give that point to the map');
       assertions(await at(barSpot, 'CANVAS'), 'box: collapsed production bar gives that point to the map');
       assertions(await E('getComputedStyle(document.querySelector("#hud .btns")).display==="none"'), 'box: collapsed toolbar is not displayed');
@@ -144,6 +179,13 @@ async function main() {
       assert.equal(ordered[0].t, 'fireAt', 'box: long-press command is the existing fireAt');
       await button('#r901-box');
       assertions(await E('document.getElementById("r901-box").getAttribute("aria-pressed")==="true"'), 'box: touch selection arms');
+      const beforeArmedHold = await state();
+      await hold();
+      assertions((await state()).open, 'box: long press still opens the command menu while box select is armed');
+      await button('#cm-he'); await frames();
+      const armedOrdered = (await state()).log.slice(beforeArmedHold.log.length).map(l => l.cmd);
+      assert.equal(armedOrdered.length, 1, 'box: armed long-press menu issues one command');
+      assert.equal(armedOrdered[0].t, 'fireAt', 'box: armed long-press command is the existing fireAt');
       await E('__rts.focus(27,27,1);__rts.select([])'); await frames();
       const all = await E('__rts.units().filter(u=>u.alive&&u.side===0).map(u=>({id:u.id,p:__rts.screenOf(u.id)}))');
       const units = all.filter(u => u.p[0] > 70 && u.p[0] < 340 && u.p[1] > 210 && u.p[1] < 680);
@@ -189,6 +231,7 @@ async function main() {
       const afterDraws = await E('__rts.info()');
       assert.equal(afterDraws.calls, draws.calls, 'box: mobile chrome adds no draw call');
       assertions(afterDraws.calls <= 22 && afterDraws.triangles <= 80000, 'box: phone view stays inside the battle draw budget');
+      record(`R905 portrait battle closeup: ${afterDraws.calls} calls / ${afterDraws.triangles} triangles`);
     };
     const cases = {
       async box() {

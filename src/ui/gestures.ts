@@ -11,7 +11,7 @@ export interface GestureActions {
   select: (rect: SelectionRect) => void;
   hold: (x: number, y: number) => void;
   dismiss: () => void;
-  touchBox?: () => boolean; // R901：只有觸控、而且玩家打開框選時，單指拖曳才改走框選
+  touchBox?: () => boolean; // R901：框選開著時，停住仍長按；拖過 8px 才改走框選
 }
 interface Candidate { id: number; kind: 'box' | 'hold'; x: number; y: number; cx: number; cy: number; started: boolean }
 const rectangle = (c: Candidate): SelectionRect => ({ left: Math.min(c.x, c.cx), top: Math.min(c.y, c.cy), right: Math.max(c.x, c.cx), bottom: Math.max(c.y, c.cy) });
@@ -42,7 +42,7 @@ export class Gestures {
     }
     if (dismissOnly) { this.dismissOnly.add(e.pointerId); this.consumed.add(e.pointerId); return; }
     if (!this.actions.enabled()) return;
-    const kind = e.pointerType === 'mouse' && e.button === 0 && e.shiftKey ? 'box' : e.pointerType === 'touch' && this.actions.touchBox?.() ? 'box' : e.pointerType === 'touch' ? 'hold' : null;
+    const kind = e.pointerType === 'mouse' && e.button === 0 && e.shiftKey ? 'box' : e.pointerType === 'touch' ? 'hold' : null;
     if (!kind) return;
     const c: Candidate = { id: e.pointerId, kind, x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY, started: false };
     this.candidate = c;
@@ -65,6 +65,12 @@ export class Gestures {
     if (c.kind === 'box') {
       if (moved) c.started = true;
       if (c.started) { this.consumed.add(c.id); this.actions.box(rectangle(c)); }
+      return true;
+    }
+    // 框選開著：先當長按，手指真正拖過 8px 才改成框，不再平移。
+    if (c.kind === 'hold' && moved && !c.started && this.actions.touchBox?.()) {
+      if (this.timer !== null) { this.clock.clear(this.timer); this.timer = null; }
+      c.kind = 'box'; c.started = true; this.consumed.add(c.id); this.actions.box(rectangle(c));
       return true;
     }
     if (moved) { this.consumed.delete(c.id); this.clearCandidate(); this.actions.dismiss(); return false; }
