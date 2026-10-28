@@ -34,6 +34,7 @@ import { setStreets } from './render/battle.ts';
 import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
+import { initTutorial } from './ui/tutorial.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
@@ -506,6 +507,8 @@ if (V.r045) zombiesPick = initZombiesPick({
   toggle: () => { if (w.zombies) q.delete('mode'); else q.set('mode', 'zombies'); reset(); },
 });
 
+const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
+
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
   const t = performance.now(), dt = Math.min(0.25, (t - lastT) / 1000);
@@ -559,6 +562,7 @@ renderer.setAnimationLoop(() => {
   }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
+  tutorial.frame(t);
   commandMenu?.frame(); // R137：只更新選單，不補跑其他 HUD 的刷新路徑。
   prodBar?.update();
   minimap?.frame(t);

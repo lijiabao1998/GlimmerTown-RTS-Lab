@@ -40,6 +40,37 @@ assert.equal((chromeSrc.match(/addEventListener\('gesture(?:start|change)'/g) ||
 assert.ok(lines(main) <= 673, `main.ts stays within the hub ceiling (${lines(main)})`);
 assert.equal(lines(read('../src/render/battle.ts')), 1175, 'battle.ts line count is unchanged');
 
+// 教學開著時，具／產／框仍點得到。間距用安全區內距算，不假設瀏海是 0。
+{
+  const tutorial = read('../src/ui/tutorial.ts');
+  assert.match(tutorial, /#tutorial \{[^}]*pointer-events:\s*none/, 'open tutorial panel does not take hits itself');
+  assert.match(tutorial, /@media \(max-width: 480px\) and \(orientation: portrait\) \{[\s\S]*left: calc\(max\(8px, env\(safe-area-inset-left\)\) \+ 64px\)/, 'portrait tutorial steps right of the safe area');
+  assert.match(tutorial, /top: calc\(max\(8px, env\(safe-area-inset-top\)\) \+ 220px\)/, 'portrait tutorial top tracks the safe area');
+  const sep = (a, b) => {
+    const dx = Math.max(a.left - b.right, b.left - a.right);
+    const dy = Math.max(a.top - b.bottom, b.top - a.bottom);
+    if (dx < 0 && dy < 0) return 0;
+    if (dx < 0) return dy;
+    if (dy < 0) return dx;
+    return Math.hypot(dx, dy);
+  };
+  const insets = [{ left: 0, top: 0 }, { left: 12, top: 20 }, { left: 34, top: 47 }, { left: 59, top: 8 }];
+  for (const inset of insets) {
+    const edgeL = Math.max(8, inset.left), edgeT = Math.max(8, inset.top);
+    const buttons = ['r901-top', 'r901-bar', 'r901-box'].map((id, i) => {
+      const top = edgeT + 230 + i * (44 + 6);
+      return { id, left: edgeL, top, right: edgeL + 44, bottom: top + 44, cx: edgeL + 22, cy: top + 22 };
+    });
+    const tut = { left: edgeL + 64, top: edgeT + 220, right: edgeL + 64 + 160, bottom: edgeT + 220 + 360 };
+    for (const b of buttons) {
+      const gap = sep(tut, b);
+      assert.ok(gap >= 16, `tutorial open: ${b.id} stays clickable with safe-area ${inset.left},${inset.top} (gap ${gap})`);
+      const inside = b.cx >= tut.left && b.cx <= tut.right && b.cy >= tut.top && b.cy <= tut.bottom;
+      assert.equal(inside, false, `tutorial open: a click on ${b.id} is not inside the panel`);
+    }
+  }
+}
+
 function clock() {
   let now = 0, next = 0;
   const timers = new Map();
