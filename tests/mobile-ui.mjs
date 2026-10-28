@@ -30,7 +30,9 @@ for (const key of ['safe-area-inset-top', 'safe-area-inset-right', 'safe-area-in
 assert.match(css, /#r901-chrome[\s\S]*env\(safe-area-inset-left\)[\s\S]*env\(safe-area-inset-top\)[\s\S]*env\(safe-area-inset-right\)[\s\S]*env\(safe-area-inset-bottom\)/, 'chrome block names every safe-area inset');
 assert.match(css, /body\.r901-top-off #hud \.btns \{ display: none; \}/, 'collapsed toolbar is display none');
 assert.match(css, /body\.r901-bar-off #prodbar, body\.r901-bar-off #buildbar \{ display: none; \}/, 'collapsed build and production bars are display none');
-assert.match(css, /@media \(max-width: 480px\) and \(orientation: portrait\) \{[\s\S]*#prodbar button, body\.r044 #prodbar button \{[^}]*width: 44px;/, 'portrait production buttons stay a 44px row');
+assert.match(css, /@media \(max-width: 480px\) and \(orientation: portrait\) \{[\s\S]*#prodbar button \{[^}]*width: 44px;/, 'portrait production buttons stay a 44px row');
+assert.match(css, /body\.r044 #prodbar button \{ padding: 0 5px; \}/, 'eleven-unit row keeps the 5px padding');
+assert.match(css, /#prodbar button \{[^}]*padding: 0 7px;/, 'noR044 production buttons keep 7px padding');
 assert.match(css, /#buildbar \.row \{ flex-wrap: nowrap;/, 'portrait build button row stays one line');
 assert.match(css, /#hud \.bottom \{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; \}/, 'portrait status line does not wrap');
 for (const id of ['#sb-enter', '#map-pick', '#zombies-pick', '#town-pick']) {
