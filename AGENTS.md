@@ -8,7 +8,7 @@
 
 - **第四條線：二戰戰術 RTS。** 同一座城的第四種時間：戰爭（願景見 `docs/R000-願景.md`）。
 - 另外三條線只讀，業主明說才能動：主線 `GlimmerTown`、2D 實驗線 `GlimmerTown-lab`、3D 實驗線 `GlimmerTown3D-lab`。從那邊搬程式、規則、數字過來，寫明出處（倉庫@commit 路徑）。那三條線的規矩不會自動適用這裡。
-- **卡號 R 開頭**：Claude 用 R001–R099；GPT 車道用 R100–R899；Grok 用 R900–R999（業主 2026-10-28）。不借 D、T 號（兩條 2D 線在 T578–T589 撞過號）。
+- **卡號 R 開頭**：Claude 用 R001–R099；GPT 車道用 R100–R899；Grok 用 R900–R999（業主 2026-10-28；Grok 與它派出的代理共用這一段）。不借 D、T 號（兩條 2D 線在 T578–T589 撞過號）。**一個號只能有一張卡、`LOG.md` 只能有一列**（R066，`tests/card-numbers.mjs` 擋）：開卡前看 `origin/main` 的 `docs/tasks/`、`LOG.md` 與所有開著的 PR，拿沒人用過的號；撞了就後來的那張改號。
 - 業主的決定記在 `docs/DECISIONS.md`，定了的不重問，沒定的不替業主決定。
 
 ## 1. 誰寫哪裡
@@ -33,7 +33,7 @@
 7. **新效果都要有逃生閥。** 網址 `?noR<號>=1`（或既有的 `?fx=off`）關得掉；閥關時模擬雜湊不變。
 8. **二戰題材紅線。** 不畫卐字、SS 符文等仇恨符號，不出現真實納粹領導人；陣營徽記只用程序生成的通用圖形與顏色。
 9. **本機存檔鍵名**用 `gtrts.v1.` 開頭（Pages 跟其他三條線同一個網域 `lijiabao1998.github.io`）。
-10. **總機只放接線**（R060、R061）。`src/main.ts`、`src/render/battle.ts` 的行數上限在 `tools/hub-budget.json`，只准往下調；新功能寫在自己的檔，總機只加一兩行接線，放不下就先把總機裡別的東西搬出去。新的 `?noR<號>` 閥加在 `src/valves.ts` 一行，不要在別處讀網址（`tests/valves.mjs`、`tests/hub-budget.mjs` 會擋，這兩支只有 Claude 改）。
+10. **總機只放接線**（R060、R061）。`src/main.ts`、`src/render/battle.ts` 的行數上限在 `tools/hub-budget.json`，只准往下調；新功能寫在自己的檔，總機只加一兩行接線，放不下就先把總機裡別的東西搬出去。新的 `?noR<號>` 閥加在 `src/valves.ts` 一行，不要在別處讀網址（`tests/valves.mjs`、`tests/hub-budget.mjs` 會擋；這兩支和 R066 的 `tests/card-numbers.mjs` 只有 Claude 改）。
 
 ## 3. 每一張卡的流程（所有寫入者）
 
