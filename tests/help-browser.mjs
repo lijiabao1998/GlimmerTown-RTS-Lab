@@ -18,6 +18,7 @@ const EXPECTED_COPY = {"legacy": "怎麼玩布陣：開局先停著。點藍色�
 // R045 新增的固定文案；前面的既有全文仍逐字保留。
 for (const key of Object.keys(EXPECTED_COPY)) EXPECTED_COPY[key] = EXPECTED_COPY[key].replace('知道了', '喪屍模式：布陣時按「喪屍」切換。喪屍一波波從邊緣湧來，只會近身攻擊；用掩體與火力守住指揮部，撐越多波越好。戰報會記波次、擊倒數與最佳紀錄；一般對戰仍是預設。知道了');
 for (const key of Object.keys(EXPECTED_COPY)) EXPECTED_COPY[key] = EXPECTED_COPY[key].replace('知道了', '河鎮：布陣時按「96×96河鎮」進入更大的密集市街、村莊與田野；原本「地圖」鍵仍能切換萊伊與鄉間大圖。喪屍模式也能使用新圖。知道了');
+for (const key of Object.keys(EXPECTED_COPY)) EXPECTED_COPY[key] += '新手教學';
 const hits = new Set();
 const plugin = {
   name: 'r114-isolated-help-mutants', enforce: 'pre',
