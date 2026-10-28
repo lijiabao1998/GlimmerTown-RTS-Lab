@@ -11,6 +11,7 @@ export interface GestureActions {
   select: (rect: SelectionRect) => void;
   hold: (x: number, y: number) => void;
   dismiss: () => void;
+  touchBox?: () => boolean; // R901：只有觸控、而且玩家打開框選時，單指拖曳才改走框選
 }
 interface Candidate { id: number; kind: 'box' | 'hold'; x: number; y: number; cx: number; cy: number; started: boolean }
 const rectangle = (c: Candidate): SelectionRect => ({ left: Math.min(c.x, c.cx), top: Math.min(c.y, c.cy), right: Math.max(c.x, c.cx), bottom: Math.max(c.y, c.cy) });
@@ -41,7 +42,7 @@ export class Gestures {
     }
     if (dismissOnly) { this.dismissOnly.add(e.pointerId); this.consumed.add(e.pointerId); return; }
     if (!this.actions.enabled()) return;
-    const kind = e.pointerType === 'mouse' && e.button === 0 && e.shiftKey ? 'box' : e.pointerType === 'touch' ? 'hold' : null;
+    const kind = e.pointerType === 'mouse' && e.button === 0 && e.shiftKey ? 'box' : e.pointerType === 'touch' && this.actions.touchBox?.() ? 'box' : e.pointerType === 'touch' ? 'hold' : null;
     if (!kind) return;
     const c: Candidate = { id: e.pointerId, kind, x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY, started: false };
     this.candidate = c;

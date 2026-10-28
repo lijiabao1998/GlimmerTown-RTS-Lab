@@ -29,9 +29,9 @@
     #sb-hint { font-size: 13px; overflow-wrap: anywhere; }
     @media (max-width: 640px) { #sb-enter, #map-pick { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
     @media (max-width: 411px) { #hud.cover-durability ~ #sb-enter, #hud.cover-durability ~ #map-pick { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #2a3329; color: #f3eedf;
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #2a3329; color: #f3eedf;
       font: 14px/1.4 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
-    canvas { display: block; touch-action: none; image-rendering: pixelated; }
+    canvas { display: block; touch-action: none; image-rendering: pixelated; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     #hud { position: fixed; inset: 0; pointer-events: none; }
     #hud .bar { position: absolute; display: flex; gap: 6px; align-items: center; padding: 6px 8px;
       background: rgba(28, 32, 26, 0.72); border-radius: 6px; pointer-events: auto; }
@@ -172,6 +172,18 @@
     @keyframes ld-bob { 50% { transform: translateY(-1px); } }
     @keyframes ld-puff { 0% { opacity: .75; transform: translate(0, 0) scale(1); } 100% { opacity: 0; transform: translate(-28px, -14px) scale(2.2); } }
     @media (prefers-reduced-motion: reduce) { #loader .ld-scene * { animation: none; } }
+    /* R901：直向窄螢幕才顯示。三顆鍵留在安全區，收起後工具列／建造生產列不擋地圖。 */
+    #r901-chrome { display: none; }
+    @media (max-width: 480px) and (orientation: portrait) {
+      #r901-chrome { display: flex; flex-direction: column; gap: 6px; position: fixed; z-index: 7; box-sizing: border-box;
+        left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 230px); pointer-events: auto; touch-action: manipulation;
+        max-width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - 16px);
+        max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 246px); }
+      #r901-chrome button { box-sizing: border-box; width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; border: 1px solid #6c745f; border-radius: 5px; background: #3c4535; color: #f3eedf; font: inherit; cursor: pointer; }
+      #r901-chrome button[aria-pressed="true"], body.r901-top-off #r901-top, body.r901-bar-off #r901-bar { background: #2f5f9a; border-color: #9cc6ff; }
+      body.r901-top-off #hud .btns { display: none; }
+      body.r901-bar-off #prodbar, body.r901-bar-off #buildbar { display: none; }
+    }
   #town-pick{position:fixed;left:8px;top:164px;min-width:120px;min-height:44px;z-index:20;padding:8px;border:1px solid #929477;border-radius:4px;background:#353e2c;color:#eee7d5;font:inherit;cursor:pointer}#town-pick[hidden]{display:none}
 </style>
 </head>
