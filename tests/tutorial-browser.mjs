@@ -123,7 +123,7 @@ async function main() {
       assert(b.left >= g.tut.left - 1 && b.right <= g.tut.right + 1 && b.top >= g.tut.top - 1 && b.bottom <= g.tut.bottom + 1, `${b.id} 留在面板裡面`);
     }
     const ids = g.outside.map(b => b.id);
-    for (const id of ['bb-start', 'b-help', 'b-all', 'b-restart', 'b-audio', 'town-pick', 'map-pick', 'sb-enter', 'zombies-pick']) {
+    for (const id of ['bb-start', 'b-help', 'b-all', 'b-restart', 'b-audio', 'town-pick', 'map-pick', 'sb-enter', 'zombies-pick', 'r901-top', 'r901-bar', 'r901-box']) {
       assert(ids.includes(id), `畫面上要有 ${id}`);
     }
     let minGap = Infinity, nearest = '';

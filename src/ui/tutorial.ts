@@ -29,6 +29,11 @@ const CSS = `
 #tutorial #tutorial-skip { background: #2a2e26; }
 #tutorial #tutorial-ok { background: #2f5f9a; border-color: #9cc6ff; font-weight: 700; }
 #tutorial button[hidden] { display: none; }
+/* 直向手機左側是 R901 的具／產／框（各 44px，貼著安全區）。面板從同一條安全區往右讓出 44+20。 */
+@media (max-width: 480px) and (orientation: portrait) {
+  #tutorial { left: calc(max(8px, env(safe-area-inset-left)) + 64px);
+    top: calc(max(8px, env(safe-area-inset-top)) + 220px); }
+}
 /* 入口放在說明遮罩裡、課文面板外面。說明收起時整層 display:none，不會躺在地圖上擋按鈕。 */
 #help #tutorial-open { position: absolute; left: 8px; bottom: 8px; z-index: 2; box-sizing: border-box;
   width: auto; min-width: 44px; min-height: 44px; height: 44px; padding: 0 10px; pointer-events: auto;
