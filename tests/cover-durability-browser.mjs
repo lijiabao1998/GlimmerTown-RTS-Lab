@@ -125,7 +125,7 @@ async function main(){
       const brief={size:[g.width,g.height],toolbar:[g.toolbar.left,g.toolbar.top,g.toolbar.right,g.toolbar.bottom],stats:[g.stats.left,g.stats.top,g.stats.right,g.stats.bottom,g.statsOverflow],mini:g.mini?[g.mini.left,g.mini.top,g.mini.right,g.mini.bottom]:null,hint:[g.hint.left,g.hint.top,g.hint.right,g.hint.bottom],prod:[g.prod.top,g.prod.bottom],overflow:[g.scrollW-g.clientW,g.scrollH-g.clientH],invalidButtons:g.buttons.filter(invalid)};
       if(!check){narrowBaseline=brief;return g;}
       const evidence=JSON.stringify({enabled:brief,...(label==='narrow-multi'?{baseline:narrowBaseline}:{})});
-      assert(g.shown&&g.prod.bottom<=g.hint.top-6&&g.prod.top>=0&&g.hint.bottom<=g.height&&g.hint.top>=0&&g.hint.left>=0&&g.hint.right<=g.width&&g.scrollH<=g.clientH&&(g.scrollW<=g.clientW||g.width<=480),`${label}: complete durability hint and production row visible with clearance; ${evidence}`);
+      assert(g.shown&&g.prod.bottom<=g.hint.top-6&&g.prod.top>=0&&g.hint.bottom<=g.height&&g.hint.top>=0&&g.hint.left>=0&&g.hint.right<=g.width&&g.scrollH<=g.clientH&&g.scrollW<=g.clientW,`${label}: complete durability hint and production row visible with clearance; ${evidence}`);
       assert(g.buttons.every(b=>b.w>=44&&b.h>=44&&b.left>=0&&b.right<=g.width&&b.top>=0&&b.bottom<=g.height&&b.hit),`${label}: existing 44px toolbar and production targets remain usable; ${evidence}`);
       if(g.width<=411)assert(g.toolbar.bottom<=g.stats.top&&g.stats.left>=0&&g.stats.right<=g.width&&g.statsOverflow<=0&&g.mini&&g.stats.bottom<=g.mini.top&&g.mini.left>=0&&g.mini.right<=g.width&&g.mini.bottom<=g.prod.top,`${label}: narrow toolbar, full top stats, minimap and production do not overlap; ${evidence}`);
     };

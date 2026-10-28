@@ -154,7 +154,7 @@ async function main() {
     };
     const layout=async label=>{
       const g=await E(`(()=>{const h=document.getElementById('hint'),p=document.getElementById('prodbar'),r=h.getBoundingClientRect(),b=p.getBoundingClientRect();return {hint:r.toJSON(),prod:b.toJSON(),shown:!p.hidden,scrollH:h.scrollHeight,clientH:h.clientHeight,scrollW:h.scrollWidth,clientW:h.clientWidth,width:innerWidth,height:innerHeight,buttons:[...document.querySelectorAll('#prodbar button,#hud .btns button')].filter(e=>e.getBoundingClientRect().height).map(e=>{const q=e.getBoundingClientRect();return {w:q.width,h:q.height,left:q.left,right:q.right,top:q.top,bottom:q.bottom,hit:e.contains(document.elementFromPoint(q.x+q.width/2,q.y+q.height/2))}})};})()`);
-      assert(g.shown&&g.prod.bottom<=g.hint.top-6&&g.prod.top>=0&&g.hint.bottom<=g.height&&g.hint.top>=0&&g.hint.left>=0&&g.hint.right<=g.width&&g.scrollH<=g.clientH&&(g.scrollW<=g.clientW||g.width<=480),`${label}: full reload hint and production row remain visible with clearance`);
+      assert(g.shown&&g.prod.bottom<=g.hint.top-6&&g.prod.top>=0&&g.hint.bottom<=g.height&&g.hint.top>=0&&g.hint.left>=0&&g.hint.right<=g.width&&g.scrollH<=g.clientH&&g.scrollW<=g.clientW,`${label}: full reload hint and production row remain visible with clearance`);
       assert(g.buttons.every(b=>b.w>=44&&b.h>=44&&b.left>=0&&b.right<=g.width&&b.top>=0&&b.bottom<=g.height&&b.hit),`${label}: all existing toolbar and production targets remain usable`);
     };
     const fireGun=async mobile=>{

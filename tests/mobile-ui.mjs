@@ -30,11 +30,10 @@ for (const key of ['safe-area-inset-top', 'safe-area-inset-right', 'safe-area-in
 assert.match(css, /#r901-chrome[\s\S]*env\(safe-area-inset-left\)[\s\S]*env\(safe-area-inset-top\)[\s\S]*env\(safe-area-inset-right\)[\s\S]*env\(safe-area-inset-bottom\)/, 'chrome block names every safe-area inset');
 assert.match(css, /body\.r901-top-off #hud \.btns \{ display: none; \}/, 'collapsed toolbar is display none');
 assert.match(css, /body\.r901-bar-off #prodbar, body\.r901-bar-off #buildbar \{ display: none; \}/, 'collapsed build and production bars are display none');
-assert.match(css, /@media \(max-width: 480px\) and \(orientation: portrait\) \{[\s\S]*#prodbar button \{[^}]*width: 44px;/, 'portrait production buttons stay a 44px row');
-assert.match(css, /body\.r044 #prodbar button \{ padding: 0 5px; \}/, 'eleven-unit row keeps the 5px padding');
-assert.match(css, /#prodbar button \{[^}]*padding: 0 7px;/, 'noR044 production buttons keep 7px padding');
-assert.match(css, /#buildbar \.row \{ flex-wrap: nowrap;/, 'portrait build button row stays one line');
-assert.match(css, /#hud \.bottom \{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; \}/, 'portrait status line does not wrap');
+// R905：直向生產鍵是至少 44px 的小方鍵（名稱在上、補給在下），不用負邊距疊在一起；提示列不截斷（耐久、裝填等資訊要看得完整）
+assert.match(css, /@media \(max-width: 480px\) and \(orientation: portrait\) \{[\s\S]*body #hud #prodbar button \{[^}]*min-width: 44px;[^}]*height: 44px;[^}]*flex-direction: column;/, 'portrait production keys are 44px stacked keys');
+assert.equal(/#prodbar button \{[^}]*margin[^;}]*-\d/.test(css), false, 'production keys never overlap through negative margins');
+assert.equal(/#hud \.bottom \{[^}]*text-overflow: ellipsis/.test(css), false, 'status line is never cut with an ellipsis');
 for (const id of ['#sb-enter', '#map-pick', '#zombies-pick', '#town-pick']) {
   assert.match(css, new RegExp(`body\\.r901-top-off ${id.replace('#', '\\#')}`), `collapsed top hides ${id}`);
   assert.match(css, new RegExp(`body\\.r901-bar-off ${id.replace('#', '\\#')}`), `collapsed bar hides ${id}`);

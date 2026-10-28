@@ -183,25 +183,15 @@
       #r901-chrome button[aria-pressed="true"], body.r901-top-off #r901-top, body.r901-bar-off #r901-bar { background: #2f5f9a; border-color: #9cc6ff; }
       body.r901-top-off #hud .btns { display: none; }
       body.r901-bar-off #prodbar, body.r901-bar-off #buildbar { display: none; }
-      #prodbar { flex-wrap: wrap; gap: 0; padding: 4px 0; align-items: center; overflow: hidden; }
-      #prodbar button { box-sizing: border-box; flex: 0 0 44px; width: 44px; min-width: 44px; max-width: 44px; height: 44px; min-height: 44px; margin: 0 -14px 0 0; padding: 0 7px; overflow: hidden; font-size: 11px; }
-      body.r044 #prodbar button { padding: 0 5px; }
-      #prodbar .info { flex: 0 0 auto; margin: 0 4px 0 12px; font-size: 11px; white-space: nowrap; }
-      #prodbar #pb-prog { width: 28px; }
-      #prodbar.production-countdown #pb-countdown, #prodbar #pb-reason, #prodbar #pb-hq { flex: 1 1 100%; width: auto; max-width: 100%; margin: 0; padding: 0 8px; white-space: normal; overflow: hidden; }
-      #buildbar { padding: 2px 0; gap: 2px; }
-      #buildbar .row { flex-wrap: nowrap; gap: 0; overflow: hidden; max-height: 44px; align-items: center; }
-      #buildbar .row button { box-sizing: border-box; flex: 0 0 44px; width: 44px; min-width: 44px; max-width: 44px; height: 44px; min-height: 44px; padding: 0 2px; overflow: hidden; }
-      #buildbar #bb-start { flex: 0 0 96px; width: 96px; min-width: 96px; max-width: 96px; }
-      #hud .bottom { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* R905：直向生產鍵改成「名稱在上、補給在下」的小方鍵，每顆至少 44×44，不疊、不藏、字不截；11 顆排兩行（原本三行）。提示列照舊換行，耐久／裝填等資訊不截斷。 */
+      body #hud #prodbar button { flex: 1 1 52px; min-width: 44px; max-width: 76px; height: 44px; min-height: 44px; margin: 0; padding: 0 2px;
+        display: inline-flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; line-height: 1.15; white-space: nowrap; }
+      body #hud #prodbar button b { margin: 0; font-size: 11px; }
       body.r901-top-off #sb-enter, body.r901-top-off #sandbox-panel, body.r901-top-off #map-pick, body.r901-top-off #zombies-pick, body.r901-top-off #town-pick,
       body.r901-bar-off #sb-enter, body.r901-bar-off #sandbox-panel, body.r901-bar-off #map-pick, body.r901-bar-off #zombies-pick, body.r901-bar-off #town-pick { display: none; }
     }
-    @media (max-width: 390px) and (orientation: portrait) {
-      #prodbar button { margin-right: -18px; }
-    }
     @media (max-width: 360px) and (orientation: portrait) {
-      #prodbar button { margin-right: -20px; }
+      body #hud #prodbar button { flex-basis: 48px; font-size: 11px; }
     }
   #town-pick{position:fixed;left:8px;top:164px;min-width:120px;min-height:44px;z-index:20;padding:8px;border:1px solid #929477;border-radius:4px;background:#353e2c;color:#eee7d5;font:inherit;cursor:pointer}#town-pick[hidden]{display:none}
 </style>

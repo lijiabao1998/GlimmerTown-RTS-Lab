@@ -130,33 +130,24 @@ async function main() {
         await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
         await frames();
         return E(`(()=>{
-          const tops = el => [...el.querySelectorAll('button')].filter(b => !b.hidden && b.getBoundingClientRect().height > 0).map(b => Math.round(b.getBoundingClientRect().top));
-          const hint = document.getElementById('hint');
-          const cs = getComputedStyle(hint);
-          const line = parseFloat(cs.lineHeight) || 0;
-          const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
-          const border = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
-          const hintH = hint.getBoundingClientRect().height;
-          const prod = document.getElementById('prodbar');
-          const build = document.getElementById('buildbar');
-          const wasHidden = build.hidden; build.hidden = false;
-          const buildRow = build.querySelector('.row');
-          const out = {
-            prodRows: new Set(tops(prod)).size,
-            prodH: prod.getBoundingClientRect().height,
-            prodBtn: prod.querySelector('button')?.getBoundingClientRect().height || 0,
-            buildRows: new Set(tops(buildRow)).size,
-            hintH, oneLine: cs.whiteSpace === 'nowrap' && hintH <= line + pad + border + 2,
-          };
-          build.hidden = wasHidden;
-          return out;
+          // R905：生產鍵每顆至少 44×44、整顆在畫面裡、彼此不疊、中心點得到、名稱與補給沒被截；提示列不截斷
+          const prod = document.getElementById('prodbar'), hint = document.getElementById('hint');
+          const bs = [...prod.querySelectorAll('button')].filter(b => !b.hidden && b.getBoundingClientRect().height > 0).map(b => {
+            const r = b.getBoundingClientRect();
+            return { id: b.id, l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height, clip: b.scrollWidth > b.clientWidth + 1,
+              hit: b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) };
+          });
+          const overlap = bs.some((a, i) => bs.some((c, k) => k > i && a.l < c.r - 0.5 && c.l < a.r - 0.5 && a.t < c.b - 0.5 && c.t < a.b - 0.5));
+          return { n: bs.length, rows: new Set(bs.map(b => Math.round(b.t))).size, overlap, bs,
+            bad: bs.filter(b => b.w < 44 || b.h < 44 || b.l < 0 || b.r > innerWidth || b.t < 0 || b.b > innerHeight || b.clip || !b.hit).map(b => b.id),
+            hintCut: hint.scrollWidth > hint.clientWidth + 1 || hint.scrollHeight > hint.clientHeight + 1 };
         })()`);
       };
       for (const w of [412, 390, 360]) {
         const row = await phoneRow(w, 915);
-        assertions(row.prodRows === 1, `box: ${w}×915 production buttons are one row`);
-        assertions(row.buildRows === 1, `box: ${w}×915 build button row is one row`);
-        assertions(row.oneLine, `box: ${w}×915 status bar does not wrap`);
+        assertions(row.n >= 7 && row.rows <= 2, `box: ${w}×915 production buttons fit in at most two rows (${row.n} buttons, ${row.rows} rows)`);
+        assertions(!row.overlap && row.bad.length === 0, `box: ${w}×915 every production button is a whole, unclipped, unobstructed 44px target ${JSON.stringify(row.bad)}`);
+        assertions(!row.hintCut, `box: ${w}×915 status line shows its full text`);
       }
       await viewport(true); await E('__rts.focus(27,27,1)'); await frames();
       const spot = sel => E(`(()=>{const e=document.querySelector(${JSON.stringify(sel)}); const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2,id:e.id};})()`);
@@ -170,6 +161,7 @@ async function main() {
       const hiddenNow = await E(`(${JSON.stringify(prebattle)}).map(id => { const e = document.getElementById(id); return e ? getComputedStyle(e).display : 'missing'; })`);
       assertions(hiddenNow.every(d => d === 'none'), 'box: collapsed chrome hides pre-battle rows ' + JSON.stringify(hiddenNow));
       await E(`(${JSON.stringify(shown)}).forEach((hidden, i) => { const e = document.getElementById(${JSON.stringify(prebattle)}[i]); if (e && hidden !== null) e.hidden = hidden; })`);
+      assertions(await at(topSpot, 'CANVAS'), 'box: collapsed top buttons give that point to the map');
       assertions(await at(barSpot, 'CANVAS'), 'box: collapsed production bar gives that point to the map');
       assertions(await E('getComputedStyle(document.querySelector("#hud .btns")).display==="none"'), 'box: collapsed toolbar is not displayed');
       await E('document.getElementById("buildbar").hidden=false');
@@ -237,7 +229,7 @@ async function main() {
       const afterDraws = await E('__rts.info()');
       assert.equal(afterDraws.calls, draws.calls, 'box: mobile chrome adds no draw call');
       assertions(afterDraws.calls <= 22 && afterDraws.triangles <= 80000, 'box: phone view stays inside the battle draw budget');
-      record(`R904 portrait battle closeup: ${afterDraws.calls} calls / ${afterDraws.triangles} triangles`);
+      record(`R905 portrait battle closeup: ${afterDraws.calls} calls / ${afterDraws.triangles} triangles`);
     };
     const cases = {
       async box() {
@@ -355,8 +347,7 @@ async function main() {
           assertions(g.production.bottom<=g.hint.top-6,`productionLayout: ${label} preserves six-pixel hint clearance (production bottom ${g.production.bottom}, hint top ${g.hint.top})`);
           assert.equal(g.production.bottom,g.hint.top-6,`productionLayout: ${label} tracks the hint without leaving stale excess space`);
           assertions(g.hint.left>=0&&g.hint.right<=g.width&&g.hint.top>=0&&g.hint.bottom<=g.height,`productionLayout: ${label} prompt stays fully visible`);
-          assertions(g.buttons.every(b=>b.width>=44&&b.height>=44),`productionLayout: ${label} production buttons stay at least 44px`);
-          assertions(g.buttons.filter(b=>b.left>=g.production.left-1&&b.right<=g.production.right+1&&b.top>=g.production.top-1&&b.bottom<=g.production.bottom+1).every(b=>b.hit),`productionLayout: ${label} production buttons remain unobstructed touch targets`);
+          assertions(g.buttons.every(b=>b.hit&&b.width>=44&&b.height>=44),`productionLayout: ${label} production buttons remain unobstructed touch targets`);
           for(const r of g.obstacles)assertions(disjoint(g.hint,r),`productionLayout: ${label} prompt avoids the other HUD rectangles`);
           if(g.menu) {
             assertions(g.menu.left>=0&&g.menu.right<=g.width&&g.menu.top>=0&&g.menu.bottom<=g.height,`productionLayout: ${label} menu stays in viewport`);
@@ -375,7 +366,7 @@ async function main() {
         const short=await check('short selection');
         await E('__rts.select([1,4,9])'); await frames();
         const long=await check('long selection');
-        assertions(Math.abs(long.hint.height-short.hint.height)<1,'fixture: portrait status line stays one row when the hint gets longer');
+        assertions(long.hint.height>short.hint.height,'fixture: selected phone hint actually wraps onto more lines');
         await E('__rts.select([])'); await frames();
         const shortAgain=await check('short selection restored');
         assert.deepEqual(shortAgain.hint,short.hint,'productionLayout: shrinking hint restores short geometry');
@@ -387,10 +378,8 @@ async function main() {
         await E(`(()=>{const p=document.querySelector('#prodbar'),measure=p.getBoundingClientRect.bind(p);window.__r111MenuRead=null;p.getBoundingClientRect=()=>{const r=measure();if(!window.__r111MenuRead&&document.querySelector('#command-menu:not([hidden])')){const h=document.querySelector('#hint');window.__r111MenuRead={production:r.toJSON(),hint:h.getBoundingClientRect().toJSON(),text:h.textContent};}return r;};})()`);
         await hold(false);
         const menuRead=await E('window.__r111MenuRead');
-        if (!await E('location.search.includes("__r109mutant=productionLayout")')) {
-          assertions(menuRead&&menuRead.text.includes('選擇這一格'),'fixture: real hold records menu.open reading the current production obstacle');
-          assert.equal(menuRead.production.bottom,menuRead.hint.top-6,'productionLayout: HUD and production synchronize before menu.open reads its obstacle');
-        }
+        assertions(menuRead&&menuRead.text.includes('選擇這一格'),'fixture: real hold records menu.open reading the current production obstacle');
+        assert.equal(menuRead.production.bottom,menuRead.hint.top-6,'productionLayout: HUD and production synchronize before menu.open reads its obstacle');
         const prompt=await check('held menu prompt');
         assertions(prompt.menu,'productionLayout: real hold opens its menu');
         await sameDraws(beforeMenu,'held prompt/menu');
@@ -414,7 +403,7 @@ async function main() {
         assert.deepEqual((await state()).log,smokeLog,'productionLayout: menu, rejected smoke and cancellation add no commands');
         const phoneDraws=await E('__rts.info()');
         await viewport(false); const desktop=await check('desktop resize');
-        assertions(desktop.hint.height>errorCleared.hint.height,'fixture: desktop viewport changes actual prompt wrapping');
+        assertions(desktop.hint.height<errorCleared.hint.height,'fixture: desktop viewport changes actual prompt wrapping');
         await viewport(true); const phone=await check('phone resize restored');
         assert.deepEqual(phone.hint,errorCleared.hint,'productionLayout: phone resize restores hint geometry');
         assert.deepEqual(phone.production,errorCleared.production,'productionLayout: phone resize restores production geometry');
@@ -454,7 +443,7 @@ async function main() {
       try { await run(); } catch(e) { failure=e; }
       if (name === 'hold' || name === 'cancel') await touch('touchCancel', []);
       assertions(failure instanceof assert.AssertionError && failure.message.startsWith(`${name}:`),`negative ${name}: expected semantic ${name} assertion, got ${failure?.stack??'no failure'}`);
-      if(name==='productionLayout')assertions(failure.message.startsWith('productionLayout: real hold opens its menu'),`negative productionLayout: expected the first failure when the stale production update drops the long-press menu, got ${failure.message}`);
+      if(name==='productionLayout')assertions(failure.message.startsWith('productionLayout: long selection preserves six-pixel hint clearance'),`negative productionLayout: expected the first failure at long-hint geometry, got ${failure.message}`);
       assert.equal(page.errors.length,errors,`negative ${name} caused an unrelated runtime error`); record(`RED real Chrome ${name}: ${failure.message.split('\n')[0]}`);
     }
   });
