@@ -54,7 +54,12 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
   if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
-  if (cmd.t === 'tutorial') { if (cmd.on) w.tutorial = 1; else delete w.tutorial; return; }
+  if (cmd.t === 'tutorial') {
+    // 只在開戰前（tick 仍是 0）接受停火。開戰後的同一條指令不改世界，敵方照樣開火。
+    if (!cmd.on) delete w.tutorial;
+    else if (w.tick === 0) w.tutorial = 1;
+    return;
+  }
   if (w.tutorial && (cmd.t === 'attack' || cmd.t === 'fireAt') && cmd.side === SIDE_ENEMY) return;
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {

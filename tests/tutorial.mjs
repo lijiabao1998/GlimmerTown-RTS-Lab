@@ -156,7 +156,11 @@ assert.equal(ui.includes("root.addEventListener('click'"), false, '面板本體�
 const main = read('src/main.ts');
 const valves = read('src/valves.ts');
 const readme = read('README.md');
-assert.match(main, /initTutorial\(document\.getElementById\('hud'\) \?\? document\.body, V\.r902, undefined, on => issue\(\{ t: 'tutorial', on: on \? 1 : 0 \}\)\)/);
+assert.match(main, /initTutorial\(document\.getElementById\('hud'\) \?\? document\.body, V\.r902/);
+assert.match(main, /if \(phase === 'build'\) issue\(\{ t: 'tutorial', on: on \? 1 : 0 \}\)/);
+assert.match(main, /pending = pending\.filter\(c => c\.t !== 'tutorial'\)/);
+assert.match(main, /log = log\.filter\(e => e\.cmd\.t !== 'tutorial'\)/);
+assert.match(main, /delete w\.tutorial/);
 assert.match(main, /tutorial\.frame\(t\)/);
 assert.equal(main.includes("q.get('noR"), false);
 assert.match(valves, /get r902\(\) \{ return on\('902'\); \}/);
@@ -180,6 +184,14 @@ assert.equal(readme.includes('`?noR902=1`'), true, 'README 逃生閥對照要有
   const open = aimed();
   step(open.w, []);
   assert.equal(fires(open.w), 1, '沒開教學時同一姿勢敵方會開火');
+  const late = aimed();
+  step(late.w, []);
+  assert.equal(late.w.tick > 0, true, '這一步之後已經開戰');
+  late.foe.x = late.me.x + 2 * SUB; late.foe.z = late.me.z; late.foe.path = []; late.foe.pathIdx = 0; late.foe.cooldown = 0;
+  late.foe.order = ORD_ATTACK; late.foe.target = late.me.id; late.foe.tx = late.me.x; late.foe.tz = late.me.z;
+  step(late.w, [{ t: 'tutorial', on: 1 }]);
+  assert.equal(late.w.tutorial, undefined, '開戰後不接受教學停火');
+  assert.equal(fires(late.w), 1, '開戰後再打開教學，敵方照樣開火');
   const blocked = createWorld(1944);
   const me = blocked.units.find(u => u.side === SIDE_PLAYER);
   const foe = blocked.units.find(u => u.side === SIDE_ENEMY);
