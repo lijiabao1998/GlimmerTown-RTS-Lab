@@ -20,6 +20,10 @@ const strictCI = !!(process.env.CI || process.env.GITHUB_ACTIONS || process.env.
 // unit processes. Both retain the runner's original 120s ceiling and this test's
 // 108s diagnostic deadline; no timeout is accepted as a semantic negative.
 const negativeOnly = process.argv.includes('--r137-negatives-only');
+// R067: the native live-death pair (normal + low FPS, valve on/off) runs in its own
+// process too (bombard-eligibility-death-browser.mjs), with the same 120s ceiling and
+// 108s deadline. Same assertions; only the process boundary moved.
+const deathOnly = process.argv.includes('--r137-death-only');
 const plain = value => JSON.parse(JSON.stringify(value));
 const original = ['高爆砲擊', '煙幕（榴彈砲）', '取消'];
 const note = '適用不查射程、裝填、煙幕存量';
@@ -70,6 +74,7 @@ assert(!combat.units[3].alive && combat.winner < 0, 'fixture: ordinary combat na
 const deathTick = combat.tick, beforeDeath = deathTick - 4 * TICK_HZ;
 assert(runLog(createWorld(1944), deathLog, beforeDeath).units[3].alive, 'fixture: four live seconds before natural death');
 
+const started0 = Date.now();
 async function main() {
   assert.equal(hashWorld(runScript(1200)), JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/golden.json'), 'utf8')).hash, 'golden: unchanged original full-state combat');
   const baseline = path.join(temp, 'baseline'), broken = path.join(temp, 'broken');
@@ -264,6 +269,7 @@ async function main() {
     };
 
     if (!negativeOnly) {
+    if (!deathOnly) {
     for (const w of [1440, 412, 860]) {
       await viewport(w); const modes = [];
       for (const off of [false, true]) {
@@ -294,8 +300,11 @@ async function main() {
     }
     await viewport(412);
     assert.deepEqual(await mixedProduction(false), await mixedProduction(true), 'valve: real produced mortar commands and complete world match');
+    } else {
+    await viewport(412);
     const deathOn = await liveDeath(false, true), deathOff = await liveDeath(true, false);
     assert.deepEqual(deathOn, deathOff, 'valve: real death evidence then equal-tick full-world/log/camera replay');
+    }
     assert.equal(page.errors.length, 0, 'browser: all native/mixed/death fixtures have zero console errors');
     } else {
 
@@ -331,7 +340,9 @@ async function main() {
   receipts.status = 'passed real Chromium';
   console.log(negativeOnly
     ? 'OK R137 9 independent native baseline / exact-first-red negative pairs; unchanged operational deadline'
-    : 'OK R137 native longpress/mouse/touch, qualification, live deaths, low FPS, complete replay, rollback and 3 viewports');
+    : deathOnly
+      ? `OK R137 native live deaths, low FPS, complete replay and valve parity (412; separate process, ${Date.now() - started0} ms)`
+      : `OK R137 native longpress/mouse/touch, qualification, mixed production, complete replay, rollback and 3 viewports (live deaths: bombard-eligibility-death-browser; ${Date.now() - started0} ms)`);
 }
 try { await main(); }
 catch (e) {
