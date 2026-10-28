@@ -1,0 +1,40 @@
+name: RTS isolated visual QA
+on:
+  push:
+    branches: ['gpt/qa-pr102-20261028']
+permissions:
+  contents: read
+jobs:
+  visual:
+    if: github.ref == 'refs/heads/gpt/qa-pr102-20261028' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-wqy-zenhei
+      - run: npm run typecheck && npm run build
+      - name: Candidate guards
+        run: node tests/mobile-ui.mjs && node tests/production-layout.mjs --mutations
+      - name: Six portrait sizes and rollback
+        run: node tests/r901-scroll-browser.mjs 2>&1 | tee r901-visual.log
+        shell: bash
+      - name: Input and long-hint regressions
+        if: always()
+        run: node tests/input-browser.mjs 2>&1 | tee input-visual.log
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rts-qa-${{ github.sha }}
+          path: |
+            shots/*.png
+            r901-visual.log
+            input-visual.log
+          if-no-files-found: error
+          retention-days: 14

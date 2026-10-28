@@ -8,7 +8,7 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
   root.id = 'prodbar'; root.className = 'bar';
   root.classList.toggle('production-countdown', !!a.countdown);
   let feedbackKind: number | undefined, feedbackContext: object | undefined;
-  root.innerHTML = `${items.map(it => `<button id="pb-k${it.kind}" title="${it.label}：補給 ${it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}
+  root.innerHTML = `<div class="production-buttons">${items.map(it => `<button id="pb-k${it.kind}" title="${it.label}：補給 ${it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}</div>
     <span class="info"><span id="pb-supply"></span><span id="pb-queue"></span><i id="pb-prog"><i></i></i></span>${a.countdown ? '<span id="pb-countdown" hidden></span>' : ''}${a.blockReason ? '<span id="pb-reason" role="status" hidden></span>' : ''}${a.hq ? '<span id="pb-hq" hidden></span>' : ''}`;
   (document.getElementById('hud') ?? document.body).appendChild(root);
   const $ = (id: string) => root.querySelector('#' + id) as HTMLElement;

@@ -31,6 +31,7 @@ export function initMobileChrome(canvas: HTMLCanvasElement): void {
     else if (root.isConnected) root.remove();
     document.body.classList.toggle('r901-top-off', flags.topOff);
     document.body.classList.toggle('r901-bar-off', flags.barOff);
+    document.body.classList.toggle('r901', flags.mounted);
     armed = flags.armed;
     top.setAttribute('aria-expanded', String(state.top));
     bar.setAttribute('aria-expanded', String(state.bar));

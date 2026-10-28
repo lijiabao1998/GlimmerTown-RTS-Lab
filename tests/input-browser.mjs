@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
-import { withBrowser, sleep, shot, touchTap } from '../tools/cdp.mjs';
+import { withBrowser, sleep, shot, touchTap } from './qa-safe-cdp.mjs';
 import { runScript as nodeScript } from '../src/sim/script.ts';
 import { hashWorld } from '../src/sim/world.ts';
 // R115: the visual valve still compares the complete current world across Node and Chrome.
@@ -146,7 +146,7 @@ async function main() {
             prodH: prod.getBoundingClientRect().height,
             prodBtn: prod.querySelector('button')?.getBoundingClientRect().height || 0,
             buildRows: new Set(tops(buildRow)).size,
-            hintH, oneLine: cs.whiteSpace === 'nowrap' && hintH <= line + pad + border + 2,
+            hintH, readable: cs.whiteSpace === 'normal' && hint.scrollHeight <= hint.clientHeight && hint.scrollWidth <= hint.clientWidth,
           };
           build.hidden = wasHidden;
           return out;
@@ -156,7 +156,8 @@ async function main() {
         const row = await phoneRow(w, 915);
         assertions(row.prodRows === 1, `box: ${w}×915 production buttons are one row`);
         assertions(row.buildRows === 1, `box: ${w}×915 build button row is one row`);
-        assertions(row.oneLine, `box: ${w}×915 status bar does not wrap`);
+        // Owner-approved follow-up: long prompts may wrap; frozen PR102 card is retained unchanged.
+        assertions(row.readable, `box: ${w}×915 status text is fully readable without clipping`);
       }
       await viewport(true); await E('__rts.focus(27,27,1)'); await frames();
       const spot = sel => E(`(()=>{const e=document.querySelector(${JSON.stringify(sel)}); const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2,id:e.id};})()`);
@@ -375,7 +376,7 @@ async function main() {
         const short=await check('short selection');
         await E('__rts.select([1,4,9])'); await frames();
         const long=await check('long selection');
-        assertions(Math.abs(long.hint.height-short.hint.height)<1,'fixture: portrait status line stays one row when the hint gets longer');
+        assertions(long.hint.height>short.hint.height,'fixture: selected phone hint actually wraps onto more lines');
         await E('__rts.select([])'); await frames();
         const shortAgain=await check('short selection restored');
         assert.deepEqual(shortAgain.hint,short.hint,'productionLayout: shrinking hint restores short geometry');
@@ -414,7 +415,7 @@ async function main() {
         assert.deepEqual((await state()).log,smokeLog,'productionLayout: menu, rejected smoke and cancellation add no commands');
         const phoneDraws=await E('__rts.info()');
         await viewport(false); const desktop=await check('desktop resize');
-        assertions(desktop.hint.height>errorCleared.hint.height,'fixture: desktop viewport changes actual prompt wrapping');
+        assertions(desktop.hint.height<errorCleared.hint.height,'fixture: desktop viewport changes actual prompt wrapping');
         await viewport(true); const phone=await check('phone resize restored');
         assert.deepEqual(phone.hint,errorCleared.hint,'productionLayout: phone resize restores hint geometry');
         assert.deepEqual(phone.production,errorCleared.production,'productionLayout: phone resize restores production geometry');
@@ -454,7 +455,7 @@ async function main() {
       try { await run(); } catch(e) { failure=e; }
       if (name === 'hold' || name === 'cancel') await touch('touchCancel', []);
       assertions(failure instanceof assert.AssertionError && failure.message.startsWith(`${name}:`),`negative ${name}: expected semantic ${name} assertion, got ${failure?.stack??'no failure'}`);
-      if(name==='productionLayout')assertions(failure.message.startsWith('productionLayout: real hold opens its menu'),`negative productionLayout: expected the first failure when the stale production update drops the long-press menu, got ${failure.message}`);
+      if(name==='productionLayout')assertions(failure.message.startsWith('productionLayout: long selection preserves six-pixel hint clearance'),`negative productionLayout: expected the first failure at long-hint geometry, got ${failure.message}`);
       assert.equal(page.errors.length,errors,`negative ${name} caused an unrelated runtime error`); record(`RED real Chrome ${name}: ${failure.message.split('\n')[0]}`);
     }
   });

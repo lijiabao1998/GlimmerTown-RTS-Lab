@@ -255,7 +255,7 @@ const groups = {
   },
   buttons() {
     const f = fixture();
-    assert.equal(f.root.innerHTML, '<button id="pb-k7" title="坦克：補給 80">坦克<b>80</b></button><button id="pb-k23" title="榴彈砲：補給 120">榴彈砲<b>120</b></button><button id="pb-k91" title="觀測車：補給 30">觀測車<b>30</b></button>\n    <span class="info"><span id="pb-supply"></span><span id="pb-queue"></span><i id="pb-prog"><i></i></i></span>', 'buttons: exact existing markup, labels, costs and titles');
+    assert.equal(f.root.innerHTML, '<div class="production-buttons"><button id="pb-k7" title="坦克：補給 80">坦克<b>80</b></button><button id="pb-k23" title="榴彈砲：補給 120">榴彈砲<b>120</b></button><button id="pb-k91" title="觀測車：補給 30">觀測車<b>30</b></button></div>\n    <span class="info"><span id="pb-supply"></span><span id="pb-queue"></span><i id="pb-prog"><i></i></i></span>', 'buttons: scroll wrapper preserves exact button markup, labels, costs and titles');
     for (const [index, kind] of [7, 23, 91].entries()) {
       assert.equal(f.click(kind), 1, 'buttons: each click stops propagation exactly once');
       assert.deepEqual(f.calls, [7, 23, 91].slice(0, index + 1), 'buttons: each click emits exactly one original kind callback');
