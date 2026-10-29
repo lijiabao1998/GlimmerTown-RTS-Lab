@@ -126,8 +126,11 @@ export async function withBrowser(opt, fn) {
     if (opt.mobile) await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     if (opt.cpuThrottle) await page.send('Emulation.setCPUThrottlingRate', { rate: opt.cpuThrottle });
     if (opt.preload) await page.send('Page.addScriptToEvaluateOnNewDocument', { source: opt.preload });
-    const open = async query => {
-      await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/${entry}?${query}` });
+    // R069：預設在網址加 noR069=1，既有守衛照舊測沒有開始選單的流程（它們寫的時候就是這個流程）；
+    // 要測開始選單的守衛傳 open(query, { menu: true })。網址自己寫了 noR069 就照它的。
+    const open = async (query, { menu = false } = {}) => {
+      const q = menu || /(^|&)noR069=/.test(query) ? query : `${query ? query + '&' : ''}noR069=1`;
+      await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/${entry}?${q}` });
       for (let i = 0, t0 = Date.now(); Date.now() - t0 < readyMs; i++) { await sleep(150); if (await page.evaluate(ready).catch(() => false)) break; }
       await sleep(opt.settle ?? 900);   // 讓第一幀以上畫完（陰影貼圖、後製）
     };

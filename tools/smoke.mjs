@@ -23,7 +23,7 @@ const BUDGET = { calls: 20, triangles: 80_000 };     // R001 手機預算（含�
 const nodeHash = hashWorld(runScript());
 const nodeHalf = hashWorld(runScript(600));
 // 每個瀏覽器工作階段用不同的埠：上一個 Chrome 還在關的時候，下一個才不會撞到同一個除錯埠（CI 上曾因此卡 60 秒）
-const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451, loader: 9471, loaderDesk: 9491, loaderFail: 9511, noR040: 9531, noR041: 9551, armor2: 9701, armor2Desk: 9721, noR044: 9741, large: 9761, largeDesk: 9781, noR043: 9801 };
+const PORTS = { desktop: 8411, mobile: 8431, valve: 8451, build: 8471, fx: 8491, fxMobile: 8511, noR004: 8531, tracks: 8551, noR008: 8571, bars: 8591, barsMobile: 8611, noR009: 8631, report: 8651, reportMobile: 8671, noR010: 8691, orders: 8711, ordersMobile: 8731, noR011: 8751, cam: 8771, camMobile: 8831, noR012: 8851, help: 8871, holes: 8891, noR014: 8911, minimap: 8931, noR015: 8951, start: 8971, noR016: 8991 , ai: 9011, noR018: 9031 , prod: 9051, noR019: 9071 , inf: 9091, infDesk: 9131, noR021: 9111, guns: 9151, gunsDesk: 9171, noR022: 9191, tanks: 9231, tanksDesk: 9251, noR023: 9271, pillbox: 9291, noR024: 9311, rye: 9331, ryeDesk: 9351, noR026: 9371, facades: 9391, noR028: 9411, streets: 9431, noR027: 9451, loader: 9471, loaderDesk: 9491, loaderFail: 9511, noR040: 9531, noR041: 9551, armor2: 9701, armor2Desk: 9721, noR044: 9741, large: 9761, largeDesk: 9781, noR043: 9801, menu: 9821, menuDesk: 9841 };
 const external = reqs => reqs.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
 
 // 一個空地格（我方附近、沒有建築）：觸控下移動指令用
@@ -961,6 +961,24 @@ await withBrowser({ width: 1280, height: 800, port: PORTS.streets + 2 }, async (
     await open('noR040=1');
     const none = await page.evaluate("document.getElementById('loader') === null"), hh = await page.evaluate(`__rts.runScript(${SCRIPT_TICKS})`);
     log(none && hh === nodeHash && page.errors.length === 0, '?noR040=1：沒有載入畫面、雜湊不變、零頁面錯誤', hh);
+  });
+}
+
+// ---- R069 開始選單：玩家預設看到的流程。其他段落經 cdp.mjs 預設帶 noR069=1，照舊直接進布陣 ----
+for (const [mobile, w, h, port, name] of [[true, 412, 860, PORTS.menu, '手機'], [false, 1280, 800, PORTS.menuDesk, '桌機']]) {
+  await withBrowser({ width: w, height: h, mobile, port }, async ({ open, page }) => {
+    await open('', { menu: true });
+    const m = await page.evaluate("(() => { const e = document.getElementById('start-menu'); return { open: !!e && !e.hidden, start: !!document.getElementById('sm-start'), menuKey: !!document.getElementById('b-menu') }; })()");
+    const info = await page.evaluate('__rts.info()');
+    await shot(page, path.join(SHOTS, `r069-menu-${mobile ? 'phone' : 'desk'}.png`));
+    const [x, y] = await page.evaluate("(() => { const r = document.getElementById('sm-start').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()");
+    if (mobile) await touchTap(page, x, y);
+    else for (const type of ['mousePressed', 'mouseReleased']) await page.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1 });
+    await sleep(200);
+    const after = await page.evaluate("({ open: !document.getElementById('start-menu').hidden, phase: __rts.phase(), tick: __rts.tick() })");
+    log(m.open && m.start && m.menuKey && info.calls <= BUDGET.calls && info.triangles <= BUDGET.triangles && !after.open && after.phase === 'build' && after.tick === 0 && page.errors.length === 0,
+      `R069 開始選單（${name}）：開頁先停在選單；選單開著繪製呼叫 ≤ 20、三角形 ≤ 80,000；按「開始」進布陣第 0 步；零頁面錯誤`,
+      `${JSON.stringify(m)}；${info.calls}／${info.triangles}；${JSON.stringify(after)}`);
   });
 }
 
