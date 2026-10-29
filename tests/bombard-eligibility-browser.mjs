@@ -24,6 +24,13 @@ const negativeOnly = process.argv.includes('--r137-negatives-only');
 // process too (bombard-eligibility-death-browser.mjs), with the same 120s ceiling and
 // 108s deadline. Same assertions; only the process boundary moved.
 const deathOnly = process.argv.includes('--r137-death-only');
+// R068: the 860 landscape viewport and mixed production run in bombard-eligibility-mixed-browser.mjs;
+// the 1440 and 412 viewports stay here. Each viewport's on/off parity is compared within its own
+// pass, so the split keeps every comparison. Negatives split into the first five pairs and the last
+// four (bombard-eligibility-negative-late-browser.mjs). Same 108s deadline per process.
+const mixedOnly = process.argv.includes('--r137-mixed-only');
+const lateNegatives = process.argv.includes('--r137-negatives-late');
+const part = negativeOnly ? (lateNegatives ? 'negatives-late' : 'negatives') : deathOnly ? 'death' : mixedOnly ? 'mixed' : 'views';
 const plain = value => JSON.parse(JSON.stringify(value));
 const original = ['高爆砲擊', '煙幕（榴彈砲）', '取消'];
 const note = '適用不查射程、裝填、煙幕存量';
@@ -270,7 +277,7 @@ async function main() {
 
     if (!negativeOnly) {
     if (!deathOnly) {
-    for (const w of [1440, 412, 860]) {
+    for (const w of mixedOnly ? [860] : [1440, 412]) {
       await viewport(w); const modes = [];
       for (const off of [false, true]) {
         const errorCount = page.errors.length, opening = await fresh(off);
@@ -298,8 +305,10 @@ async function main() {
       }
       assert.deepEqual(modes[0], modes[1], 'valve: identical full world/log/selection/camera/original button sizes and behavior');
     }
+    if (mixedOnly) {
     await viewport(412);
     assert.deepEqual(await mixedProduction(false), await mixedProduction(true), 'valve: real produced mortar commands and complete world match');
+    }
     } else {
     await viewport(412);
     const deathOn = await liveDeath(false, true), deathOff = await liveDeath(true, false);
@@ -323,7 +332,8 @@ async function main() {
       valve: async mutant => { await fresh(true, mutant); await E('__rts.select([4])'); counts(await hold(), true, 'valve'); },
       death: async mutant => { await liveDeath(false, true, mutant); },
     };
-    for (const [name, run] of Object.entries(negatives)) {
+    const early = ['counts', 'refresh', 'readonly', 'layout', 'disclosure'];
+    for (const [name, run] of Object.entries(negatives).filter(([name]) => early.includes(name) !== lateNegatives)) {
       delete overlay['index.html'];
       await run('');
       assert.equal(page.errors.length, 0, `baseline ${name}: no browser errors`);
@@ -339,10 +349,12 @@ async function main() {
   });
   receipts.status = 'passed real Chromium';
   console.log(negativeOnly
-    ? 'OK R137 9 independent native baseline / exact-first-red negative pairs; unchanged operational deadline'
+    ? `OK R137 ${receipts.negatives.length} independent native baseline / exact-first-red negative pairs (${part}: ${receipts.negatives.map(n => n.name).join(', ')}); unchanged operational deadline; ${Date.now() - started0} ms`
     : deathOnly
       ? `OK R137 native live deaths, low FPS, complete replay and valve parity (412; separate process, ${Date.now() - started0} ms)`
-      : `OK R137 native longpress/mouse/touch, qualification, mixed production, complete replay, rollback and 3 viewports (live deaths: bombard-eligibility-death-browser; ${Date.now() - started0} ms)`);
+      : mixedOnly
+        ? `OK R137 860 landscape native longpress/mouse/touch, qualification, replay, rollback and native mixed production (separate process, ${Date.now() - started0} ms)`
+        : `OK R137 native longpress/mouse/touch, qualification, complete replay and rollback at 1440 and 412 (860 + mixed production: bombard-eligibility-mixed-browser; live deaths: bombard-eligibility-death-browser; ${Date.now() - started0} ms)`);
 }
 try { await main(); }
 catch (e) {
@@ -356,6 +368,6 @@ catch (e) {
   console.error('R137 FIRST RED ' + String(e.message).replace(/\n/g, ' '));
 } finally {
   fs.mkdirSync(path.join(ROOT, 'shots'), { recursive: true });
-  fs.writeFileSync(path.join(ROOT, 'shots/r137-browser-receipt.json'), JSON.stringify(receipts, null, 2));
+  fs.writeFileSync(path.join(ROOT, `shots/r137-browser-receipt${part === 'views' ? '' : '-' + part}.json`), JSON.stringify(receipts, null, 2));
   fs.rmSync(temp, { recursive: true, force: true });
 }

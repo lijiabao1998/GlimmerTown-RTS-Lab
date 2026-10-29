@@ -310,11 +310,17 @@ if (BUILTINS) { // 地圖（種子 0–199 都驗）：建築 ≥12、出生角�
   const all = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.mjs')).sort() : [];
   const files = SHARD ? shardOf(all, dir, SHARD.k, SHARD.n) : all;
   if (SHARD) console.log(`・分片 ${SHARD.k}/${SHARD.n}：內建各節${BUILTINS ? '有跑' : '在第 1 份'}；這一份跑 ${files.length}／${all.length} 支：${files.join(' ')}`);
+  // R068：每支印秒數；被 120 秒上限停掉的寫清楚；最後列最慢五支（只印，不設門檻）
+  const times = [];
   for (const f of files) {
     if (LIST_ONLY) { console.log(`LIST tests/${f}`); continue; }
+    const start = Date.now();
     const r = spawnSync(process.execPath, [path.join(dir, f)], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
-    log(r.status === 0, `tests/${f}`, r.status === 0 ? '' : `退出碼 ${r.status}：${(r.stdout + r.stderr).trim().split('\n').slice(-3).join(' ｜ ')}`);
+    const s = Math.round((Date.now() - start) / 1000), why = r.error?.code === 'ETIMEDOUT' ? '超過 120 秒被停' : `退出碼 ${r.status}`;
+    times.push([f, s]);
+    log(r.status === 0, `tests/${f}`, r.status === 0 ? `${s} 秒` : `${s} 秒；${why}：${(r.stdout + r.stderr).trim().split('\n').slice(-3).join(' ｜ ')}`);
   }
+  if (times.length) console.log(`・最慢五支：${times.sort((a, b) => b[1] - a[1]).slice(0, 5).map(([f, s]) => `${f} ${s} 秒（120 秒上限的 ${Math.round(s / 1.2)}%）`).join('、')}`);
   if (!all.length) console.log('・tests/ 還沒有守衛');
 }
 
