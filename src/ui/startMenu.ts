@@ -162,7 +162,11 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
   addEventListener('keydown', e => {
     if (root.hidden) return;
     e.stopPropagation();
-    if (e.key === 'Escape' && resume) { e.preventDefault(); close(); }
+    if (e.key === 'Escape' && resume) { e.preventDefault(); close(); return; }
+    // 焦點留在選單裡：Tab 在選單的鍵之間循環；焦點跑到外面時 Enter／空白鍵不按到後面的鍵，拉回選單
+    const keys = [...root.querySelectorAll('button')] as HTMLElement[], at = keys.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'Tab') { e.preventDefault(); keys[at < 0 ? 0 : (at + (e.shiftKey ? keys.length - 1 : 1)) % keys.length]?.focus({ preventScroll: true }); }
+    else if (at < 0 && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); (root.querySelector('.sm-primary') as HTMLElement | null)?.focus({ preventScroll: true }); }
   }, true);
   addEventListener('keyup', e => { if (!root.hidden) e.stopPropagation(); }, true);
   const audio = el('b-audio');

@@ -170,6 +170,15 @@ async function main() {
     await key('Enter', 'Enter', 13, '\r');
     assert(!(await menu()).open && (await state()).phase === 'build', 'keyboard: Enter on 開始 closes the menu into build step 0');
     await press('bb-start'); await press('b-menu'); await layout('pause menu');
+    // 鍵盤焦點留在選單裡：Tab／Shift+Tab 繞一圈多都還在選單；焦點被移到後面的 ⏸ 時按 Enter 不會讓戰鬥繼續
+    const nKeys = (await menu()).ids.length;
+    const inside = () => E("document.getElementById('start-menu').contains(document.activeElement)");
+    for (let i = 0; i <= nKeys; i++) await key('Tab', 'Tab', 9);
+    assert(await inside(), 'keyboard: Tab stays inside the open menu');
+    for (let i = 0; i <= 2 * nKeys; i++) { for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 }); await frames(); }
+    assert(await inside(), 'keyboard: Shift+Tab stays inside the open menu');
+    await E("document.getElementById('b-pause').focus()"); await key('Enter', 'Enter', 13, '\r');
+    assert((await state()).paused && (await menu()).open, 'keyboard: Enter cannot press a key behind the open menu');
     await shot(page, path.join(SHOTS, 'r069-desktop-pause.png'));
     const held = await state();
     await key('Escape', 'Escape', 27);
