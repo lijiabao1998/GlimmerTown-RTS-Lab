@@ -35,6 +35,7 @@ import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initTutorial } from './ui/tutorial.ts';
+import { initStartMenu } from './ui/startMenu.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
@@ -122,7 +123,7 @@ document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說�
 const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}) });
 let prodBar: ProdBar | undefined;
 // R018 電腦難度：?ai=1|2|3
-const aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));
+let aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));   // R069：開始選單可以改
 const AI_NAME = ['', '簡單', '普通', '困難'];
 
 function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026 || large || expanded, vegetation = true, sandbox = false) {
@@ -508,6 +509,10 @@ if (V.r045) zombiesPick = initZombiesPick({
 });
 
 const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
+// R069 開始選單（src/ui/startMenu.ts）：地圖、模式、重來、說明、教學都按原本那幾顆鍵；這裡只接難度、暫停與音效
+if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: n => (aiLevel = n ?? aiLevel), paused: v => { if (v !== undefined) { paused = v; syncBattleAudio(); hud?.update(); } return paused; },
+  state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
+  audio: battleAudio ? () => { syncBattleAudio(); battleAudio.toggleFromGesture(); hud?.update(); } : undefined });
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {

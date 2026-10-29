@@ -30,6 +30,7 @@ export function valves(q: URLSearchParams) {
     get r044() { return on('044'); }, // R044 裝甲車、驅逐戰車、突擊砲（關掉＝eco 不帶 armor2）
     get r045() { return on('045'); }, // R045 喪屍模式：入口與 ?mode=zombies
     get r065() { return on('065'); }, // R065 建築抗鋸齒：後製渲染目標 4 倍多重取樣；關掉＝不取樣，畫面逐位等於原本
+    get r069() { return on('069'); }, // R069 開始選單：開頁先停在選單、右上「選單」鍵；布陣前四顆入口鍵收進選單
     get r100() { return on('100'); }, // R100 迷霧（沙盒本來就不用）
     get r101() { return on('101'); }, // R101 觀測員細節
     get r104() { return on('104'); }, // R104 裝甲弧提示；只關畫面，不改模擬
