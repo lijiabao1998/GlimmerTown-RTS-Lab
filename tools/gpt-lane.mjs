@@ -80,8 +80,9 @@ if (!statusOnly) {
     // 日誌只以第一欄的正式迭代號保留用號；敘述中引用別卡不是使用該號。
     // 已撤回且卡面刪除的迭代仍由歷史日誌列保留，不准重用。
     const used = [...git('ls-tree', '-r', '--name-only', BASE, 'docs/tasks').matchAll(/R(\d{3,})-/g), ...(show(BASE, 'LOG.md') ?? '').matchAll(/^\s*\|\s*R(\d{3,})\s*\|/gm)].map(m => Number(m[1]));
-    const maxUsed = Math.max(99, ...used);
+    const maxUsed = Math.max(99, ...used.filter(n => n >= 100 && n <= 899));
     if (num < 100) no(`GPT 的卡號從 R100 起（R001–R099 留給 Claude），這張是 R${num}。`);
+    else if (num > 899) no(`GPT 的卡號只到 R899（R900–R999 留給 Grok），這張是 R${num}。`);
     else if (num <= maxUsed) no(`卡號 R${num} 不比 main 上用過的最大號 R${maxUsed} 大：卡號只往上加，不重用（撤回過的號也不用）。`);
     const text = show(HEAD, card) ?? '';
     const hdr = text.match(/<!--\s*card:\s*sim=(yes|no);\s*golden=([^;]*);\s*valve=([^;]*);\s*owner_ok=([^>]*?)\s*-->/);

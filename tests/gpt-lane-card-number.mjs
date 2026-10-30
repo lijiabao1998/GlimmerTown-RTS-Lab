@@ -20,7 +20,7 @@ const runCase = (name, log, existing, number, pass, script = guard) => {
     put('guard.mjs', script);
     const r = spawnSync(process.execPath, ['guard.mjs'], { cwd: dir, env: { ...process.env, BASE: base, HEAD_REF: 'HEAD', BRANCH: 'gpt/fixture' }, encoding: 'utf8' });
     assert.equal(r.status, pass ? 0 : 1, `${name}: ${r.stdout}\n${r.stderr}`);
-    if (!pass) assert.match(r.stdout, /卡號.*最大號/, `${name}: reject for the intended card-number reason`);
+    if (!pass) assert.match(r.stdout, /卡號.*(最大號|R899)/, `${name}: reject for the intended card-number reason`);
     console.log(`OK ${name}`);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 };
@@ -33,3 +33,14 @@ runCase('next unused number accepted', '| R130 | complete |\n', '130', 131, true
 const old = guard.replace('/^\\s*\\|\\s*R(\\d{3,})\\s*\\|/gm', '/\\bR(\\d{3,})\\b/g');
 assert.notEqual(old, guard, 'negative control must restore original faulty parser');
 runCase('negative control: old parser reproduces exact original red', '| R039 | mentions R129 |\n| R128 | complete |\n', '128', 129, false, old);
+
+// Owner-approved fix: Grok/Claude cards must not exhaust the GPT allocation.
+runCase('Grok card R905 does not exhaust GPT range', '| R139 | complete |\n| R905 | Grok |\n', '905', 140, true);
+runCase('withdrawn Grok LOG row is outside GPT range', '| R139 | complete |\n| R999 | withdrawn Grok |\n', '139', 140, true);
+runCase('Claude range does not reserve GPT numbers', '| R099 | Claude |\n', '099', 100, true);
+runCase('highest available GPT number accepted', '| R898 | complete |\n| R905 | Grok |\n', '898', 899, true);
+runCase('withdrawn GPT R899 remains reserved', '| R899 | withdrawn GPT |\n| R905 | Grok |\n', '905', 899, false);
+runCase('Grok range cannot be borrowed by GPT', '| R139 | complete |\n', '139', 900, false);
+const unfiltered = guard.replace('used.filter(n => n >= 100 && n <= 899)', 'used');
+assert.notEqual(unfiltered, guard, 'range negative control must change the production guard');
+runCase('negative control: unfiltered Grok card recreates R140 rejection', '| R139 | complete |\n| R905 | Grok |\n', '905', 140, false, unfiltered);
