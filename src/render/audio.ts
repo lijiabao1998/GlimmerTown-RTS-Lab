@@ -42,7 +42,7 @@ export function makeBattlePCM(kind: BattleSound): Float32Array<ArrayBuffer> {
 
 interface Voice { source: AudioBufferSourceNode; gain: GainNode; connected: number; released: boolean }
 const positionOK = (w: World, x: number, z: number) => Number.isInteger(x) && Number.isInteger(z) && x >= 0 && z >= 0 && x < w.n * SUB && z < w.n * SUB;
-const artillery = (kind: number) => kind === UK_TANK || kind === UK_HOWITZER || kind === UK_ATGUN || kind === UK_MORTAR || kind === UK_LIGHT || kind === UK_HEAVY || kind === UK_ARMORED_CAR || kind === UK_DESTROYER || kind === UK_ASSAULT;   // R044 三種新車也是砲聲
+const artillery = (kind: number) => (kind >= 12 && kind <= 22) || kind === UK_TANK || kind === UK_HOWITZER || kind === UK_ATGUN || kind === UK_MORTAR || kind === UK_LIGHT || kind === UK_HEAVY || kind === UK_ARMORED_CAR || kind === UK_DESTROYER || kind === UK_ASSAULT;   // R044 三種新車也是砲聲
 
 export class BattleAudio {
   private context: AudioContext | null = null;
