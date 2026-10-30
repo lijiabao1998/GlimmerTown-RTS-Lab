@@ -26,6 +26,14 @@ for(const [name,width,height,port] of [['desktop',1280,800,18651],['mobile',412,
    assert.ok(info.info.calls<=20&&info.info.triangles<=80000);
    assert.ok(info.text.includes('裝填完成 2／裝填中 0'));
    await shot(page,path.join(ROOT,'shots',`international-${name}-${tank}.png`));
+   const target=w.blds.find(b=>b.hp>0), gunId=w.units.find(u=>u.kind===gun&&u.side===0).id;
+   const bombard=[...log,{tick:1600,cmd:{t:'fireAt',side:0,ids:[gunId],x:target.x,z:target.z}}];
+   const firing=runLog(createWorld(1944),bombard,1601), b=firing.blds.find(b=>b.id===target.id);
+   assert.equal(await page.evaluate(`__rts.playLog(1944,${JSON.stringify(bombard)},1601)`),hashWorld(firing));
+   await page.evaluate(`__rts.pause(true);__rts.select([${gunId}])`);await sleep(100);
+   const targetText=await page.evaluate('document.body.innerText');
+   assert.ok(targetText.includes('掩體目標 1：')&&targetText.includes(`#${b.id}(${b.x},${b.z})`)&&targetText.includes(`${b.hp}/${b.maxHp}`),'towed gun building target durability visibly rendered');
+   await shot(page,path.join(ROOT,'shots',`international-${name}-${tank}-cover.png`));
   }
   await open('noR142=1');
   assert.equal(await page.evaluate("[...document.querySelector('#pb-catalog').options].some(o=>o.value==='美式裝備')"),false);

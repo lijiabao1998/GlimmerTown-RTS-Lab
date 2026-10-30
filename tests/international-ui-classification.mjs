@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
-import { createWorld, hashWorld, UNIT_KINDS } from '../src/sim/world.ts';
+import { createWorld, hashWorld, UNIT_KINDS, ORD_FIRE_AT } from '../src/sim/world.ts';
 import { runScript } from '../src/sim/script.ts';
 import { newStats, makeReport } from '../src/ui/report.ts';
 import { reloadStatus } from '../src/ui/reloadStatus.ts';
+import { coverDurability } from '../src/ui/coverDurability.ts';
 const kinds = [23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]; // independent expected roster
 function fixture(kind, side = 0, cooldown = 0) {
   const w = createWorld(1944);
@@ -56,3 +57,23 @@ assert.throws(()=>reportChecks(badReport.newStats,badReport.makeReport),/counted
 const badReload=await mutant('reloadStatus','!INTERNATIONAL_KINDS.includes(u.kind) && ', '');
 assert.throws(()=>reloadChecks(badReload.reloadStatus),/kind 28 ready/);
 console.log('OK international UI: 36 side/kind report cases, 18 reload kinds, mixed guns, readonly state, legacy hash; both old bugs rejected');
+
+function coverChecks(read) {
+  for (const kind of [21,22,...kinds]) {
+    const w=fixture(kind), b=w.blds.find(b=>b.hp>0);
+    Object.assign(w.units[0],{order:ORD_FIRE_AT,target:0,tx:b.x,tz:b.z});
+    const selected=new Set([1]), before=JSON.stringify(w);
+    const value=read(w,selected);
+    assert.ok(value.includes(`#${b.id}(${b.x},${b.z})`) && value.includes(`${b.hp}/${b.maxHp}`),`kind ${kind} building target durability`);
+    assert.equal(JSON.stringify(w),before);assert.deepEqual([...selected],[1]);
+    assert.equal(read(w,selected,false),'');assert.equal(read(w,new Set()),'');
+    w.units[0].alive=false;assert.equal(read(w,selected),'');
+    w.units[0].alive=true;w.units[0].side=1;assert.equal(read(w,selected),'');
+  }
+}
+coverChecks(coverDurability);
+const badCover=await mutant('coverDurability',' && !INTERNATIONAL_KINDS.includes(u.kind) && !SOVIET_KINDS.includes(u.kind)','');
+assert.throws(()=>coverChecks(badCover.coverDurability),/kind 21 building target durability/);
+console.log('OK international/Soviet cover target: 20 kinds, visibility filters, readonly state and omitted-gun negative control');
+const badInternationalCover=await mutant('coverDurability',' && !INTERNATIONAL_KINDS.includes(u.kind)','');
+assert.throws(()=>coverChecks(badInternationalCover.coverDurability),/kind 28 building target durability/);
