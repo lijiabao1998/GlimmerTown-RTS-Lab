@@ -110,7 +110,7 @@
       background: rgba(20, 24, 18, 0.55); border: 1px solid rgba(220, 230, 200, 0.35); border-radius: 4px; image-rendering: pixelated; touch-action: none; }
     /* R019 生產列：貼在提示列上方（bottom 由 src/ui/production.ts 設定） */
     #prodbar { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: 52px; flex-wrap: wrap; background: rgba(28, 34, 26, 0.86); border: 1px solid #6c745f; }
-    #prodbar #pb-catalog { min-height: 44px; max-width: 130px; background: #273024; color: #f4efda; border: 1px solid #859272; border-radius: 4px; }
+    #prodbar #pb-catalog { position: absolute; right: 0; bottom: calc(100% + 4px); min-height: 44px; max-width: 130px; background: #273024; color: #f4efda; border: 1px solid #859272; border-radius: 4px; }
     #prodbar button[hidden] { display: none !important; }
     #prodbar .info { overflow-wrap: anywhere; max-width: 100%; }
     #prodbar[hidden] { display: none; }

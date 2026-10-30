@@ -100,7 +100,7 @@ export function initCommandMenu(on: { choose: (ammo: AmmoMode, target: BombardTa
       frame();
       const rect = root.getBoundingClientRect();
       const obstacles: MenuRect[] = [];
-      for (const selector of ['#hud .btns', '#hud .top', '#hud .bottom', '#minimap', '#prodbar', '#buildbar']) {
+      for (const selector of ['#hud .btns', '#hud .top', '#hud .bottom', '#minimap', '#prodbar', '#pb-catalog', '#buildbar']) {
         const el = document.querySelector<HTMLElement>(selector);
         if (!el || el.hidden) continue;
         const r = el.getBoundingClientRect();

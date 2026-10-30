@@ -1,13 +1,19 @@
 // Real browser gate. No replacement screenshots or DOM mocks count as a pass.
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import { build } from 'vite';
 import { withBrowser, shot, ROOT, sleep } from '../tools/cdp.mjs';
 import { createWorld, hashWorld } from '../src/sim/world.ts';
 import { runLog } from '../src/sim/step.ts';
 const log=[{tick:0,cmd:{t:'eco',soviet:1}},{tick:800,cmd:{t:'produce',side:0,kind:14}}];
 const expected=hashWorld(runLog(createWorld(1944),log,1300));
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'soviet-browser-'));
+try {
+await build({root:ROOT,logLevel:'error',build:{outDir:temp}});
 for(const [name,width,height,port] of [['desktop',1280,800,18611],['mobile',412,860,18631]]){
- await withBrowser({width,height,port},async({open,page})=>{
+ await withBrowser({width,height,port,root:temp},async({open,page})=>{
   await open('');
   const got=await page.evaluate(`__rts.playLog(1944,${JSON.stringify(log)},1300)`);assert.equal(got,expected);
   await page.evaluate('__rts.pause(true)');
@@ -24,4 +30,5 @@ for(const [name,width,height,port] of [['desktop',1280,800,18611],['mobile',412,
   assert.equal(page.errors.length,0,page.errors.join('\n'));
  });
 }
+} finally { fs.rmSync(temp,{recursive:true,force:true}); }
 console.log('OK soviet desktop/mobile: replay parity, category navigation, 44px targets, screen bounds, render budget, screenshots');
