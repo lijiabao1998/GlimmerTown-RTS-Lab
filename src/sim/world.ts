@@ -118,6 +118,33 @@ UNIT_KINDS.push(
   soviet(UK_HOWITZER, { name: 'M-30', hp: 55, speed: 8, range: 24 * SUB, minRange: 5 * SUB, reload: 120, dmgUnit: 58, dmgBld: 72, splash: 352, cost: 58, buildTicks: 440 }),
 );
 
+// R142 append-only international arsenal. Optional unlock preserves existing logs.
+export const AMERICAN_KINDS = [23, 24, 25, 26, 27, 28];
+export const GERMAN_KINDS = [29, 30, 31, 32, 33, 34];
+export const JAPANESE_KINDS = [35, 36, 37, 38, 39, 40];
+export const INTERNATIONAL_KINDS = [...AMERICAN_KINDS, ...GERMAN_KINDS, ...JAPANESE_KINDS];
+export const INTERNATIONAL_GUNS = [28, 34, 40];
+UNIT_KINDS.push(
+  soviet(UK_LIGHT, { name: 'M3 Stuart', hp: 75, speed: 29, reload: 36, dmgUnit: 22, cost: 33, buildTicks: 220 }),
+  soviet(UK_TANK, { name: 'M4 Sherman', hp: 120, speed: 21, reload: 55, dmgBld: 32, cost: 52, buildTicks: 360 }),
+  soviet(UK_TANK, { name: 'M4A3(76)', hp: 125, speed: 20, range: 11 * SUB, reload: 72, dmgUnit: 50, dmgBld: 23, cost: 67, buildTicks: 450 }),
+  soviet(UK_DESTROYER, { name: 'M18 Hellcat', hp: 65, speed: 35, range: 12 * SUB, reload: 68, dmgUnit: 66, cost: 60, buildTicks: 390 }),
+  soviet(UK_HOWITZER, { name: 'M7 Priest', hp: 85, speed: 18, range: 23 * SUB, minRange: 5 * SUB, reload: 125, dmgUnit: 60, dmgBld: 65, armored: true, openTop: true, cost: 75, buildTicks: 520 }),
+  soviet(UK_ATGUN, { name: 'M1 57mm', hp: 45, speed: 10, reload: 52, dmgUnit: 39, cost: 31, buildTicks: 230 }),
+  soviet(UK_LIGHT, { name: 'Panzer II', hp: 65, speed: 28, range: 7 * SUB, reload: 22, dmgUnit: 16, pierce: 45, cost: 27, buildTicks: 190 }),
+  soviet(UK_TANK, { name: 'Panzer IV', hp: 110, speed: 19, range: 11 * SUB, reload: 70, dmgUnit: 48, cost: 57, buildTicks: 400 }),
+  soviet(UK_TANK, { name: 'Panther', hp: 145, speed: 19, armor: 80, range: 12 * SUB, reload: 82, dmgUnit: 65, cost: 88, buildTicks: 580 }),
+  soviet(UK_HEAVY, { name: 'Tiger I', hp: 195, speed: 10, armor: 65, range: 11 * SUB, reload: 100, dmgUnit: 72, cost: 110, buildTicks: 740 }),
+  soviet(UK_ASSAULT, { name: 'StuG III', hp: 105, speed: 17, range: 10 * SUB, reload: 78, dmgUnit: 50, dmgBld: 52, setup: true, cost: 53, buildTicks: 390 }),
+  soviet(UK_ATGUN, { name: 'PaK 40', hp: 48, speed: 7, range: 13 * SUB, reload: 82, dmgUnit: 72, cost: 48, buildTicks: 340 }),
+  soviet(UK_LIGHT, { name: '九五式 Ha-Go', hp: 50, speed: 28, range: 7 * SUB, reload: 40, dmgUnit: 21, pierce: 60, cost: 23, buildTicks: 170 }),
+  soviet(UK_TANK, { name: '九七式 Chi-Ha', hp: 80, speed: 22, range: 7 * SUB, reload: 50, dmgUnit: 30, dmgBld: 36, pierce: 55, cost: 34, buildTicks: 250 }),
+  soviet(UK_TANK, { name: '新砲塔 Chi-Ha', hp: 85, speed: 22, range: 9 * SUB, reload: 48, dmgUnit: 31, dmgBld: 20, pierce: 90, cost: 40, buildTicks: 300 }),
+  soviet(UK_TANK, { name: '一式 Chi-He', hp: 105, speed: 21, range: 9 * SUB, reload: 50, dmgUnit: 33, dmgBld: 22, cost: 46, buildTicks: 340 }),
+  soviet(UK_DESTROYER, { name: '一式 Ho-Ni I', hp: 70, speed: 19, range: 11 * SUB, reload: 85, dmgUnit: 58, dmgBld: 40, soft: 65, cost: 44, buildTicks: 350 }),
+  soviet(UK_ATGUN, { name: '九〇式 75mm', hp: 42, speed: 9, range: 11 * SUB, reload: 70, dmgUnit: 42, dmgBld: 35, soft: 90, cost: 35, buildTicks: 270 }),
+);
+
 export const ORD_IDLE = 0;
 export const ORD_MOVE = 1;
 export const ORD_ATTACK = 2;    // 攻擊一個單位
@@ -189,7 +216,7 @@ export type SimEvent =
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
-export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; pop?: number }   // R044 armor2：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number }   // R044 armor2：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number }   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
@@ -406,7 +433,7 @@ export function hashWorld(w: World): string {
     for (const s of w.wires.segments) f.int(s.id).int(s.kind).int(s.x).int(s.z).int(s.w).int(s.d).int(s.floors).int(s.hp).int(s.maxHp).int(s.builtBy ?? -1);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
-  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.pop) f.int(0x504f).int(e.pop); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
