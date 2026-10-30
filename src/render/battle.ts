@@ -1,6 +1,6 @@
 // 戰場畫面：只讀世界、不改世界（AGENTS.md 規則 2）。兩個 tick 之間用 alpha 插值，畫面 60fps、模擬 20 步／秒。
 import * as THREE from 'three';
-import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts';
+import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
   SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_ZOMBIE, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
@@ -35,7 +35,7 @@ const TANK_SCALE23: Record<number, number> = { [UK_LIGHT]: 0.8, [UK_HEAVY]: 1.18
 // hull＝車體（長、高、寬）、top＝砲塔／戰鬥室（長、高、寬；砲管跟著長度伸縮）、fwd＝砲塔沿車頭前移（格）、casemate＝固定戰鬥室（平常朝車頭，正在打時才對準）
 // 裝甲車：長、矮、窄，小砲塔；驅逐戰車：低車體、壓扁的戰鬥室、長砲管；突擊砲：寬低車體、寬扁戰鬥室、短粗砲管
 type Art44 = { hull: [number, number, number]; top: [number, number, number]; fwd: number; casemate: boolean };
-const ART44: Record<number, Art44> = { ...SOVIET_ART,
+const ART44: Record<number, Art44> = { ...INTERNATIONAL_ART, ...SOVIET_ART,
   [UK_ARMORED_CAR]: { hull: [0.92, 0.56, 0.58], top: [0.5, 0.7, 0.5], fwd: 0, casemate: false },   // 比輕坦克（0.8／0.68／0.8）長、矮、窄
   [UK_DESTROYER]: { hull: [1.05, 0.72, 0.95], top: [1.45, 0.55, 1.2], fwd: 0.04, casemate: true },
   [UK_ASSAULT]: { hull: [1.0, 0.7, 1.15], top: [0.78, 0.62, 1.4], fwd: 0.07, casemate: true },
@@ -46,7 +46,7 @@ const vehSize = (kind: number) => ART44[kind] ? Math.max(ART44[kind].hull[0], AR
 const muzzleL = (kind: number) => ART44[kind] ? 0.42 * ART44[kind].top[0] + ART44[kind].fwd : 0.44 * (TANK_SCALE23[kind] ?? 1);
 const muzzleY = (kind: number) => ART44[kind] ? 0.195 * ART44[kind].top[1] + 0.15 * (ART44[kind].hull[1] - ART44[kind].top[1]) : 0.2;
 // R022 砲的網格縮放（長、高、寬）：榴彈砲原樣；反戰車砲壓低放平；迫擊砲短而翹
-const GUN_SCALE22: Record<number, [number, number, number]> = { ...SOVIET_GUNS, [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4] };
+const GUN_SCALE22: Record<number, [number, number, number]> = { ...INTERNATIONAL_GUN_ART, ...SOVIET_GUNS, [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4] };
 // 一班六個人的位置（班長前進方向的本地座標：兩排三列）
 const SLOTS: [number, number][] = [[0.07, -0.15], [0.07, 0], [0.07, 0.15], [-0.11, -0.15], [-0.11, 0], [-0.11, 0.15]];
 const C_BODY = [new THREE.Color(0x3c4526), new THREE.Color(0x4a4944)];

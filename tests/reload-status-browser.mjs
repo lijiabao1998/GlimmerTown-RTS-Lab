@@ -85,7 +85,7 @@ const plugin = mutant => ({
     }
     if (mutant && rel === 'src/ui/reloadStatus.ts') {
       replace('!u.alive || u.side !== SIDE_PLAYER', "(!u.alive && new URLSearchParams(location.search).get('__r123mutant') !== 'dead') || (u.side !== SIDE_PLAYER && new URLSearchParams(location.search).get('__r123mutant') !== 'enemy')");
-      replace('if (!k.armored && !SOVIET_KINDS.includes(u.kind) && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR)', "if (new URLSearchParams(location.search).get('__r123mutant') !== 'eligibility' && !k.armored && !SOVIET_KINDS.includes(u.kind) && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR)");
+      replace('if (!INTERNATIONAL_KINDS.includes(u.kind) && !k.armored && !SOVIET_KINDS.includes(u.kind) && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR)', "if (new URLSearchParams(location.search).get('__r123mutant') !== 'eligibility' && !k.armored && !SOVIET_KINDS.includes(u.kind) && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR)");
       replace('Math.ceil(u.cooldown * 10 / TICK_HZ)', "(new URLSearchParams(location.search).get('__r123mutant') === 'rounding' ? Math.floor(u.cooldown * 10 / TICK_HZ) : Math.ceil(u.cooldown * 10 / TICK_HZ))");
       replace("low === high ? ''", "(new URLSearchParams(location.search).get('__r123mutant') === 'range' || low === high) ? ''");
     }
