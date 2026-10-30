@@ -1,4 +1,4 @@
-import { SIDE_PLAYER, TICK_HZ, UNIT_KINDS, UK_HOWITZER, UK_ATGUN, UK_MORTAR, type World } from '../sim/world.ts';
+import { SOVIET_KINDS, SIDE_PLAYER, TICK_HZ, UNIT_KINDS, UK_HOWITZER, UK_ATGUN, UK_MORTAR, type World } from '../sim/world.ts';
 
 // R123: presentation only. A loaded weapon may still lack range, LOS or a valid target.
 export function reloadStatus(w: World, selected: ReadonlySet<number>, enabled = true): string {
@@ -7,7 +7,7 @@ export function reloadStatus(w: World, selected: ReadonlySet<number>, enabled = 
   for (const u of w.units) {
     if (!selected.has(u.id) || !u.alive || u.side !== SIDE_PLAYER) continue;
     const k = UNIT_KINDS[u.kind];
-    if (!k.armored && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR) continue;
+    if (!k.armored && !SOVIET_KINDS.includes(u.kind) && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR) continue;
     if (u.cooldown <= 0) ready++;
     else {
       loading++;

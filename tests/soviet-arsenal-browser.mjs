@@ -27,6 +27,15 @@ for(const [name,width,height,port] of [['desktop',1280,800,18611],['mobile',412,
   for(const group of ['蘇式支援','通用裝備','蘇式支援'])await page.evaluate(`(()=>{const c=document.querySelector('#pb-catalog');c.value=${JSON.stringify(group)};c.dispatchEvent(new Event('change'));})()`);
   assert.equal(await page.evaluate("[...document.querySelectorAll('#prodbar button')].filter(b=>!b.hidden).length"),5);
   await shot(page,path.join(ROOT,'shots',`soviet-${name}-support.png`));
+  // R141: real production/replay and visible mixed towed-gun reload text.
+  const gunsLog=[{tick:0,cmd:{t:'eco',soviet:1}},{tick:800,cmd:{t:'produce',side:0,kind:21}},{tick:1100,cmd:{t:'produce',side:0,kind:22}}];
+  const guns=runLog(createWorld(1944),gunsLog,1600), ids=guns.units.filter(u=>u.side===0&&u.alive&&(u.kind===21||u.kind===22)).map(u=>u.id);
+  assert.equal(ids.length,2,'both towed guns actually produced');
+  assert.equal(await page.evaluate(`__rts.playLog(1944,${JSON.stringify(gunsLog)},1600)`),hashWorld(guns));
+  await page.evaluate(`__rts.pause(true);__rts.select(${JSON.stringify(ids)})`);
+  await sleep(100);
+  assert.ok(await page.evaluate("document.body.innerText.includes('裝填完成 2／裝填中 0')"),'visible mixed Soviet gun reload summary');
+  await shot(page,path.join(ROOT,'shots',`soviet-${name}-gun-reload.png`));
   assert.equal(page.errors.length,0,page.errors.join('\n'));
  });
 }

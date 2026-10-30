@@ -14,7 +14,7 @@ const url = new URL('../src/ui/reloadStatus.ts', import.meta.url);
 const source = fs.readFileSync(url, 'utf8');
 const signature = 'export function reloadStatus(w: World, selected: ReadonlySet<number>, enabled = true): string {';
 const resultLine = 'return `裝填完成 ${ready}／裝填中 ${loading}${remaining}；裝填完成不代表可射擊`;';
-const eligibility = 'if (!k.armored && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR) continue;';
+const eligibility = 'if (!k.armored && !SOVIET_KINDS.includes(u.kind) && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR) continue;';
 const cached = `let lastTick = -1, lastText = '';
 ${signature}
   if (w.tick === lastTick) return lastText;
