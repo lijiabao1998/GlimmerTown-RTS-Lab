@@ -1,5 +1,5 @@
 // R019 生產列（DOM）：補給、三種單位按鈕、佇列與目前那一台的進度。只顯示、只呼叫傳進來的動作。
-export interface ProdItem { kind: number; label: string; cost: number }
+export interface ProdItem { kind: number; label: string; cost: number; group?: string; role?: string }
 export interface ProdState { visible: boolean; supply: number; queue: number[]; prog: number; progMax: number; queueMax: number; countdown?: string; hq?: string; context?: object }
 export interface ProdBar { update: () => void }
 
@@ -7,13 +7,22 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
   const root = document.createElement('div');
   root.id = 'prodbar'; root.className = 'bar';
   root.classList.toggle('production-countdown', !!a.countdown);
+  const groups = [...new Set(items.map(it => it.group ?? '通用裝備'))];
   let feedbackKind: number | undefined, feedbackContext: object | undefined;
   root.innerHTML = `${items.map(it => `<button id="pb-k${it.kind}" title="${it.label}：補給 ${it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}
     <span class="info"><span id="pb-supply"></span><span id="pb-queue"></span><i id="pb-prog"><i></i></i></span>${a.countdown ? '<span id="pb-countdown" hidden></span>' : ''}${a.blockReason ? '<span id="pb-reason" role="status" hidden></span>' : ''}${a.hq ? '<span id="pb-hq" hidden></span>' : ''}`;
   (document.getElementById('hud') ?? document.body).appendChild(root);
-  const $ = (id: string) => root.querySelector('#' + id) as HTMLElement;
+  const buttons = new Map<string, HTMLElement>();
+  const $ = (id: string) => buttons.get(id) ?? root.querySelector('#' + id) as HTMLElement;
   for (const it of items) $('pb-k' + it.kind).addEventListener('click', e => { e.stopPropagation(); feedbackKind = it.kind; a.produce(it.kind); update(); });
-  const label = new Map(items.map(it => [it.kind, it.label[0]]));
+  if (groups.length > 1) {
+    const select = document.createElement('select'); select.id = 'pb-catalog'; select.setAttribute('aria-label', '裝備分類');
+    select.innerHTML = groups.map(g => `<option>${g}</option>`).join(''); root.prepend(select);
+    for (const it of items) buttons.set('pb-k' + it.kind, $('pb-k' + it.kind));
+    const filter = () => { for (const it of items) { const button = $('pb-k' + it.kind); button.remove(); if ((it.group ?? '通用裝備') === select.value) root.insertBefore(button, root.querySelector('.info')); } };
+    select.addEventListener('change', () => { filter(); feedbackKind = undefined; layoutValid = false; update(); }); filter();
+  }
+  const label = new Map(items.map(it => [it.kind, it.group ? it.label : it.label[0]]));
   let last = '';
   let layoutValid = false, lastHint: HTMLElement | null = null, lastHintText: string | null = null;
   let lastWidth = -1, lastHeight = -1;
@@ -37,7 +46,7 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
       for (const it of items) {
         const reason = s.visible ? a.blockReason(it.kind) : '';
         const button = $('pb-k' + it.kind);
-        const title = `${it.label}：補給 ${it.cost}${reason ? ' · ' + reason : ''}`;
+        const title = `${it.label}${it.role ? ' · ' + it.role : ''}：補給 ${it.cost}${reason ? ' · ' + reason : ''}`;
         if (button.title !== title) button.title = title;
         if (button.getAttribute('aria-label') !== title) button.setAttribute('aria-label', title);
         if (button.classList.contains('dim') !== !!reason) button.classList.toggle('dim', !!reason);
@@ -57,7 +66,7 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
       last = key;
       if (!a.blockReason) for (const it of items) $('pb-k' + it.kind).classList.toggle('dim', it.cost > s.supply || s.queue.length >= s.queueMax);
       $('pb-supply').textContent = `補給 ${s.supply}`;
-      $('pb-queue').textContent = s.queue.length ? `　${s.queue.map(k => label.get(k) ?? '?').join('')}` : '';
+      $('pb-queue').textContent = s.queue.length ? `　${s.queue.map(k => label.get(k) ?? '?').join(groups.length > 1 ? ' · ' : '')}` : '';
       ($('pb-prog').firstElementChild as HTMLElement).style.width = `${s.queue.length && s.progMax ? Math.round((100 * s.prog) / s.progMax) : 0}%`;
     }
     const hint = document.getElementById('hint');

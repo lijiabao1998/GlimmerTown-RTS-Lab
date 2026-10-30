@@ -16,7 +16,7 @@ const { createWorld, hashWorld, UNIT_KINDS, SIDE_PLAYER, SIDE_ENEMY, SUB, ORD_ID
 const paths = { ui: '../src/ui/vehicleDurability.ts', hud: '../src/ui/hud.ts', main: '../src/main.ts' };
 const sources = Object.fromEntries(Object.entries(paths).map(([key, path]) => [key, fs.readFileSync(new URL(path, import.meta.url), 'utf8')]));
 const signature = 'export function vehicleDurability(w: World, selected: ReadonlySet<number>, enabled = true): string {';
-const eligibility = 'if (!k.armored && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR) continue;';
+const eligibility = 'if (!k.armored && !SOVIET_KINDS.includes(u.kind) && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR) continue;';
 const single = (hp, max) => `車輛耐久：${hp}/${max}`;
 const multiple = (count, percent) => `車輛耐久：${count} 輛；最低 ${percent}%`;
 const cases = {}, mutations = {};

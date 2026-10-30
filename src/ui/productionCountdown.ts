@@ -9,5 +9,5 @@ export function productionCountdown(w: World, enabled = true): string {
   if (!queue.length) return '';
   const kind = queue[0], remaining = UNIT_KINDS[kind].buildTicks - w.eco.prog[SIDE_PLAYER];
   const status = remaining > 0 ? `製造剩餘 ${Math.ceil(remaining / TICK_HZ)} 遊戲秒` : '等待部署';
-  return `${labels[kind]}：${status} · 後續 ${queue.length - 1}`;
+  return `${labels[kind] ?? UNIT_KINDS[kind].name}：${status} · 後續 ${queue.length - 1}`;
 }
