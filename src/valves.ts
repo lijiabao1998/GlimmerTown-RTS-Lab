@@ -58,6 +58,7 @@ export function valves(q: URLSearchParams) {
     get r136() { return on('136'); }, // R136 沙盒戰況與容量分解
     get r137() { return on('137'); }, // R137 砲擊選單的適用數；不改原按鈕與下令資格
     get r138() { return on('138'); }, // R138 破牆邊緣與瓦礫辨識
+    get r145() { return on('145'); }, // 只讀砲擊任務摘要
     get r143() { return on('143'); }, // 車砲停火操作入口，舊重播不變
     get r142() { return on('142'); }, // 美德日軍械庫入口，舊重播不變
     get r140() { return on('140'); }, // 蘇式軍械庫入口；已記錄指令仍可重播

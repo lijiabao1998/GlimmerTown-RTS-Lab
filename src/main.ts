@@ -3,6 +3,7 @@ import { hqDurability } from './ui/hqDurability.ts';
 import { productionBlockReason } from './ui/productionBlockReason.ts';
 import { productionCountdown } from './ui/productionCountdown.ts';
 import { coverDurability } from './ui/coverDurability.ts';
+import { bombardStatus } from './ui/bombardStatus.ts';
 import { reloadStatus } from './ui/reloadStatus.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
@@ -64,6 +65,7 @@ let sandboxBar: SandboxBar | undefined, sandboxTool: number | null = UK_TANK, sa
 let lastRangeInfo = '';
 let lastCoverInfo = ''; // R124：同 tick 傷害／換選／重播也重算
 let lastVehicleInfo = ''; // R135：同 tick 受傷／換選／清空即時刷新
+let lastBombardInfo = '';
 let lastReloadInfo = ''; // R123：同 tick 換選與清理也重算
 let lastVegetationInfo = '';
 let lastCounterbatteryInfo = '';
@@ -435,6 +437,7 @@ hud = initHud({
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
       coverEnabled: phase === 'battle' && V.r124,
       coverInfo: coverDurability(w, selected, phase === 'battle' && V.r124),
+      bombardInfo: bombardStatus(w, selected, phase === 'battle' && V.r145),
       reloadInfo: reloadStatus(w, selected, phase === 'battle' && V.r123),
       counterbatteryInfo: counterbatteryHint(w, phase === 'battle' && V.r015 && V.r115),
       vegetationInfo: view.vegetationInfo,
@@ -552,6 +555,8 @@ renderer.setAnimationLoop(() => {
   if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
   const coverInfo = coverDurability(w, selected, phase === 'battle' && V.r124);
   if (coverInfo !== lastCoverInfo) { lastCoverInfo = coverInfo; hud?.update(); }
+  const bombardInfo = bombardStatus(w, selected, phase === 'battle' && V.r145);
+  if (bombardInfo !== lastBombardInfo) { lastBombardInfo = bombardInfo; hud?.update(); }
   const reloadInfo = reloadStatus(w, selected, phase === 'battle' && V.r123);
   if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
   const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);

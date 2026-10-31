@@ -162,8 +162,8 @@ function mainFixture(query = '') {
     hud: { update: () => hudUpdates++, frame: () => hudFrames++ }, performance: { now: () => 1000 }, lastT: 1000,
     paused: true, speed: 1, acc: 0, endT0: -1, endFrom: null, reportShown: false, stats: {}, slowmoFactor: () => 1,
     syncBattleAudio() {}, battleAudio: undefined, tick: () => step(c.w, []), TICK_HZ: 30, devicePixelRatio: 1, innerWidth: 412, innerHeight: 860,
-    fling: { active: false }, glide: { active: false }, style: {}, lastRangeInfo: 'unchanged', lastCoverInfo: '', lastReloadInfo: '', lastVehicleInfo: '', lastVegetationInfo: '',
-    coverDurability: () => '', reloadStatus: () => '', vehicleDurability: () => '', counterbatteryHint: () => '', lastCounterbatteryInfo: '', lastCounterbatteryWorld: f.w,
+    fling: { active: false }, glide: { active: false }, style: {}, lastRangeInfo: 'unchanged', lastCoverInfo: '', lastBombardInfo: '', lastReloadInfo: '', lastVehicleInfo: '', lastVegetationInfo: '',
+    coverDurability: () => '', bombardStatus: () => '', reloadStatus: () => '', vehicleDurability: () => '', counterbatteryHint: () => '', lastCounterbatteryInfo: '', lastCounterbatteryWorld: f.w,
     fireDisciplineFrame: undefined, prodBar: undefined, minimap: undefined, tutorial: { frame() {} },
     renderer: { setAnimationLoop: callback => { render = callback; }, setPixelRatio() {}, setSize() {} } });
   vm.runInContext(section(mainPlain, 'if (V.r109) {\n  commandMenu = ', '\n// R037：'), c);
