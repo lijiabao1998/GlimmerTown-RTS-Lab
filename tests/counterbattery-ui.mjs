@@ -144,7 +144,7 @@ function mainFixture(query = '', w = fixtureWorld()) {
   const document = dom(); w.units = [];
   const metrics = { updates: 0, minimaps: 0 }; let actions;
   const q = new URLSearchParams(`${query}&noR135=1`);
-  const c = vm.createContext({ ...world, reloadStatus, coverDurability, vehicleDurability, document, w, selected: new Set(), paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
+  const c = vm.createContext({ ...world, bombardStatus: () => '', reloadStatus, coverDurability, vehicleDurability, document, w, selected: new Set(), paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
     battleAudio: undefined, syncBattleAudio() {}, // R117 stays outside this counterbattery-only fixture.
     V: fixtureValves(q, { r009: false, r010: true, r018: false, r012: false }), planner: { buildHint: '' }, BUILD_TIP: '布陣說明', q,
     view: { rangeInfo: '', visibleUnit: () => false }, counterbatteryHint, hud: undefined, minimap: undefined, lastCounterbatteryInfo: '', lastCounterbatteryWorld: undefined,

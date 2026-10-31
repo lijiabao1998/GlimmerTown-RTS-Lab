@@ -101,7 +101,7 @@ function fixture({ hud = true, enabled = true } = {}) {
     q, V: fixtureValves(q, { r109: enabled, r009: true, r010: false, r012: false, r018: false, r015: true, r115: true }),
     w, selected, battleHint: undefined, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he',
     battleAudio: undefined, syncBattleAudio() {}, // This guard exercises the original no-audio HUD/input path.
-    reloadStatus, coverDurability, vehicleDurability, counterbatteryHint: () => '', BUILD_TIP: '布陣說明',
+    bombardStatus: () => '', reloadStatus, coverDurability, vehicleDurability, counterbatteryHint: () => '', BUILD_TIP: '布陣說明',
     SIDE_PLAYER, SIDE_ENEMY, SUB, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UNIT_KINDS,
     routeBattleOrder, bombardCommand, bombardTarget, inSelectionRect, document, canvas,
     pointers: new Map(), dragged: false, pinchD: 0, dragV: { vx: 2, vy: 3, t: 4 }, lastTap: { id: 0, t: 0 },
