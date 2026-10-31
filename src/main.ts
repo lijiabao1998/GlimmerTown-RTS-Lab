@@ -17,6 +17,7 @@ import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
 import { BattleAudio } from './render/audio.ts';
 import { STYLE_A, type Style } from './render/post.ts';
+import { initFireDiscipline } from './ui/fireDiscipline.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
 import { Gestures, inSelectionRect, type SelectionRect } from './ui/gestures.ts';
@@ -44,7 +45,6 @@ import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleSt
 import { initReportView, type ReportView } from './ui/reportView.ts';
 import { showStartOrder, startOrderText } from './ui/startOrder.ts';
 import { valves } from './valves.ts';
-
 const q = new URLSearchParams(location.search);
 const V = valves(q);   // R060 逃生閥表：所有 ?noR<號> 都在 src/valves.ts
 const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
@@ -85,13 +85,11 @@ function startBanner() {
   (document.getElementById('hud') ?? document.body).appendChild(el);
   setTimeout(() => el.remove(), 1300);   // 只是畫面上的字，跟模擬無關
 }
-
 const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.BasicShadowMap;
 document.body.appendChild(renderer.domElement);
 const canvas = renderer.domElement;
-
 let w: World, view: BattleView, log: LoggedCommand[], pending: Command[];
 const sandboxPlacementResults: (SandboxError | null)[] = [];
 let hud: Hud | undefined, buildBar: BuildBar | undefined;
@@ -453,6 +451,7 @@ hud = initHud({
   help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
+const fireDisciplineFrame = V.r143 ? initFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue) : undefined;
 if (V.r901) initMobileChrome(canvas);
 prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []),
   ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
@@ -570,6 +569,7 @@ renderer.setAnimationLoop(() => {
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
   tutorial.frame(t);
+  fireDisciplineFrame?.();
   commandMenu?.frame(); // R137：只更新選單，不補跑其他 HUD 的刷新路徑。
   prodBar?.update();
   minimap?.frame(t);
