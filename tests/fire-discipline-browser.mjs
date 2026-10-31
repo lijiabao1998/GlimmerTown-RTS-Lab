@@ -10,7 +10,7 @@ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'discipline-browser-'));
 try {
  await build({root:ROOT,logLevel:'error',build:{outDir:temp}});
  for(const [name,width,height,port] of [['desktop',1280,800,18731],['mobile',412,860,18751],['narrow',360,860,18771]]) {
-  await withBrowser({width,height,port,root:temp},async({open,page})=>{
+  await withBrowser({width,height,mobile:width<=480,port,root:temp},async({open,page})=>{
    await open('noR069=1');
    await page.evaluate('__rts.playLog(1944,[],1);__rts.pause(true);__rts.select([1,4])');
    await sleep(100);
@@ -37,6 +37,8 @@ try {
    assert.ok(label.includes('車砲停火 2/2')&&!label.includes('待模擬執行'),label);
    const info=await page.evaluate('(()=>{const b=document.querySelector("#b-discipline"),r=b.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom,disabled:b.disabled,hidden:b.hidden,scene:__rts.info()}})()');
    assert.ok(!info.disabled&&!info.hidden&&info.w>=44&&info.h>=44&&info.x>=0&&info.right<=width&&info.y>=0&&info.bottom<=height,JSON.stringify(info));
+   const hit=await page.evaluate('(()=>{const b=document.querySelector("#b-discipline"),r=b.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===b})()');
+   assert.equal(hit,true,'control is topmost, not covered by another overlay');
    assert.ok(info.scene.calls<=20&&info.scene.triangles<=80000,JSON.stringify(info.scene));
    await shot(page,path.join(ROOT,'shots',`fire-discipline-${name}-held.png`));
    // Change selection and create mixed hold state, then action must hold all, not silently release half.
@@ -58,5 +60,5 @@ try {
    assert.equal(page.errors.length,0,page.errors.join('\n'));
   });
  }
-}finally{fs.rmSync(temp,{recursive:true,force:true});}
-console.log('OK R143 desktop/mobile actual UI: queued repeated clicks, mixed selection, disabled selection, 44px bounds/budget, valve replay, six screenshots');
+}catch(error){console.error('R143 FIRST RED '+String(error.stack??error).replaceAll('\n',' | '));process.exitCode=1;}finally{fs.rmSync(temp,{recursive:true,force:true});}
+if(!process.exitCode) console.log('OK R143 desktop/mobile actual UI: queued repeated clicks, mixed selection, disabled selection, 44px bounds/budget, valve replay, six screenshots');

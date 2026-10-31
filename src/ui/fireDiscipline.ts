@@ -15,12 +15,15 @@ export function fireDisciplineState(w: World, selected: Iterable<number>, pendin
 
 export function initFireDiscipline(read: () => { world: World; selected: Iterable<number>; pending: readonly Command[]; active: boolean }, issue: (cmd: Command) => void): () => void {
   const hud = document.querySelector('#hud')!;
-  hud.classList.add('has-fire-control');
+  const bar = document.createElement('div');
+  bar.id = 'fire-discipline'; bar.className = 'bar';
+  hud.appendChild(bar);
   const button = document.createElement('button');
   button.id = 'b-discipline'; button.type = 'button';
-  hud.querySelector('.btns')!.appendChild(button);
+  bar.appendChild(button);
   const frame = () => {
     const s = read(), state = fireDisciplineState(s.world, s.selected, s.pending);
+    bar.hidden = !s.active;
     button.hidden = !s.active;
     button.disabled = !state.ids.length;
     button.textContent = state.hold ? '停火' : '開火';

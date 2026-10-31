@@ -156,12 +156,12 @@
       #hud.cover-durability .top { top: calc(max(8px, env(safe-area-inset-top)) + 108px); }
       #hud.cover-durability #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 148px); }
     }
-    /* R143 ninth control: wrap the entire toolbar without shrinking old hit targets. */
-    @media (max-width: 480px) {
-      #hud.has-fire-control .btns { left: max(8px, env(safe-area-inset-left)); flex-wrap: wrap; justify-content: flex-end; }
-      #hud.has-fire-control .top { top: calc(max(8px, env(safe-area-inset-top)) + 108px); }
-      #hud.has-fire-control #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 148px); }
-    }
+    /* R143 contextual control does not move any existing toolbar or minimap target. */
+    #hud #fire-discipline { left: calc(max(8px, env(safe-area-inset-left)) + 92px); top: calc(max(8px, env(safe-area-inset-top)) + 58px); }
+    #hud #fire-discipline[hidden] { display: none; }
+    #hud #fire-discipline button { width: 44px; height: 44px; }
+    @media (max-width: 640px) { #hud #fire-discipline { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
+    @media (max-width: 480px) and (orientation: portrait) { body.r901-top-off #hud #fire-discipline { display: none; } }
     /* R040 載入畫面：排在程式碼前面先畫（vite.config.ts 把 module 腳本搬到 body 尾巴）。
        動畫只動 transform／opacity：主執行緒忙著解析程式時照樣動。不吃點擊；初始化做完由 main.ts 拿掉。 */
     #loader { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
