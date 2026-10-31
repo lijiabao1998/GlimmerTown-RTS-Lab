@@ -556,7 +556,7 @@ renderer.setAnimationLoop(() => {
   const coverInfo = coverDurability(w, selected, phase === 'battle' && V.r124);
   if (coverInfo !== lastCoverInfo) { lastCoverInfo = coverInfo; hud?.update(); }
   const bombardInfo = bombardStatus(w, selected, phase === 'battle' && V.r145);
-  if (bombardInfo !== lastBombardInfo) { lastBombardInfo = bombardInfo; hud?.update(); }
+  if (bombardInfo !== lastBombardInfo) { lastBombardInfo = bombardInfo; hud?.bombardFrame(bombardInfo); }
   const reloadInfo = reloadStatus(w, selected, phase === 'battle' && V.r123);
   if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
   const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);

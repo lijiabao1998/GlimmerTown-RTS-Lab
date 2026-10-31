@@ -31,7 +31,7 @@ export interface HudActions {
   help?: () => void;   // R013 說明面板
   toggleAudio?: () => void; // R117：可選，不在 HUD 內建立音訊
 }
-export interface Hud { update: () => void; frame: () => void; vehicleFrame: (info: string) => void }
+export interface Hud { update: () => void; frame: () => void; vehicleFrame: (info: string) => void; bombardFrame: (info: string) => void }
 
 export function initHud(a: HudActions): Hud {
   const root = document.createElement('div');
@@ -62,10 +62,13 @@ export function initHud(a: HudActions): Hud {
   if (a.toggleAudio) $('b-audio').addEventListener('click', e => { e.stopPropagation(); if (!e.isTrusted) return; a.toggleAudio!(); update(); });
 
   let lastSec = -1;
-  let legacyHint = '', priorityHint = false;
+  let legacyHint = '', priorityHint = false, bombardText = '', vehicleText = '';
+  function bombardFrame(info: string) { bombardText = info; vehicleFrame(vehicleText); }
   // R135 frame-only updates never read state or refresh other features' cached text.
   function vehicleFrame(info: string) {
-    const text = !priorityHint && info ? `${info}。${legacyHint}` : legacyHint;
+    vehicleText = info;
+    const base = !priorityHint && info ? `${info}。${legacyHint}` : legacyHint;
+    const text = base + (!priorityHint && bombardText ? `。${bombardText}` : '');
     if ($('hint').textContent !== text) $('hint').textContent = text;
   }
   function update() {
@@ -100,11 +103,11 @@ export function initHud(a: HudActions): Hud {
       ? `${s.info ? `${s.info}。` : ''}已選：${s.tanks ? `坦克 ${s.tanks}` : ''}${s.tanks && s.guns ? '、' : ''}${s.guns ? `砲 ${s.guns}` : ''}${s.infantry ? ` 步兵 ${s.infantry}` : ''}${s.observers ? ` 觀測員 ${s.observers}` : ''}${s.observers || s.infantry ? '（點房子進駐）' : ''}。點地面＝移動，點敵人＝攻擊，點房子＝轟它${s.fireMode ? '；砲擊模式：點地面＝對那一格開火' : ''}`
       : '點我方單位（藍圈）選取；拖曳平移，雙指或滾輪縮放';
     if (s.hint === undefined && s.coverInfo) $('hint').textContent += `。${s.coverInfo}`;
-    if (s.hint === undefined && s.bombardInfo) $('hint').textContent += `。${s.bombardInfo}`;
     if (s.hint === undefined && s.reloadInfo) $('hint').textContent += `。${s.reloadInfo}`;
     if (s.hint === undefined && s.rangeInfo) $('hint').textContent += `。${s.rangeInfo}`;
     if (s.hint === undefined && s.counterbatteryInfo) $('hint').textContent += `。${s.counterbatteryInfo}`;
     if (s.hint === undefined && !sel && !s.fireMode && !s.rangeInfo && !s.counterbatteryInfo && s.vegetationInfo) $('hint').textContent += `。${s.vegetationInfo}`;
+    bombardText = s.bombardInfo ?? '';
     legacyHint = $('hint').textContent ?? ''; priorityHint = s.hint !== undefined;
     vehicleFrame(s.vehicleInfo ?? '');
     const ban = $('banner');
@@ -116,5 +119,5 @@ export function initHud(a: HudActions): Hud {
     if (sec !== lastSec) { lastSec = sec; $('clock').textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; update(); }
   }
   update();
-  return { update, frame, vehicleFrame };
+  return { update, frame, vehicleFrame, bombardFrame };
 }
