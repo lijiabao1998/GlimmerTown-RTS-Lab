@@ -164,7 +164,7 @@ function mainFixture(query = '') {
     syncBattleAudio() {}, battleAudio: undefined, tick: () => step(c.w, []), TICK_HZ: 30, devicePixelRatio: 1, innerWidth: 412, innerHeight: 860,
     fling: { active: false }, glide: { active: false }, style: {}, lastRangeInfo: 'unchanged', lastCoverInfo: '', lastReloadInfo: '', lastVehicleInfo: '', lastVegetationInfo: '',
     coverDurability: () => '', reloadStatus: () => '', vehicleDurability: () => '', counterbatteryHint: () => '', lastCounterbatteryInfo: '', lastCounterbatteryWorld: f.w,
-    prodBar: undefined, minimap: undefined, tutorial: { frame() {} },
+    fireDisciplineFrame: undefined, prodBar: undefined, minimap: undefined, tutorial: { frame() {} },
     renderer: { setAnimationLoop: callback => { render = callback; }, setPixelRatio() {}, setSize() {} } });
   vm.runInContext(section(mainPlain, 'if (V.r109) {\n  commandMenu = ', '\n// R037：'), c);
   vm.runInContext(section(mainPlain, 'renderer.setAnimationLoop(() => {', '\n// R040：'), c);

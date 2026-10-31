@@ -1,5 +1,6 @@
 // 一步＝1/20 秒。順序固定：套指令 → 全部單位移動 → 車輛推擠（R005）→ 全部單位開火 → 砲彈飛行與落地 → 判勝負。
 import { isqrt, dist } from './math.ts';
+import { fireDisciplineEligible } from './fireDiscipline.ts';
 import { armorPct } from './armor.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
@@ -25,6 +26,7 @@ export type Command =
   | { t: 'move'; side: number; ids: number[]; x: number; z: number }
   | { t: 'attack'; side: number; ids: number[]; target: number }
   | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number; ammo?: 'smoke' }
+  | { t: 'fireDiscipline'; side: number; ids: number[]; hold: boolean }
   | { t: 'stop'; side: number; ids: number[] }
   | TrenchCmd
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
@@ -46,7 +48,7 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 // 指令只認：屬於下指令那一方、還活著的單位；座標夾進地圖；攻擊目標要是活著的敵人
 export function applyCommand(w: World, cmd: Command): SandboxError | null | void {
   if (cmd.t === 'sandboxPlace' || cmd.t === 'sandboxRun' || cmd.t === 'sandboxReset') return applySandbox(w, cmd);
-  if (w.sandbox && cmd.t !== 'move' && cmd.t !== 'attack' && cmd.t !== 'fireAt' && cmd.t !== 'stop') return;
+  if (w.sandbox && cmd.t !== 'move' && cmd.t !== 'attack' && cmd.t !== 'fireAt' && cmd.t !== 'stop' && cmd.t !== 'fireDiscipline') return;
   if (cmd.t === 'zombies') return; // 地圖後、eco 前在 step() 開頭套。
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map') return;   // 布陣、地圖（R026）指令只在 step() 開頭套
@@ -62,6 +64,10 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   const cx = (v: number) => Math.max(0, Math.min(w.n - 1, v | 0));
   us.forEach((u, k) => {
     const ux = cellOf(u.x), uz = cellOf(u.z);
+    if (cmd.t === 'fireDiscipline') {
+      if (fireDisciplineEligible(u) && typeof cmd.hold === 'boolean') { if (cmd.hold) u.holdFire = 1; else delete u.holdFire; }
+      return;
+    }
     if (cmd.t === 'stop') { delete u.fireAmmo; u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
     if (cmd.t === 'move') {
       delete u.fireAmmo;
@@ -306,6 +312,7 @@ function fireUnit(w: World, u: Unit): void {
   if (UNIT_KINDS[u.kind].range === 0) return;   // 觀測員沒有武裝
   if (u.cooldown > 0) u.cooldown--;
   const k = UNIT_KINDS[u.kind];
+  if (u.holdFire === 1 && fireDisciplineEligible(u)) { if (k.indirect) syncRanging(w, u, null); return; }
   if (u.order !== ORD_FIRE_AT) delete u.fireAmmo;
   const smoke = u.fireAmmo === SHELL_SMOKE;
   const aim = pickAim(w, u);

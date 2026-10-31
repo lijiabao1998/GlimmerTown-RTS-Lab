@@ -180,6 +180,7 @@ export interface Unit {
   cooldown: number;
   ranging?: Ranging; // optional so earlier saved worlds can still advance
   hullX?: number; hullZ?: number; // R104 車體整數方向；舊世界缺欄位時保留原傷害
+  holdFire?: 1; // R143 player vehicle/artillery fire discipline; absence preserves old worlds
   fireAmmo?: number;    // R107：只有明確煙幕任務才保存；舊世界沒有此欄位
   aimX: number; aimZ: number; // 最後一次開火的方向（位置單位的向量；渲染轉砲塔用）
 }
@@ -418,6 +419,7 @@ export function hashWorld(w: World): string {
     const r = u.ranging;
     f.int(r ? 1 : 0);
     if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
+    if (u.holdFire === 1) f.int(0x4846).int(1);
     if (u.fireAmmo !== undefined) f.int(0x5341).int(u.fireAmmo);
   }
   if (w.vegetation) {
