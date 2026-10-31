@@ -47,6 +47,8 @@ try {
    assert.ok(!info.disabled&&!info.hidden&&info.w>=44&&info.h>=44&&info.x>=0&&info.right<=width&&info.y>=0&&info.bottom<=height,JSON.stringify(info));
    const hit=await page.evaluate('(()=>{const b=document.querySelector("#b-discipline"),r=b.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===b})()');
    assert.equal(hit,true,'control is topmost, not covered by another overlay');
+   const overlaps=await page.evaluate(`(()=>{const a=document.querySelector('#fire-discipline').getBoundingClientRect();return ['#hud .top','#minimap','#sb-enter'].filter(s=>{const e=document.querySelector(s);if(!e||e.hidden)return false;const b=e.getBoundingClientRect();return b.width>0&&b.height>0&&a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top})})()`);
+   assert.deepEqual(overlaps,[],'contextual control must not obscure status, minimap, or sandbox entry');
    assert.ok(info.scene.calls<=20&&info.scene.triangles<=80000,JSON.stringify(info.scene));
    await shot(page,path.join(ROOT,'shots',`fire-discipline-${name}-held.png`));
    // Change selection and create mixed hold state, then action must hold all, not silently release half.
