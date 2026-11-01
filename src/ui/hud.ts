@@ -12,6 +12,7 @@ export interface HudState {
   coverEnabled?: boolean; // R124：窄螢幕工具列跟隨獨立閥
   coverInfo?: string; // R124：當前砲擊建築的只讀耐久摘要
   vehicleInfo?: string; // R135：我方選取坦克／砲車的現有HP，混選顯示最低比例
+  bombardInfo?: string; // R145: real fireAt order state, never inferred hit/success
   reloadInfo?: string; // R123：純讀坦克／砲車裝填，不表示能射擊
   rangeInfo?: string; // R113：當前單選武器的名目射程與散布上界
   vegetationInfo?: string; // R116：閒置時的地形規則，讓操作／射程／聲測提示優先
@@ -30,7 +31,7 @@ export interface HudActions {
   help?: () => void;   // R013 說明面板
   toggleAudio?: () => void; // R117：可選，不在 HUD 內建立音訊
 }
-export interface Hud { update: () => void; frame: () => void; vehicleFrame: (info: string) => void }
+export interface Hud { update: () => void; frame: () => void; vehicleFrame: (info: string) => void; bombardFrame: (info: string) => void }
 
 export function initHud(a: HudActions): Hud {
   const root = document.createElement('div');
@@ -61,10 +62,13 @@ export function initHud(a: HudActions): Hud {
   if (a.toggleAudio) $('b-audio').addEventListener('click', e => { e.stopPropagation(); if (!e.isTrusted) return; a.toggleAudio!(); update(); });
 
   let lastSec = -1;
-  let legacyHint = '', priorityHint = false;
+  let legacyHint = '', priorityHint = false, bombardText = '', vehicleText = '';
+  function bombardFrame(info: string) { bombardText = info; vehicleFrame(vehicleText); }
   // R135 frame-only updates never read state or refresh other features' cached text.
   function vehicleFrame(info: string) {
-    const text = !priorityHint && info ? `${info}。${legacyHint}` : legacyHint;
+    vehicleText = info;
+    const base = !priorityHint && info ? `${info}。${legacyHint}` : legacyHint;
+    const text = base + (!priorityHint && bombardText ? `。${bombardText}` : '');
     if ($('hint').textContent !== text) $('hint').textContent = text;
   }
   function update() {
@@ -103,6 +107,7 @@ export function initHud(a: HudActions): Hud {
     if (s.hint === undefined && s.rangeInfo) $('hint').textContent += `。${s.rangeInfo}`;
     if (s.hint === undefined && s.counterbatteryInfo) $('hint').textContent += `。${s.counterbatteryInfo}`;
     if (s.hint === undefined && !sel && !s.fireMode && !s.rangeInfo && !s.counterbatteryInfo && s.vegetationInfo) $('hint').textContent += `。${s.vegetationInfo}`;
+    bombardText = s.bombardInfo ?? '';
     legacyHint = $('hint').textContent ?? ''; priorityHint = s.hint !== undefined;
     vehicleFrame(s.vehicleInfo ?? '');
     const ban = $('banner');
@@ -114,5 +119,5 @@ export function initHud(a: HudActions): Hud {
     if (sec !== lastSec) { lastSec = sec; $('clock').textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; update(); }
   }
   update();
-  return { update, frame, vehicleFrame };
+  return { update, frame, vehicleFrame, bombardFrame };
 }
