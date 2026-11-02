@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createWorld, SIDE_PLAYER, SIDE_ENEMY, SUB, UK_TANK } from '../src/sim/world.ts';
 import { routeBattleOrder } from '../src/ui/smoke.ts';
+import { pickUnitAt } from '../src/ui/pick.ts';   // R070：pickUnit 的內容搬到這裡，總機只留薄接線；沙箱照樣要有這個符號
 import { bombardCommand, bombardTarget } from '../src/ui/commandMenu.ts';
 
 let main = fs.readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
@@ -58,7 +59,7 @@ function fixture(r037 = true) {
     help: { visible: () => false }, reportView: { visible: () => false, hide() {} },
     fling: { stop() {}, start: (...a) => flings.push(a) }, glide: { stop() {}, start: (...a) => glides.push(a) },
     dragV: { vx: 0, vy: 0, t: 0 }, lastTap: { id: 0, t: -1e9 },
-    innerWidth: 412, innerHeight: 860, SIDE_PLAYER, SIDE_ENEMY, SUB, routeBattleOrder, bombardCommand, bombardTarget,
+    innerWidth: 412, innerHeight: 860, SIDE_PLAYER, SIDE_ENEMY, SUB, routeBattleOrder, bombardCommand, bombardTarget, pickUnitAt,
     issue: cmd => issued.push(cmd), simT: () => 0, planner: { placeAt() {} },
     initCommandMenu: () => ({ open() { menuOpen = true; }, close() { menuOpen = false; }, isOpen: () => menuOpen, contains: () => false }),
   });
