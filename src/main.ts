@@ -18,7 +18,9 @@ import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView } from './render/battle.ts';
 import { BattleAudio } from './render/audio.ts';
 import { STYLE_A, type Style } from './render/post.ts';
-import { initFireDiscipline } from './ui/fireDiscipline.ts';
+import { initFireDiscipline, toggleFireDiscipline } from './ui/fireDiscipline.ts';
+import { initDesktopControls, isDesktopPointer } from './ui/desktopControls.ts';
+import { pickUnitAt } from './ui/pick.ts';
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
 import { Gestures, inSelectionRect, type SelectionRect } from './ui/gestures.ts';
@@ -245,17 +247,6 @@ function tick() {
 const pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 let dragged = false, pinchD = 0;
 
-function pickUnit(cx: number, cy: number): number {
-  let best = 0, bestD = 26 * 26;
-  for (const u of w.units) {
-    if (!u.alive || !view.visibleUnit(u)) continue;
-    const [sx, sy] = view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, innerWidth, innerHeight);
-    const d = (sx - cx) ** 2 + (sy - cy) ** 2;
-    if (d < bestD) { bestD = d; best = u.id; }
-  }
-  return best;
-}
-
 // R110：暫停時沒有下一個模擬秒，清提示必須同步刷新 HUD。
 function clearBattleHint() {
   if (battleHint === undefined) return;
@@ -268,7 +259,7 @@ function order(cx: number, cy: number) {
   if (V.r109) clearBattleHint();
   if (phase === 'build') { planner.placeAt(cx, cy); return; }
   const route = routeBattleOrder(w, selected, fireMode, ammo, {
-    unit: pickUnit(cx, cy),
+    unit: pickUnitAt(w, view, cx, cy),
     building: view.buildingAt(cx, cy, innerWidth, innerHeight),
     ground: view.groundAt(cx, cy, innerWidth, innerHeight),
   });
@@ -280,7 +271,7 @@ function order(cx: number, cy: number) {
 function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {
   if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
   if (V.r109) clearBattleHint();
-  const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
+  const hit = pickUnitAt(w, view, cx, cy), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
     // 雙擊：鏡頭跟過去。兩次放手的間隔用事件時間量（R037）；滑過去的動畫照樣用現在的時間起算
     if (V.r012 && lastTap.id === u.id && t - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, performance.now() / 1000);
@@ -321,7 +312,7 @@ const gestures = V.r109 ? new Gestures({
   hold: (cx, cy) => {
     fling.stop(); glide.stop();
     const target = bombardTarget(w, {
-      unit: pickUnit(cx, cy), building: view.buildingAt(cx, cy, innerWidth, innerHeight),
+      unit: pickUnitAt(w, view, cx, cy), building: view.buildingAt(cx, cy, innerWidth, innerHeight),
       ground: view.groundAt(cx, cy, innerWidth, innerHeight),
     });
     battleHint = target ? '選擇這一格的高爆砲擊或煙幕；放手不會下指令。' : '這裡不在地圖內，請長按地圖上的目標。';
@@ -420,6 +411,9 @@ function selInfo(sel: typeof w.units, showAverage = true): string {
   return `${hp}${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}`;
 }
 
+// R070：桌機按鍵與工具列共用同一組動作
+const toggleFireMode = () => { fireMode = !fireMode; }, selectAllUnits = () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); };
+
 // ---- HUD ----
 hud = initHud({
   state: () => {
@@ -447,14 +441,15 @@ hud = initHud({
   togglePause: () => { if (phase === 'battle') setPaused(!paused); },
   toggleAudio: battleAudio ? () => { syncBattleAudio(); battleAudio.toggleFromGesture(); } : undefined,
   cycleSpeed: () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; },
-  toggleFire: () => { fireMode = !fireMode; },
+  toggleFire: toggleFireMode,
   toggleAmmo: () => { ammo = ammo === 'he' ? 'smoke' : 'he'; if (ammo === 'smoke') fireMode = true; },
-  selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); },
+  selectAll: selectAllUnits,
   restart: () => w.sandbox ? sandboxAction({ t: 'sandboxReset' }) : reset(),
   help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
-const fireDisciplineFrame = V.r143 ? initFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue) : undefined;
+const fireDisciplineRead = () => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 });
+const fireDisciplineFrame = V.r143 ? initFireDiscipline(fireDisciplineRead, issue, { show: !(V.r070 && isDesktopPointer()) }) : undefined;
 if (V.r901) initMobileChrome(canvas);
 prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []),
   ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
@@ -518,6 +513,9 @@ if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: 
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
   audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次
 
+// R070 桌機按鍵：WASD／方向鍵平移、Q／E 縮放、標準 RTS 快捷鍵（?noR070=1 關掉整組、浮動開火鍵也回來）
+const desktopControls = V.r070 && isDesktopPointer() ? initDesktopControls({ world: () => w, selected, view: () => view, fling, glide, hud: () => hud, blocked: () => help.visible() || !!reportView?.visible(), toggleFireMode, selectAll: selectAllUnits, toggleHoldFire: () => { if (toggleFireDiscipline(fireDisciplineRead, issue)) fireDisciplineFrame?.(); }, help: () => help.open() }) : undefined;
+
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
   const t = performance.now(), dt = Math.min(0.25, (t - lastT) / 1000);
@@ -548,6 +546,7 @@ renderer.setAnimationLoop(() => {
     view.pan(camStep.x, camStep.z, innerHeight);
     if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= view.world.n || view.target.z >= view.world.n) fling.stop();
   }
+  desktopControls?.step(dt);   // R070：WASD／方向鍵平移（說明／戰報／開始選單開著時自己不作用）
   if (glide.active) { glide.at(t / 1000, camStep); view.target.x = camStep.x; view.target.z = camStep.z; }
   view.update(alpha, simT(alpha), selected, phase === 'battle');
   // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。

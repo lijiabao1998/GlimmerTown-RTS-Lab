@@ -13,7 +13,19 @@ export function fireDisciplineState(w: World, selected: Iterable<number>, pendin
   return { ids: units.map(u => u.id), held, hold: held !== units.length };
 }
 
-export function initFireDiscipline(read: () => { world: World; selected: Iterable<number>; pending: readonly Command[]; active: boolean }, issue: (cmd: Command) => void): () => void {
+export interface FireDisciplineRead { world: World; selected: Iterable<number>; pending: readonly Command[]; active: boolean }
+
+// R070：按鈕與桌機 G 鍵共用這一段，送出的指令逐位相同。
+export function toggleFireDiscipline(read: () => FireDisciplineRead, issue: (cmd: Command) => void): boolean {
+  const s = read(); if (!s.active) return false;
+  const state = fireDisciplineState(s.world, s.selected, s.pending);
+  if (!state.ids.length) return false;
+  issue({ t: 'fireDiscipline', side: 0, ids: state.ids, hold: state.hold });
+  return true;
+}
+
+export function initFireDiscipline(read: () => FireDisciplineRead, issue: (cmd: Command) => void, opts: { show?: boolean } = {}): () => void {
+  if (opts.show === false) return () => {};   // R070 桌機：不建浮動鍵，改按 G
   const hud = document.querySelector('#hud')!;
   const bar = document.createElement('div');
   bar.id = 'fire-discipline'; bar.className = 'bar';
@@ -34,10 +46,7 @@ export function initFireDiscipline(read: () => { world: World; selected: Iterabl
   };
   button.addEventListener('click', e => {
     e.stopPropagation();
-    const s = read(); if (!s.active) return;
-    const state = fireDisciplineState(s.world, s.selected, s.pending);
-    if (state.ids.length) issue({ t: 'fireDiscipline', side: 0, ids: state.ids, hold: state.hold });
-    frame();
+    if (toggleFireDiscipline(read, issue)) frame();
   });
   frame(); return frame;
 }
