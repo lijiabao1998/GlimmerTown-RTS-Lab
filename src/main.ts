@@ -246,6 +246,7 @@ function tick() {
 // ---- 輸入：單指點＝選取／下指令；單指拖＝平移；雙指＝縮放；滾輪＝縮放；右鍵＝下指令 ----
 const pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 let dragged = false, pinchD = 0;
+const pickUnit = (cx: number, cy: number) => pickUnitAt(w, view, cx, cy, innerWidth, innerHeight);   // R070 內容搬到 src/ui/pick.ts（R124／R123 的守衛會注入這個名字）
 
 // R110：暫停時沒有下一個模擬秒，清提示必須同步刷新 HUD。
 function clearBattleHint() {
@@ -259,7 +260,7 @@ function order(cx: number, cy: number) {
   if (V.r109) clearBattleHint();
   if (phase === 'build') { planner.placeAt(cx, cy); return; }
   const route = routeBattleOrder(w, selected, fireMode, ammo, {
-    unit: pickUnitAt(w, view, cx, cy),
+    unit: pickUnit(cx, cy),
     building: view.buildingAt(cx, cy, innerWidth, innerHeight),
     ground: view.groundAt(cx, cy, innerWidth, innerHeight),
   });
@@ -271,7 +272,7 @@ function order(cx: number, cy: number) {
 function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {
   if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
   if (V.r109) clearBattleHint();
-  const hit = pickUnitAt(w, view, cx, cy), u = hit ? w.units[hit - 1] : null;
+  const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
     // 雙擊：鏡頭跟過去。兩次放手的間隔用事件時間量（R037）；滑過去的動畫照樣用現在的時間起算
     if (V.r012 && lastTap.id === u.id && t - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, performance.now() / 1000);
@@ -312,7 +313,7 @@ const gestures = V.r109 ? new Gestures({
   hold: (cx, cy) => {
     fling.stop(); glide.stop();
     const target = bombardTarget(w, {
-      unit: pickUnitAt(w, view, cx, cy), building: view.buildingAt(cx, cy, innerWidth, innerHeight),
+      unit: pickUnit(cx, cy), building: view.buildingAt(cx, cy, innerWidth, innerHeight),
       ground: view.groundAt(cx, cy, innerWidth, innerHeight),
     });
     battleHint = target ? '選擇這一格的高爆砲擊或煙幕；放手不會下指令。' : '這裡不在地圖內，請長按地圖上的目標。';
