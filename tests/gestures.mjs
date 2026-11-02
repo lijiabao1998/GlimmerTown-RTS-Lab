@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { createWorld, SIDE_PLAYER, SIDE_ENEMY, SUB, UK_HOWITZER, UK_TANK } from '../src/sim/world.ts';
 import { routeBattleOrder } from '../src/ui/smoke.ts';
 import { bombardCommand, bombardTarget } from '../src/ui/commandMenu.ts';
+import { pickUnitAt } from '../src/ui/pick.ts';   // R070：pickUnit 內容搬到這裡，總機只留薄接線
 const sources = Object.fromEntries(['gestures', 'main'].map(n => [n, fs.readFileSync(new URL(n === 'main' ? '../src/main.ts' : '../src/ui/gestures.ts', import.meta.url), 'utf8')]));
 const mutations = {
   threshold: { group: 'box', file: 'gestures', from: 'Math.hypot(c.cx - c.x, c.cy - c.y) > 8', to: 'Math.hypot(c.cx - c.x, c.cy - c.y) >= 8' },
@@ -62,7 +63,7 @@ function mainFixture(enabled = true) {
   };
   const c = vm.createContext({
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // This fixture exercises the existing small-map controller.
-    V: { r109: enabled, r012: true }, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
+    V: { r109: enabled, r012: true }, pickUnitAt, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
     commandMenu: undefined, battleHint: undefined, document: { createElement: () => ({ id: '', hidden: false, style: {} }), body: { appendChild: el => elements.push(el) }, addEventListener: (t, f) => docEvents.set(t, f) },
     addEventListener: (t, f) => globalEvents.set(t, f), canvas, performance: { now: clock.now },
     view, w: createWorld(1944), selected: new Set(), phase: 'battle', fireMode: false, ammo: 'he', paused: false,

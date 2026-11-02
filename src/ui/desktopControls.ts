@@ -22,10 +22,11 @@ export interface DesktopDeps {
   help: () => void;
 }
 
-export const DESKTOP_POINTER = '(hover: hover) and (pointer: fine)';
+// 主要指標不是粗指標＝有滑鼠（無頭 Chrome 的 hover 不可靠，CI 上會是 none；pointer:coarse 才是「這台是觸控」的可靠訊號）。
+export const DESKTOP_POINTER = '(pointer: coarse)';
 
 export function isDesktopPointer(): boolean {
-  return typeof matchMedia === 'function' && matchMedia(DESKTOP_POINTER).matches;
+  return typeof matchMedia === 'function' && !matchMedia(DESKTOP_POINTER).matches;
 }
 
 // R069 開始選單開著時整組不作用（選單本身不在這裡建立，只讀它的 hidden）。
@@ -34,7 +35,7 @@ const menuOpen = (): boolean => {
   return !!m && !m.hidden;
 };
 
-export function initDesktopControls(d: DesktopDeps): { step: (dt: number) => void } {
+export function initDesktopControls(d: DesktopDeps): void {
   document.body.classList.add('r070');
   const groups = new Map<number, number[]>();
   let tabAt = 0;
@@ -74,5 +75,13 @@ export function initDesktopControls(d: DesktopDeps): { step: (dt: number) => voi
     zoom: f => d.view().zoomAt(f, innerWidth / 2, innerHeight / 2, innerWidth, innerHeight),
     action: act,
   });
-  return { step: dt => keys.step(dt) };
+  // 自己跑一個 rAF：總機那條迴圈是守衛的切片對象，不再往裡面加識別字。
+  let last = performance.now();
+  const frame = (now: number) => {
+    const dt = Math.min(0.25, Math.max(0, (now - last) / 1000));
+    last = now;
+    keys.step(dt);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
 }

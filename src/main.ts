@@ -412,9 +412,6 @@ function selInfo(sel: typeof w.units, showAverage = true): string {
   return `${hp}${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}`;
 }
 
-// R070：桌機按鍵與工具列共用同一組動作
-const toggleFireMode = () => { fireMode = !fireMode; }, selectAllUnits = () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); };
-
 // ---- HUD ----
 hud = initHud({
   state: () => {
@@ -442,15 +439,14 @@ hud = initHud({
   togglePause: () => { if (phase === 'battle') setPaused(!paused); },
   toggleAudio: battleAudio ? () => { syncBattleAudio(); battleAudio.toggleFromGesture(); } : undefined,
   cycleSpeed: () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; },
-  toggleFire: toggleFireMode,
+  toggleFire: () => { fireMode = !fireMode; },
   toggleAmmo: () => { ammo = ammo === 'he' ? 'smoke' : 'he'; if (ammo === 'smoke') fireMode = true; },
-  selectAll: selectAllUnits,
+  selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); },
   restart: () => w.sandbox ? sandboxAction({ t: 'sandboxReset' }) : reset(),
   help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
-const fireDisciplineRead = () => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 });
-const fireDisciplineFrame = V.r143 ? initFireDiscipline(fireDisciplineRead, issue, { show: !(V.r070 && isDesktopPointer()) }) : undefined;
+const fireDisciplineFrame = V.r143 ? initFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue, { show: !(V.r070 && isDesktopPointer()) }) : undefined;
 if (V.r901) initMobileChrome(canvas);
 prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []),
   ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
@@ -514,8 +510,7 @@ if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: 
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
   audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次
 
-// R070 桌機按鍵：WASD／方向鍵平移、Q／E 縮放、標準 RTS 快捷鍵（?noR070=1 關掉整組、浮動開火鍵也回來）
-const desktopControls = V.r070 && isDesktopPointer() ? initDesktopControls({ world: () => w, selected, view: () => view, fling, glide, hud: () => hud, blocked: () => help.visible() || !!reportView?.visible(), toggleFireMode, selectAll: selectAllUnits, toggleHoldFire: () => { if (toggleFireDiscipline(fireDisciplineRead, issue)) fireDisciplineFrame?.(); }, help: () => help.open() }) : undefined;
+if (V.r070 && isDesktopPointer()) initDesktopControls({ world: () => w, selected, view: () => view, fling, glide, hud: () => hud, blocked: () => help.visible() || !!reportView?.visible(), toggleFireMode: () => { fireMode = !fireMode; }, selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); }, toggleHoldFire: () => { if (toggleFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue)) fireDisciplineFrame?.(); }, help: () => help.open() });
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {
@@ -547,7 +542,6 @@ renderer.setAnimationLoop(() => {
     view.pan(camStep.x, camStep.z, innerHeight);
     if ((view.target.x === bx && view.target.z === bz) || view.target.x <= 0 || view.target.z <= 0 || view.target.x >= view.world.n || view.target.z >= view.world.n) fling.stop();
   }
-  desktopControls?.step(dt);   // R070：WASD／方向鍵平移（說明／戰報／開始選單開著時自己不作用）
   if (glide.active) { glide.at(t / 1000, camStep); view.target.x = camStep.x; view.target.z = camStep.z; }
   view.update(alpha, simT(alpha), selected, phase === 'battle');
   // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。

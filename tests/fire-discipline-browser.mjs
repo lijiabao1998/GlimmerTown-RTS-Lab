@@ -29,7 +29,7 @@ try {
    };
    if (name === 'desktop') {
     // R070：桌機（hover:hover 且 pointer:fine）不建浮動「開火／停火」鍵，改用 G 鍵送同一支 fireDiscipline 指令。
-    assert.equal(await page.evaluate('matchMedia("(hover: hover) and (pointer: fine)").matches'),true,'desktop harness reports a fine pointer');
+    assert.equal(await page.evaluate('document.body.classList.contains("r070")'),true,'R070: this harness page runs in desktop mode');
     assert.equal(await page.evaluate('document.querySelector("#fire-discipline")===null&&document.querySelector("#b-discipline")===null'),true,'R070: desktop has no floating fire-discipline rail');
     const toolbar=await page.evaluate('[...document.querySelectorAll("#hud .btns button")].filter(b=>!b.hidden).map(b=>{const r=b.getBoundingClientRect();return{id:b.id,x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom}})');
     assert.ok(toolbar.every(r=>r.w>=44&&r.h>=44&&r.x>=0&&r.right<=width&&r.y>=0&&r.bottom<=height),JSON.stringify(toolbar));
