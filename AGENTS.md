@@ -44,7 +44,7 @@
 3. **施工。** 能跑就在本機跑 `npm run check`（typecheck → unit → build → smoke）；跑不了照實寫「未跑，靠 CI」。
 4. **收尾。** 卡面補驗收結果（附實際數字）與沒做成的事（不准空著，也不准美化）；`LOG.md` 加一列；樣張看 CI 附件 `shots-<PR 最新提交>`。
 5. **一張卡只做一件事**；玩法和美術不放在同一張卡。
-6. **守衛。** `tools/` 是受保護的（只有 Claude 改）。新機制要守衛時，寫一支 `tests/<主題>.mjs`：獨立的 Node 腳本，可以 import `../src/sim/*.ts`，綠燈退出碼 0、紅燈非 0。`npm run unit` 會在子行程裡逐支跑。守衛裡的距離、時間用 `UNIT_KINDS` 推，不要寫死，不然調數值就會誤紅。範例卡：`docs/tasks/R001-地基與第一場小仗.md`。瀏覽器守衛用 `tools/cdp.mjs` 開頁：`open(query)` 預設在網址加 `noR069=1`（不顯示 R069 開始選單，照舊直接進布陣）；要測開始選單的守衛寫 `open(query, { menu: true })`。
+6. **守衛。** `tools/` 是受保護的（只有 Claude 改）。新機制要守衛時，寫一支 `tests/<主題>.mjs`：獨立的 Node 腳本，可以 import `../src/sim/*.ts`，綠燈退出碼 0、紅燈非 0。`npm run unit` 會在子行程裡逐支跑。守衛裡的距離、時間用 `UNIT_KINDS` 推，不要寫死，不然調數值就會誤紅。範例卡：`docs/tasks/R001-地基與第一場小仗.md`。瀏覽器守衛用 `tools/cdp.mjs` 開頁：`open(query)` 預設在網址加 `noR069=1`（不顯示 R069 開始選單，照舊直接進布陣）；要測開始選單的守衛寫 `open(query, { menu: true })`。要直接開某一種局，把設定寫在網址（R046）：`seed=`、`map=village|64|96`、`mode=zombies`、`ai=1|2|3`、`force=1|3`（兵力精簡／加倍）、`supply=1|3`（補給慢／快），例如 `open('map=village&seed=7&force=3')`；沒寫或寫別的值＝標準。只驗 R069 選單本身的守衛加 `noR046=1`。
 
 ## 4. GPT 連續迭代
 

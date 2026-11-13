@@ -118,7 +118,9 @@ const groups = {
       const rules = { t: 'rules', force: FORCE_DOUBLE, income: INCOME_FAST };
       const log = [...at0(mapCmd(id), rules, { t: 'build', side: SIDE_PLAYER, kind: 0, x: id === MAP_RYE ? 20 : 50, z: id === MAP_RYE ? 27 : 50, rot: 0 }, { t: 'eco', inf: 1, guns: 1, tanks: 1, armor2: 1 }, { t: 'ai', side: SIDE_ENEMY, level: 3 }, { t: 'ai', side: SIDE_PLAYER, level: 2 }),
         { tick: 40, cmd: { t: 'produce', side: SIDE_PLAYER, kind: UK_TANK } }];
-      const TICKS = 600, a = hashWorld(runLog(createWorld(seed), log, TICKS));
+      const TICKS = 600, first = runLog(createWorld(seed), log, TICKS), a = hashWorld(first);
+      assert(first.rules && first.eco && first.ai?.length === 2 && first.blds.some(b => b.builtBy === SIDE_PLAYER), `fixture: ${name} rules, headquarters, both AIs and the player's house are all in play`);
+      assert(first.units.length > (id === MAP_RYE ? 20 : 60), `fixture: ${name} both sides produced units on top of the doubled opening (${first.units.length})`);
       assert.equal(hashWorld(runLog(createWorld(seed), log, TICKS)), a, `determinism: ${name} same seed and log give the same hash twice`);
       assert.equal(hashWorld(runLog(createWorld(seed), JSON.parse(JSON.stringify(log)), TICKS)), a, `determinism: ${name} log survives a JSON round trip`);
       const half = runLog(createWorld(seed), log, TICKS / 2), copy = structuredClone(half);
