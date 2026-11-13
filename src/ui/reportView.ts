@@ -28,6 +28,7 @@ export function initReportView(actions: { again: () => void }): ReportView {
           ${row('開局', units(r.start[0]), units(r.start[1]))}
           ${row('剩下', units(r.left[0]), units(r.left[1]))}
           ${row('開火', `${r.fires[0]} 發`, `${r.fires[1]} 發`)}
+          ${r.bounces ? row('跳彈', `${r.bounces[0]} 發`, `${r.bounces[1]} 發`) : ''}
         </table>
         <p class="town">村子：轟塌 ${r.rubble} 棟、打成空殼 ${r.roofless} 棟${r.built ? `；你蓋的 ${r.built} 棟還站著 ${r.builtStanding} 棟` : ''}</p>
         <div class="acts"><button id="rp-look">看戰場</button><button id="rp-again">再來一局</button></div>

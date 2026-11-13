@@ -2,6 +2,7 @@
 import { isqrt, dist } from './math.ts';
 import { fireDisciplineEligible } from './fireDiscipline.ts';
 import { armorPct } from './armor.ts';
+import { apHit } from './ballistics.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
 import { smokeBlocks, advanceSmoke, spawnSmoke } from './smoke.ts';
@@ -381,12 +382,17 @@ function land(w: World, s: Shell): void {
   if (s.kind === SHELL_SMOKE) { spawnSmoke(w, s); return; }
   const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
   if (s.kind === SHELL_AP || s.kind === SHELL_SMALL) {
+    let bounce = false;
     if (s.hitBld) { const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一
     else {
       const t = unitById(w, s.target);
-      if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, s.kind === SHELL_AP ? Math.floor(k.dmgUnit * armorPct(t, s.sx, s.sz) / 100) : k.dmgUnit));
+      // R051（rules 帶 ap 才走）：-1 這一發不歸厚度規則管、0 彈開、1 穿透。穿甲彈穿透吃完整傷害；步兵的槍穿透照下面原本的算法；彈開零傷害
+      const ap = w.rules?.ap && t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS ? apHit(w.units[s.shooter - 1].kind, s.sx, s.sz, t) : -1;
+      if (ap === 0) bounce = s.kind === SHELL_AP;
+      else if (ap === 1 && s.kind === SHELL_AP) damageUnit(w, t!, k.dmgUnit);
+      else if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, s.kind === SHELL_AP ? Math.floor(k.dmgUnit * armorPct(t, s.sx, s.sz) / 100) : k.dmgUnit));
     }
-    w.events.push({ e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld });
+    w.events.push(bounce ? { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld, bounce: 1, side: s.side } : { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld });
     return;
   }
   const gun = unitById(w, s.shooter), r = gun?.ranging;

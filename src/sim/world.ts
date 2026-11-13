@@ -207,7 +207,7 @@ export interface Shell {
 // 給渲染看的事件：每一步開頭清空，不進雜湊
 export type SimEvent =
   | { e: 'fire'; unit: number; x: number; z: number }
-  | { e: 'impact'; kind: number; x: number; z: number; bld: number; r?: number }   // R022 r：爆炸半徑（只有迫擊砲這種小號的才帶；畫面用）
+  | { e: 'impact'; kind: number; x: number; z: number; bld: number; r?: number; bounce?: 1; side?: number }   // R022 r：爆炸半徑（只有迫擊砲這種小號的才帶；畫面用）
   | { e: 'kill'; unit: number }
   | { e: 'stage'; bld: number; stage: number }
   | { e: 'build'; bld: number }
@@ -247,7 +247,7 @@ export interface World extends RngState {
   wires?: { version: 1; segments: Building[] }; // R121：沿用耐久資料，不佔blds/occ、不冒充房屋
   trenches?: { version: 1; segments: TrenchSegment[] }; // R118：只有成功布陣才保存
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
-  rules?: { force?: number; income?: number };   // R046 遭遇戰設定（rules 指令；只存不是標準值的欄位，全是標準就沒有這一欄）
+  rules?: { force?: number; income?: number; ap?: number };   // R046 遭遇戰設定（rules 指令；只存不是標準值的欄位，全是標準就沒有這一欄）
   smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
   counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
   sandbox?: { version: 1; running: boolean; frame: number }; // R128：frame 是指令步序，tick 仍只計戰鬥時間
@@ -436,7 +436,7 @@ export function hashWorld(w: World): string {
     for (const s of w.wires.segments) f.int(s.id).int(s.kind).int(s.x).int(s.z).int(s.w).int(s.d).int(s.floors).int(s.hp).int(s.maxHp).int(s.builtBy ?? -1);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
-  if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
+  if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
   if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);

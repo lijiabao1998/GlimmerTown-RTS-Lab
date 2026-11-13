@@ -27,7 +27,7 @@ export function isCommand(x: unknown): x is Command {
     case 'map': return int(c.id) && optInt(c.vegetation);
     case 'eco': return optInt(c.inf) && optInt(c.guns) && optInt(c.tanks) && optInt(c.armor2) && optInt(c.soviet) && optInt(c.international);
     case 'produce': return side(c.side) && int(c.kind);
-    case 'rules': return optInt(c.force) && optInt(c.income);
+    case 'rules': return optInt(c.force) && optInt(c.income) && optInt(c.ap);
     case 'zombies': case 'sandboxReset': return true;
     case 'sandboxRun': return typeof c.running === 'boolean';
     case 'sandboxPlace': return side(c.side) && int(c.kind) && int(c.x) && int(c.z);

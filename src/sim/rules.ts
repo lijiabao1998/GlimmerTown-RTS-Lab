@@ -6,7 +6,7 @@ import {
   SUB, cellIdx, inGrid, center, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, ORD_IDLE, SIDE_PLAYER, SIDE_ENEMY, TER_MUD, type World,
 } from './world.ts';
 
-export interface RulesCmd { t: 'rules'; force?: number; income?: number }
+export interface RulesCmd { t: 'rules'; force?: number; income?: number; ap?: number }   // ap＝1：R051 穿甲與裝甲厚度（見 ballistics.ts）
 
 export const FORCE_LEAN = 1;      // 精簡：起手留一半左右
 export const FORCE_DOUBLE = 3;    // 加倍：標準那一批原地不動，再加同樣的一批
@@ -49,11 +49,12 @@ function deploy(w: World, force: number): void {
 }
 
 // rules 指令：只在第 0 步、還沒有指揮部、還沒進喪屍模式、不是沙盒時套，而且只套一次
-export function applyRules(w: World, cmd: { force?: number; income?: number }): void {
+export function applyRules(w: World, cmd: { force?: number; income?: number; ap?: number }): void {
   if (w.tick !== 0 || w.rules || w.sandbox || w.eco || w.zombies) return;
   const force = cmd.force === FORCE_LEAN || cmd.force === FORCE_DOUBLE ? cmd.force : 0;
   const income = cmd.income === INCOME_SLOW || cmd.income === INCOME_FAST ? cmd.income : 0;
-  if (!force && !income) return;
-  w.rules = { ...(force ? { force } : {}), ...(income ? { income } : {}) };
+  const ap = cmd.ap === 1 ? 1 : 0;
+  if (!force && !income && !ap) return;
+  w.rules = { ...(force ? { force } : {}), ...(income ? { income } : {}), ...(ap ? { ap } : {}) };
   if (force) deploy(w, force);
 }

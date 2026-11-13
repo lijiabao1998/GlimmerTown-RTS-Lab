@@ -2,7 +2,7 @@
 import { INTERNATIONAL_KINDS, INTERNATIONAL_GUNS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, SIDE_PLAYER, SIDE_ENEMY, STAGE_ROOFLESS, stageOf, type World, type SimEvent } from '../sim/world.ts';
 
 const KINDS = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY];   // R021 加步兵
-export interface BattleStats { start: number[][]; fires: number[]; lastKill: { x: number; z: number; tick: number } | null; endTick: number }
+export interface BattleStats { start: number[][]; fires: number[]; lastKill: { x: number; z: number; tick: number } | null; endTick: number; bounces?: number[] }   // bounces（R051）：雙方各有幾發穿甲彈被彈開；有發生才有這一欄
 export interface Report {
   zombies?: { wave: number; killed: number; lost: number };
   winner: number; endTick: number; seconds: number;
@@ -10,6 +10,7 @@ export interface Report {
   kills: number; lost: number;                   // 擊毀敵方、我方損失（台）
   rubble: number; roofless: number;              // 轟塌（瓦礫）、打成空殼的建築
   fires: number[];                               // 雙方開火（發）
+  bounces?: number[];                            // R051：雙方被彈開的穿甲彈（發）；規則開著而且有發生才有
   built: number; builtStanding: number;          // 我方布陣蓋的、還站著的
   lastKill: { x: number; z: number; tick: number } | null;
 }
@@ -26,6 +27,7 @@ export function statsStep(st: BattleStats, w: World, events: SimEvent[]): void {
   for (const e of events) {
     if (e.e === 'fire') { const u = w.units[e.unit - 1]; if (u && (u.side === SIDE_PLAYER || u.side === SIDE_ENEMY)) st.fires[u.side]++; }
     else if (e.e === 'kill') { const u = w.units[e.unit - 1]; if (u) st.lastKill = { x: u.x, z: u.z, tick: w.tick - 1 }; }
+    else if (e.e === 'impact' && e.bounce && (e.side === SIDE_PLAYER || e.side === SIDE_ENEMY)) (st.bounces ??= [0, 0])[e.side]++;
   }
   if (w.winner >= 0 && st.endTick < 0) st.endTick = w.tick;
 }
@@ -40,7 +42,7 @@ export function makeReport(w: World, st: BattleStats): Report {
     start: st.start.map(a => a.slice()), left,
     kills: sum(st.start[SIDE_ENEMY]) - sum(left[SIDE_ENEMY]), lost: sum(st.start[SIDE_PLAYER]) - sum(left[SIDE_PLAYER]),
     rubble: w.blds.filter(b => b.hp <= 0).length, roofless: w.blds.filter(b => stageOf(b) === STAGE_ROOFLESS).length,
-    fires: st.fires.slice(),
+    fires: st.fires.slice(), ...(st.bounces ? { bounces: st.bounces.slice() } : {}),
     built: w.blds.filter(b => b.builtBy === SIDE_PLAYER).length, builtStanding: w.blds.filter(b => b.builtBy === SIDE_PLAYER && b.hp > 0).length,
     lastKill: st.lastKill ? { ...st.lastKill } : null,
   };

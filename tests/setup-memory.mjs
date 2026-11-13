@@ -34,7 +34,7 @@ assert.equal(SETUP_KEY.startsWith('gtrts.v1.'), true, 'format: the key starts wi
 }
 
 // ---- 驗收 2：填進網址參數的規則 ----
-assert.deepEqual(SETUP_PARAMS, ['seed', 'map', 'mode', 'ai', 'force', 'supply'], 'fixture: the six setup items');
+assert.deepEqual(SETUP_PARAMS, ['seed', 'map', 'mode', 'ai', 'force', 'supply', 'ap'], 'fixture: the setup items (R051 added ap)');
 assert.equal(fill('', mem(SAVED)), 'map=64&mode=zombies&ai=3&force=3&supply=1&seed=77', 'restore: an address with no setup item takes all six from storage');
 assert.equal(fill('', mem(STANDARD)), '', 'restore: standard values are not written');
 assert.equal(fill('', mem({ ...STANDARD, map: 'village', seed: 5 })), 'map=village&seed=5', 'restore: only the non-standard items are written');
@@ -105,6 +105,18 @@ assert.equal(fill('', null), '', 'restore: no storage restores nothing');
     k2.start(big); k2.start(other);
     assert.deepEqual([loadSetup(st2).seed, loadSetup(st2).map], [6, '64'], 'link: a different seed in the same linked page counts as a change');
   }
+  // R051 審查找到的：穿甲規則的閥關著時，網址上的 ap 不算帶了設定（照樣還原），本機原本記著的 ap 也不被這一頁洗掉
+  {
+    const withAp = { ...SAVED, mode: 'battle', ap: 1 }, st = mem(withAp);
+    const qq = restoreSetup(new URLSearchParams('noR051=1&ap=1'), st);
+    assert.equal(qq.get('map'), '64', 'valve: with noR051 an ap in the address does not make the page a linked one (the remembered map is restored)');
+    const k = initSkirmish(qq, true), big = createWorld(77); applyMap(big, MAP_LARGE, 1);
+    k.start(big); k.set({ ai: 1 });
+    assert.deepEqual([k.ap, k.canAp, loadSetup(st).ai, loadSetup(st).ap], [false, false, 1, 1], 'valve: with noR051 the rule stays off on this page and the remembered ap survives the visit');
+    const st2 = mem(withAp), k2 = initSkirmish(restoreSetup(new URLSearchParams(''), st2), true);
+    k2.start(big); k2.set({ ap: false });
+    assert.equal(loadSetup(st2).ap, undefined, 'valve: with the valve on, turning the rule off really forgets it');
+  }
   const off = mem(), plain = initSkirmish(restoreSetup(new URLSearchParams('noR073=1'), off), true);
   plain.start(createWorld(3));
   assert.equal(off.m.size, 0, 'save: with the valve off nothing is ever written');
@@ -120,7 +132,7 @@ assert.equal(fill('', null), '', 'restore: no storage restores nothing');
   assert.equal((main.match(/const q = restoreSetup\(new URLSearchParams\(location\.search\)\);/g) ?? []).length, 1, 'wiring: main.ts reads its address items through restoreSetup, once');
   assert(main.indexOf('const q = restoreSetup(') < main.indexOf('let seed = ') && main.indexOf('const q = restoreSetup(') < main.indexOf('let aiLevel = ') && main.indexOf('const q = restoreSetup(') < main.indexOf('let large = '), 'wiring: the restore happens before seed, map and AI level are read');
   assert.match(menu, /sk\?\.set\(\{ ai: Number\(id\.slice\(6\)\) \}\)/, 'wiring: the menu tells the setup about a new AI level');
-  assert.match(menu, /id === 'sm-setup-reset'\) \{ sk\.set\(\{ force: 2, supply: 2 \}\); host\.seed\?\.\(DEFAULT_SEED\); fresh = true; \}/, 'wiring: 恢復預設 resets force, supply and seed and restarts');
+  assert.match(menu, /id === 'sm-setup-reset'\) \{ sk\.set\(\{ force: 2, supply: 2, ap: false \}\); host\.seed\?\.\(DEFAULT_SEED\); fresh = true; \}/, 'wiring: 恢復預設 resets force, supply and seed and restarts');
   assert.match(cdp, /localStorage\.removeItem\('gtrts\.v1\.setup'\)/, 'harness: cdp open() clears the stored setup unless a guard keeps it');
   assert.match(read('../AGENTS.md'), /gtrts\.v1\.setup/, 'rules: AGENTS.md tells guard writers the stored setup is cleared');
   assert.match(read('../tests/skirmish-browser.mjs'), /noR073=1/, 'guards: the R046 browser guard opens with noR073=1');
