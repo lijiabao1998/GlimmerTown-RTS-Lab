@@ -12,7 +12,7 @@ export interface MenuView {
   maps: MapChoice[]; modes: ModeChoice[];
   aiOn: boolean; rye: boolean; tutorial: boolean; audio: boolean | null;   // audio：null＝沒有音效鍵
   resume: boolean;   // 從「選單」鍵打開（布陣中）：主鍵是「繼續」與「重新開始」，不是「開始」
-  setup?: { force: number; supply: number; seed: number; reset?: boolean };   // R046：有才顯示「遭遇戰設定」；reset（R073）：設定頁有「恢復預設」
+  setup?: { force: number; supply: number; seed: number; reset?: boolean; ap?: boolean };   // ap（R051）：有這一欄才有「擬真規則」那一列   // R046：有才顯示「遭遇戰設定」；reset（R073）：設定頁有「恢復預設」
   page?: 'setup';                                              // R046：現在看的是設定頁
   replays?: boolean;                                           // R047：有重播面板可開
 }
@@ -39,6 +39,7 @@ export function menuLayout(v: MenuView): MenuLayout {
     return { title: '遭遇戰設定', sub: '雙方一樣。改了會回到布陣第 0 步', extra: s.reset ? [{ id: 'sm-setup-reset', label: '恢復預設' }] : [], main: [{ id: 'sm-setup-done', label: '完成' }], rows: [
       { id: 'sm-forces', title: '兵力', items: seg('sm-force', FORCE_TEXT, FORCE_SUB, s.force) },
       { id: 'sm-supplies', title: '補給速度', items: seg('sm-supply', SUPPLY_TEXT, SUPPLY_SUB, s.supply) },
+      ...(s.ap === undefined ? [] : [{ id: 'sm-rules', title: '擬真規則', items: [{ id: 'sm-ap', label: '穿甲與裝甲厚度', sub: s.ap ? '開：穿不透就彈開' : '關：打中就有傷害', pressed: s.ap }] }]),   // R051
       { id: 'sm-seeds', title: '種子（同一個種子＝同一張圖、同一局）', items: [{ id: 'sm-seed', label: String(s.seed), input: true }, { id: 'sm-seed-roll', label: '隨機' }] },
     ] };
   }
@@ -49,7 +50,7 @@ export function menuLayout(v: MenuView): MenuLayout {
   }
   if (v.modes.length > 1) rows.push({ id: 'sm-modes', title: '模式', items: v.modes.map(m => ({ id: `sm-mode-${m}`, label: MODE_TEXT[m], pressed: v.mode === m })) });
   if (v.aiOn && v.mode === 'battle') rows.push({ id: 'sm-ais', title: '電腦難度', items: [1, 2, 3].map(n => ({ id: `sm-ai-${n}`, label: AI_TEXT[n], pressed: v.ai === n })) });
-  if (v.setup && v.mode !== 'sandbox') rows.push({ id: 'sm-setups', title: '', items: [{ id: 'sm-setup', label: '遭遇戰設定', sub: setupSummary(v.setup.force, v.setup.supply, v.setup.seed) }] });
+  if (v.setup && v.mode !== 'sandbox') rows.push({ id: 'sm-setups', title: '', items: [{ id: 'sm-setup', label: '遭遇戰設定', sub: setupSummary(v.setup.force, v.setup.supply, v.setup.seed, v.setup.ap) }] });
   const main = v.resume ? [{ id: 'sm-resume', label: '繼續' }, { id: 'sm-restart', label: '重新開始' }] : [{ id: 'sm-start', label: '開始' }];
   return { title: '微光小鎮·二戰 RTS', sub: v.resume ? '換地圖或模式會回到布陣第 0 步' : '選地圖與模式，按「開始」布陣', rows, main, extra };
 }
@@ -144,7 +145,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
     return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
-      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}) };
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
@@ -197,7 +198,8 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     else if (sk && id.startsWith('sm-force-')) { sk.set({ force: Number(id.slice(9)) }); fresh = true; }
     else if (sk && id.startsWith('sm-supply-')) { sk.set({ supply: Number(id.slice(10)) }); fresh = true; }
     else if (id === 'sm-seed-roll') { host.seed?.(randomSeed()); fresh = true; }
-    else if (sk && id === 'sm-setup-reset') { sk.set({ force: 2, supply: 2 }); host.seed?.(DEFAULT_SEED); fresh = true; }   // R073 恢復預設：兵力、補給、種子
+    else if (sk && id === 'sm-setup-reset') { sk.set({ force: 2, supply: 2, ap: false }); host.seed?.(DEFAULT_SEED); fresh = true; }
+    else if (sk && id === 'sm-ap') { sk.set({ ap: !sk.ap }); fresh = true; }   // R051 擬真規則的開關   // R073 恢復預設：兵力、補給、種子
     if (fresh) host.reset?.();
     hold(); render();
     (root.querySelector(`#${id}`) as HTMLElement | null)?.focus({ preventScroll: true });

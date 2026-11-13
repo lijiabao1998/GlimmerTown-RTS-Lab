@@ -63,7 +63,7 @@ async function main() {
     const geometry = () => E(`(()=>{const bs=[...document.querySelectorAll('#start-menu button, #start-menu input')];return bs.map(b=>{const r=b.getBoundingClientRect();return {id:b.id,w:Math.round(r.width),h:Math.round(r.height),inside:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,hit:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)),clip:b.scrollWidth>b.clientWidth+1||b.scrollHeight>b.clientHeight+1}}).filter(b=>b.w<44||b.h<44||!b.inside||!b.hit||b.clip)})()`);
     const layout = async label => assert.deepEqual(await geometry(), [], `layout: ${label} ${width}×${height} every menu key is a whole, unclipped, reachable 44px target`);
     // R047：這支驗的是 R046 的選單（鍵的清單寫死），帶 noR047=1&noR073=1 開頁；「重播」鍵由 tests/replay-browser.mjs 驗，「恢復預設」由 tests/setup-memory-browser.mjs 驗
-    const opened = async (q = '') => { await open(q ? `${q}&noR047=1&noR073=1` : 'noR047=1&noR073=1', { menu: true }); assert(await E('!!window.__rts?.ready'), 'fixture: RTS ready'); await frames(); };
+    const opened = async (q = '') => { await open(q ? `${q}&noR047=1&noR073=1&noR051=1` : 'noR047=1&noR073=1&noR051=1', { menu: true }); assert(await E('!!window.__rts?.ready'), 'fixture: RTS ready'); await frames(); };
     const rulesAt0 = s => s.log.filter(c => c.tick === 0 && c.cmd.t === 'rules').map(c => c.cmd);
     const mapsAt0 = s => s.log.filter(c => c.tick === 0 && c.cmd.t === 'map').map(c => c.cmd.id);
     // 種子輸入：點那一格、全選、打字、Enter

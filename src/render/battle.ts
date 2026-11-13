@@ -794,6 +794,12 @@ export class BattleView {
       if (e.kind === SHELL_HE) { this.blast(x, z, t, e.r ? 0.6 : 1, true, DIRT, e.r ? 4 : 7); if (this.vis(x, z)) this.shake(0.06, x, z, t); return; }   // 看不到的彈著不震（不洩漏）
       // 穿甲彈：打中建築噴牆色碎片；打空或打中車輛噴火星
       const b = e.bld ? this.w.blds[e.bld - 1] : null, fog = true;
+      if (e.bounce) {   // R051 彈開：冷白的閃光＋一道往上彈走的火花，不揚塵（跟穿透時橘色的火星分得出來）
+        const a = H(0, 31) * Math.PI * 2;
+        this.glow!.spawn({ x, y: 0.26, z, t0: t, life: 0.22, s0: 0.16, s1: 0.5, c0: 0xffffff, c1: 0x9fd0ff, fog });
+        for (let k = 0; k < 4; k++) this.glow!.spawn({ x, y: 0.28, z, vx: Math.cos(a) * (2.4 - 0.4 * k), vz: Math.sin(a) * (2.4 - 0.4 * k), vy: 3.4 - 0.5 * k, g: 6, t0: t + 0.012 * k, life: 0.6, s0: 0.085 - 0.012 * k, s1: 0.02, c0: 0xffffff, c1: 0x8fc0ff, fog });
+        return;
+      }
       this.glow!.spawn({ x, y: b ? 0.3 : 0.15, z, t0: t, life: 0.07, s0: 0.08, s1: 0.26, c0: 0xfff2c0, c1: 0xffa040, fog });
       if (b) {
         const wall = bldColors(b.kind).wall.getHex();

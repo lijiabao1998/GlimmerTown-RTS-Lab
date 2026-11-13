@@ -23,17 +23,17 @@ export function parseSeed(text: string): number | null {
   return n <= SEED_MAX ? n : null;
 }
 // 兩項都是標準就不發指令（世界、紀錄都跟沒有這張卡時一樣）
-export const rulesCommand = (force: number, supply: number): RulesCmd | undefined =>
-  force === 2 && supply === 2 ? undefined : { t: 'rules', ...(force !== 2 ? { force } : {}), ...(supply !== 2 ? { income: supply } : {}) };
-export const setupSummary = (force: number, supply: number, seed: number): string => `兵力 ${FORCE_TEXT[force]} · 補給 ${SUPPLY_TEXT[supply]} · 種子 ${seed}`;
+export const rulesCommand = (force: number, supply: number, ap = false): RulesCmd | undefined =>
+  force === 2 && supply === 2 && !ap ? undefined : { t: 'rules', ...(force !== 2 ? { force } : {}), ...(supply !== 2 ? { income: supply } : {}), ...(ap ? { ap: 1 } : {}) };   // ap（R051）：穿甲與裝甲厚度
+export const setupSummary = (force: number, supply: number, seed: number, ap = false): string => `兵力 ${FORCE_TEXT[force]} · 補給 ${SUPPLY_TEXT[supply]} · 種子 ${seed}${ap ? ' · 穿甲' : ''}`;
 export const randomSeed = (): number => crypto.getRandomValues(new Uint32Array(1))[0];
 
 // ---- R073 記住上次的設定：存本機，下次開頁（網址沒帶任何設定時）照舊 ----
 export const SETUP_KEY = 'gtrts.v1.setup';
 export const DEFAULT_SEED = SCRIPT_SEED;
-export const SETUP_PARAMS = ['seed', 'map', 'mode', 'ai', 'force', 'supply'];   // 網址帶了其中任何一項＝整份照網址，不用存下來的
+export const SETUP_PARAMS = ['seed', 'map', 'mode', 'ai', 'force', 'supply', 'ap'];   // 網址帶了其中任何一項＝整份照網址，不用存下來的
 export type SetupMap = 'rye' | 'village' | '64' | '96';
-export interface SavedSetup { v: 1; map: SetupMap; mode: 'battle' | 'zombies'; ai: number; force: number; supply: number; seed: number }
+export interface SavedSetup { v: 1; map: SetupMap; mode: 'battle' | 'zombies'; ai: number; force: number; supply: number; seed: number; ap?: 1 }   // ap（R051）：開著才有這一欄
 const aiLevel = (v: unknown): number => (v === 1 || v === 3 ? v : 2);
 const three = (v: unknown): number => (v === 1 || v === 3 ? v : 2);
 
@@ -47,7 +47,7 @@ export function loadSetup(store: Store | null): SavedSetup | null {
     const r = x as Record<string, unknown>;
     if (r.v !== 1) return null;
     const seed = typeof r.seed === 'number' && Number.isInteger(r.seed) && r.seed >= 0 && r.seed <= SEED_MAX ? r.seed : DEFAULT_SEED;
-    return { v: 1, map: r.map === 'village' || r.map === '64' || r.map === '96' ? r.map : 'rye', mode: r.mode === 'zombies' ? 'zombies' : 'battle', ai: aiLevel(r.ai), force: three(r.force), supply: three(r.supply), seed };
+    return { v: 1, map: r.map === 'village' || r.map === '64' || r.map === '96' ? r.map : 'rye', mode: r.mode === 'zombies' ? 'zombies' : 'battle', ai: aiLevel(r.ai), force: three(r.force), supply: three(r.supply), seed, ...(r.ap === 1 ? { ap: 1 as const } : {}) };
   } catch { return null; }
 }
 export function saveSetup(store: Store | null, setup: SavedSetup): void {
@@ -71,6 +71,7 @@ export function restoreSetup(q: URLSearchParams, store: Store | null = browserSt
   if (s.force !== 2) q.set('force', String(s.force));
   if (s.supply !== 2) q.set('supply', String(s.supply));
   if (s.seed !== DEFAULT_SEED) q.set('seed', String(s.seed));
+  if (s.ap) q.set('ap', '1');
   return q;
 }
 
@@ -78,34 +79,37 @@ export interface Skirmish {
   readonly force: number; readonly supply: number;
   readonly village: boolean;    // 現在選的是不是亂數村莊（R026 閥關著時萊伊那一格本來就是村莊，這裡永遠是 false）
   readonly remembers: boolean;  // R073：這一頁會把設定存到本機（設定頁才有「恢復預設」）
-  set: (patch: { force?: number; supply?: number; village?: boolean; ai?: number }) => void;
+  readonly ap: boolean;         // R051：穿甲與裝甲厚度開著
+  readonly canAp: boolean;      // R051：這一頁有這顆開關（閥開著）
+  set: (patch: { force?: number; supply?: number; village?: boolean; ai?: number; ap?: boolean }) => void;
   start: (w: World) => RulesCmd | undefined;   // 新的一局：直接套到世界上（布陣時就看得到），回傳要記進紀錄的指令
 }
 
 // canVillage：R026 閥開著（萊伊在）才另外有「村莊」可選
 export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish {
-  const store = memory;
+  const store = memory, canAp = valves(q).r051;
   let owned = !linked, pristine: string | null = null;   // 用連結開的頁：第一次只記下「連結給的那一份」，之後跟它不一樣了才開始存
-  const s = { force: level(q.get('force')), supply: level(q.get('supply')), village: canVillage && q.get('map') === 'village', ai: Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2)) };   // 難度的讀法跟 main.ts 一樣
+  const s = { force: level(q.get('force')), supply: level(q.get('supply')), village: canVillage && q.get('map') === 'village', ai: Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2)), ap: canAp && q.get('ap') === '1' };   // 難度的讀法跟 main.ts 一樣
   // R073：最近開的那一局是哪張圖、哪個模式、哪個種子（start() 從世界讀）；還沒開過局就還沒有東西可存
   let last: { map: SetupMap; mode: 'battle' | 'zombies'; seed: number } | null = null;
   const persist = () => {
     if (!store || !last) return;
-    const now: SavedSetup = { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply }, text = JSON.stringify(now);
+    const now: SavedSetup = { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply, ...(s.ap ? { ap: 1 as const } : {}) }, text = JSON.stringify(now);
     if (!owned) { if (pristine === null) { pristine = text; return; } if (text === pristine) return; owned = true; }
     saveSetup(store, now);
   };
   return {
-    get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, remembers: !!store,
+    get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, remembers: !!store, get ap() { return s.ap; }, canAp,
     set: p => {
       if (p.force !== undefined) s.force = level(String(p.force));
       if (p.supply !== undefined) s.supply = level(String(p.supply));
       if (p.village !== undefined) s.village = canVillage && p.village;
       if (p.ai !== undefined) s.ai = aiLevel(p.ai);
+      if (p.ap !== undefined) s.ap = canAp && p.ap;
       persist();
     },
     start: w => {
-      const cmd = rulesCommand(s.force, s.supply);
+      const cmd = rulesCommand(s.force, s.supply, s.ap);
       if (cmd) applyRules(w, cmd);
       if (w.sandbox) return cmd;   // 沙盒不記（main.ts 本來就不會拿沙盒世界來，這裡再擋一次）
       // 地圖、種子從世界讀；模式跟 main.ts 的 reset() 用同一個條件（喪屍要等這裡回去之後才開始，世界上還看不到）
