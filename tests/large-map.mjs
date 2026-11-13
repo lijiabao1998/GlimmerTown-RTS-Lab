@@ -208,7 +208,7 @@ group('main', () => {
   for (const rye of [true, false]) {
     const c = vm.createContext({
       createWorld, createSandboxWorld, applyMap, MAP_RYE, MAP_LARGE, MAP_TOWN, seed: 1944,
-      V: { r006: false, r018: false, r019: false, r026: rye, r109: false }, large: true, expanded: false, townPick: undefined,
+      V: { r006: false, r018: false, r019: false, r026: rye, r109: false }, large: true, expanded: false, townPick: undefined, skirmish: undefined,   // R046: reset() reads skirmish; absent here = standard rules
       q: new URLSearchParams(), fxOn: true, selected: new Set(), view: undefined, battleAudio: undefined, reportView: undefined,
       BattleView: class { constructor() { return { dispose() {}, target: { set(...p) { c.focus = p; } } }; } },
       newStats: () => ({}), ui() {}, planner: { clear() {}, refreshPreview() {} }, syncBattleAudio() {}, issue(cmd) { c.log.push({ tick: c.w.tick, cmd }); },
