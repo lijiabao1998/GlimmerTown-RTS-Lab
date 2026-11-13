@@ -39,6 +39,8 @@ const groups = {
     assert.equal(late.rules, undefined, 'guard: late rules leave no state');
     const once = open(5, mapCmd(MAP_RYE), { t: 'rules', force: FORCE_DOUBLE }), twice = open(5, mapCmd(MAP_RYE), { t: 'rules', force: FORCE_DOUBLE }, { t: 'rules', force: FORCE_LEAN, income: INCOME_SLOW });
     assert.equal(hashWorld(twice), hashWorld(once), 'guard: the first rules command wins, a second one is ignored');
+    // 全是標準值的指令不留任何狀態（驗收 2），所以它後面同一步的指令照樣生效：「只生效一次」指的是第一條不是全標準的指令
+    assert.equal(hashWorld(open(5, mapCmd(MAP_RYE), { t: 'rules', force: 2 }, { t: 'rules', force: FORCE_DOUBLE })), hashWorld(once), 'guard: an all-standard rules command leaves no trace, so a later one in the same tick still applies');
     for (const [name, prepare] of [['headquarters', w => startEco(w)], ['zombies', w => startZombies(w)]]) {
       const w = createWorld(5); applyMap(w, MAP_RYE, 1); prepare(w);
       const before = hashWorld(w); applyRules(w, { force: FORCE_DOUBLE, income: INCOME_FAST });

@@ -24,6 +24,7 @@ const mutations = {
   force: ['src/ui/startMenu.ts', "    else if (sk && id.startsWith('sm-force-')) {", "    else if (sk && id.startsWith('sm-force-') && location.search.includes('__r046mutant=force')) { fresh = true; /* 選了不套用 */ } else if (sk && id.startsWith('sm-force-')) {"],
   supply: ['src/ui/skirmish.ts', '...(supply !== 2 ? { income: supply } : {})', "...(supply !== 2 && !location.search.includes('__r046mutant=supply') ? { income: supply } : {})"],
   valve: ['src/main.ts', 'const skirmish = V.r046 ? initSkirmish(', "const skirmish = V.r046 || location.search.includes('__r046mutant=valve') ? initSkirmish("],
+  flush: ['src/ui/startMenu.ts', '    commitSeed();   // R046：種子框裡打到一半就點別的鍵', "    if (!location.search.includes('__r046mutant=flush')) commitSeed();   // R046：種子框裡打到一半就點別的鍵"],
 };
 const applied = new Set();
 const plugin = { name: 'r046-dormant-negatives', enforce: 'pre', transform(code, id) {
@@ -65,10 +66,13 @@ async function main() {
     const rulesAt0 = s => s.log.filter(c => c.tick === 0 && c.cmd.t === 'rules').map(c => c.cmd);
     const mapsAt0 = s => s.log.filter(c => c.tick === 0 && c.cmd.t === 'map').map(c => c.cmd.id);
     // 種子輸入：點那一格、全選、打字、Enter
-    const typeSeed = async text => {
-      await press('sm-seed'); await E("(e => { e.focus(); e.select(); })(document.getElementById('sm-seed'))");
-      await page.send('Input.insertText', { text }); await key('Enter', 'Enter', 13, '\r');
+    const dirtySeed = async text => {   // 只打字，不按 Enter、不離開那一格
+      await press('sm-seed');
+      assert.equal(await E('document.activeElement?.id'), 'sm-seed', 'seed: a real tap or click puts the cursor in the seed box');
+      await E("document.getElementById('sm-seed').select()");
+      await page.send('Input.insertText', { text });
     };
+    const typeSeed = async text => { await dirtySeed(text); await key('Enter', 'Enter', 13, '\r'); };
 
     // ---- 共用的檢查（正向與故意弄壞都跑同一段）----
     const forceApplies = async () => {
@@ -92,6 +96,23 @@ async function main() {
       const b = await state();
       assert.equal(b.supply[0] - a.supply[0], STEPS / (ECO_INCOME_TICKS / 2), `supply: 快 pays the player twice the standard income (${a.supply[0]} → ${b.supply[0]} in ${STEPS} ticks)`);
       return b;
+    };
+    // 種子框打到一半（沒按 Enter）就去按別的鍵或按 Esc：先套用打的種子，選單上的字也要跟上
+    const seedCommits = async (q = '') => {
+      await opened(q); await press('sm-setup'); await dirtySeed('55');
+      assert.notEqual((await state()).seed, 55, 'fixture: typing alone does not apply the seed');
+      await E("document.getElementById('sm-setup-done').click()"); await frames();   // 用程式按＝輸入框不會先失焦（有的手機點按鈕就是這樣）
+      let s = await state(), m = await menu();
+      assert(s.seed === 55 && m.setup?.endsWith('種子 55'), `seed: text typed in the box is applied when another key is pressed without leaving the box (seed ${s.seed}, key ${m.setup})`);
+      await press('sm-setup'); await dirtySeed('66'); await key('Escape', 'Escape', 27);
+      s = await state(); m = await menu();
+      assert(s.seed === 66 && m.title === '微光小鎮·二戰 RTS' && m.setup?.endsWith('種子 66'), `seed: Esc with typed text applies it and the start page shows it (seed ${s.seed}, key ${m.setup})`);
+      await press('sm-setup'); await dirtySeed('77'); await press(`sm-force-${FORCE_DOUBLE}`);
+      s = await state(); m = await menu();
+      assert(s.seed === 77 && m.seed === '77' && s.mine === 10, `seed: pressing a force key after typing applies both the seed and the force (seed ${s.seed}, box ${m.seed}, ${s.mine} units)`);
+      await press('sm-seed-roll');
+      s = await state();
+      assert(s.seed !== 77 && (await menu()).seed === String(s.seed) && s.mine === 10, `seed: 隨機 right after is not undone by the old text in the box (seed ${s.seed})`);
     };
     const valveOff = async (extra = '') => {
       await opened(`noR046=1&force=3&supply=3&map=village${extra}`);
@@ -161,6 +182,8 @@ async function main() {
       assert(s.map === MAP_LARGE && !(await menu()).pressed.includes('sm-map-village'), 'village: 鄉間 leaves the village');
       await press('sm-map-village'); assert.equal((await state()).map, 0, 'village: back from 鄉間 to the village');
       await press('sm-map-rye'); assert.equal((await state()).map, MAP_RYE, 'village: back to 萊伊');
+      await seedCommits();
+      await press('sm-setup-done');
       // 沙盒沒有設定鍵；喪屍＋精簡
       await press('sm-mode-sandbox');
       assert(!(await menu()).ids.includes('sm-setup'), 'sandbox: no setup key');
@@ -194,6 +217,7 @@ async function main() {
         ['force', async () => { await opened('__r046mutant=force'); await forceApplies(); }, 'force: 加倍 doubles'],
         ['supply', async () => { await opened('__r046mutant=supply'); await forceApplies(); await supplyApplies(); }, 'supply: 快 is recorded'],
         ['valve', async () => { await valveOff('&__r046mutant=valve'); }, 'valve: noR046 leaves exactly'],
+        ['flush', async () => { await seedCommits('__r046mutant=flush'); }, 'seed: text typed in the box is applied when another key'],
       ];
       for (const [name, run, prefix] of negatives) {
         const errors = page.errors.length; let failure;
@@ -241,6 +265,7 @@ async function main() {
     s = await state();
     assert(s.phase === 'build' && s.tick === 0 && s.seed === 2024 && s.mine === 3, `restart: 重新開始 keeps the seed and the settings (seed ${s.seed}, ${s.mine} units)`);
     assert.deepEqual(rulesAt0(s), [{ t: 'rules', force: FORCE_LEAN, income: INCOME_FAST }], 'restart: the new log carries the same rules');
+    await seedCommits();
 
     // ---- 網址直接開局＝選單選出來的同一局 ----
     const pick = r => ({ hash: r.hash, seed: r.seed, map: r.map, n: r.n, mine: r.mine, theirs: r.theirs, log: r.log });

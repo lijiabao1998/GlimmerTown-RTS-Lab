@@ -130,7 +130,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
   root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-labelledby', 'sm-title');
   document.body.appendChild(root);
   const el = (id: string) => document.getElementById(id);
-  let kind: MenuKind = 'start', resume = false, held = false, before = false, page: 'setup' | undefined;
+  let kind: MenuKind = 'start', resume = false, held = false, before = false, page: 'setup' | undefined, painting = false;
   const sk = host.skirmish;
 
   const view = (): MenuView => {
@@ -144,12 +144,14 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
-    root.innerHTML = `<div class="sm-panel">
+    const html = `<div class="sm-panel">
       <div class="sm-head"><h1 id="sm-title">${esc(m.title)}</h1><p class="sm-sub">${esc(m.sub)}</p></div>
       <div class="sm-rows">${m.rows.map(r => `<div class="sm-row" id="${r.id}">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}<div class="sm-seg">${r.items.map(it => button(it)).join('')}</div></div>`).join('')}</div>
       <div class="sm-side"><div class="sm-main">${m.main.map((it, i) => button(it, i === 0 ? 'sm-primary' : '')).join('')}</div>
       <div class="sm-extra">${m.extra.map(it => button(it)).join('')}</div></div>
     </div>`;
+    painting = true;   // R046：重畫會拿掉種子框，有的瀏覽器在拿掉的當下發 change；那一下不能當成玩家改了種子
+    try { root.innerHTML = html; } finally { painting = false; }
     if (focused) (root.querySelector(`#${focused}`) as HTMLElement | null)?.focus({ preventScroll: true });   // 重畫不丟焦點（鍵盤操作）
   }
   // 開戰中（或沒有布陣、重開就開打）選單開著時暫停；關掉時還原打開前的暫停狀態
@@ -170,8 +172,9 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (n !== null && n !== host.seed()) { host.seed(n); host.reset?.(); hold(); }
     box.value = String(host.seed());   // 只改這一格，不重畫整頁：重畫會把輸入框拿掉，瀏覽器在拿掉的當下再發一次 change，變成畫到一半又畫一次
   }
-  root.addEventListener('change', e => { if ((e.target as HTMLElement).id === 'sm-seed') commitSeed(); });
+  root.addEventListener('change', e => { if (!painting && (e.target as HTMLElement).id === 'sm-seed') commitSeed(); });
   function act(id: string, trusted: boolean) {
+    commitSeed();   // R046：種子框裡打到一半就點別的鍵：先套用再做那顆鍵的事（有的手機點按鈕不會讓輸入框失焦，等不到 change）
     if (id === 'sm-start' || id === 'sm-resume') return close();
     if (id === 'sm-restart') { close(); return press('b-restart'); }
     if (id === 'sm-main') { close(); press('b-restart'); return open('start'); }
@@ -203,7 +206,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
   addEventListener('keydown', e => {
     if (root.hidden) return;
     e.stopPropagation();
-    if (e.key === 'Escape' && page) { e.preventDefault(); page = undefined; render(); focus('#sm-setup'); return; }   // R046：設定頁按 Esc 回上一頁
+    if (e.key === 'Escape' && page) { e.preventDefault(); commitSeed(); page = undefined; render(); focus('#sm-setup'); return; }   // R046：設定頁按 Esc 回上一頁（種子框裡打到一半的先套用）
     if (e.key === 'Enter' && (document.activeElement as HTMLElement | null)?.id === 'sm-seed') { e.preventDefault(); commitSeed(); return; }
     if (e.key === 'Escape' && resume) { e.preventDefault(); close(); return; }
     // 焦點留在選單裡：Tab 在選單的鍵之間循環；焦點跑到外面時 Enter／空白鍵不按到後面的鍵，拉回選單
