@@ -511,7 +511,7 @@ if (V.r045) zombiesPick = initZombiesPick({
 
 const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
 // R069 開始選單（src/ui/startMenu.ts）：地圖、模式、重來、說明、教學都按原本那幾顆鍵；這裡只接難度、暫停與音效
-const replay = V.r047 ? initReplay({ world: () => w, log: () => log, hash: () => hashWorld(w), begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { makeView(); stats = newStats(w); ui(); }, focus: (x, z) => view.target.set(x, 0, z), leave: () => reset() }) : undefined;   // R047 重播（src/ui/replay.ts）
+const replay = V.r047 ? initReplay({ world: () => w, log: () => log, hash: () => hashWorld(w), begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w); ui(); }, focus: (x, z) => view.target.set(x, 0, z), leave: () => reset() }) : undefined;   // R047 重播（src/ui/replay.ts）
 if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: n => (aiLevel = n ?? aiLevel), paused: v => { if (v !== undefined) { paused = v; syncBattleAudio(); hud?.update(); } return paused; },
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
   audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined, skirmish, seed: n => (seed = n ?? seed), reset: () => reset(), replays: replay?.open });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次

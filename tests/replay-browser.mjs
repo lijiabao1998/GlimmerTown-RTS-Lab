@@ -57,8 +57,8 @@ async function main() {
     // 打一局到分出勝負：開戰、我方也交給電腦、一步一步走
     const fight = async () => {
       if (await E("!!document.getElementById('sm-start') && !document.getElementById('start-menu').hidden")) await press('sm-start');
-      await E('__rts.startBattle()'); await E('__rts.pause(true)');
-      await E("__rts.issue({ t: 'ai', side: 0, level: 3 })");
+      // 開戰、暫停、把我方交給電腦要在同一次呼叫裡做完：中間不能讓畫面多跑幾步，不然電腦接手的那一步每次不一樣、同一局就打不出同一個結果
+      await E("(() => { __rts.startBattle(); __rts.pause(true); __rts.issue({ t: 'ai', side: 0, level: 3 }); })()");
       for (let i = 0; i < 60 && (await E('__rts.winner()')) < 0; i++) await E('__rts.stepN(100)');
       await E('__rts.stepN(2)');   // 分出勝負之後再走兩步：存檔發生在下一步開頭
       const s = await state();
@@ -112,7 +112,10 @@ async function main() {
       await E('__rts.pause(true)');
       // 停火待命會在單位上留下旗標（進雜湊），電腦接手的那一方也不會自己取消：漏進世界的話雜湊一定不同
       await E("__rts.issue({ t: 'fireDiscipline', side: 0, ids: [1, 2], hold: true })"); await E("__rts.issue({ t: 'move', side: 0, ids: [1, 2], x: 1, z: 1 })");
-      await touchTap(page, 206, 500); await frames();
+      // 真的手指：先選兩台，再點地圖下移動指令（走遊戲平常的輸入路徑）。指令有發出去，但不能進世界
+      const issued = await E('__rts.log().length');
+      await E('__rts.select([1, 2])'); await touchTap(page, 206, 560); await frames();
+      assert((await E('__rts.log().length')) > issued, 'fixture: the tap on the map really issued a command through the normal input path');
       const end = await playToEnd(rec);
       assert.equal(end.hash, rec.hash, 'replay: commands issued while watching never reach the world (hash at the saved tick equals the record)');
       return end;
@@ -129,7 +132,6 @@ async function main() {
     // ---- 正向 ----
     const rec = await saves();
     assert.equal(await E(`__rts.playLog(${rec.seed}, ${JSON.stringify(rec.log)}, ${rec.ticks})`), rec.hash, 'save: seed, log and ticks reproduce the recorded hash');
-    assert.equal((await stored()).length, 1, 'save: replaying through the guard hook does not add a record');
     await open(QUICK, { menu: true, keep: true });
     assert.equal((await stored()).length, 1, 'save: the record is still there after reloading the page');
     let p = await openPanel();
@@ -170,7 +172,7 @@ async function main() {
     // 大地圖（64×64）：重播起播時世界換了大小，畫面要照新世界重建、鏡頭對準我方角落
     // 大地圖上全滅要打很久，這裡不等勝負：打 400 步，照格式自己做一筆紀錄放進本機，再從面板播
     await open(`map=64&seed=47&${QUICK}`, { menu: true, keep: true });
-    await press('sm-start'); await E('__rts.startBattle()'); await E('__rts.pause(true)'); await E("__rts.issue({ t: 'ai', side: 0, level: 3 })"); await E('__rts.stepN(400)');
+    await press('sm-start'); await E("(() => { __rts.startBattle(); __rts.pause(true); __rts.issue({ t: 'ai', side: 0, level: 3 }); __rts.stepN(400); })()");
     const bigEnd = await state();
     const big = { v: 1, seed: 47, ticks: bigEnd.tick, hash: bigEnd.hash, log: await E('__rts.log()'), at: '2026-03-03T00:00:00.000Z', meta: { map: 2, n: 64, winner: -1, seconds: Math.floor(bigEnd.tick / 20) } };
     assert(decodeReplay(JSON.stringify(big)).ok && bigEnd.seed === 47 && bigEnd.tick > 400, `large: a hand-made record of the 64×64 battle passes the format check (tick ${bigEnd.tick})`);
@@ -182,8 +184,8 @@ async function main() {
     assert(bigReplay.hash === big.hash && bigReplay.text === SAME, 'large: the 64×64 replay reaches the recorded hash');
     await press('replay-leave');
     // 匯入：好檔、壞檔
-    const good = path.join(temp, 'good.json'), junk = path.join(temp, 'junk.json'), other = path.join(temp, 'other.json');
-    fs.writeFileSync(good, text); fs.writeFileSync(junk, '{ not json'); fs.writeFileSync(other, JSON.stringify({ ...rec, seed: rec.seed + 1, at: '2026-02-02T00:00:00.000Z' }));
+    const good = path.join(temp, 'good.json'), junk = path.join(temp, 'junk.json'), other = path.join(temp, 'other.json'), deep = path.join(temp, 'deep.json');
+    fs.writeFileSync(good, text); fs.writeFileSync(junk, '{ not json'); fs.writeFileSync(deep, `{"v":${'['.repeat(5000)}${']'.repeat(5000)}}`); fs.writeFileSync(other, JSON.stringify({ ...rec, seed: rec.seed + 1, at: '2026-02-02T00:00:00.000Z' }));
     const upload = async file => {
       const { root } = await page.send('DOM.getDocument', {}), { nodeId } = await page.send('DOM.querySelector', { nodeId: root.nodeId, selector: '#rpl-file' });
       await page.send('DOM.setFileInputFiles', { nodeId, files: [file] });
@@ -196,6 +198,9 @@ async function main() {
     await upload(junk);
     p = await panel();
     assert(/匯入失敗/.test(p.note) && p.rows.length === 0 && (await stored()).length === 0, `import: a broken file is refused with a reason and nothing is stored (“${p.note}”)`);
+    await upload(deep);
+    p = await panel();
+    assert(/匯入失敗/.test(p.note) && p.rows.length === 0, `import: a file built to overflow the checker is refused with a reason (“${p.note}”)`);
     await upload(good);
     p = await panel();
     assert(p.rows.length === 1 && /已匯入/.test(p.note) && (await stored())[0].hash === rec.hash, `import: a good file is added to the list (“${p.note}”)`);

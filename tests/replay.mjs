@@ -72,7 +72,7 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK repla
 
 // ---- 紀錄格式、來回、儲存、接線（需要 src/ui，不在隔離副本裡跑）----
 {
-  const { makeRecord, checkRecord, encodeReplay, decodeReplay, loadReplays, addReplay, replayTitle, REPLAY_KEY, REPLAY_KEEP } = await import('../src/ui/replayStore.ts');
+  const { makeRecord, checkRecord, encodeReplay, decodeReplay, loadReplays, addReplay, replayTitle, sameReplay, REPLAY_KEY, REPLAY_KEEP, REPLAY_MAX_TEXT, REPLAY_BUDGET } = await import('../src/ui/replayStore.ts');
   const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
   // 驗收 4：來回
   const b = battle();
@@ -93,7 +93,10 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK repla
   bad({ seed: undefined }, 'a missing seed'); bad({ seed: -1 }, 'a negative seed'); bad({ seed: 2 ** 32 }, 'a seed above 32 bits');
   bad({ ticks: -5 }, 'negative ticks'); bad({ ticks: 0 }, 'zero ticks'); bad({ ticks: 1.5 }, 'fractional ticks'); bad({ hash: 'xyz' }, 'a hash that is not 8 hex digits');
   assert.match(bad({ log: [{ tick: 0, cmd: { t: 'move', side: 0, x: 1, z: 1 } }] }, 'a bad command'), /第 1 筆/, 'decode: points at the bad command');
-  bad('x'.repeat(4_000_001), 'an oversized file');
+  bad('x'.repeat(REPLAY_MAX_TEXT + 1), 'an oversized file');
+  // 審查找到的：超深的巢狀陣列會讓 String() 爆堆疊；不管塞什麼都只能回「讀不出來」，不能丟例外
+  for (const field of ['v', 'seed', 'hash', 'log', 'meta', 'at']) assert.doesNotThrow(() => decodeReplay(JSON.stringify(rec).replace(`"${field}":`, `"${field}":${'['.repeat(5000)}${']'.repeat(5000)},"x${field}":`)), `decode: a 5,000-deep array in ${field} never throws`);
+  assert.equal(decodeReplay(`{"v":${'['.repeat(5000)}${']'.repeat(5000)}}`).ok, false, 'decode: a 5,000-deep version is refused, not thrown');
   const loose = decodeReplay(JSON.stringify({ v: 1, seed: rec.seed, ticks: rec.ticks, hash: rec.hash, log: rec.log, future: { anything: true } }));
   assert(loose.ok && loose.rec.at === '' && loose.rec.meta.seconds === Math.floor(rec.ticks / 20) && !('future' in loose.rec), 'decode: a version-1 record without meta or date, with unknown extra fields, still loads');
   assert.equal(checkRecord({ ...rec, meta: { map: 'x', n: -3, winner: 9, seconds: 'long' } }).rec.meta.winner, -1, 'decode: nonsense display data falls back to defaults instead of failing');
@@ -119,6 +122,31 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK repla
   let room = 3; const small = { ...mem(), setItem(k, v) { if (JSON.parse(v).length > room) throw new Error('quota'); this.m.set(k, v); } };
   for (let i = 0; i < 6; i++) addReplay(small, { ...rec, seed: 100 + i });
   assert.deepEqual(loadReplays(small).map(r => r.seed), [105, 104, 103], 'storage: when space runs out the oldest are dropped until it fits');
+  // 審查找到的：一直存不進去時，回傳的要是本機真的存著的列表（舊的還在、新的不在），不是空的
+  const stuck = mem(); for (const seed of [1, 2]) addReplay(stuck, { ...rec, seed });
+  stuck.setItem = () => { throw new Error('quota'); };
+  const after = addReplay(stuck, { ...rec, seed: 3 });
+  assert.deepEqual([after.map(r => r.seed), after.some(r => sameReplay(r, { ...rec, seed: 3 }))], [[2, 1], false], 'storage: when nothing can be written the old list is returned and the new record is not in it');
+  // 總量上限：這個網域跟另外三條線共用本機空間
+  const fatLog = Array.from({ length: 9000 }, () => ({ tick: 5, cmd: { t: 'stop', side: 0, ids: [1, 2, 3] } })), fat = seed => ({ ...rec, seed, log: fatLog });
+  assert(JSON.stringify(fat(1)).length > REPLAY_BUDGET / 4 && JSON.stringify(fat(1)).length < REPLAY_MAX_TEXT, 'fixture: a fat record is big but importable');
+  const roomy = mem(); for (let seed = 1; seed <= 6; seed++) addReplay(roomy, fat(seed));
+  assert(roomy.m.get(REPLAY_KEY).length <= REPLAY_BUDGET && loadReplays(roomy)[0].seed === 6 && loadReplays(roomy).length < 6, `storage: the total stays inside the budget by dropping the oldest (${loadReplays(roomy).length} kept, ${roomy.m.get(REPLAY_KEY).length} chars)`);
+  const huge = { ...rec, seed: 9, log: Array.from({ length: 30000 }, () => ({ tick: 5, cmd: { t: 'stop', side: 0, ids: [1, 2, 3] } })) };
+  assert(JSON.stringify(huge).length > REPLAY_MAX_TEXT, 'fixture: the huge record is past the import limit');
+  assert.deepEqual(addReplay(roomy, huge).map(r => r.seed), loadReplays(roomy).map(r => r.seed), 'storage: a record too big to import back is not stored and the list is left alone');
+  assert.equal(loadReplays(roomy).some(r => r.seed === 9), false, 'storage: the huge record is not in the list');
+  // 審查找到的：看重播時戰報不能改到自己的喪屍最佳紀錄
+  {
+    const { zombiesBest } = await import('../src/ui/zombiesMode.ts');
+    const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage'), data = new Map([['gtrts.v1.zombies.best', '4']]);
+    try {
+      Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) } });
+      assert.deepEqual([zombiesBest(9, false), data.get('gtrts.v1.zombies.best')], [4, '4'], 'zombies: while watching a replay the best wave is read, not raised');
+      assert.deepEqual([zombiesBest(9), data.get('gtrts.v1.zombies.best')], [9, '9'], 'zombies: an ordinary battle still raises it');
+    } finally { if (previous) Object.defineProperty(globalThis, 'localStorage', previous); else delete globalThis.localStorage; }
+    assert.match(read('../src/ui/reportView.ts'), /zombiesBest\(r\.zombies\.wave, document\.getElementById\('replay-bar'\)\?\.hidden !== false\)/, 'zombies: the report only saves the best wave when no replay bar is showing');
+  }
   // 接線與閥
   const main = read('../src/main.ts'), valves = read('../src/valves.ts');
   assert.match(valves, /get r047\(\) \{ return on\('047'\); \}/, 'valve: r047 is on the table');

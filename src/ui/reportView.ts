@@ -16,7 +16,7 @@ export function initReportView(actions: { again: () => void }): ReportView {
   function show(r: Report) {
     last = r;
     const title = r.zombies ? '防線失守' : r.winner === 0 ? '勝利' : r.winner === 1 ? '戰敗' : '同歸於盡';
-    const survival = r.zombies ? `<p class="survival">撐到第 ${r.zombies.wave} 波 · 擊倒 ${r.zombies.killed} 隻 · 我方損失 ${r.zombies.lost}<br>最佳：第 ${zombiesBest(r.zombies.wave)} 波</p>` : '';
+    const survival = r.zombies ? `<p class="survival">撐到第 ${r.zombies.wave} 波 · 擊倒 ${r.zombies.killed} 隻 · 我方損失 ${r.zombies.lost}<br>最佳：第 ${zombiesBest(r.zombies.wave, document.getElementById('replay-bar')?.hidden !== false)} 波</p>` : '';
     root.className = r.winner === 0 ? 'win' : r.winner === 1 ? 'lose' : 'draw';
     root.innerHTML = `
       <div class="panel">

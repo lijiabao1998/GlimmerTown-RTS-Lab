@@ -3,7 +3,7 @@
 // 只檢查形狀與範圍，不檢查「這一步下這個指令有沒有用」：那是 step() 自己的事（沒用的指令本來就會被略過）。
 import type { Command, LoggedCommand } from './step.ts';
 
-export const MAX_IDS = 1024;          // 一條指令最多點幾個單位
+export const MAX_IDS = 256;           // 一條指令最多點幾個單位（每方人口上限 40、沙盒 32；留很大的餘裕）
 export const MAX_LOG = 200000;        // 一份紀錄最多幾筆
 export const MAX_TICK = 20 * 60 * 60 * 12;   // 一局最長 12 小時（每秒 20 步）
 const LIMIT = 0x7fffffff;

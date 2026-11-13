@@ -3,7 +3,7 @@
 //   正在重播 → 回傳紀錄裡這一步的指令（玩家這時下的指令不會進世界）；不是重播 → 回傳 undefined（照舊用玩家的指令），並在分出勝負時存檔。
 import type { World } from '../sim/world.ts';
 import type { Command, LoggedCommand } from '../sim/step.ts';
-import { addReplay, loadReplays, makeRecord, encodeReplay, decodeReplay, replayTitle, browserStore, type ReplayRecord, type Store } from './replayStore.ts';
+import { addReplay, loadReplays, makeRecord, encodeReplay, decodeReplay, replayTitle, browserStore, sameReplay, REPLAY_MAX_TEXT, type Decoded, type ReplayRecord, type Store } from './replayStore.ts';
 
 export interface ReplayHost {
   world: () => World;
@@ -152,8 +152,15 @@ export function initReplay(host: ReplayHost, store: Store | null = browserStore(
   file.addEventListener('change', () => {
     const f = file.files?.[0];
     if (!f) return;
-    f.text().then(t => decodeReplay(t), () => ({ ok: false as const, why: '這個檔讀不出來' })).then(d => {
-      if (d.ok) { list = addReplay(store, d.rec); note = '已匯入，排在最前面。'; } else note = `匯入失敗：${d.why}`;
+    const failed = (why: string): Decoded => ({ ok: false, why });
+    // 先看檔案大小（一個字最多四個位元組），太大的不讀；讀檔或檢查出任何意外都當成讀不出來
+    const read: Promise<Decoded> = f.size > REPLAY_MAX_TEXT * 4 ? Promise.resolve(failed('檔案太大，不像重播紀錄')) : f.text().then(t => decodeReplay(t));
+    read.catch(() => failed('這個檔讀不出來')).then(d => {
+      if (d.ok) {
+        const kept = addReplay(store, d.rec), stored = kept.some(r => sameReplay(r, d.rec));
+        list = stored ? kept : [d.rec, ...kept];   // 本機存不進去：這次開著的時候照樣可以看
+        note = stored ? '已匯入，排在最前面。' : '已匯入，但本機存不進去（空間不夠，或瀏覽器不讓存）；關掉頁面就沒了。';
+      } else note = `匯入失敗：${d.why}`;
       if (!root.hidden) render();
     });
   });

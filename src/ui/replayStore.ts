@@ -6,7 +6,8 @@ import type { LoggedCommand } from '../sim/step.ts';
 
 export const REPLAY_KEY = 'gtrts.v1.replays';
 export const REPLAY_KEEP = 10;                 // 本機最多留幾筆（最新在前）
-export const REPLAY_MAX_TEXT = 4_000_000;      // 一個匯入檔最多幾個字元
+export const REPLAY_MAX_TEXT = 1_000_000;      // 一筆紀錄的文字最多幾個字元（半小時的一局大約二十萬）
+export const REPLAY_BUDGET = 1_500_000;        // 本機全部紀錄加起來最多幾個字元（這個網域跟另外三條線共用本機空間）
 
 export interface ReplayMeta { map: number; n: number; winner: number; seconds: number; wave?: number }   // 只給列表顯示，不影響重播
 export interface ReplayRecord { v: 1; seed: number; ticks: number; hash: string; log: LoggedCommand[]; at: string; meta: ReplayMeta }
@@ -24,7 +25,7 @@ export function makeRecord(seed: number, ticks: number, hash: string, log: reado
 export function checkRecord(x: unknown): Decoded {
   if (typeof x !== 'object' || x === null || Array.isArray(x)) return no('這不是重播紀錄');
   const r = x as Record<string, unknown>;
-  if (r.v !== 1) return no(`不認得的紀錄版本（${String(r.v).slice(0, 12)}）；這一版遊戲只讀第 1 版`);
+  if (r.v !== 1) return no(`不認得的紀錄版本（${typeof r.v === 'number' || typeof r.v === 'string' ? String(r.v).slice(0, 12) : '看不懂'}）；這一版遊戲只讀第 1 版`);
   if (!int(r.seed, 0, 0xffffffff)) return no('紀錄的種子不對');
   if (!int(r.ticks, 1, MAX_TICK)) return no('紀錄的步數不對');
   if (typeof r.hash !== 'string' || !/^[0-9a-f]{8}$/.test(r.hash)) return no('紀錄的雜湊不對');
@@ -43,10 +44,10 @@ export function decodeReplay(text: string): Decoded {
   if (typeof text !== 'string' || text.length > REPLAY_MAX_TEXT) return no('檔案太大，不像重播紀錄');
   let x: unknown;
   try { x = JSON.parse(text); } catch { return no('這個檔不是 JSON，讀不出來'); }
-  return checkRecord(x);
+  try { return checkRecord(x); } catch { return no('這個檔的內容看不懂'); }   // 不管裡面塞什麼，都只回「讀不出來」，不往外丟例外
 }
 
-const same = (a: ReplayRecord, b: ReplayRecord): boolean => a.seed === b.seed && a.ticks === b.ticks && a.hash === b.hash && a.log.length === b.log.length;
+export const sameReplay = (a: ReplayRecord, b: ReplayRecord): boolean => a.seed === b.seed && a.ticks === b.ticks && a.hash === b.hash && a.log.length === b.log.length;
 
 // 讀本機的紀錄：讀不到、讀到壞掉的東西都當作沒有；壞掉的單筆略過
 export function loadReplays(store: Store | null): ReplayRecord[] {
@@ -61,13 +62,17 @@ export function loadReplays(store: Store | null): ReplayRecord[] {
   } catch { return []; }
 }
 
-// 加一筆到最前面（同一局已經在裡面就先拿掉舊的），只留 REPLAY_KEEP 筆；空間不夠就從最舊的丟到存得進去為止。回傳現在的列表
+// 加一筆到最前面（同一局已經在裡面就先拿掉舊的），只留 REPLAY_KEEP 筆、總字數不超過 REPLAY_BUDGET；放不下就從最舊的丟到放得下為止。
+// 回傳本機現在真的存著的列表：新的那一筆連自己都放不下、或瀏覽器根本不讓存時，它不會在裡面（呼叫的人用 sameReplay 找得到才算存成功）
 export function addReplay(store: Store | null, rec: ReplayRecord): ReplayRecord[] {
-  const list = [rec, ...loadReplays(store).filter(r => !same(r, rec))].slice(0, REPLAY_KEEP);
+  if (JSON.stringify(rec).length > REPLAY_MAX_TEXT) return loadReplays(store);   // 單筆就超過匯入上限的不存（存了也匯不回來）
+  const list = [rec, ...loadReplays(store).filter(r => !sameReplay(r, rec))].slice(0, REPLAY_KEEP);
   while (list.length) {
-    try { store?.setItem(REPLAY_KEY, JSON.stringify(list)); break; } catch { list.pop(); }
+    const text = JSON.stringify(list);
+    if (text.length <= REPLAY_BUDGET) { try { store?.setItem(REPLAY_KEY, text); break; } catch { /* 空間不夠：丟最舊的再試 */ } }
+    list.pop();
   }
-  return list;
+  return loadReplays(store);
 }
 
 export const browserStore = (): Store | null => { try { return localStorage; } catch { return null; } };
