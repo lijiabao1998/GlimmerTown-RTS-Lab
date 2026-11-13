@@ -42,7 +42,7 @@ import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initTutorial } from './ui/tutorial.ts';
 import { initStartMenu } from './ui/startMenu.ts';
-import { initSkirmish } from './ui/skirmish.ts';
+import { initSkirmish, restoreSetup } from './ui/skirmish.ts';
 import { initReplay } from './ui/replay.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
@@ -50,7 +50,7 @@ import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleSt
 import { initReportView, type ReportView } from './ui/reportView.ts';
 import { showStartOrder, startOrderText } from './ui/startOrder.ts';
 import { valves } from './valves.ts';
-const q = new URLSearchParams(location.search);
+const q = restoreSetup(new URLSearchParams(location.search));   // R073：網址沒帶任何設定時，照上次存在本機的那一份
 const V = valves(q);   // R060 逃生閥表：所有 ?noR<號> 都在 src/valves.ts
 let seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;   // R046：遭遇戰設定可以改
 const skirmish = V.r046 ? initSkirmish(q, V.r026) : undefined;   // R046 遭遇戰設定：兵力、補給速度、亂數村莊（src/ui/skirmish.ts）

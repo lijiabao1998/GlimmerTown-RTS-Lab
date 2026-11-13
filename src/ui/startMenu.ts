@@ -2,7 +2,7 @@
 // 地圖、模式、重新開始、說明、教學都按原本那幾顆鍵（同一段程式，結果跟按舊鍵一樣）；這裡只顯示狀態、轉送動作，不碰世界。
 // 電腦難度、暫停、音效由 main.ts 接線傳進來（音效要真的手指點才開得了，不能用程式按舊鍵）。
 // R046 遭遇戰設定：多一顆「遭遇戰設定」鍵與設定頁（兵力、補給速度、種子）、地圖多一顆「村莊」；host.skirmish 沒有（?noR046=1）時跟 R069 一模一樣。
-import { FORCE_TEXT, FORCE_SUB, SUPPLY_TEXT, SUPPLY_SUB, setupSummary, parseSeed, randomSeed, type Skirmish } from './skirmish.ts';
+import { FORCE_TEXT, FORCE_SUB, SUPPLY_TEXT, SUPPLY_SUB, DEFAULT_SEED, setupSummary, parseSeed, randomSeed, type Skirmish } from './skirmish.ts';
 export type MapChoice = 'rye' | 'village' | 'large' | 'town';
 export type ModeChoice = 'battle' | 'zombies' | 'sandbox';
 export type MenuKind = 'start' | 'pause';
@@ -12,7 +12,7 @@ export interface MenuView {
   maps: MapChoice[]; modes: ModeChoice[];
   aiOn: boolean; rye: boolean; tutorial: boolean; audio: boolean | null;   // audio：null＝沒有音效鍵
   resume: boolean;   // 從「選單」鍵打開（布陣中）：主鍵是「繼續」與「重新開始」，不是「開始」
-  setup?: { force: number; supply: number; seed: number };   // R046：有才顯示「遭遇戰設定」
+  setup?: { force: number; supply: number; seed: number; reset?: boolean };   // R046：有才顯示「遭遇戰設定」；reset（R073）：設定頁有「恢復預設」
   page?: 'setup';                                              // R046：現在看的是設定頁
   replays?: boolean;                                           // R047：有重播面板可開
 }
@@ -36,7 +36,7 @@ export function menuLayout(v: MenuView): MenuLayout {
   }
   if (v.page === 'setup' && v.setup) {   // R046 設定頁：每改一項，後面的戰場當場重開
     const s = v.setup, seg = (id: string, text: string[], sub: string[], now: number) => [1, 2, 3].map(n => ({ id: `${id}-${n}`, label: text[n], sub: sub[n], pressed: now === n }));
-    return { title: '遭遇戰設定', sub: '雙方一樣。改了會回到布陣第 0 步', extra: [], main: [{ id: 'sm-setup-done', label: '完成' }], rows: [
+    return { title: '遭遇戰設定', sub: '雙方一樣。改了會回到布陣第 0 步', extra: s.reset ? [{ id: 'sm-setup-reset', label: '恢復預設' }] : [], main: [{ id: 'sm-setup-done', label: '完成' }], rows: [
       { id: 'sm-forces', title: '兵力', items: seg('sm-force', FORCE_TEXT, FORCE_SUB, s.force) },
       { id: 'sm-supplies', title: '補給速度', items: seg('sm-supply', SUPPLY_TEXT, SUPPLY_SUB, s.supply) },
       { id: 'sm-seeds', title: '種子（同一個種子＝同一張圖、同一局）', items: [{ id: 'sm-seed', label: String(s.seed), input: true }, { id: 'sm-seed-roll', label: '隨機' }] },
@@ -144,7 +144,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
     return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
-      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed() }, page } : {}), ...(host.replays ? { replays: true } : {}) };
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
@@ -193,10 +193,11 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (fresh) sk!.set({ village });
     if (id.startsWith('sm-map-')) for (let i = 0, b; i < 3 && (b = mapStep(host.state().map, village ? 'rye' : id.slice(7) as MapChoice)); i++) { press(b); fresh = false; }
     else if (id.startsWith('sm-mode-')) for (let i = 0, b; i < 3 && (b = modeStep(host.state().mode, id.slice(8) as ModeChoice)); i++) press(b);
-    else if (id.startsWith('sm-ai-')) host.ai(Number(id.slice(6)));
+    else if (id.startsWith('sm-ai-')) { host.ai(Number(id.slice(6))); sk?.set({ ai: Number(id.slice(6)) }); }   // R073：難度也記下來（換難度不會重開一局）
     else if (sk && id.startsWith('sm-force-')) { sk.set({ force: Number(id.slice(9)) }); fresh = true; }
     else if (sk && id.startsWith('sm-supply-')) { sk.set({ supply: Number(id.slice(10)) }); fresh = true; }
     else if (id === 'sm-seed-roll') { host.seed?.(randomSeed()); fresh = true; }
+    else if (sk && id === 'sm-setup-reset') { sk.set({ force: 2, supply: 2 }); host.seed?.(DEFAULT_SEED); fresh = true; }   // R073 恢復預設：兵力、補給、種子
     if (fresh) host.reset?.();
     hold(); render();
     (root.querySelector(`#${id}`) as HTMLElement | null)?.focus({ preventScroll: true });
