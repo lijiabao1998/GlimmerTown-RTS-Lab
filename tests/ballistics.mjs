@@ -26,7 +26,15 @@ const STUART = 23, SHERMAN = 24, M4A376 = 25, M18 = 26, PRIEST = 27, M157 = 28, 
 const HAGO = 35, CHIHA = 36, SHINHOTO = 37, CHIHE = 38, HONI = 39, TYPE90 = 40;
 assert.deepEqual([BT7, IS2, M30, STUART, PRIEST, PZ2, PANTHER, TIGER, PAK40, HAGO, TYPE90].map(k => UNIT_KINDS[k].name), ['BT-7', 'IS-2', 'M-30', 'M3 Stuart', 'M7 Priest', 'Panzer II', 'Panther', 'Tiger I', 'PaK 40', '九五式 Ha-Go', '九〇式 75mm'], 'fixture: the kind numbers used below are the vehicles they claim to be');
 
-const FACES = [[FACE_FRONT, '正面'], [FACE_SIDE, '側面'], [FACE_REAR, '後面']];
+// 卡面的兩張表，守衛自己抄一份（不拿受測的表當答案）：改數字要同時改卡面、src/sim/ballistics.ts 與這裡
+const CARD_ARMOR = { 0: [30, 20, 15], 6: [15, 13, 10], 7: [78, 65, 55], 8: [12, 8, 6], 9: [13, 13, 13], 10: [50, 30, 30],
+  12: [22, 13, 13], 13: [70, 15, 15], 14: [90, 45, 45], 15: [90, 45, 45], 16: [90, 75, 70], 17: [200, 90, 60], 18: [50, 15, 15], 19: [70, 45, 45], 20: [85, 60, 60],
+  23: [38, 25, 25], 24: [75, 38, 38], 25: [95, 38, 38], 26: [30, 13, 13], 27: [15, 13, 13], 29: [15, 15, 15], 30: [80, 30, 20], 31: [140, 40, 40], 32: [100, 80, 80], 33: [80, 30, 50],
+  35: [12, 12, 8], 36: [25, 25, 20], 37: [25, 25, 20], 38: [50, 25, 20], 39: [25, 25, 20] };
+const CARD_PEN = { 0: [44, 32], 3: [21, 0], 4: [44, 32], 6: [20, 9], 7: [53, 40], 8: [20, 9], 9: [54, 41], 10: [41, 35],
+  12: [40, 28], 13: [40, 28], 14: [69, 50], 15: [94, 85], 16: [69, 50], 17: [128, 115], 18: [67, 55], 19: [94, 85], 20: [113, 95], 21: [67, 55],
+  23: [59, 46], 24: [71, 60], 25: [97, 88], 26: [97, 88], 28: [92, 71], 29: [20, 9], 30: [106, 85], 31: [138, 112], 32: [120, 99], 33: [106, 85], 34: [108, 80],
+  35: [30, 18], 36: [22, 16], 37: [59, 36], 38: [59, 36], 39: [80, 60], 40: [80, 60] };
 const meters = cells => cells * METERS_PER_CELL, units = cells => cells * SUB;
 // 一片空地（沒有房子、路、彈坑、植被），上面只放守衛自己擺的單位
 function field(ap) {
@@ -77,6 +85,8 @@ const groups = {
       else assert.equal(pen, undefined, `table: ${k.name} is not in the penetration table`);
     });
     for (const kind of [UK_HOWITZER, UK_MORTAR, UK_OBSERVER, UK_ZOMBIE, M30, PRIEST]) assert.equal(penetration(kind, SUB), -1, `table: ${UNIT_KINDS[kind].name} has no penetration`);
+    assert.deepEqual(ARMOR_MM, CARD_ARMOR, 'table: every thickness is the one on the card');
+    assert.deepEqual(PEN_MM, CARD_PEN, 'table: every penetration is the one on the card');
     assert.deepEqual([ARMOR_MM[UK_HEAVY], ARMOR_MM[TIGER], ARMOR_MM[PANTHER][0], PEN_MM[PAK40], ARMOR_MM[UK_TANK], PEN_MM[UK_TANK], PEN_MM[UK_INFANTRY]], [[78, 65, 55], [100, 80, 80], 140, [108, 80], [30, 20, 15], [44, 32], [21, 0]], 'table: the numbers are the ones on the card');
   },
   // 驗收 2：穿深隨距離遞減
@@ -111,6 +121,18 @@ const groups = {
     assert.deepEqual([hit.lost, hit.bounce], [Math.floor((UNIT_KINDS[UK_TANK].dmgUnit * UNIT_KINDS[UK_TANK].armor) / 100), false], 'bounce: a penetrating shot does the gun\'s full damage, no bounce flag');
     const tough = duel(PAK40, UK_HEAVY, 5, FACE_FRONT, true);
     assert.equal(tough.lost, Math.floor((UNIT_KINDS[PAK40].dmgUnit * UNIT_KINDS[UK_HEAVY].armor) / 100), 'bounce: the target\'s own damage percentage still applies after penetration');
+    // 審查找到的：穿透之後不再乘砲自己的穿甲率（輕坦克的砲是 70%）——原本每個例子用的砲都是 100%，驗不到
+    assert(UNIT_KINDS[UK_LIGHT].pierce < 100 && pens(UK_LIGHT, UK_LIGHT, FACE_FRONT, 200), 'fixture: the light tank gun has a pierce percentage below 100 and defeats a light tank at 200 m');
+    assert.equal(duel(UK_LIGHT, UK_LIGHT, 2, FACE_FRONT, true).lost, Math.floor((UNIT_KINDS[UK_LIGHT].dmgUnit * UNIT_KINDS[UK_LIGHT].armor) / 100), 'bounce: a penetrating shot ignores the gun\'s old pierce percentage');
+    // 審查找到的：砲彈落地時目標已經不在那裡、或已經死了，不算彈開（沒有東西可以彈）
+    for (const [what, spoil] of [['has moved away', t => { t.x += 4 * SUB; }], ['is already dead', t => { t.alive = false; t.hp = 0; }]]) {
+      const w = field(true), tx = center(16), tz = center(16), t = put(w, SIDE_ENEMY, UK_HEAVY, tx, tz); t.cooldown = 1e9;
+      put(w, SIDE_PLAYER, UK_TANK, tx + units(5), tz);
+      let landed = null;
+      for (let i = 0; i < 300 && !landed; i++) { step(w, []); if (w.shells.length && !t.spoiled) { spoil(t); t.spoiled = true; } for (const e of w.events) if (e.e === 'impact' && e.kind === SHELL_AP) landed = e; }
+      assert(landed && t.spoiled, `fixture: a shell was in flight when the target ${what}`);
+      assert.equal(landed.bounce, undefined, `bounce: a shell that lands after the target ${what} is not a bounce`);
+    }
     const rear = duel(UK_TANK, UK_TANK, 5, FACE_REAR, true), front = duel(UK_TANK, UK_TANK, 5, FACE_FRONT, true);
     assert.equal(rear.lost, front.lost, 'bounce: with the rule on, a penetrating hit does the same damage from any side (no 75%/125%)');
   },
@@ -151,8 +173,10 @@ const groups = {
     assert.deepEqual([on.lost, on.bounce], [offLost, false], 'infantry: when the anti-tank rifle penetrates, the damage is what it was without the rule');
     const tank = duel(UK_INFANTRY, UK_TANK, 2, FACE_FRONT, true);
     assert.deepEqual([tank.lost, tank.bounce], [0, false], 'infantry: rifle fire on the medium tank\'s front does nothing and is not reported as a bounce');
-    assert(duel(UK_INFANTRY, UK_TANK, 2, FACE_FRONT, false).lost >= 0, 'fixture: without the rule the same shot is resolved the old way');
-    assert.equal(duel(UK_INFANTRY, UK_DESTROYER, 2, FACE_FRONT, true).lost, duel(UK_INFANTRY, UK_DESTROYER, 2, FACE_FRONT, false).lost, 'infantry: an open-topped vehicle is hit the old way (R044)');
+    // 開頂車照舊（R044）：挑一輛槍穿不透的（SU-76M 正面 50 公釐），少了「開頂照舊」那一條就會變成零傷害
+    const openOff = duel(UK_INFANTRY, SU76, 2, FACE_FRONT, false), openOn = duel(UK_INFANTRY, SU76, 2, FACE_FRONT, true);
+    assert(UNIT_KINDS[SU76].openTop && penetration(UK_INFANTRY, units(2)) < ARMOR_MM[SU76][FACE_FRONT] && openOff.lost > 0, 'fixture: the SU-76M is open-topped, too thick for the rifle from the front, and rifle fire hurts it without the rule');
+    assert.equal(openOn.lost, openOff.lost, 'infantry: an open-topped vehicle is hit the old way (R044)');
     assert.equal(apHit(UK_INFANTRY, SUB, 0, target(UK_DESTROYER, FACE_FRONT)[0]), -1, 'infantry: apHit steps aside for open-topped targets');
   },
   // 驗收 9：沒有裝甲的目標、建築

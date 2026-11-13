@@ -112,7 +112,8 @@ async function main() {
     // 特寫：同一場仗再打一次（決定性，結果一樣），先走到跳彈前五十步，再一步一步走到彈開的那一步，鏡頭對準那輛重坦克
     await open(`${BIG}&ap=1&noR016=1`); await frames();
     await E(`(() => { __rts.startBattle(); __rts.pause(true); __rts.issue({ t: 'attack', side: 0, ids: [1, 2, 3, 4, 5, 6], target: ${HEAVY} }); __rts.stepN(${Math.max(1, on.tick - 60)}); })()`);
-    assert.equal(await bounces(), null, 'fixture: nothing has bounced yet sixty steps before the first bounce');
+    const early = await bounces();
+    assert(!early || early[0] === 0, 'fixture: none of the player\'s shots has bounced yet sixty steps before the first one');
     let at = -1;
     for (let i = 0; i < 80 && at < 0; i++) { await E('__rts.stepN(1)'); const b = await bounces(); if (b && b[0] > 0) at = await E('__rts.tick()'); }
     assert(at > 0 && at <= on.tick, `fixture: the same battle bounces at the same moment again (tick ${at}, first seen by tick ${on.tick})`);

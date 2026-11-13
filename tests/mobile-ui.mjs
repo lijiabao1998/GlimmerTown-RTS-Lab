@@ -53,7 +53,9 @@ const chromeSrc = read('../src/ui/mobileChrome.ts');
 assert.equal((chromeSrc.match(/canvas\.addEventListener\('gesture(?:start|change)'/g) || []).length, 2, 'pinch blockers stay on the canvas');
 assert.equal((chromeSrc.match(/addEventListener\('gesture(?:start|change)'/g) || []).length, 2, 'pinch blockers are not also on the window');
 assert.ok(lines(main) <= 673, `main.ts stays within the hub ceiling (${lines(main)})`);
-assert.equal(lines(read('../src/render/battle.ts')), 1175, 'battle.ts line count is unchanged');
+// R051（Claude）：原本寫死「battle.ts 剛好 1175 行」，是 R901 當時證明自己沒碰 battle.ts 用的；留著會擋住之後每一張要改 battle.ts 的卡。
+// 改成對正式的上限（tools/hub-budget.json，只准往下調；tests/hub-budget.mjs 也守同一個數）。
+assert.ok(lines(read('../src/render/battle.ts')) <= JSON.parse(read('../tools/hub-budget.json'))['src/render/battle.ts'], 'battle.ts stays within the hub ceiling (tools/hub-budget.json)');
 
 // 教學開著時，具／產／框仍點得到。間距用安全區內距算，不假設瀏海是 0。
 {

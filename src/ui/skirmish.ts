@@ -61,7 +61,7 @@ let linked = false;                // 這一頁是不是用帶設定的網址開
 export function restoreSetup(q: URLSearchParams, store: Store | null = browserStore()): URLSearchParams {
   const V = valves(q);
   memory = V.r069 && V.r046 && V.r073 ? store : null;
-  linked = SETUP_PARAMS.some(k => q.has(k));
+  linked = SETUP_PARAMS.some(k => q.has(k) && !(k === 'ap' && !V.r051));   // R051 的閥關著時，網址上的 ap 不算帶了設定
   if (!memory || linked) return q;
   const s = loadSetup(memory);
   if (!s) return q;
@@ -88,13 +88,14 @@ export interface Skirmish {
 // canVillage：R026 閥開著（萊伊在）才另外有「村莊」可選
 export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish {
   const store = memory, canAp = valves(q).r051;
+  const keptAp = !canAp && loadSetup(store)?.ap === 1;   // R051 的閥關著的這一頁：本機原本記著的 ap 原樣留著，不因為這一頁看不到就洗掉
   let owned = !linked, pristine: string | null = null;   // 用連結開的頁：第一次只記下「連結給的那一份」，之後跟它不一樣了才開始存
   const s = { force: level(q.get('force')), supply: level(q.get('supply')), village: canVillage && q.get('map') === 'village', ai: Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2)), ap: canAp && q.get('ap') === '1' };   // 難度的讀法跟 main.ts 一樣
   // R073：最近開的那一局是哪張圖、哪個模式、哪個種子（start() 從世界讀）；還沒開過局就還沒有東西可存
   let last: { map: SetupMap; mode: 'battle' | 'zombies'; seed: number } | null = null;
   const persist = () => {
     if (!store || !last) return;
-    const now: SavedSetup = { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply, ...(s.ap ? { ap: 1 as const } : {}) }, text = JSON.stringify(now);
+    const now: SavedSetup = { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply, ...(s.ap || keptAp ? { ap: 1 as const } : {}) }, text = JSON.stringify(now);
     if (!owned) { if (pristine === null) { pristine = text; return; } if (text === pristine) return; owned = true; }
     saveSetup(store, now);
   };
