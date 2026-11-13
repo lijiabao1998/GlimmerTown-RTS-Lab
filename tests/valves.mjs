@@ -42,11 +42,11 @@ const main = read('src/main.ts');
 assert(!main.includes("q.get('noR"), 'valves: main.ts has no direct q.get(\'noR…\')');
 console.log('OK valves location: only src/valves.ts reads ?noR parameters');
 
-// 4. 畫面：建構子只收 (world, options)；main.ts 只有一處 new BattleView；runScript 與開局都走 makeView
+// 4. 畫面：建構子只收 (world, options)；main.ts 只有一處 new BattleView；runScript、開局與 R047 重播起播都走 makeView
 const battle = read('src/render/battle.ts');
 assert.match(battle, /constructor\(w: World, options: ViewOptions = \{\}\)/, 'view: constructor takes (world, options)');
 assert.equal((main.match(/new BattleView\(/g) ?? []).length, 1, 'view: main.ts constructs BattleView in exactly one place');
-assert.equal((main.match(/\bmakeView\(\);/g) ?? []).length, 2, 'view: reset and runScript both call makeView');
+assert.equal((main.match(/\bmakeView\(\);/g) ?? []).length, 3, 'view: reset, runScript and the R047 replay start all call makeView (no other way to build a view)');
 assert.deepEqual(viewOptions({}), { fx: true, fog: true, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true,
   r107: true, r113: true, r118: true, r104: true, r123: true, rubbleMarks: true, multiRange: true }, 'view: unspecified options default on');
 assert.equal(viewOptions({ r118: undefined, fog: false }).r118, true, 'view: undefined keeps the default like an omitted positional argument');
