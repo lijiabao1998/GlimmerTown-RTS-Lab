@@ -198,7 +198,7 @@ for (const disabled of [false, true]) {
   test(name, `reset ${disabled ? 'off' : 'on'}: original reset cleanup closes the real command menu`, 'main',
     '  if (V.r109) clearGestureInput();\n  battleAudio?.reset();', '  battleAudio?.reset();', message => {
       const f = mainFixture(disabled ? 'noR137=1' : '');
-      Object.assign(f.c, { Gestures, MAP_LARGE, MAP_TOWN, selectInBox() {},
+      Object.assign(f.c, { Gestures, MAP_LARGE, MAP_TOWN, selectInBox() {}, skirmish: undefined,   // R046: reset() reads skirmish; absent here = standard rules
         fling: { stop() {} }, glide: { stop() {} }, dragged: false, pinchD: 0, dragV: { vx: 0, vy: 0, t: 0 },
         fxOn: true,
         newStats: () => ({}), ui() {}, planner: { clear() {}, refreshPreview() {} }, BattleView: class { constructor() { return f.c.view; } },

@@ -1,7 +1,9 @@
 // R069 開始選單：開頁先停在選單；右上「選單」鍵叫出同一份（開戰後是暫停選單）。
 // 地圖、模式、重新開始、說明、教學都按原本那幾顆鍵（同一段程式，結果跟按舊鍵一樣）；這裡只顯示狀態、轉送動作，不碰世界。
 // 電腦難度、暫停、音效由 main.ts 接線傳進來（音效要真的手指點才開得了，不能用程式按舊鍵）。
-export type MapChoice = 'rye' | 'large' | 'town';
+// R046 遭遇戰設定：多一顆「遭遇戰設定」鍵與設定頁（兵力、補給速度、種子）、地圖多一顆「村莊」；host.skirmish 沒有（?noR046=1）時跟 R069 一模一樣。
+import { FORCE_TEXT, FORCE_SUB, SUPPLY_TEXT, SUPPLY_SUB, setupSummary, parseSeed, randomSeed, type Skirmish } from './skirmish.ts';
+export type MapChoice = 'rye' | 'village' | 'large' | 'town';
 export type ModeChoice = 'battle' | 'zombies' | 'sandbox';
 export type MenuKind = 'start' | 'pause';
 export interface MenuView {
@@ -10,11 +12,13 @@ export interface MenuView {
   maps: MapChoice[]; modes: ModeChoice[];
   aiOn: boolean; rye: boolean; tutorial: boolean; audio: boolean | null;   // audio：null＝沒有音效鍵
   resume: boolean;   // 從「選單」鍵打開（布陣中）：主鍵是「繼續」與「重新開始」，不是「開始」
+  setup?: { force: number; supply: number; seed: number };   // R046：有才顯示「遭遇戰設定」
+  page?: 'setup';                                              // R046：現在看的是設定頁
 }
-export interface MenuItem { id: string; label: string; sub?: string; pressed?: boolean }
+export interface MenuItem { id: string; label: string; sub?: string; pressed?: boolean; input?: boolean }   // input：可以打字的一格（R046 種子）
 export interface MenuLayout { title: string; sub: string; rows: { id: string; title: string; items: MenuItem[] }[]; main: MenuItem[]; extra: MenuItem[] }
 
-const MAP_TEXT: Record<MapChoice, [string, string]> = { rye: ['萊伊', '32×32'], large: ['鄉間', '64×64'], town: ['河鎮', '96×96'] };
+const MAP_TEXT: Record<MapChoice, [string, string]> = { rye: ['萊伊', '32×32'], village: ['村莊', '32×32'], large: ['鄉間', '64×64'], town: ['河鎮', '96×96'] };
 const MODE_TEXT: Record<ModeChoice, string> = { battle: '一般對戰', zombies: '喪屍防守', sandbox: '沙盒' };
 export const AI_TEXT = ['', '簡單', '普通', '困難'];
 
@@ -28,6 +32,14 @@ export function menuLayout(v: MenuView): MenuLayout {
     return { title: '暫停', sub: '戰鬥已暫停', rows: [], extra,
       main: [{ id: 'sm-resume', label: '繼續' }, { id: 'sm-restart', label: '重新開始' }, { id: 'sm-main', label: '回主選單' }] };
   }
+  if (v.page === 'setup' && v.setup) {   // R046 設定頁：每改一項，後面的戰場當場重開
+    const s = v.setup, seg = (id: string, text: string[], sub: string[], now: number) => [1, 2, 3].map(n => ({ id: `${id}-${n}`, label: text[n], sub: sub[n], pressed: now === n }));
+    return { title: '遭遇戰設定', sub: '雙方一樣。改了會回到布陣第 0 步', extra: [], main: [{ id: 'sm-setup-done', label: '完成' }], rows: [
+      { id: 'sm-forces', title: '兵力', items: seg('sm-force', FORCE_TEXT, FORCE_SUB, s.force) },
+      { id: 'sm-supplies', title: '補給速度', items: seg('sm-supply', SUPPLY_TEXT, SUPPLY_SUB, s.supply) },
+      { id: 'sm-seeds', title: '種子（同一個種子＝同一張圖、同一局）', items: [{ id: 'sm-seed', label: String(s.seed), input: true }, { id: 'sm-seed-roll', label: '隨機' }] },
+    ] };
+  }
   const rows: MenuLayout['rows'] = [];
   if (v.mode !== 'sandbox' && v.maps.length > 1) {
     rows.push({ id: 'sm-maps', title: '地圖', items: v.maps.map(m => ({
@@ -35,6 +47,7 @@ export function menuLayout(v: MenuView): MenuLayout {
   }
   if (v.modes.length > 1) rows.push({ id: 'sm-modes', title: '模式', items: v.modes.map(m => ({ id: `sm-mode-${m}`, label: MODE_TEXT[m], pressed: v.mode === m })) });
   if (v.aiOn && v.mode === 'battle') rows.push({ id: 'sm-ais', title: '電腦難度', items: [1, 2, 3].map(n => ({ id: `sm-ai-${n}`, label: AI_TEXT[n], pressed: v.ai === n })) });
+  if (v.setup && v.mode !== 'sandbox') rows.push({ id: 'sm-setups', title: '', items: [{ id: 'sm-setup', label: '遭遇戰設定', sub: setupSummary(v.setup.force, v.setup.supply, v.setup.seed) }] });
   const main = v.resume ? [{ id: 'sm-resume', label: '繼續' }, { id: 'sm-restart', label: '重新開始' }] : [{ id: 'sm-start', label: '開始' }];
   return { title: '微光小鎮·二戰 RTS', sub: v.resume ? '換地圖或模式會回到布陣第 0 步' : '選地圖與模式，按「開始」布陣', rows, main, extra };
 }
@@ -59,6 +72,9 @@ export interface StartMenuHost {
   ai: (level?: number) => number;                                          // 讀／改電腦難度（開戰時送出的電腦指令用它）
   paused: (value?: boolean) => boolean;                                    // 讀／設暫停；開戰後打開選單時暫停，關掉時還原
   audio?: () => void;                                                      // 音效開關（要在真的點擊裡呼叫）
+  skirmish?: Skirmish;                                                     // R046：兵力、補給速度、村莊（沒有＝?noR046=1）
+  seed?: (value?: number) => number;                                       // R046：讀／改種子
+  reset?: () => void;                                                      // R046：照現在的設定重開一局（回布陣第 0 步）
 }
 export interface StartMenu { open: (kind?: MenuKind, resume?: boolean) => void; close: () => void; visible: () => boolean }
 
@@ -83,7 +99,10 @@ body.r069 #sb-enter, body.r069 #map-pick, body.r069 #zombies-pick, body.r069 #to
 #start-menu .sm-main { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
 #start-menu .sm-main button { min-height: 48px; font-size: 17px; }
 #start-menu .sm-main button.sm-primary { min-height: 54px; background: #9a4a2e; border-color: #e3a07c; font-size: 19px; font-weight: 700; }
-#start-menu button:focus-visible { outline: 2px solid #ffd36a; outline-offset: 2px; }
+#start-menu button:focus-visible, #start-menu input:focus-visible { outline: 2px solid #ffd36a; outline-offset: 2px; }
+#start-menu input { box-sizing: border-box; flex: 2 1 0; min-width: 0; min-height: 44px; margin: 0; padding: 6px 10px; border: 1px solid #6c745f; border-radius: 5px;
+  background: #1b2118; color: #f3eedf; font: inherit; font-size: 16px; font-variant-numeric: tabular-nums; -webkit-user-select: text; user-select: text; }
+#start-menu #sm-setup small { font-size: 12px; }
 @media (orientation: landscape) and (max-height: 520px) {
   #start-menu .sm-panel { width: min(760px, 100%); display: grid; grid-template-columns: 1.3fr 1fr; column-gap: 16px; align-items: start; padding: 12px 14px; }
   #start-menu .sm-head, #start-menu .sm-rows { grid-column: 1; }
@@ -95,8 +114,9 @@ body.r069 #sb-enter, body.r069 #map-pick, body.r069 #zombies-pick, body.r069 #to
 `;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
-const button = (it: MenuItem, cls = '') =>
-  `<button type="button" id="${it.id}"${cls ? ` class="${cls}"` : ''}${it.pressed === undefined ? '' : ` aria-pressed="${it.pressed}"`}>${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</button>`;
+const button = (it: MenuItem, cls = '') => it.input
+  ? `<input type="text" id="${it.id}" inputmode="numeric" maxlength="10" autocomplete="off" spellcheck="false" aria-label="種子" value="${esc(it.label)}">`
+  : `<button type="button" id="${it.id}"${cls ? ` class="${cls}"` : ''}${it.pressed === undefined ? '' : ` aria-pressed="${it.pressed}"`}>${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</button>`;
 
 export function initStartMenu(host: StartMenuHost): StartMenu {
   if (!document.getElementById('start-menu-style')) {
@@ -110,23 +130,28 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
   root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-labelledby', 'sm-title');
   document.body.appendChild(root);
   const el = (id: string) => document.getElementById(id);
-  let kind: MenuKind = 'start', resume = false, held = false, before = false;
+  let kind: MenuKind = 'start', resume = false, held = false, before = false, page: 'setup' | undefined, painting = false;
+  const sk = host.skirmish;
 
   const view = (): MenuView => {
     const s = host.state(), audio = el('b-audio'), tut = el('tutorial-open');
     const maps: MapChoice[] = ['rye', ...(el('map-pick') ? ['large' as const] : []), ...(el('town-pick') ? ['town' as const] : [])];
     const modes: ModeChoice[] = ['battle', ...(el('zombies-pick') ? ['zombies' as const] : []), ...(el('sb-enter') ? ['sandbox' as const] : [])];
-    return { kind, map: s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
-      tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume };
+    if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
+    return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
+      tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed() }, page } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
-    root.innerHTML = `<div class="sm-panel">
+    const html = `<div class="sm-panel">
       <div class="sm-head"><h1 id="sm-title">${esc(m.title)}</h1><p class="sm-sub">${esc(m.sub)}</p></div>
-      <div class="sm-rows">${m.rows.map(r => `<div class="sm-row" id="${r.id}"><h2>${esc(r.title)}</h2><div class="sm-seg">${r.items.map(it => button(it)).join('')}</div></div>`).join('')}</div>
+      <div class="sm-rows">${m.rows.map(r => `<div class="sm-row" id="${r.id}">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}<div class="sm-seg">${r.items.map(it => button(it)).join('')}</div></div>`).join('')}</div>
       <div class="sm-side"><div class="sm-main">${m.main.map((it, i) => button(it, i === 0 ? 'sm-primary' : '')).join('')}</div>
       <div class="sm-extra">${m.extra.map(it => button(it)).join('')}</div></div>
     </div>`;
+    painting = true;   // R046：重畫會拿掉種子框，有的瀏覽器在拿掉的當下發 change；那一下不能當成玩家改了種子
+    try { root.innerHTML = html; } finally { painting = false; }
     if (focused) (root.querySelector(`#${focused}`) as HTMLElement | null)?.focus({ preventScroll: true });   // 重畫不丟焦點（鍵盤操作）
   }
   // 開戰中（或沒有布陣、重開就開打）選單開著時暫停；關掉時還原打開前的暫停狀態
@@ -135,20 +160,39 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
   const press = (id: string) => (el(id) as HTMLElement | null)?.click();
 
   function open(next: MenuKind = host.battle() ? 'pause' : 'start', fromBar = false) {
-    kind = next; resume = fromBar || next === 'pause'; root.hidden = false; render(); hold();
+    kind = next; resume = fromBar || next === 'pause'; page = undefined; root.hidden = false; render(); hold();
     (root.querySelector('.sm-primary') as HTMLElement | null)?.focus({ preventScroll: true });
   }
   function close() { release(); root.hidden = true; root.innerHTML = ''; }
+  const focus = (selector: string) => (root.querySelector(selector) as HTMLElement | null)?.focus({ preventScroll: true });
+  // R046 種子輸入：打完按 Enter 或離開那一格才套用；不是 0–4294967295 的整數就改回原值
+  function commitSeed() {
+    const box = el('sm-seed') as HTMLInputElement | null, n = box ? parseSeed(box.value) : null;
+    if (!box || !host.seed) return;
+    if (n !== null && n !== host.seed()) { host.seed(n); host.reset?.(); hold(); }
+    box.value = String(host.seed());   // 只改這一格，不重畫整頁：重畫會把輸入框拿掉，瀏覽器在拿掉的當下再發一次 change，變成畫到一半又畫一次
+  }
+  root.addEventListener('change', e => { if (!painting && (e.target as HTMLElement).id === 'sm-seed') commitSeed(); });
   function act(id: string, trusted: boolean) {
+    commitSeed();   // R046：種子框裡打到一半就點別的鍵：先套用再做那顆鍵的事（有的手機點按鈕不會讓輸入框失焦，等不到 change）
     if (id === 'sm-start' || id === 'sm-resume') return close();
     if (id === 'sm-restart') { close(); return press('b-restart'); }
     if (id === 'sm-main') { close(); press('b-restart'); return open('start'); }
     if (id === 'sm-help') { close(); return press('b-help'); }
     if (id === 'sm-tutorial') { close(); return press('tutorial-open'); }
     if (id === 'sm-audio') { if (trusted) host.audio?.(); return render(); }
-    if (id.startsWith('sm-map-')) for (let i = 0, b; i < 3 && (b = mapStep(host.state().map, id.slice(7) as MapChoice)); i++) press(b);
+    if (id === 'sm-setup' || id === 'sm-setup-done') { page = id === 'sm-setup' ? 'setup' : undefined; render(); return focus(page ? '.sm-primary' : '#sm-setup'); }
+    // R046：村莊＝萊伊那一格換成亂數村莊（地圖 0）。先改設定，再照舊按舊鍵走到 32×32；一顆都不用按時（萊伊↔村莊）自己重開一局
+    const village = id === 'sm-map-village';
+    let fresh = !!sk && id.startsWith('sm-map-') && sk.village !== village;
+    if (fresh) sk!.set({ village });
+    if (id.startsWith('sm-map-')) for (let i = 0, b; i < 3 && (b = mapStep(host.state().map, village ? 'rye' : id.slice(7) as MapChoice)); i++) { press(b); fresh = false; }
     else if (id.startsWith('sm-mode-')) for (let i = 0, b; i < 3 && (b = modeStep(host.state().mode, id.slice(8) as ModeChoice)); i++) press(b);
     else if (id.startsWith('sm-ai-')) host.ai(Number(id.slice(6)));
+    else if (sk && id.startsWith('sm-force-')) { sk.set({ force: Number(id.slice(9)) }); fresh = true; }
+    else if (sk && id.startsWith('sm-supply-')) { sk.set({ supply: Number(id.slice(10)) }); fresh = true; }
+    else if (id === 'sm-seed-roll') { host.seed?.(randomSeed()); fresh = true; }
+    if (fresh) host.reset?.();
     hold(); render();
     (root.querySelector(`#${id}`) as HTMLElement | null)?.focus({ preventScroll: true });
   }
@@ -162,9 +206,11 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
   addEventListener('keydown', e => {
     if (root.hidden) return;
     e.stopPropagation();
+    if (e.key === 'Escape' && page) { e.preventDefault(); commitSeed(); page = undefined; render(); focus('#sm-setup'); return; }   // R046：設定頁按 Esc 回上一頁（種子框裡打到一半的先套用）
+    if (e.key === 'Enter' && (document.activeElement as HTMLElement | null)?.id === 'sm-seed') { e.preventDefault(); commitSeed(); return; }
     if (e.key === 'Escape' && resume) { e.preventDefault(); close(); return; }
     // 焦點留在選單裡：Tab 在選單的鍵之間循環；焦點跑到外面時 Enter／空白鍵不按到後面的鍵，拉回選單
-    const keys = [...root.querySelectorAll('button')] as HTMLElement[], at = keys.indexOf(document.activeElement as HTMLElement);
+    const keys = [...root.querySelectorAll('button, input')] as HTMLElement[], at = keys.indexOf(document.activeElement as HTMLElement);
     if (e.key === 'Tab') { e.preventDefault(); keys[at < 0 ? 0 : (at + (e.shiftKey ? keys.length - 1 : 1)) % keys.length]?.focus({ preventScroll: true }); }
     else if (at < 0 && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); (root.querySelector('.sm-primary') as HTMLElement | null)?.focus({ preventScroll: true }); }
   }, true);

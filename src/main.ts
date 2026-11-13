@@ -42,6 +42,7 @@ import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
 import { initTutorial } from './ui/tutorial.ts';
 import { initStartMenu } from './ui/startMenu.ts';
+import { initSkirmish } from './ui/skirmish.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
@@ -50,7 +51,8 @@ import { showStartOrder, startOrderText } from './ui/startOrder.ts';
 import { valves } from './valves.ts';
 const q = new URLSearchParams(location.search);
 const V = valves(q);   // R060 逃生閥表：所有 ?noR<號> 都在 src/valves.ts
-const seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;
+let seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;   // R046：遭遇戰設定可以改
+const skirmish = V.r046 ? initSkirmish(q, V.r026) : undefined;   // R046 遭遇戰設定：兵力、補給速度、亂數村莊（src/ui/skirmish.ts）
 const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)), msaa: V.r065 ? STYLE_A.msaa : 0 };
 // 逃生閥：?fx=off 或 window.__noFx＝true 時不產生爆炸、煙（AGENTS.md：新效果都要關得掉）
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
@@ -136,8 +138,9 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   w = sandbox ? createSandboxWorld(s) : createWorld(s);
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
-  const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : MAP_RYE) : 0;
+  const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : skirmish?.village ? 0 : MAP_RYE) : 0;   // R046：村莊＝地圖 0（createWorld 的亂數村莊）
   if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
+  const rules = !sandbox && (map || vegetation) ? skirmish?.start(w) : undefined;   // R046：一般開局才套（布陣時就看得到）；腳本、重播、沙盒不套
   const zombies = !sandbox && (map || vegetation) && V.r045 && q.get('mode') === 'zombies';
   if (zombies) startZombies(w);
   makeView();
@@ -149,6 +152,7 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
   if (sandbox) paused = true;
   if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}) });
+  if (rules) issue(rules);
   if (zombies) issue({ t: 'zombies' });
   if (build) { paused = true; planner.refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
@@ -508,7 +512,7 @@ const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V
 // R069 開始選單（src/ui/startMenu.ts）：地圖、模式、重來、說明、教學都按原本那幾顆鍵；這裡只接難度、暫停與音效
 if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: n => (aiLevel = n ?? aiLevel), paused: v => { if (v !== undefined) { paused = v; syncBattleAudio(); hud?.update(); } return paused; },
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
-  audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次
+  audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined, skirmish, seed: n => (seed = n ?? seed), reset: () => reset() });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次
 
 if (V.r070 && isDesktopPointer()) initDesktopControls({ world: () => w, selected, view: () => view, fling, glide, hud: () => hud, blocked: () => help.visible() || !!reportView?.visible(), toggleFireMode: () => { fireMode = !fireMode; }, selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); }, toggleHoldFire: () => { if (toggleFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue)) fireDisciplineFrame?.(); }, help: () => help.open() });
 
