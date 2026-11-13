@@ -9,13 +9,15 @@ export function initZombiesPick(a: { state: () => { show: boolean; active: boole
   update(); return { update };
 }
 
-export function zombiesBest(wave: number): number {
+// save＝false（R047 看重播時）：只讀本機的最佳紀錄，不拿這一局去比、也不寫回去——看別人的重播不能改到自己的紀錄
+export function zombiesBest(wave: number, save = true): number {
   let best = 0;
   try {
     const stored = Number(localStorage.getItem('gtrts.v1.zombies.best'));
     if (Number.isSafeInteger(stored) && stored >= 0) best = stored;
+    if (!save) return best;
     best = Math.max(best, wave);
     localStorage.setItem('gtrts.v1.zombies.best', String(best));
-  } catch { best = Math.max(best, wave); }
+  } catch { if (save) best = Math.max(best, wave); }
   return best;
 }

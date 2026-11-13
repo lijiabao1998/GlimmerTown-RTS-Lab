@@ -14,6 +14,7 @@ export interface MenuView {
   resume: boolean;   // 從「選單」鍵打開（布陣中）：主鍵是「繼續」與「重新開始」，不是「開始」
   setup?: { force: number; supply: number; seed: number };   // R046：有才顯示「遭遇戰設定」
   page?: 'setup';                                              // R046：現在看的是設定頁
+  replays?: boolean;                                           // R047：有重播面板可開
 }
 export interface MenuItem { id: string; label: string; sub?: string; pressed?: boolean; input?: boolean }   // input：可以打字的一格（R046 種子）
 export interface MenuLayout { title: string; sub: string; rows: { id: string; title: string; items: MenuItem[] }[]; main: MenuItem[]; extra: MenuItem[] }
@@ -27,6 +28,7 @@ export function menuLayout(v: MenuView): MenuLayout {
   const extra: MenuItem[] = [];
   if (v.kind === 'start' && v.tutorial) extra.push({ id: 'sm-tutorial', label: '新手教學' });
   extra.push({ id: 'sm-help', label: '怎麼玩' });
+  if (v.kind === 'start' && v.replays) extra.push({ id: 'sm-replays', label: '重播' });   // R047：開戰後的暫停選單沒有（看重播會丟掉正在打的這一局）
   if (v.audio !== null) extra.push({ id: 'sm-audio', label: v.audio ? '音效：開' : '音效：關', pressed: v.audio });
   if (v.kind === 'pause') {
     return { title: '暫停', sub: '戰鬥已暫停', rows: [], extra,
@@ -75,6 +77,7 @@ export interface StartMenuHost {
   skirmish?: Skirmish;                                                     // R046：兵力、補給速度、村莊（沒有＝?noR046=1）
   seed?: (value?: number) => number;                                       // R046：讀／改種子
   reset?: () => void;                                                      // R046：照現在的設定重開一局（回布陣第 0 步）
+  replays?: () => void;                                                    // R047：打開重播面板
 }
 export interface StartMenu { open: (kind?: MenuKind, resume?: boolean) => void; close: () => void; visible: () => boolean }
 
@@ -94,6 +97,7 @@ body.r069 #sb-enter, body.r069 #map-pick, body.r069 #zombies-pick, body.r069 #to
 #start-menu button { box-sizing: border-box; min-width: 44px; min-height: 44px; margin: 0; padding: 6px 8px; border: 1px solid #6c745f; border-radius: 5px;
   background: #3c4535; color: #f3eedf; font: inherit; line-height: 1.2; cursor: pointer; touch-action: manipulation; }
 #start-menu .sm-seg button, #start-menu .sm-extra button { flex: 1 1 0; }
+#start-menu .sm-extra.sm-many button { flex: 1 1 auto; padding: 6px 4px; }
 #start-menu .sm-seg button small { display: block; color: #d9dcc6; font-size: 11px; }
 #start-menu button[aria-pressed="true"] { background: #2f5f9a; border-color: #9cc6ff; }
 #start-menu .sm-main { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
@@ -140,7 +144,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
     return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
-      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed() }, page } : {}) };
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed() }, page } : {}), ...(host.replays ? { replays: true } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
@@ -148,7 +152,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
       <div class="sm-head"><h1 id="sm-title">${esc(m.title)}</h1><p class="sm-sub">${esc(m.sub)}</p></div>
       <div class="sm-rows">${m.rows.map(r => `<div class="sm-row" id="${r.id}">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}<div class="sm-seg">${r.items.map(it => button(it)).join('')}</div></div>`).join('')}</div>
       <div class="sm-side"><div class="sm-main">${m.main.map((it, i) => button(it, i === 0 ? 'sm-primary' : '')).join('')}</div>
-      <div class="sm-extra">${m.extra.map(it => button(it)).join('')}</div></div>
+      <div class="sm-extra${m.extra.length > 3 ? ' sm-many' : ''}">${m.extra.map(it => button(it)).join('')}</div></div>
     </div>`;
     painting = true;   // R046：重畫會拿掉種子框，有的瀏覽器在拿掉的當下發 change；那一下不能當成玩家改了種子
     try { root.innerHTML = html; } finally { painting = false; }
@@ -179,6 +183,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (id === 'sm-restart') { close(); return press('b-restart'); }
     if (id === 'sm-main') { close(); press('b-restart'); return open('start'); }
     if (id === 'sm-help') { close(); return press('b-help'); }
+    if (id === 'sm-replays') { close(); return host.replays?.(); }
     if (id === 'sm-tutorial') { close(); return press('tutorial-open'); }
     if (id === 'sm-audio') { if (trusted) host.audio?.(); return render(); }
     if (id === 'sm-setup' || id === 'sm-setup-done') { page = id === 'sm-setup' ? 'setup' : undefined; render(); return focus(page ? '.sm-primary' : '#sm-setup'); }

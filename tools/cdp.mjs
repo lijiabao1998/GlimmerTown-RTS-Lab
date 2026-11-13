@@ -128,7 +128,10 @@ export async function withBrowser(opt, fn) {
     if (opt.preload) await page.send('Page.addScriptToEvaluateOnNewDocument', { source: opt.preload });
     // R069：預設在網址加 noR069=1，既有守衛照舊測沒有開始選單的流程（它們寫的時候就是這個流程）；
     // 要測開始選單的守衛傳 open(query, { menu: true })。網址自己寫了 noR069 就照它的。
-    const open = async (query, { menu = false } = {}) => {
+    // R047：每次開頁都當成第一次來——先清掉上一頁存在本機的重播紀錄（同一個設定檔裡前一頁打完的局不影響下一頁）；
+    // 要測「存了之後再開頁還在」的守衛傳 open(query, { keep: true })。新手教學、喪屍最佳紀錄那些既有的鍵不清（原本的守衛靠它們跨頁）。
+    const open = async (query, { menu = false, keep = false } = {}) => {
+      if (!keep) await page.evaluate("try { localStorage.removeItem('gtrts.v1.replays') } catch {}").catch(() => {});
       const q = menu || /(^|&)noR069=/.test(query) ? query : `${query ? query + '&' : ''}noR069=1`;
       await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/${entry}?${q}` });
       for (let i = 0, t0 = Date.now(); Date.now() - t0 < readyMs; i++) { await sleep(150); if (await page.evaluate(ready).catch(() => false)) break; }
