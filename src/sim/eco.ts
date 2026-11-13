@@ -5,6 +5,7 @@ import { findPath } from './path.ts';
 import { stillConnected, keepsFootPaths } from './build.ts';
 import { MAP_LARGE, LARGE_POP } from './largeMap.ts';
 import { MAP_TOWN } from './expandedMap.ts';
+import { incomeTicks } from './rules.ts';
 import {
   INTERNATIONAL_KINDS, SOVIET_KINDS, SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, BK_HQ, TER_ROAD,
   ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, type World, type Building,
@@ -80,7 +81,7 @@ export function ecoStep(w: World): void {
   for (const side of [SIDE_PLAYER, SIDE_ENEMY]) {
     const hq = hqAlive(w, side);
     if (!hq) { e.queue[side] = []; e.prog[side] = 0; continue; }
-    if (w.tick % ECO_INCOME_TICKS === 0) e.supply[side]++;
+    if (w.tick % (incomeTicks(w) || ECO_INCOME_TICKS) === 0) e.supply[side]++;   // R046：補給速度可由 rules 指令改（慢 40、快 10）
     const q = e.queue[side];
     if (!q.length) continue;
     const k = UNIT_KINDS[q[0]];

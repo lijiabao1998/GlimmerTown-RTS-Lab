@@ -58,7 +58,8 @@ async function main() {
     const state = () => E(`({phase:__rts.phase(),paused:__rts.paused(),tick:__rts.tick(),hash:__rts.hash(),map:__rts.map(),n:__rts.mapSize(),sandbox:!!__rts.sandbox(),zombies:__rts.log().some(c=>c.cmd.t==='zombies'),log:__rts.log(),selected:__rts.selected()})`);
     const geometry = () => E(`(()=>{const bs=[...document.querySelectorAll('#start-menu button')];return bs.map(b=>{const r=b.getBoundingClientRect();return {id:b.id,w:Math.round(r.width),h:Math.round(r.height),inside:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,hit:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)),clip:b.scrollWidth>b.clientWidth+1||b.scrollHeight>b.clientHeight+1}}).filter(b=>b.w<44||b.h<44||!b.inside||!b.hit||b.clip)})()`);
     const layout = async label => assert.deepEqual(await geometry(), [], `layout: ${label} ${width}×${height} every menu key is a whole, unclipped, reachable 44px target`);
-    const opened = async (q = '') => { await open(q, { menu: true }); assert(await E('!!window.__rts?.ready'), 'fixture: RTS ready'); await frames(); };
+    // R046：這支驗的是 R069 的選單（鍵的清單寫死），帶 noR046=1 開頁；R046 加的鍵由 tests/skirmish-browser.mjs 驗
+    const opened = async (q = '') => { await open(q ? `${q}&noR046=1` : 'noR046=1', { menu: true }); assert(await E('!!window.__rts?.ready'), 'fixture: RTS ready'); await frames(); };
 
     // ---- 共用的檢查（正向與故意弄壞都跑同一段）----
     const mapApplies = async () => {

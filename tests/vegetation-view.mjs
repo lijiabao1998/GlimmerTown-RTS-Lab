@@ -120,7 +120,7 @@ function mini(w, enabled = true) {
 function mainFixture() {
   const mockView = () => ({ dispose() {}, setWorld() {}, vegetation116: { mesh: null, cells: 0, triangles: 0, builds: 0 } });
   const c = vm.createContext({ ...sim, applyMap, MAP_RYE, runLog, SCRIPT, SCRIPT_SEED, SCRIPT_TICKS, seed: 1944,
-    MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // Default village and legacy replay; large maps are checked separately.
+    MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, skirmish: undefined, // Default village and legacy replay; large maps are checked separately. (R046: reset() reads skirmish; absent here = standard rules)
     // R060：閥從閥表來（網址 noR116=1）；布陣、電腦、補給、萊伊、快捷手勢在這個夾具裡關掉
     V: { ...valves(new URLSearchParams('noR116=1')), r006: false, r018: false, r019: false, r026: false, r109: false }, fxOn: true, q: new URLSearchParams('noR116=1'),
     w: undefined, view: mockView(), selected: new Set(), log: [], pending: [], paused: true, phase: 'battle', window: {},

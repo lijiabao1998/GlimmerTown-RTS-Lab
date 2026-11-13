@@ -29,6 +29,7 @@ export function valves(q: URLSearchParams) {
     get r043() { return on('043'); }, // R043 大地圖：布陣時「地圖」鍵、?map=64；關掉＝沒有這顆鍵、不認 ?map=64
     get r044() { return on('044'); }, // R044 裝甲車、驅逐戰車、突擊砲（關掉＝eco 不帶 armor2）
     get r045() { return on('045'); }, // R045 喪屍模式：入口與 ?mode=zombies
+    get r046() { return on('046'); }, // R046 遭遇戰設定：選單的「遭遇戰設定」與「村莊」、?force／?supply／?map=village；關掉＝R069 的選單（紀錄裡的 rules 指令照常重播）
     get r065() { return on('065'); }, // R065 建築抗鋸齒：後製渲染目標 4 倍多重取樣；關掉＝不取樣，畫面逐位等於原本
     get r069() { return on('069'); }, // R069 開始選單：開頁先停在選單、右上「選單」鍵；布陣前四顆入口鍵收進選單
     get r070() { return on('070'); }, // R070 桌機鍵盤：WASD／方向鍵平移、標準 RTS 快捷鍵；關掉＝沒有桌機按鍵，浮動開火鍵回來
