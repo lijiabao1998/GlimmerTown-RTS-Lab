@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R072 | 2026-11-13 | Claude | 業主 2026-11-13 授權入檔：原話逐字記進 `DECISIONS.md`；`ROADMAP.md` 加最終目標與「誰決定什麼」（迭代、大方向、效能含手機預算改由 Claude 決定；紅線、聯機、整張畫面的觀感、破壞舊重播、加 npm 套件照舊）；`AGENTS.md`、`CLAUDE.md` 跟著改；核對 Claude 段卡號還能出 41 張 | card-numbers、start-menu（本機）；只改文件，其餘靠 CI | #118 | 兩張表是 Claude 的讀法，業主還沒看過；沒有守衛擋「規則檔之間互相矛盾」，靠人讀 |
 | R071 | 2026-11-04 | Claude | 帳目補齊：方向檔待辦44移到已完成（R145）、45 不再寫「待44」；LOG 補 R138、R139、R144、R145 四列；R043、R045 卡面狀態改成已合併；DECISIONS／AGENTS 記 DeepSeek 借用 R070（號碼不改） | card-numbers、全部非瀏覽器守衛；只改文件 | 待開 PR | card-numbers 仍只擋重複、不擋缺漏；遠端舊分支沒清（清單交 Grok） |
 | R070 | 2026-11-02 | DeepSeek | 桌機 WASD／方向鍵平移（1100 px／秒、斜走不加速）、Q／E 縮放、H 回指揮部、F 砲擊、G 停火／開火、Ctrl+A 全選、1–9／Ctrl+1–9 群組、Tab、F1；桌機不再建 R143 浮動「開火」鍵（手機原樣）；`?noR070=1` 全部復原；`pickUnit` 內容搬 `src/ui/pick.ts`（總機留薄接線）讓總機 666 行 | typecheck 綠；hub-budget 666/673；build 800.24 kB；`tests/desktop-keys.mjs` 10 條（A／D 對調 2 紅）；`fire-discipline-browser` 五尺寸綠；`gestures`／`input-timing` 補 `pickUnitAt` 後綠；CI 41441560687：unit 1–4、chrome、smoke 全綠 | #116 | 沒真手機／真桌機量測；`?noR070=1` 沒與 `db9eedc` 拍整張對照；`bombard-status-browser` 的桌面其實是 coarse（沒改）；沒量按鍵平移的幀成本；Esc 沒擴大成關面板 |
 | R145 | 2026-11-01 | GPT（R071 Claude 補列） | 待辦44：選中我方武裝車砲時顯示真實砲擊任務的剩餘發數、建築任務、收尾、停火待命與行進；只讀模擬，不改命令與 AI；?noR145 只關提示 | bombard-status、bombard-status-browser（卡面：負控把剩餘數讀錯必紅） | #114 squash `db9eedc`；main CI／Pages 41282886931 綠 | 卡面原記：本機 Chrome 受限，原生瀏覽器靠 Ubuntu Actions；實體手機未測 |
