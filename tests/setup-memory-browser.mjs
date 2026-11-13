@@ -16,9 +16,9 @@ const SHOTS = path.join(ROOT, 'shots');
 const CHOSEN = { v: 1, map: '64', mode: 'battle', ai: 3, force: 3, supply: 3, seed: 77 };
 // 故意弄壞（只編進 broken 那一份，網址帶 __r073mutant 才生效）
 const mutations = {
-  nosave: ['src/ui/skirmish.ts', '  const persist = () => { if (store && last)', "  const persist = () => { if (!location.search.includes('__r073mutant=nosave') && store && last)"],
+  nosave: ['src/ui/skirmish.ts', '    saveSetup(store, now);', "    if (!location.search.includes('__r073mutant=nosave')) saveSetup(store, now);"],
   norestore: ['src/ui/skirmish.ts', '  const s = loadSetup(memory);', "  const s = location.search.includes('__r073mutant=norestore') ? null : loadSetup(memory);"],
-  mix: ['src/ui/skirmish.ts', '  if (!memory || SETUP_PARAMS.some(k => q.has(k))) return q;', "  if (!memory || (!location.search.includes('__r073mutant=mix') && SETUP_PARAMS.some(k => q.has(k)))) return q;"],
+  mix: ['src/ui/skirmish.ts', '  if (!memory || linked) return q;', "  if (!memory || (linked && !location.search.includes('__r073mutant=mix'))) return q;"],
 };
 const applied = new Set();
 const plugin = { name: 'r073-dormant-negatives', enforce: 'pre', transform(code, id) {
@@ -92,14 +92,18 @@ async function main() {
     await opened('', true);
     let s = await state(), m = await menu();
     assert(s.zombies && s.map === MAP_LARGE && m.pressed.includes('sm-mode-zombies') && m.pressed.includes('sm-map-large'), 'restore: zombies mode on the large map comes back');
+    const beforeSandbox = await stored();
     await press('sm-mode-sandbox');
-    assert((await state()).sandbox && (await stored()).mode === 'zombies', 'save: entering the sandbox stores nothing new');
+    assert((await state()).sandbox, 'fixture: the sandbox opened');
+    assert.deepEqual(await stored(), beforeSandbox, 'save: entering the sandbox changes nothing that is remembered');
     await opened('', true);
     s = await state();
     assert(!s.sandbox && s.zombies && s.map === MAP_LARGE, 'restore: the page never reopens straight into the sandbox');
     // 網址優先且不混用
     await urlWins();
-    assert.deepEqual(await stored(), { v: 1, map: 'rye', mode: 'battle', ai: 2, force: 2, supply: 2, seed: 5 }, 'save: the game opened from an address becomes the remembered one');
+    assert.deepEqual(await stored(), CHOSEN, 'link: merely opening an address with setup items leaves the remembered setup alone');
+    await press('sm-ai-1');
+    assert.deepEqual(await stored(), { v: 1, map: 'rye', mode: 'battle', ai: 1, force: 2, supply: 2, seed: 5 }, 'link: once a setting is changed, this game becomes the remembered one');
     // 恢復預設
     await opened(); await choose(); await press('sm-map-town'); await press('sm-setup');
     m = await menu();

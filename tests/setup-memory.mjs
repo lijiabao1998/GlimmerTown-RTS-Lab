@@ -6,6 +6,7 @@ import { createWorld } from '../src/sim/world.ts';
 import { applyMap, MAP_RYE } from '../src/sim/maps.ts';
 import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
+import { createSandboxWorld } from '../src/sim/sandbox.ts';
 import { SETUP_KEY, SETUP_PARAMS, DEFAULT_SEED, SEED_MAX, loadSetup, saveSetup, restoreSetup, initSkirmish } from '../src/ui/skirmish.ts';
 import { menuLayout } from '../src/ui/startMenu.ts';
 
@@ -24,7 +25,7 @@ assert.equal(SETUP_KEY.startsWith('gtrts.v1.'), true, 'format: the key starts wi
   assert.deepEqual(loadSetup(mem()), null, 'format: nothing stored reads as null');
   for (const [bad, name] of [['{ broken', 'broken text'], ['null', 'null'], ['[]', 'an array'], ['7', 'a number'], [{ ...SAVED, v: 2 }, 'version 2'], [{ map: '64' }, 'no version']]) assert.equal(loadSetup(mem(bad)), null, `format: ${name} is not used`);
   assert.deepEqual(loadSetup(mem({ v: 1, map: 'moon', mode: 'chess', ai: 9, force: 'big', supply: null, seed: -1 })), STANDARD, 'format: nonsense fields fall back to the standard value one by one');
-  for (const seed of [1.5, SEED_MAX + 1, '77', NaN, null]) assert.equal(loadSetup(mem({ ...SAVED, seed })).seed, DEFAULT_SEED, `format: seed ${String(seed)} falls back to ${DEFAULT_SEED}`);
+  for (const seed of [1.5, SEED_MAX + 1, '77', null, true, [77], { n: 77 }]) assert.equal(loadSetup(mem({ ...SAVED, seed })).seed, DEFAULT_SEED, `format: seed ${String(seed)} falls back to ${DEFAULT_SEED}`);
   assert.deepEqual([loadSetup(mem({ ...SAVED, seed: 0 })).seed, loadSetup(mem({ ...SAVED, seed: SEED_MAX })).seed], [0, SEED_MAX], 'format: seeds 0 and 4294967295 are kept');
   assert.deepEqual(['rye', 'village', '64', '96'].map(map => loadSetup(mem({ ...SAVED, map })).map), ['rye', 'village', '64', '96'], 'format: the four maps are kept');
   assert.equal(loadSetup(throwing), null, 'format: a storage that throws reads as null');
@@ -74,6 +75,36 @@ assert.equal(fill('', null), '', 'restore: no storage restores nothing');
   // 存下來的再讀回去＝同一份設定
   const again = restoreSetup(new URLSearchParams(''), store);
   assert.equal(again.toString(), 'map=village&ai=1&force=3&supply=3&seed=8', 'round trip: what was stored comes back as this page\'s address items');
+  // 審查找到的：模式要跟 main.ts 用同一個條件——喪屍的閥關著時，網址寫了 mode=zombies 也是一般對戰
+  {
+    const st = mem(), qq = restoreSetup(new URLSearchParams('noR045=1'), st), k = initSkirmish(qq, true);
+    qq.set('mode', 'zombies'); k.start(createWorld(4));
+    assert.equal(loadSetup(st).mode, 'battle', 'save: with the zombies valve off the stored mode is battle whatever the address says');
+  }
+  // 沙盒世界不存
+  {
+    const st = mem(), k = initSkirmish(restoreSetup(new URLSearchParams(''), st), true);
+    k.start(rye); const before = JSON.stringify(loadSetup(st));
+    k.start(createSandboxWorld(99));
+    assert.equal(JSON.stringify(loadSetup(st)), before, 'save: a sandbox world changes nothing that is remembered');
+  }
+  // 用帶設定的網址開的頁：沒動過設定就不蓋掉原本記住的；動了任何一項才變成記住的那一局
+  {
+    const st = mem(SAVED), k = initSkirmish(restoreSetup(new URLSearchParams('seed=5'), st), true);
+    const w5 = createWorld(5); applyMap(w5, MAP_RYE, 1);
+    k.start(w5);
+    assert.deepEqual(loadSetup(st), SAVED, 'link: merely opening an address with setup items leaves the remembered setup alone');
+    k.start(w5);
+    assert.deepEqual(loadSetup(st), SAVED, 'link: restarting the same game still leaves it alone');
+    k.set({ ai: 3 });
+    assert.deepEqual(loadSetup(st), { v: 1, map: 'rye', mode: 'battle', ai: 3, force: 2, supply: 2, seed: 5 }, 'link: once a setting is changed, this game becomes the remembered one');
+    k.set({ ai: 2 }); k.start(w5);
+    assert.equal(loadSetup(st).ai, 2, 'link: after that every change is stored as usual');
+    const st2 = mem(SAVED), k2 = initSkirmish(restoreSetup(new URLSearchParams('map=64'), st2), true), big = createWorld(5), other = createWorld(6);
+    applyMap(big, MAP_LARGE, 1); applyMap(other, MAP_LARGE, 1);
+    k2.start(big); k2.start(other);
+    assert.deepEqual([loadSetup(st2).seed, loadSetup(st2).map], [6, '64'], 'link: a different seed in the same linked page counts as a change');
+  }
   const off = mem(), plain = initSkirmish(restoreSetup(new URLSearchParams('noR073=1'), off), true);
   plain.start(createWorld(3));
   assert.equal(off.m.size, 0, 'save: with the valve off nothing is ever written');

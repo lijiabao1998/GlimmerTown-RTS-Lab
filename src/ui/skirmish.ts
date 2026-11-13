@@ -55,12 +55,14 @@ export function saveSetup(store: Store | null, setup: SavedSetup): void {
 }
 
 let memory: Store | null = null;   // 這一頁有沒有開記憶（restoreSetup 決定；initSkirmish 照它存）
+let linked = false;                // 這一頁是不是用帶設定的網址開的（是的話，沒動過設定就不蓋掉原本記住的那一份）
 // main.ts 讀網址參數時先過這一關：開始選單、遭遇戰設定、這張卡的閥都開著才記；
 // 網址沒帶任何設定項時，把存下來的那一份填進這次的參數（只改記憶體裡這一份，不動網址列）
 export function restoreSetup(q: URLSearchParams, store: Store | null = browserStore()): URLSearchParams {
   const V = valves(q);
   memory = V.r069 && V.r046 && V.r073 ? store : null;
-  if (!memory || SETUP_PARAMS.some(k => q.has(k))) return q;
+  linked = SETUP_PARAMS.some(k => q.has(k));
+  if (!memory || linked) return q;
   const s = loadSetup(memory);
   if (!s) return q;
   if (s.map !== 'rye') q.set('map', s.map);
@@ -83,10 +85,16 @@ export interface Skirmish {
 // canVillage：R026 閥開著（萊伊在）才另外有「村莊」可選
 export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish {
   const store = memory;
+  let owned = !linked, pristine: string | null = null;   // 用連結開的頁：第一次只記下「連結給的那一份」，之後跟它不一樣了才開始存
   const s = { force: level(q.get('force')), supply: level(q.get('supply')), village: canVillage && q.get('map') === 'village', ai: Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2)) };   // 難度的讀法跟 main.ts 一樣
   // R073：最近開的那一局是哪張圖、哪個模式、哪個種子（start() 從世界讀）；還沒開過局就還沒有東西可存
   let last: { map: SetupMap; mode: 'battle' | 'zombies'; seed: number } | null = null;
-  const persist = () => { if (store && last) saveSetup(store, { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply }); };
+  const persist = () => {
+    if (!store || !last) return;
+    const now: SavedSetup = { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply }, text = JSON.stringify(now);
+    if (!owned) { if (pristine === null) { pristine = text; return; } if (text === pristine) return; owned = true; }
+    saveSetup(store, now);
+  };
   return {
     get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, remembers: !!store,
     set: p => {
@@ -99,7 +107,9 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
     start: w => {
       const cmd = rulesCommand(s.force, s.supply);
       if (cmd) applyRules(w, cmd);
-      last = { map: w.map === 2 ? '64' : w.map === 3 ? '96' : w.map === 1 ? 'rye' : 'village', mode: q.get('mode') === 'zombies' ? 'zombies' : 'battle', seed: w.seed };
+      if (w.sandbox) return cmd;   // 沙盒不記（main.ts 本來就不會拿沙盒世界來，這裡再擋一次）
+      // 地圖、種子從世界讀；模式跟 main.ts 的 reset() 用同一個條件（喪屍要等這裡回去之後才開始，世界上還看不到）
+      last = { map: w.map === 2 ? '64' : w.map === 3 ? '96' : w.map === 1 ? 'rye' : 'village', mode: valves(q).r045 && q.get('mode') === 'zombies' ? 'zombies' : 'battle', seed: w.seed };
       persist();
       return cmd;
     },
