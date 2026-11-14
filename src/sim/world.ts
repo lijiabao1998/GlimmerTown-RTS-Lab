@@ -187,6 +187,11 @@ export interface Unit {
   aimX: number; aimZ: number; // 最後一次開火的方向（位置單位的向量；渲染轉砲塔用）
 }
 
+// R052 壓制值的三個門檻（暫定）與狀態：0 正常、1 受壓、2 釘住、3 潰退。規則與數字在 morale.ts；放這裡是因為畫面與介面也要讀
+export const SUP_SHAKEN = 30, SUP_PINNED = 60, SUP_BROKEN = 90;
+export const MORALE_OK = 0, MORALE_SHAKEN = 1, MORALE_PINNED = 2, MORALE_BROKEN = 3;
+export const moraleState = (u: Unit): number => { const s = u.sup ?? 0; return s >= SUP_BROKEN ? MORALE_BROKEN : s >= SUP_PINNED ? MORALE_PINNED : s >= SUP_SHAKEN ? MORALE_SHAKEN : MORALE_OK; };
+
 export const SHELL_AP = 0;      // 穿甲彈（直射）
 export const SHELL_HE = 1;      // 高爆彈（榴彈砲）
 export const SHELL_SMALL = 2;   // R021 步槍子彈（只打一個目標、幾乎不傷房子）

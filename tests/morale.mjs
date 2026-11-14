@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { createWorld, hashWorld, center, cellOf, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, SHELL_AP, SHELL_SMALL, SHELL_HE, BK_PILLBOX,
+import { createWorld, hashWorld, center, cellOf, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, SHELL_AP, SHELL_SMALL, SHELL_HE, BK_PILLBOX, TER_MUD,
   UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_HEAVY, UK_ZOMBIE } from '../src/sim/world.ts';
 import { step, runLog } from '../src/sim/step.ts';
 import { applyRules } from '../src/sim/rules.ts';
@@ -53,7 +53,7 @@ const BEFORE = [
   ['rye', 7, at0({ t: 'map', id: 1, vegetation: 1 }, ECO, ...BOTH), 2500, 'a89dc8bd'],
   ['rye + ap', 8, at0({ t: 'map', id: 1, vegetation: 1 }, { t: 'rules', ap: 1 }, ECO, ...BOTH), 2500, 'b97acada'],
   ['large ×3 force, fast supply', 9, at0({ t: 'map', id: 2, vegetation: 1 }, { t: 'rules', force: 3, income: 3 }, ECO, ...BOTH), 1500, '96a82148'],
-  ['zombies', 10, at0({ t: 'map', id: 1, vegetation: 1 }, { t: 'zombies' }, ECO), 1200, 'a13b1255'],
+  ['zombies', 10, at0({ t: 'map', id: 1, vegetation: 1 }, { t: 'zombies' }, ECO), 3000, '9a6e13ea'],   // 3000 步：三波喪屍、兩百多次開火、十一個陣亡
 ];
 const MORALE_LOG = at0({ t: 'map', id: 1, vegetation: 1 }, { t: 'rules', morale: 1 }, ECO, ...BOTH);
 
@@ -62,9 +62,11 @@ const groups = {
   off() {
     assert.equal(hashWorld(runScript()), 'eea1d59b', 'off: the golden script battle is unchanged');
     for (const [name, seed, log, ticks, hash] of BEFORE) {
-      const w = runLog(createWorld(seed), log, ticks);
+      const w = createWorld(seed); let stray = -1, fights = 0;
+      for (let t = 0; t < ticks; t++) { runLog(w, log, t + 1); fights += w.events.filter(e => e.e === 'impact' || e.e === 'kill').length; if (stray < 0 && w.units.some(u => hasSup(u) || 'rout' in u)) stray = t; }
+      assert(fights > 50, `fixture: ${name} has real fighting in it (${fights} impacts and kills)`);
+      assert.equal(stray, -1, `off: ${name} never carries any suppression state, at any step`);
       assert.equal(hashWorld(w), hash, `off: ${name} without the morale flag is bit for bit what it was before this card`);
-      assert(w.units.every(u => !hasSup(u) && !('rout' in u)), `off: ${name} has no suppression state at all`);
     }
     const w = field();
     put(w, SIDE_ENEMY, UK_OBSERVER, C, C);
@@ -93,6 +95,10 @@ const groups = {
     const loss = gap => { const w = field(), a = put(w, SIDE_ENEMY, UK_INFANTRY, C, C), b = put(w, SIDE_ENEMY, UK_INFANTRY, C + cells(gap), C), s = put(w, SIDE_PLAYER, UK_INFANTRY, C, C + cells(3)); b.hp = 1; land(w, SHELL_SMALL, s, b.x, b.z, b); assert.equal(b.alive, false, 'fixture: the neighbour dies'); return a; };
     assert.equal(loss(3).sup, 15, 'gain: a friend killed 3 cells away adds 15');
     assert.equal(hasSup(loss(4)), false, 'gain: a friend killed 4 cells away adds nothing');
+    { const w = field(), a = put(w, SIDE_ENEMY, UK_INFANTRY, C, C), foe = put(w, SIDE_PLAYER, UK_INFANTRY, C + cells(2), C), s = put(w, SIDE_ENEMY, UK_INFANTRY, C, C + cells(3)); foe.hp = 1; land(w, SHELL_SMALL, s, foe.x, foe.z, foe);
+      assert.deepEqual([foe.alive, hasSup(a)], [false, false], 'gain: an enemy killed nearby adds nothing'); }
+    { const w = field(), t2 = put(w, SIDE_ENEMY, UK_INFANTRY, C, C), s = put(w, SIDE_PLAYER, UK_INFANTRY, C + cells(4), C); land(w, SHELL_SMALL, s, C + cells(2), C, t2);
+      assert.deepEqual([hasSup(t2), t2.hp], [false, UNIT_KINDS[UK_INFANTRY].hp], 'gain: a shot that lands two cells from its target neither hurts nor suppresses it'); }
     const w = field(), u = put(w, SIDE_ENEMY, UK_INFANTRY, C, C);
     suppress(w, u, 80); suppress(w, u, 80);
     assert.equal(u.sup, 100, 'gain: suppression never exceeds 100');
@@ -125,6 +131,15 @@ const groups = {
       const w = field(), b = house(w, 16, 16), inside = put(w, SIDE_ENEMY, UK_INFANTRY, C, C), beside = put(w, SIDE_ENEMY, UK_INFANTRY, C + cells(1), C), s = put(w, SIDE_PLAYER, shooter, C, C + cells(4));
       land(w, kind, s, C, C, null, b.id);
       assert.deepEqual([inside.sup, hasSup(beside)], [expect, false], `house: direct fire on a house suppresses the squad inside by ${expect} and nobody outside`);
+    }
+    {
+      const w = field(), b = house(w, 16, 16), other = house(w, 20, 16), here = put(w, SIDE_ENEMY, UK_INFANTRY, C, C), there = put(w, SIDE_ENEMY, UK_INFANTRY, center(20), C), s = put(w, SIDE_PLAYER, UK_TANK, C, C + cells(4));
+      land(w, SHELL_AP, s, C, C, null, b.id);
+      assert.deepEqual([here.sup, hasSup(there), other.hp], [21, false, 200], 'house: the squad in the next house is not suppressed');
+      const r = field(), rubble = house(r, 16, 16), on = put(r, SIDE_ENEMY, UK_INFANTRY, C, C), t = put(r, SIDE_PLAYER, UK_TANK, C, C + cells(4));
+      rubble.hp = 0;
+      land(r, SHELL_AP, t, C, C, null, rubble.id);
+      assert.equal(hasSup(on), false, 'house: a shell that lands on rubble suppresses nobody (there is no inside any more)');
     }
   },
   // 驗收 5：指揮部
@@ -163,6 +178,18 @@ const groups = {
     assert(Math.abs(shaken - 10) <= 1, `rate: a suppressed squad fires at half the rate (${shaken} volleys against ${free})`);
     assert(Math.abs(pinned - 5) <= 1, `rate: a pinned squad fires at a quarter of the rate (${pinned} volleys against ${free})`);
     assert.equal(broken, 0, 'rate: a broken squad does not fire at all');
+    // 砲本來就要停下來才能打：搬到一半被釘住的砲組趴在路上、砲沒架好，不開火；原地被釘住的照四分之一打
+    const mortar = moving => {
+      const w = field(), g = put(w, SIDE_PLAYER, UK_MORTAR, C, C, false); put(w, SIDE_ENEMY, UK_HEAVY, C + cells(5), C);
+      g.sup = 75;
+      if (moving) step(w, [{ t: 'move', side: SIDE_PLAYER, ids: [g.id], x: 16, z: 26 }]);
+      let n = 0;
+      for (let i = 0; i < 480; i++) { g.sup = 75; step(w, []); n += w.events.filter(e => e.e === 'fire' && e.unit === g.id).length; }
+      return { n, at: [g.x, g.z] };
+    };
+    const still = mortar(false), caught = mortar(true);
+    assert(still.n >= 1 && still.n <= 3, `rate: a mortar crew pinned in place still fires at a quarter of the rate (${still.n} rounds in 24 seconds against 8)`);
+    assert.deepEqual([caught.n, caught.at], [0, [C, C]], 'rate: a mortar crew pinned while on the move stays where it is with the mortar not set up, and does not fire');
   },
   // 驗收 7、8 的移動部分
   move() {
@@ -197,6 +224,50 @@ const groups = {
       step(w, [{ t: 'move', side, ids: [a.id], x: 16, z: 16 }]);
       assert.equal(a.order, ORD_MOVE, 'rout: afterwards a move order is obeyed');
     }
+    // 觀測員也會退；退的時候 stop、attack、fireAt 也不收
+    {
+      const w = field(), o = put(w, SIDE_PLAYER, UK_OBSERVER, C, C), a = put(w, SIDE_PLAYER, UK_INFANTRY, C + cells(6), C), foe = put(w, SIDE_ENEMY, UK_HEAVY, C, C - cells(3));
+      suppress(w, o, 95); suppress(w, a, 95);
+      assert.deepEqual([o.rout, a.rout], [1, 1], 'rout: an observer routs like a rifle squad');
+      for (const cmd of [{ t: 'stop', side: SIDE_PLAYER, ids: [a.id] }, { t: 'attack', side: SIDE_PLAYER, ids: [a.id], target: foe.id }, { t: 'fireAt', side: SIDE_PLAYER, ids: [a.id], x: 16, z: 13 }]) {
+        step(w, [cmd]);
+        assert.deepEqual([a.order, a.tx, a.tz], [ORD_MOVE, 16 + 6 + 3, 19], `rout: a routing squad ignores a ${cmd.t} order`);
+      }
+    }
+    // 半路上回神：停下來、路徑清掉，不會自己走完
+    {
+      const w = field(); w.ter.fill(TER_MUD);
+      const a = put(w, SIDE_PLAYER, UK_INFANTRY, C, C);
+      suppress(w, a, 90);
+      let n = 0;
+      while (a.rout && n < 400) { step(w, []); n++; }
+      assert(!a.rout && a.order === ORD_IDLE && a.path.length === 0 && (cellOf(a.x) !== 19 || cellOf(a.z) !== 19), `rout: a squad that recovers half way stops there (${n} steps, at ${cellOf(a.x)},${cellOf(a.z)})`);
+    }
+    // 退完一段還是潰退（火力沒停）：再退一段
+    {
+      const w = field(), a = put(w, SIDE_PLAYER, UK_INFANTRY, C, C);
+      suppress(w, a, 95);
+      for (let i = 0; i < 320; i++) { a.sup = 95; step(w, []); }
+      assert(cellOf(a.x) >= 21 && cellOf(a.z) >= 21 && a.rout === 1, `rout: a squad still broken when it arrives falls back another leg (now at ${cellOf(a.x)},${cellOf(a.z)})`);
+    }
+    // 在房子裡潰退的不退；房子倒了，人在空地上，就退
+    {
+      const w = field(), b = house(w, 16, 16), a = put(w, SIDE_PLAYER, UK_INFANTRY, C, C);
+      suppress(w, a, 95); suppress(w, a, 95);
+      for (let i = 0; i < 30; i++) { a.sup = 100; step(w, []); }
+      assert.deepEqual([moraleState(a), a.rout, a.x, a.z], [MORALE_BROKEN, undefined, C, C], 'rout: a broken squad inside a house stays inside');
+      b.hp = 0;
+      for (let i = 0; i < 25; i++) { a.sup = 100; step(w, []); }
+      assert.equal(a.rout, 1, 'rout: once the house is rubble and it is in the open, it falls back');
+    }
+    // 彈坑、林地也算掩體
+    for (const [name, prepare] of [['a shell crater', w => { w.crater[cellIdx(w, 16, 16)] = 1; }], ['a wood', w => { w.vegetation = { version: VEGETATION_VERSION, cells: new Uint8Array(w.n * w.n) }; w.vegetation.cells[cellIdx(w, 16, 16)] = VEG_WOOD; }]]) {
+      const w = field(); prepare(w);
+      const a = put(w, SIDE_PLAYER, UK_INFANTRY, C, C);
+      suppress(w, a, 95); suppress(w, a, 95);
+      for (let i = 0; i < 30; i++) { a.sup = 100; step(w, []); }
+      assert.deepEqual([moraleState(a), a.rout, a.x, a.z], [MORALE_BROKEN, undefined, C, C], `rout: a broken squad in ${name} stays put`);
+    }
     // 在掩體裡的不退；砲組不退
     let w = field(); trench(w, 0, 16, 16);
     let a = put(w, SIDE_ENEMY, UK_INFANTRY, C, C);
@@ -227,6 +298,15 @@ const groups = {
     assert.equal(hashWorld(run(1500)), direct, 'determinism: the same log gives the same hash twice');
     const back = decodeWorld(JSON.parse(JSON.stringify(encodeWorld(mid))));
     assert.deepEqual(back, { ...mid, events: [] }, 'determinism: a world with suppression survives the R074 save codec field for field');
+    {
+      const w = field(), r = put(w, SIDE_PLAYER, UK_INFANTRY, C, C); put(w, SIDE_ENEMY, UK_OBSERVER, center(4), center(4));
+      suppress(w, r, 95);
+      for (let i = 0; i < 30; i++) step(w, []);
+      assert(r.rout === 1 && r.pathIdx < r.path.length, 'fixture: a squad half way through its rout');
+      const copy = structuredClone(w), saved = decodeWorld(JSON.parse(JSON.stringify(encodeWorld(w))));
+      for (let i = 0; i < 200; i++) { step(w, []); step(copy, []); step(saved, []); }
+      assert.deepEqual([hashWorld(copy), hashWorld(saved)], [hashWorld(w), hashWorld(w)], 'determinism: a deep copy and a saved copy of a routing squad both continue bit for bit');
+    }
     const a = field(), b = field();
     for (const w of [a, b]) put(w, SIDE_ENEMY, UK_INFANTRY, C, C);
     const base = hashWorld(a);
@@ -307,7 +387,8 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK moral
   console.log('OK morale/marks');
 
   const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
-  const { rulesCommand, setupSummary, SETUP_PARAMS, loadSetup, saveSetup } = await import('../src/ui/skirmish.ts');
+  const { rulesCommand, setupSummary, SETUP_PARAMS, loadSetup, saveSetup, restoreSetup, initSkirmish } = await import('../src/ui/skirmish.ts');
+  const { reloadStatus } = await import('../src/ui/reloadStatus.ts');
   const { menuLayout } = await import('../src/ui/startMenu.ts');
   assert.match(read('../src/valves.ts'), /get r052\(\) \{ return on\('052'\); \}/, 'valve: r052 is on the table');
   assert.deepEqual([rulesCommand(2, 2, false, true), rulesCommand(3, 2, true, true), rulesCommand(2, 2, false, false)], [{ t: 'rules', morale: 1 }, { t: 'rules', force: 3, ap: 1, morale: 1 }, undefined], 'setup: the switch becomes the morale field of the rules command');
@@ -320,13 +401,42 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK moral
   const row = s => menuLayout({ ...view, setup: { force: 2, supply: 2, seed: 5, ...s } }).rows.find(r => r.id === 'sm-rules')?.items.map(i => [i.id, i.pressed]) ?? null;
   assert.deepEqual([row({ ap: false, morale: true }), row({ morale: false }), row({ ap: true }), row({})], [[['sm-ap', false], ['sm-morale', true]], [['sm-morale', false]], [['sm-ap', true]], null], 'layout: the setup page shows the switch only when the page has it');
   assert.match(read('../README.md'), /\?noR052=1/, 'readme: the valve is documented');
+  // 跟 R051 審查找到的那兩件事同一個做法：閥關著時，網址上的 morale 不算帶了設定，本機記著的 morale 也不被這一頁洗掉；閥開著時關掉就真的忘掉
+  {
+    const mem = v => { const mm = new Map([['gtrts.v1.setup', JSON.stringify(v)]]); return { getItem: k => (mm.has(k) ? mm.get(k) : null), setItem: (k, x) => { mm.set(k, String(x)); } }; };
+    const saved = { v: 1, map: '64', mode: 'battle', ai: 3, force: 2, supply: 2, seed: 5, morale: 1 }, big = createWorld(77);
+    const st = mem(saved), q = restoreSetup(new URLSearchParams('noR052=1&morale=1'), st);
+    assert.equal(q.get('map'), '64', 'valve: with noR052 a morale in the address does not make the page a linked one (the remembered map is restored)');
+    const k = initSkirmish(q, true);
+    k.start(big); k.set({ ai: 1 });
+    assert.deepEqual([k.morale, k.canMorale, loadSetup(st).ai, loadSetup(st).morale], [false, false, 1, 1], 'valve: with noR052 the rule stays off on this page and the remembered morale survives the visit');
+    const st2 = mem(saved), k2 = initSkirmish(restoreSetup(new URLSearchParams(''), st2), true);
+    assert.equal(k2.morale, true, 'memory: the remembered rule comes back on');
+    k2.start(big); k2.set({ morale: false });
+    assert.equal(loadSetup(st2).morale, undefined, 'memory: with the valve on, turning the rule off really forgets it');
+    const on = createWorld(78); applyRules(on, { morale: 1 });
+    const k3 = initSkirmish(restoreSetup(new URLSearchParams(''), mem({ ...saved, morale: undefined })), true);
+    k3.adopt(on);
+    assert.equal(k3.morale, true, 'save: resuming a saved battle with the rule on lines the setup page up with it');
+  }
+  // 選中的砲：被壓制的時候「剩餘」要照變慢的裝填算
+  {
+    const w2 = field(), g = put(w2, SIDE_PLAYER, UK_HOWITZER, C, C), sel = new Set([g.id]);
+    g.cooldown = 140;
+    const plain = reloadStatus(w2, sel);
+    g.sup = 45; const slow = reloadStatus(w2, sel);
+    g.sup = 75; const slower = reloadStatus(w2, sel);
+    assert(plain.includes('剩餘 7.0') && !plain.includes('被壓制') && slow.includes('剩餘 14.0') && slow.includes('1 個被壓制') && slower.includes('剩餘 28.0'), `status: the reload line counts the slower reload of suppressed guns (${plain} / ${slow} / ${slower})`);
+    const off = field(false), g2 = put(off, SIDE_PLAYER, UK_HOWITZER, C, C); g2.cooldown = 140; g2.sup = 75;
+    assert(reloadStatus(off, new Set([g2.id])).includes('剩餘 7.0'), 'status: without the rule the reload line is unchanged');
+  }
   console.log('OK morale/wiring');
 }
 
 // ---- 故意弄壞（驗收 14）----
 const root = resolve(fileURLToPath(new URL('..', import.meta.url))), temp = mkdtempSync(join(tmpdir(), 'r052-negative-'));
 const mutants = [
-  ['rule_always_on', 'off', 'step.ts', '  if (w.rules?.morale) moraleStep(w);', '  moraleStep(w);', 'off: large ×3 force, fast supply without the morale flag is bit for bit what it was before this card'],
+  ['rule_always_on', 'off', 'step.ts', '  if (w.rules?.morale) moraleStep(w);', '  moraleStep(w);', 'off: rye never carries any suppression state, at any step'],
   ['blast_always_on', 'off', 'step.ts', '  if (w.rules?.morale) suppressBlast(w, s.ex, s.ez, R, k.dmgUnit);', '  suppressBlast(w, s.ex, s.ez, R, k.dmgUnit);', 'off: the golden script battle is unchanged'],
   ['no_cover', 'cover', 'morale.ts', '  let a = Math.floor((amount * supPct(coverPct(w, u))) / 100);', '  let a = amount;', "cover: in a shell crater a mortar shell at the feet adds 42, as the card's table says"],
   ['cover_as_damage', 'cover', 'morale.ts', 'export const supPct = (cover: number): number => 100 - Math.floor(((100 - cover) * 3) / 5);', 'export const supPct = (cover: number): number => cover;', "cover: the damage-to-suppression table on the card"],
@@ -337,6 +447,8 @@ const mutants = [
   ['rout_obeys', 'rout', 'step.ts', ' && !seen.has(u.id) && !u.rout) {', ' && !seen.has(u.id)) {', 'rout: a routing squad ignores a move order'],
   ['armor_suppressed', 'immune', 'morale.ts', 'export const suppressible = (u: Unit): boolean => !UNIT_KINDS[u.kind].armored && u.kind !== UK_ZOMBIE;', 'export const suppressible = (u: Unit): boolean => u.kind !== UK_ZOMBIE;', 'immune: an armoured vehicle is not suppressed by rifles, shells or high explosive'],
   ['hq_ignored', 'hq', 'morale.ts', '  if (nearHq(w, u)) a = Math.floor((a * 3) / 4);\n', '', 'hq: within 6 cells of its own standing HQ a unit takes three quarters; farther away, or with the HQ destroyed, the full amount'],
+  ['rubble_house', 'house', 'morale.ts', "  if (!((w.blds[bld - 1]?.hp ?? 0) > 0)) return;   // 已經是瓦礫（砲彈還在飛的時候房子倒了）：沒有人在「裡面」\n", '', 'house: a shell that lands on rubble suppresses nobody (there is no inside any more)'],
+  ['rout_once', 'rout', 'morale.ts', '  for (const u of w.units) if (u.alive && (w.tick + u.id) % ROUT_CHECK === 0 && moraleState(u) === MORALE_BROKEN && (!u.rout || u.pathIdx >= u.path.length)) startRout(w, u);\n', '', 'rout: a squad still broken when it arrives falls back another leg (now at 19,19)'],
   ['hash_blind', 'determinism', 'world.ts', '    if (u.sup) f.int(0x5355).int(u.sup);', '    if (u.sup) f.int(0x5355);', 'determinism: suppression is folded into the hash'],
 ];
 try {
