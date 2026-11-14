@@ -189,7 +189,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     commitSeed();   // R046：種子框裡打到一半就點別的鍵：先套用再做那顆鍵的事（有的手機點按鈕不會讓輸入框失焦，等不到 change）
     if (id === 'sm-start' || id === 'sm-resume') return close();
     if (id === 'sm-restart') { close(); return press('b-restart'); }
-    if (id === 'sm-continue') { close(); return void host.resume?.(); }   // R074
+    if (id === 'sm-continue') { const again = resume; close(); if (host.resume?.() === false) open(again ? undefined : 'start', again); return; }   // R074：存檔在選單開著的時候不見了（別的分頁打完了）→ 選單再開一次，這次沒有這顆鍵
     if (id === 'sm-main') { host.saveNow?.(); close(); press('b-restart'); return open('start'); }   // R074：回主選單之前先存，等一下還接得回來
     if (id === 'sm-help') { close(); return press('b-help'); }
     if (id === 'sm-replays') { close(); return host.replays?.(); }

@@ -129,29 +129,27 @@ export function initSaves(host: SaveHost, store: SaveStore | null = browserSaveS
   let lastTick = -1;                  // 上次存的時候世界在第幾步（沒往前走就不重存）
   let mine: string | null = null;     // 這一頁最後寫進去（或接回來）的那份文字。清存檔只清它：別的分頁存的、不是這一局的，不動
   let owner: World | null = null;     // mine 是哪一個世界的存檔
+  let ownerStats: BattleStats | null = null;   // 那個世界的戰報統計（分出勝負時它會記下步數；換局之後遊戲換一份新的，這一份還留著舊局的）
   let seenRaw: string | null | undefined, seenTitle: string | null = null;
-  const drop = () => { if (mine !== null && rawSave(store) === mine) clearSave(store); mine = null; owner = null; };
-  // 分出勝負的世界：等它再走一步（R047 的重播在那一步開頭存好）才清存檔。太早清，剛好這時離開頁面，這一局會兩邊都沒有
-  const settle = (w: World) => { const end = host.stats().endTick; if (end >= 0 && w.tick > end) drop(); };
-  const playing = (w: World) => host.battle() && !host.replaying() && !w.sandbox;
+  const forget = () => { mine = null; owner = null; ownerStats = null; };
+  // 自己存檔的那一局：分出勝負、而且又走了一步（R047 的重播在那一步開頭存好）→ 清掉存檔。
+  // 還沒走那一步就清，剛好這時離開頁面或換局，這一局會兩邊都沒有。清只清自己寫的那一份。
+  // 被換掉（重新開始、再來一局、去看重播）而還不到可以清的時候：存檔留著（按錯了還接得回去），但不再當成這一頁的
+  function sync(w: World): void {
+    if (!owner || !ownerStats) return;
+    if (ownerStats.endTick >= 0 && owner.tick > ownerStats.endTick) { if (mine !== null && rawSave(store) === mine) clearSave(store); forget(); }
+    else if (owner !== w) forget();
+  }
   function saveNow(): boolean {
     const w = host.world();
-    if (!playing(w)) return false;
-    if (w.winner >= 0) { settle(w); return false; }
+    sync(w);
+    if (!host.battle() || host.replaying() || w.winner >= 0) return false;
     const text = makeSave(w, host.log(), host.cam(), new Date().toISOString(), host.stats());
     if (!text) return false;
     lastTick = w.tick;
     if (!writeSave(store, text)) return false;
-    mine = text; owner = w;
+    mine = text; owner = w; ownerStats = host.stats();
     return true;
-  }
-  function watch(): void {
-    const w = host.world();
-    if (owner && owner !== w) {   // 這一頁存檔的那一局被換掉了（重新開始、再來一局、去看重播）
-      if (owner.winner >= 0) drop();   // 它已經打完：清掉（不然下次開頁會拿一局打完的出來）
-      else { mine = null; owner = null; }   // 還沒打完：存檔留著（按錯了還接得回去），但不再當成這一頁的
-    }
-    if (playing(w) && w.winner >= 0) settle(w);
   }
   function offer(): string | null {
     const raw = rawSave(store);
@@ -162,11 +160,11 @@ export function initSaves(host: SaveHost, store: SaveStore | null = browserSaveS
     const raw = rawSave(store), l = raw ? checkSave(raw) : null;
     if (!raw || !l?.ok) return false;
     host.adopt(l.save.world, l.save.log, l.save.cam, l.save.stats);
-    lastTick = l.save.world.tick; mine = raw; owner = host.world();
+    lastTick = l.save.world.tick; mine = raw; owner = host.world(); ownerStats = host.stats();
     return true;
   }
-  env.every(watch, SAVE_WATCH_MS);
-  env.every(() => { const w = host.world(); if (playing(w) && w.winner < 0 && w.tick !== lastTick) saveNow(); }, SAVE_EVERY_MS);
-  env.onLeave(() => { watch(); saveNow(); });
+  env.every(() => sync(host.world()), SAVE_WATCH_MS);
+  env.every(() => { const w = host.world(); if (host.battle() && w.winner < 0 && w.tick !== lastTick) saveNow(); }, SAVE_EVERY_MS);
+  env.onLeave(() => { saveNow(); });
   return { offer, resume, saveNow };
 }

@@ -184,7 +184,7 @@ async function main() {
     const list = JSON.parse((await E(`localStorage.getItem(${JSON.stringify(REPLAY_KEY)})`)) ?? '[]'), rec = list[0];
     assert((await E('__rts.winner()')) >= 0 && list.length === 1 && decodeReplay(JSON.stringify(rec)).ok, `finish: the battle finished after resuming is saved as one replay (${list.length})`);
     assert.equal(node(rec.seed, rec.log, rec.ticks), rec.hash, 'finish: that replay reproduces from step 0 in Node');
-    await sleep(900);   // 每 0.5 秒看一次
+    for (let i = 0; i < 40 && (await raw()) !== null; i++) await sleep(250);   // 遊戲每 0.5 秒看一次；機器再忙也等得到（最多等 10 秒）
     assert.equal(await raw(), null, 'finish: once the battle is decided and one more step has run, the save is cleared without leaving the page');
     await reload();
     assert.deepEqual([await raw(), (await keys()).map(x => x.id)], [null, ['sm-start']], 'finish: after a reload there is no save and the menu no longer offers it');
@@ -197,7 +197,7 @@ async function main() {
     await E('__rts.pause(false)'); await E('__rts.stepN(20)'); await E('__rts.pause(true)');
     s = await state();
     assert(s.sandbox && s.tick > 0, `fixture: the sandbox is open and its clock has moved (tick ${s.tick})`);
-    await leave(); await sleep(700);
+    await leave();
     assert.equal(await raw(), good, 'sandbox: a running sandbox neither saves nor touches the save');
     // 版面（四個尺寸）＋看重播：不存也不清
     await put(SAVE_KEY, good); await put(REPLAY_KEY, JSON.stringify([rec]));
@@ -209,6 +209,10 @@ async function main() {
       assert.deepEqual(off, [], `layout: with 繼續上一局 every key of the start menu is still a whole reachable 44px target without scrolling at ${w}×${h} (${JSON.stringify(off)})`);
     }
     await size(412, 915, true); await shot(page, path.join(SHOTS, 'r074-phone-menu.png'));
+    await E(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);   // 選單開著的時候存檔不見了（另一個分頁把那一局打完了）
+    await press('sm-continue');
+    assert.deepEqual([await menuOpen(), (await keys()).map(x => x.id), await E('__rts.phase()')], [true, ['sm-start'], 'build'], 'stale: pressing 繼續上一局 after the save has gone reopens the menu without the key');
+    await put(SAVE_KEY, good);
     await press('sm-replays'); await press('rpl-watch-0');
     await E('__rts.pause(true)'); await E('__rts.stepN(40)');
     await leave();

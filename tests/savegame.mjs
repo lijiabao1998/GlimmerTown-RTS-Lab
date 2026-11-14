@@ -94,10 +94,12 @@ const groups = {
     broken(x => { delete x.units[0].pathIdx; }, 'a unit missing a field the simulation needs');
     broken(x => { x.units[0].id = 7; }, 'a unit whose id is not its place in the list');
     broken(x => { x.units[0].kind = 999; }, 'a unit of a kind that does not exist');
+    broken(x => { x.units[0].kind = -1; }, 'a unit of a negative kind');
     broken(x => { x.units[0].alive = 1; }, 'a unit whose alive flag is not true or false');
     broken(x => { x.units[0].path = [3, 'x']; }, 'a unit path that is not all numbers');
     broken(x => { x.units[1] = null; }, 'a hole in the unit list');
     broken(x => { delete x.blds[0].hp; }, 'a building missing its durability');
+    broken(x => { x.blds[0].id = 9; }, 'a building whose id is not its place in the list');
     broken(x => { x.shells = [{ id: 1 }]; }, 'a shell missing its fields');
   },
   // 驗收 5：存檔紀錄
@@ -215,9 +217,17 @@ const groups = {
     assert.equal(r.raw(), 'another tab wrote this', 'tabs: a finished battle never clears a save this page did not write');
     r = rig(); r.s.setItem(SAVE_KEY, 'another tab wrote this'); r.decide(); r.oneMore(); r.watch(); r.leave(); r.save5();
     assert.equal(r.raw(), 'another tab wrote this', 'tabs: a page that never saved leaves the slot alone when its battle ends');
-    // 打完之後馬上換局（再來一局、重新開始）：下一次看的時候清掉
-    r = rig(); r.save5(); r.decide(); r.swap(createWorld(5), false); r.watch();
-    assert.equal(r.raw(), null, 'restart: a decided battle that was replaced before the next look is cleared');
+    // 打完（又走了一步）之後馬上換局（再來一局、重新開始）：下一次看、或下一次離開頁面的時候清掉
+    r = rig(); r.save5(); r.decide(); r.oneMore(); r.swap(createWorld(5), false); r.watch();
+    assert.equal(r.raw(), null, 'restart: a finished battle that was replaced before the next look is cleared at that look');
+    r = rig(); r.save5(); r.decide(); r.oneMore(); r.swap(createWorld(5), false); r.leave();
+    assert.equal(r.raw(), null, 'restart: or when the page is left before any look');
+    // 分出勝負的那一步之後、下一步之前就換局：重播還沒存，存檔留著（下次接回去再打完一次）
+    r = rig(); r.save5(); kept = r.raw(); r.decide(); r.swap(createWorld(5), false); r.watch(); r.leave();
+    assert.equal(r.raw(), kept, 'restart: a battle replaced in the very step it was decided keeps its save (its replay was never stored)');
+    // 沒打完就換局，接著的那一局打完、有人要它存：不會清到前一局的存檔
+    r = rig(); r.save5(); kept = r.raw(); r.swap(world(seed, log, 50), true); r.decide(); r.oneMore(); r.saves.saveNow();
+    assert.equal(r.raw(), kept, 'restart: asking to save in a later, finished battle never clears the unfinished one before it');
     // 沒打完就換局：存檔留著；之後這一頁別的局打完也不會清到它
     r = rig(); r.save5(); kept = r.raw(); r.swap(createWorld(5), false); r.watch(); r.leave();
     assert.equal(r.raw(), kept, 'restart: an unfinished battle that was replaced keeps its save');
@@ -302,10 +312,12 @@ const mutants = [
   ['hash_unchecked', 'record', 'src/ui/saveGame.ts', "    if (hashWorld(world) !== r.hash) return no('存檔的內容跟它記的雜湊對不上');\n", '', 'record: a world that does not match its hash is refused with a reason'],
   ['sum_unchecked', 'record', 'src/ui/saveGame.ts', "    if (textSum(body) !== text.slice(0, 8)) return no('存檔壞了（檢查碼對不上）');\n", '', 'record: a save with one damaged field name is refused by the checksum'],
   ['shape_unchecked', 'decode', 'src/sim/worldCodec.ts', '!r.units.every(unitOk) || ', '', 'decode: rejects a unit missing a field the simulation needs'],
+  ['kind_unchecked', 'decode', 'src/sim/worldCodec.ts', ' && u.kind >= 0 && u.kind < UNIT_KINDS.length', '', 'decode: rejects a unit of a kind that does not exist'],
+  ['bld_id_unchecked', 'decode', 'src/sim/worldCodec.ts', 'ints(b, BLD_INTS) && b.id === i + 1', 'ints(b, BLD_INTS)', 'decode: rejects a building whose id is not its place in the list'],
   ['sandbox_saved', 'record', 'src/ui/saveGame.ts', 'export const savable = (w: World): boolean => !w.sandbox && w.winner < 0 && w.tick > 0;', 'export const savable = (w: World): boolean => w.winner < 0 && w.tick > 0;', 'record: a running sandbox is never saved'],
-  ['early_clear', 'lifecycle', 'src/ui/saveGame.ts', 'if (end >= 0 && w.tick > end) drop();', 'if (end >= 0) drop();', 'end: the save stays until the decided battle has run one more step (its replay is stored in that step)'],
+  ['early_clear', 'lifecycle', 'src/ui/saveGame.ts', 'if (ownerStats.endTick >= 0 && owner.tick > ownerStats.endTick) {', 'if (ownerStats.endTick >= 0) {', 'end: the save stays until the decided battle has run one more step (its replay is stored in that step)'],
   ['clears_others', 'lifecycle', 'src/ui/saveGame.ts', 'if (mine !== null && rawSave(store) === mine) clearSave(store);', 'if (mine !== null) clearSave(store);', 'tabs: a finished battle never clears a save this page did not write'],
-  ['replay_clears', 'lifecycle', 'src/ui/saveGame.ts', 'const playing = (w: World) => host.battle() && !host.replaying() && !w.sandbox;', 'const playing = (w: World) => host.battle() && !w.sandbox;', 'replay: watching a replay neither overwrites nor clears the save'],
+  ['replay_saves', 'lifecycle', 'src/ui/saveGame.ts', 'if (!host.battle() || host.replaying() || w.winner >= 0) return false;', 'if (!host.battle() || w.winner >= 0) return false;', 'replay: watching a replay neither overwrites nor clears the save'],
 ];
 try {
   for (const [name, group, file, from, to, wanted] of mutants) {
