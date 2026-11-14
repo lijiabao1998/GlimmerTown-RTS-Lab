@@ -15,6 +15,7 @@ export interface MenuView {
   setup?: { force: number; supply: number; seed: number; reset?: boolean; ap?: boolean };   // ap（R051）：有這一欄才有「擬真規則」那一列   // R046：有才顯示「遭遇戰設定」；reset（R073）：設定頁有「恢復預設」
   page?: 'setup';                                              // R046：現在看的是設定頁
   replays?: boolean;                                           // R047：有重播面板可開
+  saved?: string;                                              // R074：有可以接的存檔（這行字是鍵下面的小字）
 }
 export interface MenuItem { id: string; label: string; sub?: string; pressed?: boolean; input?: boolean }   // input：可以打字的一格（R046 種子）
 export interface MenuLayout { title: string; sub: string; rows: { id: string; title: string; items: MenuItem[] }[]; main: MenuItem[]; extra: MenuItem[] }
@@ -51,7 +52,8 @@ export function menuLayout(v: MenuView): MenuLayout {
   if (v.modes.length > 1) rows.push({ id: 'sm-modes', title: '模式', items: v.modes.map(m => ({ id: `sm-mode-${m}`, label: MODE_TEXT[m], pressed: v.mode === m })) });
   if (v.aiOn && v.mode === 'battle') rows.push({ id: 'sm-ais', title: '電腦難度', items: [1, 2, 3].map(n => ({ id: `sm-ai-${n}`, label: AI_TEXT[n], pressed: v.ai === n })) });
   if (v.setup && v.mode !== 'sandbox') rows.push({ id: 'sm-setups', title: '', items: [{ id: 'sm-setup', label: '遭遇戰設定', sub: setupSummary(v.setup.force, v.setup.supply, v.setup.seed, v.setup.ap) }] });
-  const main = v.resume ? [{ id: 'sm-resume', label: '繼續' }, { id: 'sm-restart', label: '重新開始' }] : [{ id: 'sm-start', label: '開始' }];
+  const main: MenuItem[] = v.resume ? [{ id: 'sm-resume', label: '繼續' }, { id: 'sm-restart', label: '重新開始' }]
+    : [...(v.saved ? [{ id: 'sm-continue', label: '繼續上一局', sub: v.saved }] : []), { id: 'sm-start', label: '開始' }];   // R074：有存檔時「繼續上一局」是主鍵
   return { title: '微光小鎮·二戰 RTS', sub: v.resume ? '換地圖或模式會回到布陣第 0 步' : '選地圖與模式，按「開始」布陣', rows, main, extra };
 }
 
@@ -79,6 +81,9 @@ export interface StartMenuHost {
   seed?: (value?: number) => number;                                       // R046：讀／改種子
   reset?: () => void;                                                      // R046：照現在的設定重開一局（回布陣第 0 步）
   replays?: () => void;                                                    // R047：打開重播面板
+  saved?: () => string | null;                                             // R074：有可以接的存檔就回傳那行小字
+  resume?: () => unknown;                                                  // R074：接回存檔的那一局
+  saveNow?: () => unknown;                                                 // R074：現在存一次（回主選單之前）
 }
 export interface StartMenu { open: (kind?: MenuKind, resume?: boolean) => void; close: () => void; visible: () => boolean }
 
@@ -108,6 +113,7 @@ body.r069 #sb-enter, body.r069 #map-pick, body.r069 #zombies-pick, body.r069 #to
 #start-menu input { box-sizing: border-box; flex: 2 1 0; min-width: 0; min-height: 44px; margin: 0; padding: 6px 10px; border: 1px solid #6c745f; border-radius: 5px;
   background: #1b2118; color: #f3eedf; font: inherit; font-size: 16px; font-variant-numeric: tabular-nums; -webkit-user-select: text; user-select: text; }
 #start-menu #sm-setup small { font-size: 12px; }
+#start-menu .sm-main button small { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: #f6e3d6; }
 @media (orientation: landscape) and (max-height: 520px) {
   #start-menu .sm-panel { width: min(760px, 100%); display: grid; grid-template-columns: 1.3fr 1fr; column-gap: 16px; align-items: start; padding: 12px 14px; }
   #start-menu .sm-head, #start-menu .sm-rows { grid-column: 1; }
@@ -145,7 +151,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
     return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
-      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}) };
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && !resume && host.saved?.() ? { saved: host.saved()! } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
@@ -182,7 +188,8 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     commitSeed();   // R046：種子框裡打到一半就點別的鍵：先套用再做那顆鍵的事（有的手機點按鈕不會讓輸入框失焦，等不到 change）
     if (id === 'sm-start' || id === 'sm-resume') return close();
     if (id === 'sm-restart') { close(); return press('b-restart'); }
-    if (id === 'sm-main') { close(); press('b-restart'); return open('start'); }
+    if (id === 'sm-continue') { close(); return void host.resume?.(); }   // R074
+    if (id === 'sm-main') { host.saveNow?.(); close(); press('b-restart'); return open('start'); }   // R074：回主選單之前先存，等一下還接得回來
     if (id === 'sm-help') { close(); return press('b-help'); }
     if (id === 'sm-replays') { close(); return host.replays?.(); }
     if (id === 'sm-tutorial') { close(); return press('tutorial-open'); }
