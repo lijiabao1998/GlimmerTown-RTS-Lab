@@ -52,8 +52,9 @@ export function menuLayout(v: MenuView): MenuLayout {
   if (v.modes.length > 1) rows.push({ id: 'sm-modes', title: '模式', items: v.modes.map(m => ({ id: `sm-mode-${m}`, label: MODE_TEXT[m], pressed: v.mode === m })) });
   if (v.aiOn && v.mode === 'battle') rows.push({ id: 'sm-ais', title: '電腦難度', items: [1, 2, 3].map(n => ({ id: `sm-ai-${n}`, label: AI_TEXT[n], pressed: v.ai === n })) });
   if (v.setup && v.mode !== 'sandbox') rows.push({ id: 'sm-setups', title: '', items: [{ id: 'sm-setup', label: '遭遇戰設定', sub: setupSummary(v.setup.force, v.setup.supply, v.setup.seed, v.setup.ap) }] });
-  const main: MenuItem[] = v.resume ? [{ id: 'sm-resume', label: '繼續' }, { id: 'sm-restart', label: '重新開始' }]
-    : [...(v.saved ? [{ id: 'sm-continue', label: '繼續上一局', sub: v.saved }] : []), { id: 'sm-start', label: '開始' }];   // R074：有存檔時「繼續上一局」是主鍵
+  const saved: MenuItem[] = v.saved ? [{ id: 'sm-continue', label: '繼續上一局', sub: v.saved }] : [];   // R074：有存檔才有這顆鍵
+  const main: MenuItem[] = v.resume ? [{ id: 'sm-resume', label: '繼續' }, ...saved, { id: 'sm-restart', label: '重新開始' }]   // 布陣中從「選單」鍵叫出來的：「繼續」是回到這一局的布陣，「繼續上一局」是存檔的那一局
+    : [...saved, { id: 'sm-start', label: '開始' }];   // 開頁的那一張：有存檔時「繼續上一局」是主鍵
   return { title: '微光小鎮·二戰 RTS', sub: v.resume ? '換地圖或模式會回到布陣第 0 步' : '選地圖與模式，按「開始」布陣', rows, main, extra };
 }
 
@@ -151,7 +152,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
     return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
-      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && !resume && host.saved?.() ? { saved: host.saved()! } : {}) };
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && host.saved?.() ? { saved: host.saved()! } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';

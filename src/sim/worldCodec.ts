@@ -2,7 +2,7 @@
 // 轉回來的世界 hashWorld 跟原本相同、接著跑逐位相同（守衛 tests/savegame.mjs）。純函式、只用整數、不碰世界本身。
 // 世界裡大部分是普通的數字與陣列，原樣留著；整張圖大小的表（型別陣列）用「值、連續幾格」壓起來。
 // 只給畫面看的事件清單不存。之後哪張卡往 World 加新的型別陣列，要在這裡加一行（守衛會擋）。
-import type { World } from './world.ts';
+import { UNIT_KINDS, type World } from './world.ts';
 
 export const CODEC_MAX_N = 512;   // 邊長上限（現在的地圖是 32、64、96）
 
@@ -39,6 +39,16 @@ export function encodeWorld(w: World): unknown {
   };
 }
 
+// 一定要有、而且是整數的欄位。hashWorld 把缺的欄位跟 0 當成一樣，所以「欄位不見了」要在這裡擋：缺了它們，模擬會算出 NaN
+const WORLD_INTS = ['seed', 'tick', 'rng', 'nextShell', 'winner'];
+const UNIT_INTS = ['id', 'side', 'kind', 'x', 'z', 'hp', 'order', 'target', 'tx', 'tz', 'pathIdx', 'cooldown', 'aimX', 'aimZ'];
+const BLD_INTS = ['id', 'kind', 'x', 'z', 'w', 'd', 'floors', 'hp', 'maxHp'];
+const SHELL_INTS = ['id', 'side', 'kind', 'shooter', 'sx', 'sz', 'ex', 'ez', 't', 'T', 'target', 'hitBld'];
+const ints = (o: unknown, keys: readonly string[]): o is Record<string, number> => typeof o === 'object' && o !== null && keys.every(k => Number.isInteger((o as Record<string, unknown>)[k]));
+// 單位與建築的編號＝在陣列裡的位置＋1（模擬到處用 units[id - 1] 找）
+const unitOk = (u: unknown, i: number): boolean => ints(u, UNIT_INTS) && u.id === i + 1 && u.kind >= 0 && u.kind < UNIT_KINDS.length
+  && typeof (u as Record<string, unknown>).alive === 'boolean' && Array.isArray((u as Record<string, unknown>).path) && ((u as Record<string, unknown>).path as unknown[]).every(Number.isInteger);
+
 // x＝encodeWorld 的結果（通常剛從 JSON.parse 出來）。只檢查形狀；內容對不對由呼叫的人拿 hashWorld 比
 export function decodeWorld(x: unknown): World | null {
   if (typeof x !== 'object' || x === null || Array.isArray(x)) return null;
@@ -47,6 +57,7 @@ export function decodeWorld(x: unknown): World | null {
   const cells = n * n;
   const ter = unpack(r.ter, new Uint8Array(cells), 0, 255), occ = unpack(r.occ, new Int32Array(cells), -0x80000000, 0x7fffffff), crater = unpack(r.crater, new Uint8Array(cells), 0, 255);
   if (!ter || !occ || !crater || !Array.isArray(r.blds) || !Array.isArray(r.units) || !Array.isArray(r.shells)) return null;
+  if (!ints(r, WORLD_INTS) || !r.units.every(unitOk) || !r.blds.every((b, i) => ints(b, BLD_INTS) && b.id === i + 1) || !r.shells.every(s => ints(s, SHELL_INTS))) return null;
   let vegetation: World['vegetation'];
   if (r.vegetation !== undefined) {
     const v = r.vegetation;
