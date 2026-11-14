@@ -182,6 +182,8 @@ export interface Unit {
   hullX?: number; hullZ?: number; // R104 車體整數方向；舊世界缺欄位時保留原傷害
   holdFire?: 1; // R143 player vehicle/artillery fire discipline; absence preserves old worlds
   fireAmmo?: number;    // R107：只有明確煙幕任務才保存；舊世界沒有此欄位
+  sup?: number;         // R052 壓制值 1–100（rules.morale 開著、被打過才有；0 就沒有這一欄）
+  rout?: 1;             // R052 潰退中：照自己的路往後退，不收指令
   aimX: number; aimZ: number; // 最後一次開火的方向（位置單位的向量；渲染轉砲塔用）
 }
 
@@ -213,7 +215,8 @@ export type SimEvent =
   | { e: 'build'; bld: number }
   | { e: 'trench' }
   | { e: 'wire' }
-  | { e: 'spawn'; unit: number; x: number; z: number }; // R045：新群的畫面從實際出生位置開始
+  | { e: 'spawn'; unit: number; x: number; z: number } // R045：新群的畫面從實際出生位置開始
+  | { e: 'morale'; unit: number; state: number };       // R052：壓制狀態變了（0 正常、1 受壓、2 釘住、3 潰退）
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
@@ -247,7 +250,7 @@ export interface World extends RngState {
   wires?: { version: 1; segments: Building[] }; // R121：沿用耐久資料，不佔blds/occ、不冒充房屋
   trenches?: { version: 1; segments: TrenchSegment[] }; // R118：只有成功布陣才保存
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
-  rules?: { force?: number; income?: number; ap?: number };   // R046 遭遇戰設定（rules 指令；只存不是標準值的欄位，全是標準就沒有這一欄）
+  rules?: { force?: number; income?: number; ap?: number; morale?: number };   // R046 遭遇戰設定（rules 指令；只存不是標準值的欄位，全是標準就沒有這一欄）
   smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
   counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
   sandbox?: { version: 1; running: boolean; frame: number }; // R128：frame 是指令步序，tick 仍只計戰鬥時間
@@ -422,6 +425,8 @@ export function hashWorld(w: World): string {
     if (r) f.int(r.x).int(r.z).int(r.ax).int(r.az).int(r.target).int(r.epoch).int(r.seen);
     if (u.holdFire === 1) f.int(0x4846).int(1);
     if (u.fireAmmo !== undefined) f.int(0x5341).int(u.fireAmmo);
+    if (u.sup) f.int(0x5355).int(u.sup);          // R052：只在有時折
+    if (u.rout === 1) f.int(0x524f).int(1);
   }
   if (w.vegetation) {
     f.int(0x5647).int(w.vegetation.version).int(w.vegetation.cells.length);
@@ -436,7 +441,7 @@ export function hashWorld(w: World): string {
     for (const s of w.wires.segments) f.int(s.id).int(s.kind).int(s.x).int(s.z).int(s.w).int(s.d).int(s.floors).int(s.hp).int(s.maxHp).int(s.builtBy ?? -1);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
-  if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
+  if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); if (w.rules.morale) f.int(0x524d).int(w.rules.morale); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
   if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);

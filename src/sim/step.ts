@@ -3,6 +3,7 @@ import { isqrt, dist } from './math.ts';
 import { fireDisciplineEligible } from './fireDiscipline.ts';
 import { armorPct } from './armor.ts';
 import { apHit } from './ballistics.ts';
+import { suppress, suppressBlast, suppressHouse, moraleStep, reloads, canFire, movePct, SUP_SMALL, SUP_DIRECT } from './morale.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
 import { smokeBlocks, advanceSmoke, spawnSmoke } from './smoke.ts';
@@ -61,7 +62,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
     const u = unitById(w, id | 0);
-    if (u && u.alive && u.side === cmd.side && !seen.has(u.id)) { seen.add(u.id); us.push(u); }
+    if (u && u.alive && u.side === cmd.side && !seen.has(u.id) && !u.rout) { seen.add(u.id); us.push(u); }   // R052：潰退中的不收指令（rout 只在士氣規則開著時才會有）
   }
   us.sort((a, b) => a.id - b.id);
   const cx = (v: number) => Math.max(0, Math.min(w.n - 1, v | 0));
@@ -180,10 +181,12 @@ function moveUnit(w: World, u: Unit): void {
     else if (u.order === ORD_FIRE_AT && !inRange(u, center(u.tx), center(u.tz))) u.order = ORD_IDLE;   // 走到底還打不到：放棄
     return;
   }
+  const mv = w.rules?.morale ? movePct(u) : 100;   // R052：釘住（0）這一步不動、受壓（50）半速
+  if (!mv) return;
   const oldX = u.x, oldZ = u.z;
   const c = u.path[u.pathIdx], n = w.n, gx = center(c % n), gz = center((c - (c % n)) / n);
   const k = UNIT_KINDS[u.kind];
-  const spd = Math.max(1, Math.floor((k.speed * speedPct(w, cellOf(u.x), cellOf(u.z))) / 100));
+  const spd = Math.max(1, Math.floor((k.speed * speedPct(w, cellOf(u.x), cellOf(u.z)) * mv) / 10000));
   const dx = gx - u.x, dz = gz - u.z, d = isqrt(dx * dx + dz * dz);
   if (d <= spd) { u.x = gx; u.z = gz; u.pathIdx++; }
   else if (k.radius > 0) stepVehicle(w, u, u.x + Math.trunc((dx * spd) / d), u.z + Math.trunc((dz * spd) / d), spd);
@@ -313,8 +316,9 @@ function fireUnit(w: World, u: Unit): void {
     return;
   }
   if (UNIT_KINDS[u.kind].range === 0) return;   // 觀測員沒有武裝
-  if (u.cooldown > 0) u.cooldown--;
+  if (u.cooldown > 0 && (!w.rules?.morale || reloads(w, u))) u.cooldown--;   // R052：受壓每 2 步、釘住每 4 步才裝填一步
   const k = UNIT_KINDS[u.kind];
+  if (w.rules?.morale && !canFire(u)) { if (k.indirect) syncRanging(w, u, null); return; }   // R052：潰退不開火
   if (u.holdFire === 1 && fireDisciplineEligible(u)) { if (k.indirect) syncRanging(w, u, null); return; }
   if (u.order !== ORD_FIRE_AT) delete u.fireAmmo;
   const smoke = u.fireAmmo === SHELL_SMOKE;
@@ -383,7 +387,7 @@ function land(w: World, s: Shell): void {
   const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
   if (s.kind === SHELL_AP || s.kind === SHELL_SMALL) {
     let bounce = false;
-    if (s.hitBld) { const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一
+    if (s.hitBld) { if (w.rules?.morale) suppressHouse(w, s.hitBld, s.kind === SHELL_SMALL ? SUP_SMALL : SUP_DIRECT); const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一；R052 裡面的人被壓（先壓再算房子，倒了也算）
     else {
       const t = unitById(w, s.target);
       // R051（rules 帶 ap 才走）：-1 這一發不歸厚度規則管、0 彈開、1 穿透。穿甲彈穿透吃完整傷害；步兵的槍穿透照下面原本的算法；彈開零傷害
@@ -391,6 +395,7 @@ function land(w: World, s: Shell): void {
       if (ap === 0) bounce = s.kind === SHELL_AP;
       else if (ap === 1 && s.kind === SHELL_AP) damageUnit(w, t!, k.dmgUnit);
       else if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, s.kind === SHELL_AP ? Math.floor(k.dmgUnit * armorPct(t, s.sx, s.sz) / 100) : k.dmgUnit));
+      if (w.rules?.morale && t && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) suppress(w, t, s.kind === SHELL_SMALL ? SUP_SMALL : SUP_DIRECT);   // R052（死了、有裝甲的在 suppress 裡擋）
     }
     w.events.push(bounce ? { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld, bounce: 1, side: s.side } : { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld });
     return;
@@ -406,6 +411,7 @@ function land(w: World, s: Shell): void {
     const d = dist(t.x, t.z, s.ex, s.ez);
     if (d < R) damageUnit(w, t, pierced(k, t, Math.floor((k.dmgUnit * (R - d)) / R)));
   }
+  if (w.rules?.morale) suppressBlast(w, s.ex, s.ez, R, k.dmgUnit);   // R052：壓制半徑是殺傷半徑的兩倍
   const cx = cellOf(s.ex), cz = cellOf(s.ez), rc = Math.floor(R / SUB) + 1, hit = new Set<number>();
   for (let z = cz - rc; z <= cz + rc; z++) for (let x = cx - rc; x <= cx + rc; x++) {
     const b = bldAt(w, x, z);
@@ -480,6 +486,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   separate(w);
   for (const u of w.units) if (u.alive) fireUnit(w, u);
   updateShells(w);
+  if (w.rules?.morale) moraleStep(w);   // R052：陣亡的震撼、壓制值照時間退
   if (w.zombies) finishZombiesStep(w);
   if (!w.sandbox) checkWinner(w);
   w.tick++;

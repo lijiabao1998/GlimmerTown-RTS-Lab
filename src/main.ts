@@ -614,7 +614,7 @@ const rts = {
   info: () => ({ ...view.pipe.sceneInfo, rt: view.pipe.size, msaa: view.pipe.samples, townTris: view.townTriangles, town: view.townRegion, fx: fxOn, px: style.pixelCss, r004: fxOn && V.r004, pools: view.pools }),
   armorArcs: () => view.armorArcCount,
   fxDigest: () => view.fxDigest(),
-  bars: () => view.bars,
+  bars: () => ({ ...view.bars, pips: view.barDbg.pips }),
   dashes: () => view.dashes,
   multiRange: () => ({ ...view.multi122.solution, shown: view.multi122.mesh.visible, triangles: view.multi122.mesh.visible ? 2 : 0 }),
   rangePreview: () => view.range113 ? { ...view.range113.solution, triangles: view.range113.mesh.geometry.drawRange.count / 3, shown: view.range113.mesh.visible } : null,
@@ -625,7 +625,7 @@ const rts = {
   mapSize: () => w.n,   // R043：地圖邊長（萊伊 32、鄉間大地圖 64）
   vegetation: () => ({ version: w.vegetation?.version ?? 0, cells: w.vegetation ? [...w.vegetation.cells] : [],
     shown: !!view.vegetation116.mesh, count: view.vegetation116.cells, triangles: view.vegetation116.triangles, builds: view.vegetation116.builds }),
-  units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive })),
+  units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive, hp: u.hp, sup: u.sup ?? 0 })),   // hp、sup：R052 的守衛拿來對血條與壓制標記的數量
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
   rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner'), order: !!document.getElementById('start-order') }),
