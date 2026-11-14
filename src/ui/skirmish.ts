@@ -83,6 +83,7 @@ export interface Skirmish {
   readonly canAp: boolean;      // R051：這一頁有這顆開關（閥開著）
   set: (patch: { force?: number; supply?: number; village?: boolean; ai?: number; ap?: boolean }) => void;
   start: (w: World) => RulesCmd | undefined;   // 新的一局：直接套到世界上（布陣時就看得到），回傳要記進紀錄的指令
+  adopt: (w: World) => void;                   // R074：接回一局存檔——照那個世界把設定對齊（之後「重新開始」是同一種局），不動世界
 }
 
 // canVillage：R026 閥開著（萊伊在）才另外有「村莊」可選
@@ -117,6 +118,14 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
       last = { map: w.map === 2 ? '64' : w.map === 3 ? '96' : w.map === 1 ? 'rye' : 'village', mode: valves(q).r045 && q.get('mode') === 'zombies' ? 'zombies' : 'battle', seed: w.seed };
       persist();
       return cmd;
+    },
+    adopt: w => {
+      s.force = three(w.rules?.force); s.supply = three(w.rules?.income); s.ap = canAp && w.rules?.ap === 1;
+      s.village = canVillage && !w.map && w.n === 32;
+      s.ai = aiLevel(w.ai?.find(a => a.side === 1)?.level ?? s.ai);
+      if (w.sandbox) return;
+      last = { map: w.map === 2 ? '64' : w.map === 3 ? '96' : w.map === 1 ? 'rye' : 'village', mode: w.zombies ? 'zombies' : 'battle', seed: w.seed };
+      persist();
     },
   };
 }

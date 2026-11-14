@@ -131,7 +131,7 @@ export async function withBrowser(opt, fn) {
     // R047：每次開頁都當成第一次來——先清掉上一頁存在本機的重播紀錄（同一個設定檔裡前一頁打完的局不影響下一頁）；
     // 要測「存了之後再開頁還在」的守衛傳 open(query, { keep: true })。新手教學、喪屍最佳紀錄那些既有的鍵不清（原本的守衛靠它們跨頁）。
     const open = async (query, { menu = false, keep = false } = {}) => {
-      if (!keep) await page.evaluate("try { localStorage.removeItem('gtrts.v1.replays'); localStorage.removeItem('gtrts.v1.setup') } catch {}").catch(() => {});   // R073：上次的設定也清
+      if (!keep) await page.evaluate("try { localStorage.removeItem('gtrts.v1.replays'); localStorage.removeItem('gtrts.v1.setup'); localStorage.removeItem('gtrts.v1.save'); const set = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (k !== 'gtrts.v1.save') set.call(this, k, v); } } catch {}").catch(() => {});   // R073：上次的設定也清；R074：打到一半的存檔也清——遊戲在頁面離開時（pagehide、切到背景）會自己再存一次，所以清完順手讓這一頁之後寫不進那個鍵
       const q = menu || /(^|&)noR069=/.test(query) ? query : `${query ? query + '&' : ''}noR069=1`;
       await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/${entry}?${q}` });
       for (let i = 0, t0 = Date.now(); Date.now() - t0 < readyMs; i++) { await sleep(150); if (await page.evaluate(ready).catch(() => false)) break; }

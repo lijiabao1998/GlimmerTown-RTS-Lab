@@ -15,7 +15,7 @@ import { step, runLog, commandTick, type Command, type LoggedCommand } from './s
 import { createSandboxWorld, sandboxPlaceError, type SandboxCommand, type SandboxError } from './sim/sandbox.ts';
 import { initSandbox, SANDBOX_WHY, sandboxPlacementFeedback, sandboxCapacity, type SandboxBar } from './ui/sandbox.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
-import { BattleView } from './render/battle.ts';
+import { BattleView, setStreets } from './render/battle.ts';
 import { BattleAudio } from './render/audio.ts';
 import { STYLE_A, type Style } from './render/post.ts';
 import { initFireDiscipline, toggleFireDiscipline } from './ui/fireDiscipline.ts';
@@ -36,7 +36,6 @@ import { startZombies } from './sim/zombies.ts';
 import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
 import { BuildPlanner, BUILD_TIP, type PlanCmd } from './ui/buildPlanner.ts';
 import { setDamageDetails, setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
-import { setStreets } from './render/battle.ts';
 import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
@@ -44,6 +43,7 @@ import { initTutorial } from './ui/tutorial.ts';
 import { initStartMenu } from './ui/startMenu.ts';
 import { initSkirmish, restoreSetup } from './ui/skirmish.ts';
 import { initReplay } from './ui/replay.ts';
+import { initSaves } from './ui/saveGame.ts';
 import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
@@ -217,7 +217,6 @@ function startBattle() {
   syncBattleAudio();
   ui();
 }
-
 
 function issue(cmd: Command) {
   log.push({ tick: w.sandbox ? commandTick(w) : w.tick, cmd });
@@ -512,9 +511,10 @@ if (V.r045) zombiesPick = initZombiesPick({
 const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
 // R069 開始選單（src/ui/startMenu.ts）：地圖、模式、重來、說明、教學都按原本那幾顆鍵；這裡只接難度、暫停與音效
 const replay = V.r047 ? initReplay({ world: () => w, log: () => log, hash: () => hashWorld(w), begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w); ui(); }, focus: (x, z) => view.target.set(x, 0, z), leave: () => reset() }) : undefined;   // R047 重播（src/ui/replay.ts）
+const saves = V.r074 && V.r069 ? initSaves({ world: () => w, log: () => log, battle: () => phase === 'battle', replaying: () => !!replay?.playing(), cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }), stats: () => stats, adopt: (world, lg, cam, st) => { reset(world.seed, false, false, false, false, false); w = world; log = lg; pending = lg.filter(c => c.tick === w.tick).map(c => c.cmd); seed = world.seed; aiLevel = world.ai?.find(a => a.side === SIDE_ENEMY)?.level ?? aiLevel; large = V.r043 && world.map === MAP_LARGE; expanded = V.r130 && world.map === MAP_TOWN; if (world.zombies) q.set('mode', 'zombies'); else q.delete('mode'); skirmish?.adopt(world); view.dispose(); view = view.recreate(w); if (cam) { view.target.set(cam.x, 0, cam.z); view.zoom = cam.zoom; } stats = st ?? newStats(w); paused = true; ui(); syncBattleAudio(); } }) : undefined;   // R074 繼續上一局（src/ui/saveGame.ts）：adopt＝把遊戲換成存檔裡的那一局，停在暫停（紀錄裡步數等於現在這一步的指令還沒進世界，重新排進去）。沒有開始選單（noR069）就沒有地方按「繼續上一局」，所以也不存
 if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: n => (aiLevel = n ?? aiLevel), paused: v => { if (v !== undefined) { paused = v; syncBattleAudio(); hud?.update(); } return paused; },
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
-  audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined, skirmish, seed: n => (seed = n ?? seed), reset: () => reset(), replays: replay?.open });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次
+  audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined, skirmish, seed: n => (seed = n ?? seed), reset: () => reset(), replays: replay?.open, saved: saves?.offer, resume: saves?.resume, saveNow: saves?.saveNow });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次
 
 if (V.r070 && isDesktopPointer()) initDesktopControls({ world: () => w, selected, view: () => view, fling, glide, hud: () => hud, blocked: () => help.visible() || !!reportView?.visible(), toggleFireMode: () => { fireMode = !fireMode; }, selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); }, toggleHoldFire: () => { if (toggleFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue)) fireDisciplineFrame?.(); }, help: () => help.open() });
 
