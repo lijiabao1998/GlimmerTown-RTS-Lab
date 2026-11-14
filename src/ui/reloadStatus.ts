@@ -14,11 +14,12 @@ export function reloadStatus(w: World, selected: ReadonlySet<number>, enabled = 
     else {
       loading++;
       // Round upward: a weapon with one tick remaining must not appear loaded.
-      const tenths = Math.ceil(u.cooldown * (ms >= 2 ? 4 : ms ? 2 : 1) * 10 / TICK_HZ);
+      const tenths = Math.ceil(u.cooldown * 10 / TICK_HZ) * (ms >= 2 ? 4 : ms ? 2 : 1);
       low = Math.min(low, tenths); high = Math.max(high, tenths);
     }
   }
   if (!ready && !loading) return '';
-  const remaining = loading ? `；剩餘 ${(low / 10).toFixed(1)}${low === high ? '' : `–${(high / 10).toFixed(1)}`} 模擬秒` : '';
-  return `裝填完成 ${ready}／裝填中 ${loading}${remaining}；裝填完成不代表可射擊${pressed ? `；${pressed} 個被壓制（裝填變慢，潰退的不開火）` : ''}`;
+  const note = pressed ? `；${pressed} 個被壓制（裝填變慢，潰退的不開火）` : '';   // R052
+  const remaining = (loading ? `；剩餘 ${(low / 10).toFixed(1)}${low === high ? '' : `–${(high / 10).toFixed(1)}`} 模擬秒` : '') + note;
+  return `裝填完成 ${ready}／裝填中 ${loading}${remaining}；裝填完成不代表可射擊`;
 }
