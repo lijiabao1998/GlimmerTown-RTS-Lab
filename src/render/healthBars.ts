@@ -3,13 +3,15 @@
 // 建築：我方單位正在砲擊的那棟畫耐久條，標出「空殼」門檻（70%）。
 // R123：所有底先排、填色後排，但只送一個網格（?noR123=1 回到底、填色兩個網格）。
 import * as THREE from 'three';
-import { SUB, cellIdx, UK_OBSERVER, stageOf, STAGE_ROOFLESS, SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, type Unit, type World } from '../sim/world.ts';
+import { SUB, cellIdx, UK_OBSERVER, stageOf, STAGE_ROOFLESS, SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, moraleState, type Unit, type World } from '../sim/world.ts';
 import { wallHeight, wallShown, roofRise } from './buildings.ts';
 import type { Lerp, MakeInst, Sight } from './painter.ts';
 
 const C_BAR_BG = new THREE.Color(0x15130f), C_BAR_HI = new THREE.Color(0x63d65a), C_BAR_MID = new THREE.Color(0xf2c23a), C_BAR_LO = new THREE.Color(0xe8402a);
 const C_BLD_HI = new THREE.Color(0xdcc08a), C_BLD_LO = new THREE.Color(0xe08a3a);
 const C_WHITE = new THREE.Color(1, 1, 1);
+// R052 壓制標記：受壓一個黃、釘住兩個橘、潰退三個紅
+const C_PIP = [C_WHITE, new THREE.Color(0xf2c23a), new THREE.Color(0xf08a2a), new THREE.Color(0xe8402a)];
 
 export class HealthBars {
   on = false;                                  // ?noR009=1 時不建、不畫
@@ -27,12 +29,12 @@ export class HealthBars {
   private tmp: THREE.Object3D;
   private cap: number;
   // 守衛用：上一幀畫了哪些血條（預配，不每幀配置）
-  readonly dbg: { n: number; id: Int32Array; frac: Float32Array; ghost: Float32Array; r: Float32Array; g: Float32Array };
+  readonly dbg: { n: number; id: Int32Array; frac: Float32Array; ghost: Float32Array; r: Float32Array; g: Float32Array; pips: number };   // pips（R052）：這一幀畫了幾個壓制標記
 
   constructor(maxUnits: number, tmp: THREE.Object3D) {
     this.cap = maxUnits; this.tmp = tmp;
     this.hp = new Int32Array(maxUnits + 1); this.from = new Float64Array(maxUnits + 1); this.hitT = new Float64Array(maxUnits + 1).fill(-99);
-    this.dbg = { n: 0, id: new Int32Array(maxUnits + 64), frac: new Float32Array(maxUnits + 64), ghost: new Float32Array(maxUnits + 64), r: new Float32Array(maxUnits + 64), g: new Float32Array(maxUnits + 64) };
+    this.dbg = { n: 0, id: new Int32Array(maxUnits + 64), frac: new Float32Array(maxUnits + 64), ghost: new Float32Array(maxUnits + 64), r: new Float32Array(maxUnits + 64), g: new Float32Array(maxUnits + 64), pips: 0 };
   }
 
   build(inst: MakeInst, r123: boolean, elev: number) {
@@ -59,17 +61,19 @@ export class HealthBars {
 
   paint(w: World, t: number, selected: Set<number>, at: Lerp, view: Sight) {
     const dbg = this.dbg, MAX_UNITS = this.cap, alpha = at.alpha, prevX = at.prevX, prevZ = at.prevZ;
-    this.nb9 = 0; this.nf9 = 0; dbg.n = 0;
+    this.nb9 = 0; this.nf9 = 0; dbg.n = 0; dbg.pips = 0;
     for (const u of w.units) {
       const max = UNIT_KINDS[u.kind].hp;
       if (u.hp < this.hp[u.id]) { this.from[u.id] = this.ghost9(u.id, t); this.hitT[u.id] = t; }
       this.hp[u.id] = u.hp;
-      if (!u.alive || (u.hp >= max && !selected.has(u.id)) || !view.visibleUnit(u)) continue;
+      const ms = moraleState(u);   // R052：被壓制的單位滿血也畫血條，上面加標記（沒開士氣規則的世界永遠是 0）
+      if (!u.alive || (u.hp >= max && !selected.has(u.id) && !ms) || !view.visibleUnit(u)) continue;
       const frac = Math.max(0, u.hp / max), ghost = this.ghost9(u.id, t) / max;
       // 綠（滿）→ 黃（一半）→ 紅（快死）
       if (frac > 0.5) this.color.copy(C_BAR_MID).lerp(C_BAR_HI, (frac - 0.5) * 2); else this.color.copy(C_BAR_LO).lerp(C_BAR_MID, frac * 2);
       const x = (prevX[u.id] + (u.x - prevX[u.id]) * alpha) / SUB, z = (prevZ[u.id] + (u.z - prevZ[u.id]) * alpha) / SUB;
       this.bar9(u.id, x, view.unitHeight(u) + (u.kind === UK_OBSERVER ? 0.85 : 0.55), z, u.kind === UK_OBSERVER ? 0.34 : 0.5, frac, Math.max(frac, Math.min(1, ghost)), this.color, 0);
+      if (ms) this.pips9(x, view.unitHeight(u) + (u.kind === UK_OBSERVER ? 0.85 : 0.55) + 0.14, z, u.kind === UK_OBSERVER ? 0.34 : 0.5, ms);
     }
     // 我方正在砲擊的建築（同一棟只畫一次）
     for (const u of w.units) {
@@ -107,6 +111,15 @@ export class HealthBars {
     if (frac > 0 && this.nf9 < capF) this.put9(fill, offset + this.nf9++, x0, y0, z0, L * frac, 0.05, col);
     if (notch > 0 && this.nf9 < capF) this.put9(fill, offset + this.nf9++, x0 + R.x * L * notch, y0 + R.y * L * notch, z0 + R.z * L * notch, 0.025, 0.07, C_BAR_BG);
     if (dbg.n < dbg.id.length) { dbg.id[dbg.n] = id; dbg.frac[dbg.n] = frac; dbg.ghost[dbg.n] = ghost; dbg.r[dbg.n] = col.r; dbg.g[dbg.n] = col.g; dbg.n++; }
+  }
+  // R052 壓制標記：血條上方靠左 1–3 個小方塊，跟血條的填色排在同一個網格裡（不多繪製呼叫）
+  private pips9(cx: number, y: number, cz: number, L: number, state: number) {
+    const R = this.right, capF = 2 * (this.cap + 64), fill = this.fill ?? this.bg!, offset = this.fill ? 0 : this.cap + 64;
+    for (let i = 0; i < state && this.nf9 < capF; i++) {
+      const s = -L / 2 + i * 0.13;
+      this.put9(fill, offset + this.nf9++, cx + R.x * s, y + R.y * s, cz + R.z * s, 0.1, 0.075, C_PIP[state]);
+      this.dbg.pips++;
+    }
   }
   private put9(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, len: number, h: number, col: THREE.Color) {
     const m = this.tmp;

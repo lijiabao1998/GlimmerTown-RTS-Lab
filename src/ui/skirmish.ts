@@ -23,17 +23,17 @@ export function parseSeed(text: string): number | null {
   return n <= SEED_MAX ? n : null;
 }
 // 兩項都是標準就不發指令（世界、紀錄都跟沒有這張卡時一樣）
-export const rulesCommand = (force: number, supply: number, ap = false): RulesCmd | undefined =>
-  force === 2 && supply === 2 && !ap ? undefined : { t: 'rules', ...(force !== 2 ? { force } : {}), ...(supply !== 2 ? { income: supply } : {}), ...(ap ? { ap: 1 } : {}) };   // ap（R051）：穿甲與裝甲厚度
-export const setupSummary = (force: number, supply: number, seed: number, ap = false): string => `兵力 ${FORCE_TEXT[force]} · 補給 ${SUPPLY_TEXT[supply]} · 種子 ${seed}${ap ? ' · 穿甲' : ''}`;
+export const rulesCommand = (force: number, supply: number, ap = false, morale = false): RulesCmd | undefined =>
+  force === 2 && supply === 2 && !ap && !morale ? undefined : { t: 'rules', ...(force !== 2 ? { force } : {}), ...(supply !== 2 ? { income: supply } : {}), ...(ap ? { ap: 1 } : {}), ...(morale ? { morale: 1 } : {}) };   // ap（R051）：穿甲與裝甲厚度；morale（R052）：士氣與壓制
+export const setupSummary = (force: number, supply: number, seed: number, ap = false, morale = false): string => `兵力 ${FORCE_TEXT[force]} · 補給 ${SUPPLY_TEXT[supply]} · 種子 ${seed}${ap ? ' · 穿甲' : ''}${morale ? ' · 士氣' : ''}`;
 export const randomSeed = (): number => crypto.getRandomValues(new Uint32Array(1))[0];
 
 // ---- R073 記住上次的設定：存本機，下次開頁（網址沒帶任何設定時）照舊 ----
 export const SETUP_KEY = 'gtrts.v1.setup';
 export const DEFAULT_SEED = SCRIPT_SEED;
-export const SETUP_PARAMS = ['seed', 'map', 'mode', 'ai', 'force', 'supply', 'ap'];   // 網址帶了其中任何一項＝整份照網址，不用存下來的
+export const SETUP_PARAMS = ['seed', 'map', 'mode', 'ai', 'force', 'supply', 'ap', 'morale'];   // 網址帶了其中任何一項＝整份照網址，不用存下來的
 export type SetupMap = 'rye' | 'village' | '64' | '96';
-export interface SavedSetup { v: 1; map: SetupMap; mode: 'battle' | 'zombies'; ai: number; force: number; supply: number; seed: number; ap?: 1 }   // ap（R051）：開著才有這一欄
+export interface SavedSetup { v: 1; map: SetupMap; mode: 'battle' | 'zombies'; ai: number; force: number; supply: number; seed: number; ap?: 1; morale?: 1 }   // ap（R051）、morale（R052）：開著才有這一欄
 const aiLevel = (v: unknown): number => (v === 1 || v === 3 ? v : 2);
 const three = (v: unknown): number => (v === 1 || v === 3 ? v : 2);
 
@@ -47,7 +47,7 @@ export function loadSetup(store: Store | null): SavedSetup | null {
     const r = x as Record<string, unknown>;
     if (r.v !== 1) return null;
     const seed = typeof r.seed === 'number' && Number.isInteger(r.seed) && r.seed >= 0 && r.seed <= SEED_MAX ? r.seed : DEFAULT_SEED;
-    return { v: 1, map: r.map === 'village' || r.map === '64' || r.map === '96' ? r.map : 'rye', mode: r.mode === 'zombies' ? 'zombies' : 'battle', ai: aiLevel(r.ai), force: three(r.force), supply: three(r.supply), seed, ...(r.ap === 1 ? { ap: 1 as const } : {}) };
+    return { v: 1, map: r.map === 'village' || r.map === '64' || r.map === '96' ? r.map : 'rye', mode: r.mode === 'zombies' ? 'zombies' : 'battle', ai: aiLevel(r.ai), force: three(r.force), supply: three(r.supply), seed, ...(r.ap === 1 ? { ap: 1 as const } : {}), ...(r.morale === 1 ? { morale: 1 as const } : {}) };
   } catch { return null; }
 }
 export function saveSetup(store: Store | null, setup: SavedSetup): void {
@@ -61,7 +61,7 @@ let linked = false;                // 這一頁是不是用帶設定的網址開
 export function restoreSetup(q: URLSearchParams, store: Store | null = browserStore()): URLSearchParams {
   const V = valves(q);
   memory = V.r069 && V.r046 && V.r073 ? store : null;
-  linked = SETUP_PARAMS.some(k => q.has(k) && !(k === 'ap' && !V.r051));   // R051 的閥關著時，網址上的 ap 不算帶了設定
+  linked = SETUP_PARAMS.some(k => q.has(k) && !(k === 'ap' && !V.r051) && !(k === 'morale' && !V.r052));   // R051、R052 的閥關著時，網址上的 ap、morale 不算帶了設定
   if (!memory || linked) return q;
   const s = loadSetup(memory);
   if (!s) return q;
@@ -72,6 +72,7 @@ export function restoreSetup(q: URLSearchParams, store: Store | null = browserSt
   if (s.supply !== 2) q.set('supply', String(s.supply));
   if (s.seed !== DEFAULT_SEED) q.set('seed', String(s.seed));
   if (s.ap) q.set('ap', '1');
+  if (s.morale) q.set('morale', '1');
   return q;
 }
 
@@ -81,7 +82,9 @@ export interface Skirmish {
   readonly remembers: boolean;  // R073：這一頁會把設定存到本機（設定頁才有「恢復預設」）
   readonly ap: boolean;         // R051：穿甲與裝甲厚度開著
   readonly canAp: boolean;      // R051：這一頁有這顆開關（閥開著）
-  set: (patch: { force?: number; supply?: number; village?: boolean; ai?: number; ap?: boolean }) => void;
+  readonly morale: boolean;     // R052：士氣與壓制開著
+  readonly canMorale: boolean;  // R052：這一頁有這顆開關（閥開著）
+  set: (patch: { force?: number; supply?: number; village?: boolean; ai?: number; ap?: boolean; morale?: boolean }) => void;
   start: (w: World) => RulesCmd | undefined;   // 新的一局：直接套到世界上（布陣時就看得到），回傳要記進紀錄的指令
   adopt: (w: World) => void;                   // R074：接回一局存檔——照那個世界把設定對齊（之後「重新開始」是同一種局），不動世界
 }
@@ -89,29 +92,31 @@ export interface Skirmish {
 // canVillage：R026 閥開著（萊伊在）才另外有「村莊」可選
 export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish {
   const store = memory, canAp = valves(q).r051;
+  const canMorale = valves(q).r052, keptMorale = !canMorale && loadSetup(store)?.morale === 1;   // R052：跟 ap 一樣，閥關著的這一頁不洗掉本機記著的那一項
   const keptAp = !canAp && loadSetup(store)?.ap === 1;   // R051 的閥關著的這一頁：本機原本記著的 ap 原樣留著，不因為這一頁看不到就洗掉
   let owned = !linked, pristine: string | null = null;   // 用連結開的頁：第一次只記下「連結給的那一份」，之後跟它不一樣了才開始存
-  const s = { force: level(q.get('force')), supply: level(q.get('supply')), village: canVillage && q.get('map') === 'village', ai: Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2)), ap: canAp && q.get('ap') === '1' };   // 難度的讀法跟 main.ts 一樣
+  const s = { force: level(q.get('force')), supply: level(q.get('supply')), village: canVillage && q.get('map') === 'village', ai: Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2)), ap: canAp && q.get('ap') === '1', morale: canMorale && q.get('morale') === '1' };   // 難度的讀法跟 main.ts 一樣
   // R073：最近開的那一局是哪張圖、哪個模式、哪個種子（start() 從世界讀）；還沒開過局就還沒有東西可存
   let last: { map: SetupMap; mode: 'battle' | 'zombies'; seed: number } | null = null;
   const persist = () => {
     if (!store || !last) return;
-    const now: SavedSetup = { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply, ...(s.ap || keptAp ? { ap: 1 as const } : {}) }, text = JSON.stringify(now);
+    const now: SavedSetup = { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply, ...(s.ap || keptAp ? { ap: 1 as const } : {}), ...(s.morale || keptMorale ? { morale: 1 as const } : {}) }, text = JSON.stringify(now);
     if (!owned) { if (pristine === null) { pristine = text; return; } if (text === pristine) return; owned = true; }
     saveSetup(store, now);
   };
   return {
-    get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, remembers: !!store, get ap() { return s.ap; }, canAp,
+    get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, remembers: !!store, get ap() { return s.ap; }, canAp, get morale() { return s.morale; }, canMorale,
     set: p => {
       if (p.force !== undefined) s.force = level(String(p.force));
       if (p.supply !== undefined) s.supply = level(String(p.supply));
       if (p.village !== undefined) s.village = canVillage && p.village;
       if (p.ai !== undefined) s.ai = aiLevel(p.ai);
       if (p.ap !== undefined) s.ap = canAp && p.ap;
+      if (p.morale !== undefined) s.morale = canMorale && p.morale;
       persist();
     },
     start: w => {
-      const cmd = rulesCommand(s.force, s.supply, s.ap);
+      const cmd = rulesCommand(s.force, s.supply, s.ap, s.morale);
       if (cmd) applyRules(w, cmd);
       if (w.sandbox) return cmd;   // 沙盒不記（main.ts 本來就不會拿沙盒世界來，這裡再擋一次）
       // 地圖、種子從世界讀；模式跟 main.ts 的 reset() 用同一個條件（喪屍要等這裡回去之後才開始，世界上還看不到）
@@ -120,7 +125,7 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
       return cmd;
     },
     adopt: w => {
-      s.force = three(w.rules?.force); s.supply = three(w.rules?.income); s.ap = canAp && w.rules?.ap === 1;
+      s.force = three(w.rules?.force); s.supply = three(w.rules?.income); s.ap = canAp && w.rules?.ap === 1; s.morale = canMorale && w.rules?.morale === 1;
       s.village = canVillage && !w.map && w.n === 32;
       s.ai = aiLevel(w.ai?.find(a => a.side === 1)?.level ?? s.ai);
       if (w.sandbox) return;
