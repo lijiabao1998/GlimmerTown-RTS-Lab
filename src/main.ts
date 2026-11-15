@@ -5,6 +5,7 @@ import { productionCountdown } from './ui/productionCountdown.ts';
 import { coverDurability } from './ui/coverDurability.ts';
 import { bombardStatus } from './ui/bombardStatus.ts';
 import { reloadStatus } from './ui/reloadStatus.ts';
+import { unitSpec } from './ui/unitSpec.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
 import { internationalItems } from './ui/internationalCatalog.ts';
@@ -413,7 +414,7 @@ function selInfo(sel: typeof w.units, showAverage = true): string {
   const hp = showAverage ? `血量 ${Math.round((100 * sel.reduce((p, u) => p + u.hp / UNIT_KINDS[u.kind].hp, 0)) / sel.length)}%｜` : '';
   const n = [0, 0, 0, 0];
   for (const u of sel) n[u.order] = (n[u.order] ?? 0) + 1;
-  return `${hp}${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}`;
+  return `${hp}${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}${V.r075 ? unitSpec(w, selected, phase === 'battle', '｜') : ''}`;   // R075：厚度、穿深、士氣
 }
 
 // ---- HUD ----
@@ -620,12 +621,12 @@ const rts = {
   rangePreview: () => view.range113 ? { ...view.range113.solution, triangles: view.range113.mesh.geometry.drawRange.count / 3, shown: view.range113.mesh.visible } : null,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0, armor2: w.eco.armor2 ?? 0 } : null),
-  men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n }),
+  men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n, prone: view.menDbg.prone }),
   map: () => w.map ?? 0,
   mapSize: () => w.n,   // R043：地圖邊長（萊伊 32、鄉間大地圖 64）
   vegetation: () => ({ version: w.vegetation?.version ?? 0, cells: w.vegetation ? [...w.vegetation.cells] : [],
     shown: !!view.vegetation116.mesh, count: view.vegetation116.cells, triangles: view.vegetation116.triangles, builds: view.vegetation116.builds }),
-  units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive, hp: u.hp, sup: u.sup ?? 0 })),   // hp、sup：R052 的守衛拿來對血條與壓制標記的數量
+  units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive, hp: u.hp, sup: u.sup ?? 0, rout: u.rout ?? 0 })),   // hp、sup：R052 的守衛拿來對血條與壓制標記的數量；rout：R075 的守衛拿來算該趴下幾個人
   minimap: () => (minimap ? { shown: true, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(minimap.el.getBoundingClientRect()) } : { shown: false }),
   miniPoint: (x: number, z: number) => minimap?.point(x, z) ?? null,
   rising: () => ({ rising: view.risingCount, ghosts: view.ghostCount, banner: !!document.getElementById('start-banner'), order: !!document.getElementById('start-order') }),

@@ -52,7 +52,8 @@ async function main() {
     const menu = () => E(`(()=>{const m=document.getElementById('start-menu');return m?{open:!m.hidden,ids:[...m.querySelectorAll('button, input')].map(b=>b.id),pressed:[...m.querySelectorAll('button[aria-pressed="true"]')].map(b=>b.id),setup:document.getElementById('sm-setup')?.textContent??null,morale:document.getElementById('sm-morale')?.textContent??null}:null})()`);
     const state = () => E(`({phase:__rts.phase(),paused:__rts.paused(),tick:__rts.tick(),hash:__rts.hash(),seed:__rts.seed(),winner:__rts.winner(),rules:__rts.log().filter(c=>c.tick===0&&c.cmd.t==='rules').map(c=>c.cmd),log:__rts.log()})`);
     const offenders = () => E(`(()=>{const bs=[...document.querySelectorAll('#start-menu button, #start-menu input')];return bs.map(b=>{const r=b.getBoundingClientRect();return {id:b.id,w:Math.round(r.width),h:Math.round(r.height),inside:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,hit:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)),clip:b.scrollWidth>b.clientWidth+1||b.scrollHeight>b.clientHeight+1}}).filter(b=>b.w<44||b.h<44||!b.inside||!b.hit||b.clip)})()`);
-    const opened = async (q = '', keep = false) => { await open(q, { menu: true, keep }); assert(await E('!!window.__rts?.ready'), 'fixture: RTS ready'); await frames(); };
+    // 這支守衛驗的是士氣第一版（R052）：每一頁都帶 noR075=1，開關送的才是 morale＝1（R075 起新開的局預設送第二版，另有 tests/readable-browser.mjs）
+    const opened = async (q = '', keep = false) => { await open(q ? `noR075=1&${q}` : 'noR075=1', { menu: true, keep }); assert(await E('!!window.__rts?.ready'), 'fixture: RTS ready'); await frames(); };
     // 畫面上實際畫了幾個壓制標記（世界裡該有幾個：受壓 1、釘住 2、潰退 3，在 marks() 裡算）
     const drawn = async () => { await frames(); return (await E('__rts.bars()')).pips; };
     let lastCalls = 0;   // marks() 走到那一步時這一幀的繪製呼叫數（有標記與沒有標記的兩次要一樣）

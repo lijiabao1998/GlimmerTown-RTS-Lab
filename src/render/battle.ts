@@ -4,7 +4,7 @@ import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'
 import { hash2 } from '../sim/rng.ts';
 import {
   SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_ZOMBIE, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
-  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, type Unit, type World, type SimEvent, type Building,
+  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, moraleState, MORALE_PINNED, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
@@ -30,6 +30,7 @@ const MAX_UNITS = 512, MAX_SHELLS = 96, MAX_FX = 240, MAX_RINGS = 24;
 const C_ZOMBIE = new THREE.Color(0x8d9b72), C_ZOMBIE_BODY = new THREE.Color(0x5c6650);
 export const TURRET_RATE = 3;        // R008 砲塔最大轉速（弧度／秒）
 const MEN_CAP = 1600, BODY_CAP = 300;   // R021 小兵實例上限、倒下的人上限
+export const PRONE_TILT = -1.45, PRONE_LIFT = 0.03;   // R075 趴下的姿勢：往前倒將近 90 度（頭朝面向的方向、微微抬著）、離地一點點免得陷進地面
 // R023 坦克的網格縮放（輕坦克小一號、重坦克大一號；中坦克原樣）
 const TANK_SCALE23: Record<number, number> = { [UK_LIGHT]: 0.8, [UK_HEAVY]: 1.18 };
 // hull＝車體（長、高、寬）、top＝砲塔／戰鬥室（長、高、寬；砲管跟著長度伸縮）、fwd＝砲塔沿車頭前移（格）、casemate＝固定戰鬥室（平常朝車頭，正在打時才對準）
@@ -131,7 +132,7 @@ export class BattleView {
   private zombieBodies = new Uint8Array(BODY_CAP);
   private bodyBorn = new Float32Array(BODY_CAP);
   private lastMen = new Int8Array(MAX_UNITS + 1).fill(-1);
-  readonly menDbg = { alive: 0 };
+  readonly menDbg = { alive: 0, prone: 0 };
   private discs: THREE.InstancedMesh;
   private rings: THREE.InstancedMesh;
   private armorArcs: THREE.InstancedMesh | null = null;
@@ -572,7 +573,7 @@ export class BattleView {
   // ---- 每一幀 ----
   update(alpha: number, simT: number, selected: Set<number>, showRanges = true) {
     const w = this.w, m = this.tmp;
-    this.menDbg.alive = 0;
+    this.menDbg.alive = 0; this.menDbg.prone = 0;
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
@@ -1049,10 +1050,14 @@ export class BattleView {
     }
     this.lastMen[u.id] = men;
     const m = this.tmp, aim = Math.atan2(-u.aimZ, u.aimX), scale = y > 0 ? 0.75 : 1;   // 屋頂上站得擠一點
+    const prone = u.kind === UK_INFANTRY && !u.rout && this.w.rules?.morale === 2 && moraleState(u) >= MORALE_PINNED;   // R075：士氣第二版的局，釘住或垮掉的班趴著（釘住的動不了，手上還有路徑也一樣）；正在潰退跑的不趴。morale＝1 的舊局照舊站著
+    if (prone) this.menDbg.prone += men;
     for (let i = 0; i < men && n < MEN_CAP; i++) {
       const [ax, az] = SLOTS[i], bob = moving ? 0.012 * Math.abs(Math.sin(t * 11 + i * 1.7)) : 0;
       m.position.set(x + (ax * cy + az * sy) * scale, y + bob, z + (-ax * sy + az * cy) * scale);
-      m.rotation.set(u.kind === UK_ZOMBIE ? 0.18 : 0, moving ? yaw : aim, u.kind === UK_ZOMBIE ? Math.sin(t * 4 + i + u.id) * 0.06 : 0); m.scale.setScalar(1); m.updateMatrix();
+      m.rotation.set(u.kind === UK_ZOMBIE ? 0.18 : 0, moving ? yaw : aim, u.kind === UK_ZOMBIE ? Math.sin(t * 4 + i + u.id) * 0.06 : 0);
+      if (prone) { m.rotation.set(0, aim, PRONE_TILT); m.position.y = y + PRONE_LIFT; }   // R075：趴下——往面向的方向倒、貼地
+      m.scale.setScalar(1); m.updateMatrix();
       this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, col); n++;
     }
     this.menDbg.alive += men;

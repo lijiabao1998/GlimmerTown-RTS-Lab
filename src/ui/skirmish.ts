@@ -23,8 +23,8 @@ export function parseSeed(text: string): number | null {
   return n <= SEED_MAX ? n : null;
 }
 // 兩項都是標準就不發指令（世界、紀錄都跟沒有這張卡時一樣）
-export const rulesCommand = (force: number, supply: number, ap = false, morale = false): RulesCmd | undefined =>
-  force === 2 && supply === 2 && !ap && !morale ? undefined : { t: 'rules', ...(force !== 2 ? { force } : {}), ...(supply !== 2 ? { income: supply } : {}), ...(ap ? { ap: 1 } : {}), ...(morale ? { morale: 1 } : {}) };   // ap（R051）：穿甲與裝甲厚度；morale（R052）：士氣與壓制
+export const rulesCommand = (force: number, supply: number, ap = false, morale = false, moraleVersion = 1): RulesCmd | undefined =>   // moraleVersion（R075）：新開的局送 2（士氣第二版）
+  force === 2 && supply === 2 && !ap && !morale ? undefined : { t: 'rules', ...(force !== 2 ? { force } : {}), ...(supply !== 2 ? { income: supply } : {}), ...(ap ? { ap: 1 } : {}), ...(morale ? { morale: moraleVersion } : {}) };   // ap（R051）：穿甲與裝甲厚度；morale（R052）：士氣與壓制
 export const setupSummary = (force: number, supply: number, seed: number, ap = false, morale = false): string => `兵力 ${FORCE_TEXT[force]} · 補給 ${SUPPLY_TEXT[supply]} · 種子 ${seed}${ap ? ' · 穿甲' : ''}${morale ? ' · 士氣' : ''}`;
 export const randomSeed = (): number => crypto.getRandomValues(new Uint32Array(1))[0];
 
@@ -83,6 +83,7 @@ export interface Skirmish {
   readonly ap: boolean;         // R051：穿甲與裝甲厚度開著
   readonly canAp: boolean;      // R051：這一頁有這顆開關（閥開著）
   readonly morale: boolean;     // R052：士氣與壓制開著
+  readonly help: boolean;       // R075：設定頁「擬真規則」那一列下面要不要有說明文字（閥）
   readonly canMorale: boolean;  // R052：這一頁有這顆開關（閥開著）
   set: (patch: { force?: number; supply?: number; village?: boolean; ai?: number; ap?: boolean; morale?: boolean }) => void;
   start: (w: World) => RulesCmd | undefined;   // 新的一局：直接套到世界上（布陣時就看得到），回傳要記進紀錄的指令
@@ -105,7 +106,7 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
     saveSetup(store, now);
   };
   return {
-    get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, remembers: !!store, get ap() { return s.ap; }, canAp, get morale() { return s.morale; }, canMorale,
+    get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, remembers: !!store, get ap() { return s.ap; }, canAp, get morale() { return s.morale; }, canMorale, help: valves(q).r075,
     set: p => {
       if (p.force !== undefined) s.force = level(String(p.force));
       if (p.supply !== undefined) s.supply = level(String(p.supply));
@@ -116,7 +117,7 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
       persist();
     },
     start: w => {
-      const cmd = rulesCommand(s.force, s.supply, s.ap, s.morale);
+      const cmd = rulesCommand(s.force, s.supply, s.ap, s.morale, valves(q).r075 ? 2 : 1);
       if (cmd) applyRules(w, cmd);
       if (w.sandbox) return cmd;   // 沙盒不記（main.ts 本來就不會拿沙盒世界來，這裡再擋一次）
       // 地圖、種子從世界讀；模式跟 main.ts 的 reset() 用同一個條件（喪屍要等這裡回去之後才開始，世界上還看不到）
@@ -125,7 +126,7 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
       return cmd;
     },
     adopt: w => {
-      s.force = three(w.rules?.force); s.supply = three(w.rules?.income); s.ap = canAp && w.rules?.ap === 1; s.morale = canMorale && w.rules?.morale === 1;
+      s.force = three(w.rules?.force); s.supply = three(w.rules?.income); s.ap = canAp && w.rules?.ap === 1; s.morale = canMorale && !!w.rules?.morale;
       s.village = canVillage && !w.map && w.n === 32;
       s.ai = aiLevel(w.ai?.find(a => a.side === 1)?.level ?? s.ai);
       if (w.sandbox) return;

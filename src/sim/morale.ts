@@ -1,4 +1,5 @@
 // R052 士氣與壓制（擬真規則，rules 指令帶 morale＝1 才生效；預設關）。整數、決定性、不抽 World.rng。
+// R075 士氣第二版（morale＝2）：潰退真的會發生。跟第一版差四處，都標著「第二版」；morale＝1 的局逐位照舊。
 // 沒有裝甲的單位（步兵、觀測員、各種砲的砲組）被火力打到會累積壓制值（Unit.sup，0–100）：受壓 → 釘住 → 潰退。
 // 數字的相對關係與出處在 docs/tasks/R052-士氣與壓制.md；下面標「暫定」的是遊戲設計，沒有出處。
 import {
@@ -20,6 +21,12 @@ export const SUP_HQ_RANGE = 6 * SUB;   // 離自己還在的指揮部這麼近�
 export const SUP_DECAY_TICKS = 4;      // 每幾步 −1（100 → 0 要 20 秒；暫定）
 export const ROUT_CELLS = 3;           // 潰退時往自己那一側退幾格（暫定）
 export const ROUT_CHECK = 20;          // 每幾步看一次「潰退的人該不該再退一段」（暫定）
+// 第二版（R075，暫定；調整前後量到的數字在 docs/tasks/R075-看得懂.md）
+export const SUP_LOSS_2 = 30;               // 附近友軍陣亡：加得比第一版多一倍
+export const SUP_LOSS_RANGE_2 = 4 * SUB;    // 而且看得比較遠
+export const ROUT_CELLS_2 = 5;              // 一退退五格，看得出來是在跑
+export const WOUNDED_PCT = 150;             // 血量不到一半的單位吃到的壓制 ×1.5（打殘的班更容易垮）
+const second = (w: World): boolean => w.rules?.morale === 2;
 
 
 export const suppressible = (u: Unit): boolean => !UNIT_KINDS[u.kind].armored && u.kind !== UK_ZOMBIE;
@@ -56,6 +63,7 @@ export function suppress(w: World, u: Unit, amount: number): void {
   if (!u.alive || amount <= 0 || !suppressible(u)) return;
   let a = Math.floor((amount * supPct(coverPct(w, u))) / 100);
   if (nearHq(w, u)) a = Math.floor((a * 3) / 4);
+  if (second(w) && u.hp * 2 < UNIT_KINDS[u.kind].hp) a = Math.floor((a * WOUNDED_PCT) / 100);
   if (a > 0) setSup(w, u, (u.sup ?? 0) + a);
 }
 
@@ -76,10 +84,12 @@ export function suppressHouse(w: World, bld: number, amount: number): void {
 }
 
 // 潰退：步兵、觀測員人在空地上（沒有任何掩體，彈坑也算掩體）才退；往自己那一側退 ROUT_CELLS 格，三個方向都找不到路就原地趴著。
+// 第二版：只有碉堡與戰壕留得住；在房子裡的會棄屋往後跑，草叢與彈坑留不住。退 ROUT_CELLS_2 格。
 // 剛潰退的那一刻看一次；之後每 ROUT_CHECK 步再看（掩體沒了、上一段退完了卻還是潰退 → 再退一段）
 function startRout(w: World, u: Unit): void {
-  if (!UNIT_KINDS[u.kind].garrison || coverPct(w, u) < 100) return;
-  const x = cellOf(u.x), z = cellOf(u.z), s = u.side === SIDE_PLAYER ? ROUT_CELLS : -ROUT_CELLS, cl = (v: number) => Math.max(0, Math.min(w.n - 1, v));
+  const x = cellOf(u.x), z = cellOf(u.z), cells = second(w) ? ROUT_CELLS_2 : ROUT_CELLS;
+  if (!UNIT_KINDS[u.kind].garrison || (second(w) ? bldAt(w, x, z)?.kind === BK_PILLBOX || trenchCover(w, x, z) < 100 : coverPct(w, u) < 100)) return;
+  const s = u.side === SIDE_PLAYER ? cells : -cells, cl = (v: number) => Math.max(0, Math.min(w.n - 1, v));
   for (const [gx, gz] of [[cl(x + s), cl(z + s)], [cl(x + s), z], [x, cl(z + s)]]) {
     if ((gx === x && gz === z) || blocks(w, gx, gz)) continue;
     const path = findPath(w, x, z, gx, gz, 0, 0, u.kind);
@@ -95,7 +105,7 @@ export function moraleStep(w: World): void {
     if (e.e !== 'kill') continue;
     const dead = w.units[e.unit - 1];
     if (!dead) continue;
-    for (const u of w.units) if (u.alive && u.side === dead.side && dist(u.x, u.z, dead.x, dead.z) <= SUP_LOSS_RANGE) suppress(w, u, SUP_LOSS);
+    for (const u of w.units) if (u.alive && u.side === dead.side && dist(u.x, u.z, dead.x, dead.z) <= (second(w) ? SUP_LOSS_RANGE_2 : SUP_LOSS_RANGE)) suppress(w, u, second(w) ? SUP_LOSS_2 : SUP_LOSS);
   }
   for (const u of w.units) if (u.alive && u.sup && (w.tick + u.id) % SUP_DECAY_TICKS === 0) setSup(w, u, u.sup - 1);
   for (const u of w.units) if (u.alive && (w.tick + u.id) % ROUT_CHECK === 0 && moraleState(u) === MORALE_BROKEN && (!u.rout || u.pathIdx >= u.path.length)) startRout(w, u);
