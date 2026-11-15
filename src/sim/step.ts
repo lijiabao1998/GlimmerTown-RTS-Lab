@@ -491,9 +491,9 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   if (w.zombies) zombiesStep(w, (a, b) => zombieVision(w, a, b));
   // R018：電腦在玩家指令之後、單位移動之前想（每隔 AI_THINK 步想一次），下的指令跟玩家的一樣套用
   if (w.ai) for (const st of w.ai) if (w.tick >= st.next) {
-    const see = st.v === 2 ? memoSpotted(spotted) : spotted;   // R057：第二版先照第一版想一遍，再改寫（沒帶 v 的電腦完全照舊）；兩次想共用「看得到誰」
+    const see = st.v ? memoSpotted(spotted) : spotted;   // R057：第二版先照第一版想一遍，再改寫（沒帶 v 的電腦完全照舊）；兩次想共用「看得到誰」
     const thought = aiThink(w, st, see);
-    for (const c of st.v === 2 ? aiThink2(w, st, see, thought) : thought) applyCommand(w, c);
+    for (const c of st.v ? aiThink2(w, st, see, thought) : thought) applyCommand(w, c);   // R078：v＝3 也走 aiThink2（戰術同第二版，生產換成 ai3.ts）
     st.next = w.tick + AI_THINK[st.level];
   }
   for (const u of w.units) if (u.alive) moveUnit(w, u);

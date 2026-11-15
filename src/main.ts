@@ -159,7 +159,7 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   if (build) { paused = true; planner.refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(ecoCmd());
-    if (ai && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: 2 } : {}) });
+    if (ai && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}) });
   }
   ui();
   syncBattleAudio();
@@ -209,7 +209,7 @@ function startBattle() {
   for (const c of planner.plan) issue(c);
   for (const c of enemy) issue(c);
   if (V.r019) issue(ecoCmd());
-  if (V.r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: 2 } : {}) });
+  if (V.r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}) });
   phase = 'battle'; planner.clear();
   if (V.r016) { if (V.r041) startOrder(); else startBanner(); }
   view.setWorld(w, -1);

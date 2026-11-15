@@ -15,7 +15,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r057-browser-'));
 const SAME = '重播結束 · 跟原局相同';
 // 故意弄壞（只編進 broken 那一份，網址帶 __r057mutant 才生效）。main.ts 那一段出現兩次，兩處一起改
 const mutations = {
-  nov: ['src/main.ts', '...(V.r057 ? { v: 2 } : {})', "...(V.r057 && !location.search.includes('__r057mutant=nov') ? { v: 2 } : {})", 2],
+  nov: ['src/main.ts', '...(V.r057 ? { v: V.r078 ? 3 : 2 } : {})', "...(V.r057 && !location.search.includes('__r057mutant=nov') ? { v: V.r078 ? 3 : 2 } : {})", 2],
   valve: ['src/valves.ts', "get r057() { return on('057'); }", "get r057() { return on('057') || location.search.includes('__r057mutant=valve'); }", 1],
 };
 const applied = new Set();
@@ -53,7 +53,8 @@ async function main() {
     const frames = () => E('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
     const rect = id => E(`(()=>{const e=document.getElementById(${JSON.stringify(id)});if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height,hit:e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}})()`);
     const press = async id => { const r = await rect(id); assert(r && r.hit && r.w >= 44 && r.h >= 44, `fixture: ${id} is a reachable 44px target`); await touchTap(page, r.x, r.y); await frames(); };
-    const opened = async (q = '', keep = false) => { await open(q, { menu: true, keep }); assert(await E('!!window.__rts?.ready'), 'fixture: RTS ready'); await frames(); };
+    // 這支守衛驗的是電腦第二版（R057）：每一頁都帶 noR078=1，開戰送的才是 v＝2（R078 起新開的局預設送第三版，另有 tests/ai3-browser.mjs）
+    const opened = async (q = '', keep = false) => { await open(q ? `noR078=1&${q}` : 'noR078=1', { menu: true, keep }); assert(await E('!!window.__rts?.ready'), 'fixture: RTS ready'); await frames(); };
     const state = () => E(`({phase:__rts.phase(),tick:__rts.tick(),hash:__rts.hash(),seed:__rts.seed(),winner:__rts.winner(),log:__rts.log()})`);
     const aiCmds = async () => (await E('__rts.log()')).filter(c => c.cmd.t === 'ai').map(c => c.cmd);
 

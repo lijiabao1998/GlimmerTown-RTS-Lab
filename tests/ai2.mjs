@@ -63,7 +63,7 @@ const groups = {
     setAi(one, ME, 3); setAi(two, ME, 3, 2);
     assert.deepEqual([one.ai[0].v, two.ai[0].v], [undefined, 2], 'flag: v 2 is stored, nothing else is');
     assert.notEqual(hashWorld(one), hashWorld(two), 'flag: the version is folded into the hash');
-    for (const v of [0, 1, 3, 2.5, '2']) { const w = createWorld(3); setAi(w, ME, 3, v); assert.equal(w.ai[0].v, undefined, `flag: v ${JSON.stringify(v)} is the first version`); }
+    for (const v of [0, 1, 4, 2.5, '2']) { const w = createWorld(3); setAi(w, ME, 3, v); assert.equal(w.ai[0].v, undefined, `flag: v ${JSON.stringify(v)} is the first version`); }
     setAi(two, ME, 1);
     assert.deepEqual([two.ai[0].level, two.ai[0].v], [1, 2], 'flag: sending ai again changes the level, not the version');
     setAi(one, ME, 2, 2);
@@ -363,7 +363,7 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK ai2/$
   const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
   const main = read('../src/main.ts');
   assert.match(read('../src/valves.ts'), /get r057\(\) \{ return on\('057'\); \}/, 'valve: r057 is on the table');
-  assert.equal((main.match(/issue\(\{ t: 'ai', side: SIDE_ENEMY, level: aiLevel, \.\.\.\(V\.r057 \? \{ v: 2 \} : \{\}\) \}\);/g) ?? []).length, 2, 'wiring: both places that hand the enemy to the computer send the version, behind the valve');
+  assert.equal((main.match(/issue\(\{ t: 'ai', side: SIDE_ENEMY, level: aiLevel, \.\.\.\(V\.r057 \? \{ v: V\.r078 \? 3 : 2 \} : \{\}\) \}\);/g) ?? []).length, 2, 'wiring: both places that hand the enemy to the computer send the version, behind the valve');
   assert.equal((main.match(/t: 'ai'/g) ?? []).length, 2, 'wiring: there is no third place that starts a computer opponent');
   assert.match(read('../README.md'), /\?noR057=1/, 'readme: the valve is documented');
   console.log('OK ai2/wiring');
@@ -373,7 +373,7 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK ai2/$
 const root = resolve(fileURLToPath(new URL('..', import.meta.url))), temp = mkdtempSync(join(tmpdir(), 'r057-negative-'));
 const mutants = [
   ['version_unhashed', 'flag', 'world.ts', ' if (a.v) f.int(0x4156).int(a.v);', '', 'flag: the version is folded into the hash'],
-  ['always_second', 'flag', 'step.ts', 'for (const c of st.v === 2 ? aiThink2(w, st, see, thought) : thought) applyCommand(w, c);', 'for (const c of aiThink2(w, st, see, thought)) applyCommand(w, c);', 'flag: first version against first version on map 0 with null is bit for bit what it was before this card'],
+  ['always_second', 'flag', 'step.ts', 'for (const c of st.v ? aiThink2(w, st, see, thought) : thought) applyCommand(w, c);', 'for (const c of aiThink2(w, st, see, thought)) applyCommand(w, c);', 'flag: first version against first version on map 0 with null is bit for bit what it was before this card'],
   ['no_gather', 'wave', 'ai2.ts', '    const going = st.go !== undefined && w.tick - st.go <= WAVE_GO;', '    const going = true;', 'wave: the second version stays at its base while the wave is short (farthest'],
   ['never_launch', 'wave', 'ai2.ts', '(home.length >= WAVE[lv] || w.tick - st.gather >= WAVE_WAIT)', '(home.length >= 99)', 'wave: after 45 seconds it sets out anyway (go undefined'],
   ['no_fall_back', 'wave', 'ai2.ts', 'forward.length * 3 < st.size && seen.length > forward.length;', 'forward.length * 3 < st.size && seen.length > 99;', 'wave: a remnant facing more enemies than itself falls back to the rally point (order 2'],
