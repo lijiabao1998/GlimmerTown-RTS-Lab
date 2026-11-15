@@ -83,7 +83,8 @@ export async function withBrowser(opt, fn) {
     const chrome = spawn(chromePath, [
       '--headless=new', `--remote-debugging-port=${devPort}`, `--user-data-dir=${profile}`, `--window-size=${w},${h}`,
       // gl:false＝只用 CPU 畫 2D canvas（實驗線全是 2D canvas、大量 getImageData；走 SwiftShader 開機要 6 分鐘，CPU 約 20 秒）
-      ...(opt.gl === false ? ['--disable-gpu'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']),
+      // GT_REAL_GPU=1（R079，只給本機用；CI 沒有顯示卡）：用這台機器的真顯示卡跑守衛，驗軟體繪圖走不到的那一半（例如多重取樣真的開了沒有）
+      ...(opt.gl === false ? ['--disable-gpu'] : process.env.GT_REAL_GPU === '1' ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']),
       '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--mute-audio',
       ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
       'about:blank',
