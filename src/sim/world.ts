@@ -227,7 +227,7 @@ export type SimEvent =
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
 export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number }   // R044 armor2：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
 
-export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number }   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
+export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number; v?: 2; gather?: number; go?: number; size?: number }   // R057 v＝2：第二版（ai2.ts）；gather＝在基地集結從哪一步開始、go＝上一波哪一步出發、size＝那一波幾台   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
 export interface SmokeCloud { id: number; side: number; x: number; z: number; born: number; expires: number }
 
@@ -448,7 +448,7 @@ export function hashWorld(w: World): string {
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
   if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); if (w.rules.morale) f.int(0x524d).int(w.rules.morale); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
   if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
-  if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
+  if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); if (a.v) f.int(0x4156).int(a.v); if (a.gather !== undefined) f.int(0x4147).int(a.gather); if (a.go !== undefined) f.int(0x4157).int(a.go); if (a.size !== undefined) f.int(0x415a).int(a.size); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
   if (w.smoke) {

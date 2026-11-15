@@ -20,14 +20,14 @@ const ADVANCE = [0, 4, 6, 8];                       // 難度 1／2／3：每次
 const SCOUT = 5;                                    // R044 裝甲車在組的重心前面幾格偵察
 const ARMOR_MEMORY = 1200;                          // R044 看到敵方裝甲後 60 秒內還算「看過」（補給不夠時先存錢補驅逐戰車）
 
-// ai 指令：讓電腦接手 side（同一方再送一次＝換難度）
-export function setAi(w: World, side: number, level: number): void {
+// ai 指令：讓電腦接手 side（同一方再送一次＝換難度，版本不換）。v＝2：R057 第二版（ai2.ts 在第一版想完之後改寫指令）；其他值＝第一版
+export function setAi(w: World, side: number, level: number, v?: number): void {
   if ((side !== 0 && side !== 1) || !(level >= 1 && level <= 3) || (level | 0) !== level) return;
   if (!w.ai) w.ai = [];
   const corner = side === SIDE_PLAYER ? 5 : w.n - 6;     // 對方的出生角落（開局就知道的地圖情報；32×32 是 26）
   const old = w.ai.find(a => a.side === side);
   if (old) { old.level = level; return; }
-  w.ai.push({ side, level, next: w.tick, ox: center(corner), oz: center(corner), seen: 0, wp: 0 });
+  w.ai.push({ side, level, next: w.tick, ox: center(corner), oz: center(corner), seen: 0, wp: 0, ...(v === 2 ? { v: 2 as const } : {}) });
   w.ai.sort((a, b) => a.side - b.side);
 }
 
@@ -42,7 +42,7 @@ function cover(w: World, x: number, z: number): number {
 }
 
 // R044：(x, z) 附近（由近到遠、同距離先小 z 再小 x）第一個在地圖內、沒有站著的建築的格；都沒有回傳 null
-function freeNear(w: World, x: number, z: number): [number, number] | null {
+export function freeNear(w: World, x: number, z: number): [number, number] | null {
   for (let r = 0; r <= 2; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
     const cx = x + dx, cz = z + dz;
