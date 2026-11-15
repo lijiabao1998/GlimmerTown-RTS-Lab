@@ -10,6 +10,7 @@
 // 守衛與卡面的量測直接 import { duel, summarize }。
 import { createWorld, hashWorld, SIDE_PLAYER, SIDE_ENEMY } from '../src/sim/world.ts';
 import { step } from '../src/sim/step.ts';
+import { hqAlive } from '../src/sim/eco.ts';
 
 export const ECO = { t: 'eco', inf: 1, guns: 1, tanks: 1, armor2: 1, soviet: 1, international: 1 };   // 跟 src/main.ts 開局送的一樣（全部兵種）
 
@@ -31,16 +32,18 @@ export function duel({ map = 1, seed = 1, ticks = 24000, rules = null, a = { lev
     if (w.rules?.morale) { const now = new Set(); for (const u of w.units) if (u.alive && u.rout) { now.add(u.id); if (!routing.has(u.id)) stat.routs++; } routing = now; }
   }
   const alive = side => w.units.filter(u => u.alive && u.side === side).length;
-  return { seed, map, winner: w.winner, ticks: w.tick, alive: [alive(0), alive(1)], hash: hashWorld(w), ...stat };
+  // hqDown：到步數上限還沒宣布勝負、但有一方的指揮部其實已經倒了（勝負判定在等還在飛的砲彈；砲多的大地圖上天上幾乎隨時有砲彈）
+  const hqDown = w.winner < 0 && !!w.eco && (!hqAlive(w, 0) || !hqAlive(w, 1));
+  return { seed, map, winner: w.winner, ticks: w.tick, alive: [alive(0), alive(1)], hash: hashWorld(w), hqDown, ...stat };
 }
 
 const median = xs => { const s = [...xs].sort((p, q) => p - q); return s.length ? s[s.length >> 1] : 0; };
-// 一批的結果：a 贏幾局、b 贏幾局、平手、打不完（到步數上限）、分出勝負的那些局多長
+// 一批的結果：a 贏幾局、b 贏幾局、平手、打不完（到步數上限；hqDown＝其中指揮部已經倒了、只是遊戲還沒宣布的）、分出勝負的那些局多長
 export function summarize(rows) {
   const n = rows.length, aWins = rows.filter(r => r.winnerIs === 'a').length, bWins = rows.filter(r => r.winnerIs === 'b').length;
   const draws = rows.filter(r => r.winnerIs === 'draw').length, timeouts = rows.filter(r => r.winnerIs === 'timeout').length;
   const done = rows.filter(r => r.winnerIs === 'a' || r.winnerIs === 'b').map(r => r.ticks), sum = k => rows.reduce((s, r) => s + k(r), 0);
-  return { n, aWins, bWins, draws, timeouts, aShare: aWins + bWins ? Math.round((aWins * 100) / (aWins + bWins)) : null,
+  return { n, aWins, bWins, draws, timeouts, hqDown: rows.filter(r => r.hqDown).length, aShare: aWins + bWins ? Math.round((aWins * 100) / (aWins + bWins)) : null,
     medianSeconds: Math.round(median(done) / 20), shortestSeconds: done.length ? Math.round(Math.min(...done) / 20) : 0, longestSeconds: done.length ? Math.round(Math.max(...done) / 20) : 0,
     bounces: sum(r => r.bounces), morale: [1, 2, 3].map(i => sum(r => r.morale[i])), routs: sum(r => r.routs) };
 }
@@ -62,6 +65,7 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replaceAll('\\',
   const rules = arg('rules', '') ? Object.fromEntries(String(arg('rules')).split(',').map(p => { const [k, v] = p.split('='); return [k, v === undefined ? 1 : Number(v)]; })) : null;
   const side = (lv, v) => ({ level: Number(arg(lv, 3)), ...(arg(v, '') ? { v: Number(arg(v)) } : {}) });
   const t0 = Date.now(), rows = batch({ seeds, swap: has('swap'), map: Number(arg('map', 1)), ticks: Number(arg('ticks', 24000)), rules, a: side('a', 'av'), b: side('b', 'bv') });
-  if (has('rows')) for (const r of rows) console.log(`seed ${r.seed}${r.swapped ? ' 對調' : ''}：${r.winnerIs} ${Math.round(r.ticks / 20)} 秒，剩 ${r.alive.join('／')}，擊毀 ${r.kills.join('／')}，跳彈 ${r.bounces}，壓制 ${r.morale.slice(1).join('／')}，潰退 ${r.routs}`);
+  const ab = (r, pair) => (r.swapped ? [pair[1], pair[0]] : pair).join('／');   // 對調的那一局 a 在敵方那一側：照 a／b 的順序印，不照左右
+  if (has('rows')) for (const r of rows) console.log(`seed ${r.seed}${r.swapped ? ' 對調' : ''}：${r.winnerIs} ${Math.round(r.ticks / 20)} 秒${r.hqDown ? '（指揮部已倒、遊戲還沒宣布）' : ''}，剩（a／b）${ab(r, r.alive)}，擊毀（a／b）${ab(r, r.kills)}，跳彈 ${r.bounces}，壓制 ${r.morale.slice(1).join('／')}，潰退 ${r.routs}`);
   console.log(JSON.stringify({ map: Number(arg('map', 1)), rules, a: side('a', 'av'), b: side('b', 'bv'), ...summarize(rows), wallSeconds: Math.round((Date.now() - t0) / 1000) }));
 }

@@ -1,7 +1,7 @@
-// R057 電腦對手 v2：不開瀏覽器的部分。版本旗標與第一版逐位不變、分波次（集結、出發、殘兵撤回）、懂穿甲、懂壓制、砲兵（換陣地、反砲兵）、決定性。
+// R057 電腦對手 v2：不開瀏覽器的部分。版本旗標與第一版逐位不變、分波次（集結、出發、殘兵撤回）、懂穿甲、懂壓制、砲兵（換陣地、反砲兵）、一個單位一條指令、決定性。
 // 用法：node tests/ai2.mjs            全部跑，另外把模擬故意弄壞幾次（隔離副本），確認第一個紅燈落在指定的斷言上
 //       node tests/ai2.mjs <群組名>   只跑那一群（隔離副本裡用）
-// 對戰的勝率在 tests/ai2-duel.mjs；真實 Chrome 在 tests/ai2-browser.mjs。
+// 對戰的勝率在 tests/ai2-duel.mjs、tests/ai2-duel-morale.mjs、tests/ai2-mirror.mjs；真實 Chrome 在 tests/ai2-browser.mjs。
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,18 +9,18 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createWorld, hashWorld, center, cellOf, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SIDE_PLAYER, SIDE_ENEMY,
-  UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ASSAULT } from '../src/sim/world.ts';
+  UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_MORTAR, UK_ATGUN, UK_LIGHT, UK_HEAVY, UK_ASSAULT } from '../src/sim/world.ts';
 import { step, runLog } from '../src/sim/step.ts';
 import { dist } from '../src/sim/math.ts';
 import { applyRules } from '../src/sim/rules.ts';
-import { setAi } from '../src/sim/ai.ts';
+import { setAi, aiThink } from '../src/sim/ai.ts';
 import { apHit } from '../src/sim/ballistics.ts';
 import { isCommand } from '../src/sim/commandCheck.ts';
 import { runScript } from '../src/sim/script.ts';
 import { encodeWorld, decodeWorld } from '../src/sim/worldCodec.ts';
-import { soundCell, WAVE, WAVE_WAIT, BASE_CELLS, GUN_SHOTS } from '../src/sim/ai2.ts';
+import { aiThink2, soundCell, WAVE, WAVE_WAIT, BASE_CELLS, DEFEND_CELLS, GUN_SHOTS, GUN_SAFE } from '../src/sim/ai2.ts';
 
-assert.deepEqual([WAVE, WAVE_WAIT, GUN_SHOTS], [[0, 3, 4, 5], 900, 3], 'fixture: the numbers on the card are the numbers in src/sim/ai2.ts');
+assert.deepEqual([WAVE, WAVE_WAIT, GUN_SHOTS, DEFEND_CELLS, GUN_SAFE], [[0, 3, 4, 5], 900, 3, 3, 4], 'fixture: the numbers on the card are the numbers in src/sim/ai2.ts');
 const cells = n => n * SUB, ME = SIDE_ENEMY, FOE = SIDE_PLAYER;   // 受測的電腦放在敵方那一側（左上角是它的家）
 const ECO = { t: 'eco', inf: 1, guns: 1, tanks: 1, armor2: 1, soviet: 1, international: 1 };
 // 一片空地（沒有房子、路、彈坑、植被），上面只放守衛自己擺的東西
@@ -66,6 +66,8 @@ const groups = {
     for (const v of [0, 1, 3, 2.5, '2']) { const w = createWorld(3); setAi(w, ME, 3, v); assert.equal(w.ai[0].v, undefined, `flag: v ${JSON.stringify(v)} is the first version`); }
     setAi(two, ME, 1);
     assert.deepEqual([two.ai[0].level, two.ai[0].v], [1, 2], 'flag: sending ai again changes the level, not the version');
+    setAi(one, ME, 2, 2);
+    assert.deepEqual([one.ai[0].level, one.ai[0].v], [2, undefined], 'flag: sending ai again with v 2 does not turn a first-version computer into the second');
     assert.deepEqual([isCommand({ t: 'ai', side: 1, level: 2, v: 2 }), isCommand({ t: 'ai', side: 1, level: 2 }), isCommand({ t: 'ai', side: 1, level: 2, v: 'two' })], [true, true, false], 'flag: the command check knows the new field');
     const viaLog = runLog(createWorld(3), battle(0, null, 3, { level: 2 }, { level: 2, v: 2 }), 1);
     assert.deepEqual(viaLog.ai.map(a => [a.side, a.v]), [[SIDE_PLAYER, undefined], [SIDE_ENEMY, 2]], 'flag: the version arrives through the ai command, per side');
@@ -111,10 +113,24 @@ const groups = {
       const { w, mine } = camp(2, 2), near = put(w, FOE, UK_TANK, 12, 6);
       tick(w);
       assert(mine.every(u => u.order === ORD_ATTACK && u.target === near.id), 'wave: while gathering, an enemy within reach is engaged');
-      const b = camp(2, 2); put(b.w, ME, UK_OBSERVER, 10, 10); const away = put(b.w, FOE, UK_TANK, 22, 22);
-      for (let i = 0; i < 200; i++) tick(b.w);
-      assert(b.mine.filter(u => u.kind === UK_TANK).every(u => u.order !== ORD_ATTACK && fromRally(u) <= BASE_CELLS * SUB), 'wave: while gathering, a distant enemy it can see is not chased');
-      assert(away.alive, 'fixture: the distant enemy is still there');
+      // 坦克在 (5,5)、(6,5)，射程 9 格；敵人在 (18,5)：離第二台 12 格（9＋DEFEND_CELLS，還手）、離第一台 13 格（不追）。觀測員讓它被看得到
+      const edge = version => { const c = camp(version, 2); put(c.w, ME, UK_OBSERVER, 10, 4); const foe = put(c.w, FOE, UK_TANK, 18, 5); tick(c.w); return { ...c, foe }; };
+      const e1 = edge(undefined);
+      assert(e1.mine.every(u => u.order === ORD_ATTACK && u.target === e1.foe.id), 'fixture: the first version sends both tanks after an enemy the observer sees 12 and 13 cells away');
+      const e2 = edge(2);
+      assert.deepEqual([e2.mine[1].order, e2.mine[1].target], [ORD_ATTACK, e2.foe.id], 'wave: while gathering, an enemy within its range plus three cells is engaged');
+      assert.notEqual(e2.mine[0].order, ORD_ATTACK, 'wave: while gathering, an enemy it can see one cell beyond that is not chased');
+      // 遠處看得到的敵人，等再久也不追出去（第一版馬上追）
+      const distant = version => { const c = camp(version, 2); put(c.w, ME, UK_OBSERVER, 10, 10); const away = put(c.w, FOE, UK_TANK, 20, 18); let chased = false; for (let i = 0; i < 200; i++) { tick(c.w); chased ||= c.mine.some(u => u.order === ORD_ATTACK); } return { ...c, away, chased }; };
+      assert.equal(distant(undefined).chased, true, 'fixture: the first version goes after the distant enemy, so the computer does see it');
+      const b = distant(2);
+      assert(!b.chased && b.mine.every(u => fromRally(u) <= BASE_CELLS * SUB) && b.away.alive, 'wave: while gathering, a distant enemy it can see is not chased');
+      // 不偷看：手上的攻擊指令如果目標現在看不到（11 格外、反戰車砲視野 7 格），就不拿它當「敵人打到附近」的理由；有觀測員看著才算。
+      // 用反戰車砲：它手上有還活著的目標時第一版不再給它指令，第二版看的就是它手上那一條
+      const standing = watched => { const w = field(); bases(w); const t = put(w, ME, UK_ATGUN, 11, 6), foe = put(w, FOE, UK_TANK, 22, 6); if (watched) put(w, ME, UK_OBSERVER, 14, 6); t.order = ORD_ATTACK; t.target = foe.id; ai(w, 2); tick(w); return { t, foe }; };
+      const lit = standing(true), dark = standing(false);
+      assert.deepEqual([lit.t.order, lit.t.target], [ORD_ATTACK, lit.foe.id], 'fixture: with an observer watching the target, the gun keeps the attack order it already had');
+      assert(dark.t.order === ORD_MOVE && Math.abs(dark.t.tx - 6) <= 2 && Math.abs(dark.t.tz - 6) <= 2, `wave: a target it can no longer see is no reason to stay out; the gun goes to the rally point (order ${dark.t.order}, to ${dark.t.tx},${dark.t.tz})`);
     }
     // 殘兵撤回：出發時 6 台、前面只剩 1 台、看得到 2 個敵人 → 回集結點；之後最久 45 秒再出發
     const remnant = (size, foes) => {
@@ -129,17 +145,27 @@ const groups = {
     assert(r.lone.order === ORD_MOVE && Math.abs(r.lone.tx - 6) <= 2 && Math.abs(r.lone.tz - 6) <= 2, `wave: a remnant facing more enemies than itself falls back to the rally point (order ${r.lone.order}, to ${r.lone.tx},${r.lone.tz})`);
     assert.equal(remnant(3, 2).lone.order, ORD_ATTACK, 'wave: a third of the wave or more fights on');
     assert.equal(remnant(6, 1).lone.order, ORD_ATTACK, 'wave: a remnant that is not outnumbered fights on');
+    // 沒有人在基地等的時候不算在集結，也不會「出發」：很久以前留下的集結時間要丟掉，殘兵照樣撤回來
     {
-      const joins = ahead => {
+      const w = field(); bases(w);
+      const lone = put(w, ME, UK_TANK, 16, 16); put(w, FOE, UK_TANK, 20, 15); put(w, FOE, UK_TANK, 20, 17);
+      const st = ai(w, 2); st.go = -500; st.size = 6; st.gather = -2000;
+      tick(w);
+      assert.deepEqual([st.go, st.gather, lone.order], [-500, undefined, ORD_MOVE], 'wave: with nobody waiting at the base no wave sets out, and the stale gathering time is dropped');
+    }
+    {
+      const joins = (ahead, aheadKind = UK_TANK) => {
         const w = field(); bases(w);
         const fresh = put(w, ME, UK_TANK, 6, 6);
-        for (let i = 0; i < ahead; i++) put(w, ME, UK_TANK, 16 + i, 16);
+        for (let i = 0; i < ahead; i++) put(w, ME, aheadKind, 16 + i, 16);
         const st = ai(w, 2); st.go = -500; st.size = 5;
         for (let i = 0; i < 300; i++) tick(w);
         return fromRally(fresh) > BASE_CELLS * SUB;
       };
       assert.equal(joins(2), true, 'wave: with a group still fighting up front a new unit goes to join it');
       assert.equal(joins(0), false, 'wave: with nobody left up front a new unit waits at the base for the next wave');
+      assert.equal(joins(2, UK_INFANTRY), true, 'wave: two squads still fighting up front are a group to join');
+      assert.equal(joins(1, UK_INFANTRY), false, 'wave: one squad on its own up front is not a group; a new unit waits for the next wave');
     }
     for (const u of r.w.units) if (u.side === FOE) u.alive = false;   // 讓它平安回到基地
     let again = false;
@@ -164,6 +190,9 @@ const groups = {
     assert.deepEqual([s.me.order, s.me.target], [ORD_ATTACK, s.them[1].id], 'ap: with a target it can pierce in range, the second version shoots that one instead');
     s = duel(2, null, [heavy, light]);
     assert.deepEqual([s.me.order, s.me.target], [ORD_ATTACK, s.them[0].id], 'ap: without the rule the second version targets like the first');
+    // 射程內沒有打得穿的、射程外看得到一台打得穿的（觀測員看著）：改打那台，攻擊指令會自己開進射程
+    s = duel(2, AP, [heavy, [UK_LIGHT, 16, 4, [1, 0]]], [[UK_OBSERVER, 16, 8]]);
+    assert.deepEqual([s.me.order, s.me.target], [ORD_ATTACK, s.them[1].id], `ap: with nothing it can pierce in range it goes for one it can pierce farther off (order ${s.me.order}, target ${s.me.target})`);
     // 只有側面打得穿：繞過去
     s = duel(2, AP, [[UK_ASSAULT, 11, 16, [1, 0]]]);
     assert.deepEqual([s.me.order, s.me.tx, Math.abs(s.me.tz - 16)], [ORD_MOVE, 11, 3], `ap: when only the side can be pierced it drives to the flank (order ${s.me.order}, to ${s.me.tx},${s.me.tz})`);
@@ -179,6 +208,7 @@ const groups = {
       ai(w, 2); tick(w);
       const flankers = [a, b].filter(u => u.order === ORD_MOVE && u.tx === 11 && Math.abs(u.tz - 16) === 3);
       assert.equal(flankers.length, 1, `ap: two tanks against one lone target send exactly one round the flank (${[a, b].map(u => `${u.order}:${u.tx},${u.tz}`)})`);
+      assert.equal(flankers[0], b, 'ap: of two tanks the one nearer the flank goes, not the one with the lower number');
       assert(t.alive, 'fixture: the target is still there');
     }
     // 側面也打不穿：不打；人在它射程裡就退開；砲兵優先打它
@@ -225,6 +255,8 @@ const groups = {
     assert.deepEqual([m.me.order, m.me.target], [ORD_ATTACK, m.far.id], 'morale: the mortar takes the squad that is not pinned yet');
     m = mortar(2, M, 75);
     assert.equal(m.me.target, m.near.id, 'morale: with every squad pinned it takes the nearest');
+    m = mortar(2, null, 0);
+    assert.equal(m.me.target, m.near.id, 'morale: without the rule the mortar targets like the first version');
     // 對方被釘住：步兵多走幾格過去打
     const assault = (version, foeSup) => {
       const w = field(M), me = put(w, ME, UK_INFANTRY, 16, 16); put(w, ME, UK_OBSERVER, 16, 15);
@@ -263,9 +295,25 @@ const groups = {
     assert(h.g.order === ORD_MOVE && (there.zone !== h.here.zone || there.cell !== h.here.cell), `guns: after three shots from one sound cell the howitzer moves to another (order ${h.g.order}, to ${h.g.tx},${h.g.tz})`);
     assert.notEqual(heard(2, GUN_SHOTS - 1).g.order, ORD_MOVE, 'guns: after two shots it stays');
     assert.notEqual(heard(undefined, GUN_SHOTS).g.order, ORD_MOVE, 'fixture: the first version never displaces');
+    // 一再換陣地也不會越走越遠：每一輪都讓對方把它現在的小格聽滿三發
+    {
+      const w = field(), g = put(w, ME, UK_HOWITZER, 20, 20), start = [g.x, g.z];
+      ai(w, 2);
+      let farthest = 0;
+      for (let round = 0; round < 6; round++) {
+        const at = soundCell(w, g.x, g.z);
+        w.counterbattery = [{ side: FOE, zone: at.zone, cell: at.cell, shots: GUN_SHOTS, last: w.tick }];
+        for (let i = 0; i < 400; i++) { tick(w); if (i > 30 && g.pathIdx >= g.path.length) break; }
+        const now = soundCell(w, g.x, g.z);
+        assert(now.zone !== at.zone || now.cell !== at.cell, `guns: round ${round}, the howitzer left the sound cell it was heard in`);
+        farthest = Math.max(farthest, dist(g.x, g.z, start[0], start[1]));
+      }
+      assert(farthest <= 3 * SUB, `guns: displacing six times in a row stays near where it started (farthest ${(farthest / SUB).toFixed(1)} cells)`);
+    }
     // 反砲兵射擊
-    const located = (version, shots) => {
+    const located = (version, shots, own = null) => {
       const w = field(), g = put(w, ME, UK_HOWITZER, 8, 8), spot = soundCell(w, center(24), center(24));
+      if (own) put(w, ME, UK_OBSERVER, own[0], own[1]);
       w.counterbattery = [{ side: ME, zone: spot.zone, cell: spot.cell, shots, last: 0 }];
       ai(w, version); tick(w);
       return g;
@@ -274,6 +322,35 @@ const groups = {
     assert(g.order === ORD_FIRE_AT && Math.abs(g.tx - 24) <= 3 && Math.abs(g.tz - 24) <= 3, `guns: with nothing in sight the howitzer fires at the area the sound ranging has narrowed down (order ${g.order}, at ${g.tx},${g.tz})`);
     assert.notEqual(located(2, 1).order, ORD_FIRE_AT, 'guns: a first rough bearing is not fired at');
     assert.notEqual(located(undefined, 2).order, ORD_FIRE_AT, 'fixture: the first version does not use the sound ranging');
+    // 瞄的那一格（26,26）旁邊有自己人就不打；自己人離得遠照打
+    assert.deepEqual([g.tx, g.tz], [26, 26], 'fixture: the narrowed-down area is centred on cell 26,26');
+    assert.equal(located(2, 2, [16, 16]).order, ORD_FIRE_AT, 'fixture: own troops far from the area do not stop the fire');
+    assert.notEqual(located(2, 2, [25, 27]).order, ORD_FIRE_AT, 'guns: it does not fire at an area with its own troops in it');
+    // 第一版正要轟對方指揮部的時候，不改去打聽出來的砲位
+    const shelling = version => {
+      const w = field(); bases(w);
+      const gun = put(w, ME, UK_HOWITZER, 12, 12), spot = soundCell(w, center(20), center(12));
+      w.counterbattery = [{ side: ME, zone: spot.zone, cell: spot.cell, shots: 2, last: 0 }];
+      ai(w, version); tick(w);
+      return gun;
+    };
+    g = shelling(undefined);
+    assert.deepEqual([g.order, g.tx, g.tz], [ORD_FIRE_AT, 27, 27], 'fixture: the first version\'s howitzer shells the enemy headquarters');
+    g = shelling(2);
+    assert.deepEqual([g.order, g.tx, g.tz], [ORD_FIRE_AT, 27, 27], `guns: counter-battery fire does not take a howitzer off the enemy headquarters (order ${g.order}, at ${g.tx},${g.tz})`);
+  },
+  // 一次想完，同一個單位只會收到一條指令（前面的段落把它排進群組指令、後面的段落又改派時，群組指令裡不留它）
+  orders() {
+    const w = field({ morale: 1 }); bases(w);
+    const a = put(w, ME, UK_TANK, 12, 5), b = put(w, ME, UK_TANK, 12, 7), squad = put(w, ME, UK_INFANTRY, 12, 6);
+    squad.sup = 45;
+    const st = ai(w, 2), blind = () => false, out = aiThink2(w, st, blind, aiThink(w, st, blind));
+    const perUnit = new Map();
+    for (const c of out) for (const id of c.ids ?? []) perUnit.set(id, [...(perUnit.get(id) ?? []), c]);
+    assert.deepEqual([...perUnit.values()].map(list => list.length), [1, 1, 1], `orders: every unit gets exactly one order in one think (${JSON.stringify(out)})`);
+    const rally = perUnit.get(a.id)[0];
+    assert(rally === perUnit.get(b.id)[0] && rally.t === 'move' && Math.abs(rally.x - 6) <= 1 && Math.abs(rally.z - 6) <= 1, 'orders: the two tanks share one order to the rally point');
+    assert(perUnit.get(squad.id)[0].t === 'move' && perUnit.get(squad.id)[0].x < 12, 'orders: the suppressed squad\'s order is the one that takes it back toward its own side');
   },
 };
 
@@ -296,11 +373,23 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK ai2/$
 const root = resolve(fileURLToPath(new URL('..', import.meta.url))), temp = mkdtempSync(join(tmpdir(), 'r057-negative-'));
 const mutants = [
   ['version_unhashed', 'flag', 'world.ts', ' if (a.v) f.int(0x4156).int(a.v);', '', 'flag: the version is folded into the hash'],
-  ['always_second', 'flag', 'step.ts', 'for (const c of st.v === 2 ? aiThink2(w, st, spotted, thought) : thought) applyCommand(w, c);', 'for (const c of aiThink2(w, st, spotted, thought)) applyCommand(w, c);', 'flag: first version against first version on map 0 with null is bit for bit what it was before this card'],
+  ['always_second', 'flag', 'step.ts', 'for (const c of st.v === 2 ? aiThink2(w, st, see, thought) : thought) applyCommand(w, c);', 'for (const c of aiThink2(w, st, see, thought)) applyCommand(w, c);', 'flag: first version against first version on map 0 with null is bit for bit what it was before this card'],
   ['no_gather', 'wave', 'ai2.ts', '    const going = st.go !== undefined && w.tick - st.go <= WAVE_GO;', '    const going = true;', 'wave: the second version stays at its base while the wave is short (farthest'],
   ['never_launch', 'wave', 'ai2.ts', '(home.length >= WAVE[lv] || w.tick - st.gather >= WAVE_WAIT)', '(home.length >= 99)', 'wave: after 45 seconds it sets out anyway (go undefined'],
   ['no_fall_back', 'wave', 'ai2.ts', 'forward.length * 3 < st.size && seen.length > forward.length;', 'forward.length * 3 < st.size && seen.length > 99;', 'wave: a remnant facing more enemies than itself falls back to the rally point (order 2'],
-  ['reserves_idle', 'wave', 'ai2.ts', '    const support = st.go !== undefined && forward.length > 0 && !retreat;', '    const support = false;', 'wave: with a group still fighting up front a new unit goes to join it'],
+  ['launches_empty', 'wave', 'ai2.ts', 'if (support || !home.length) delete st.gather;', 'if (support) delete st.gather;', 'wave: with nobody waiting at the base no wave sets out, and the stale gathering time is dropped'],
+  ['lone_squad_is_a_front', 'wave', 'ai2.ts', 'wave.filter(u => !atBase(u)).length >= 2);', 'wave.filter(u => !atBase(u)).length >= 1);', 'wave: one squad on its own up front is not a group'],
+  ['squads_are_no_front', 'wave', 'ai2.ts', '(forward.length > 0 || wave.filter(u => !atBase(u)).length >= 2);', '(forward.length > 0);', 'wave: two squads still fighting up front are a group to join'],
+  ['peeks', 'wave', 'ai2.ts', 'return t && t.alive && seenIds.has(t.id) ? t : null;', 'return t && t.alive ? t : null;', 'wave: a target it can no longer see is no reason to stay out'],
+  ['defends_too_far', 'wave', 'ai2.ts', 'kind(u).range + DEFEND_CELLS * SUB) continue;', 'kind(u).range + (DEFEND_CELLS + 1) * SUB) continue;', 'wave: while gathering, an enemy it can see one cell beyond that is not chased'],
+  ['ignores_far_targets', 'ap', 'ai2.ts', 'const far = mobile ? nearest(u, reachable) : undefined;', 'const far = undefined as Unit | undefined;', 'ap: with nothing it can pierce in range it goes for one it can pierce farther off'],
+  ['first_come_flanks', 'ap', 'ai2.ts', '.sort((p, q) => dist(p.u.x, p.u.z, center(p.cell[0]), center(p.cell[1])) - dist(q.u.x, q.u.z, center(q.cell[0]), center(q.cell[1])) || p.u.id - q.u.id)[0];', '.sort((p, q) => p.u.id - q.u.id)[0];', 'ap: of two tanks the one nearer the flank goes'],
+  ['mortar_always_soft', 'morale', 'ai2.ts', '(w.rules?.morale && g.kind === UK_MORTAR ? ', '(g.kind === UK_MORTAR ? ', 'morale: without the rule the mortar targets like the first version'],
+  ['marches_east', 'guns', 'ai2.ts', 'dx = (cx >> 1) & 1 ? -SOUND_CELL : SOUND_CELL, dz =', 'dx = SOUND_CELL, dz =', 'guns: displacing six times in a row stays near where it started'],
+  ['shells_own_troops', 'guns', 'ai2.ts', ' && !mine.some(u => dist(u.x, u.z, a.x, a.z) <= GUN_SAFE * SUB))', ')', 'guns: it does not fire at an area with its own troops in it'],
+  ['steals_the_hq_fire', 'guns', 'ai2.ts', "    if ((c && c.t === 'fireAt' && onHq(c.x, c.z)) || (g.order === ORD_FIRE_AT && onHq(g.tx, g.tz))) continue;", '', 'guns: counter-battery fire does not take a howitzer off the enemy headquarters'],
+  ['double_orders', 'orders', 'ai2.ts', 'const ids = c.ids.filter(id => override.get(id) === c);', 'const ids = c.ids;', 'orders: every unit gets exactly one order in one think'],
+  ['reserves_idle', 'wave', 'ai2.ts', '    const support = st.go !== undefined && !retreat && (forward.length > 0 || wave.filter(u => !atBase(u)).length >= 2);', '    const support = false;', 'wave: with a group still fighting up front a new unit goes to join it'],
   ['flanks_into_a_crowd', 'ap', 'ai2.ts', ' && !seen.some(e => e !== t && dist(e.x, e.z, t.x, t.z) <= FLANK_ALONE * SUB)) {', ') {', 'ap: a target with company is not flanked; the tank backs away instead'],
   ['shoots_anyway', 'ap', 'ai2.ts', "      if (!t || !kind(t).armored || apHit(u.kind, u.x, u.z, t) !== 0) continue;", '      if (u) continue;', 'ap: with a target it can pierce in range, the second version shoots that one instead'],
   ['no_cover_seek', 'morale', 'ai2.ts', '|| u.rout || moraleState(u) !== MORALE_SHAKEN || coverPct(w, u) < 100) continue;', '|| u) continue;', 'morale: a suppressed squad in the open goes for the nearest house'],
