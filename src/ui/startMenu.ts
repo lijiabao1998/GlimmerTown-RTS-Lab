@@ -12,7 +12,7 @@ export interface MenuView {
   maps: MapChoice[]; modes: ModeChoice[];
   aiOn: boolean; rye: boolean; tutorial: boolean; audio: boolean | null;   // audio：null＝沒有音效鍵
   resume: boolean;   // 從「選單」鍵打開（布陣中）：主鍵是「繼續」與「重新開始」，不是「開始」
-  setup?: { force: number; supply: number; seed: number; reset?: boolean; ap?: boolean; morale?: boolean; help?: boolean };   // ap（R051）、morale（R052）：有哪一欄，「擬真規則」那一列就有哪一顆   // R046：有才顯示「遭遇戰設定」；reset（R073）：設定頁有「恢復預設」
+  setup?: { force: number; supply: number; seed: number; reset?: boolean; ap?: boolean; morale?: boolean; help?: boolean; merged?: boolean };   // merged（R076）：兩條規則收成「擬真／經典」一個選擇   // ap（R051）、morale（R052）：有哪一欄，「擬真規則」那一列就有哪一顆   // R046：有才顯示「遭遇戰設定」；reset（R073）：設定頁有「恢復預設」
   page?: 'setup';                                              // R046：現在看的是設定頁
   replays?: boolean;                                           // R047：有重播面板可開
   saved?: string;                                              // R074：有可以接的存檔（這行字是鍵下面的小字）
@@ -28,6 +28,7 @@ export const AI_TEXT = ['', '簡單', '普通', '困難'];
 // R075 擬真規則的說明（設定頁「擬真規則」那一列下面）：這條規則是什麼、畫面上怎麼看、該怎麼打
 export const AP_NOTE = '穿甲：砲彈的穿深要比被打那一面的裝甲厚才有傷害，否則彈開（「叮」一聲、不扣血）。打側面與後面、靠近一點打；選中自己的車，下面那行字有厚度與穿深。';
 export const MORALE_NOTE = '士氣：步兵與砲組被火力壓住，頭上會出現小方塊——黃色受壓（動作變慢）、橘色釘住（趴下不能動）、紅色垮掉（不開火，會往後跑）。砲彈落在附近就算，停火幾秒恢復。先壓住再衝；碉堡與戰壕最穩。';
+export const mixedNote = (ap: boolean): string => `目前只開了${ap ? '穿甲' : '士氣'}（網址或以前存的設定）；按上面任一個就會換掉。`;   // R076
 export const rulesNote = (ap: boolean, morale: boolean): string => [ap ? AP_NOTE : '', morale ? MORALE_NOTE : ''].filter(Boolean).join('\n');
 export function menuLayout(v: MenuView): MenuLayout {
   const extra: MenuItem[] = [];
@@ -44,7 +45,11 @@ export function menuLayout(v: MenuView): MenuLayout {
     return { title: '遭遇戰設定', sub: '雙方一樣。改了會回到布陣第 0 步', extra: s.reset ? [{ id: 'sm-setup-reset', label: '恢復預設' }] : [], main: [{ id: 'sm-setup-done', label: '完成' }], rows: [
       { id: 'sm-forces', title: '兵力', items: seg('sm-force', FORCE_TEXT, FORCE_SUB, s.force) },
       { id: 'sm-supplies', title: '補給速度', items: seg('sm-supply', SUPPLY_TEXT, SUPPLY_SUB, s.supply) },
-      ...(s.ap === undefined && s.morale === undefined ? [] : [{ id: 'sm-rules', title: '擬真規則', items: [
+      ...(s.merged ? [{ id: 'sm-rules', title: '規則', items: [   // R076：一個選擇。只開了一條（舊網址、以前存的設定）時兩個都不亮
+        { id: 'sm-real', label: '擬真', sub: '穿不透會彈開、被壓住會趴下會退', pressed: !!s.ap && !!s.morale },
+        { id: 'sm-classic', label: '經典', sub: '打中就有傷害、只看血量', pressed: !s.ap && !s.morale },
+      ], ...(s.help ? { note: (s.ap !== s.morale ? `${mixedNote(!!s.ap)}\n` : '') + rulesNote(true, true) } : {}) }]
+      : s.ap === undefined && s.morale === undefined ? [] : [{ id: 'sm-rules', title: '擬真規則', items: [
         ...(s.ap === undefined ? [] : [{ id: 'sm-ap', label: '穿甲與裝甲厚度', sub: s.ap ? '開：穿不透就彈開' : '關：打中就有傷害', pressed: s.ap }]),   // R051
         ...(s.morale === undefined ? [] : [{ id: 'sm-morale', label: '士氣與壓制', sub: s.morale ? '開：被壓住會趴下、會退' : '關：只看血量', pressed: s.morale }]),   // R052
       ], ...(s.help ? { note: rulesNote(s.ap !== undefined, s.morale !== undefined) } : {}) }]),   // R075：這一列下面的說明
@@ -58,7 +63,7 @@ export function menuLayout(v: MenuView): MenuLayout {
   }
   if (v.modes.length > 1) rows.push({ id: 'sm-modes', title: '模式', items: v.modes.map(m => ({ id: `sm-mode-${m}`, label: MODE_TEXT[m], pressed: v.mode === m })) });
   if (v.aiOn && v.mode === 'battle') rows.push({ id: 'sm-ais', title: '電腦難度', items: [1, 2, 3].map(n => ({ id: `sm-ai-${n}`, label: AI_TEXT[n], pressed: v.ai === n })) });
-  if (v.setup && v.mode !== 'sandbox') rows.push({ id: 'sm-setups', title: '', items: [{ id: 'sm-setup', label: '遭遇戰設定', sub: setupSummary(v.setup.force, v.setup.supply, v.setup.seed, v.setup.ap, v.setup.morale) }] });
+  if (v.setup && v.mode !== 'sandbox') rows.push({ id: 'sm-setups', title: '', items: [{ id: 'sm-setup', label: '遭遇戰設定', sub: setupSummary(v.setup.force, v.setup.supply, v.setup.seed, v.setup.ap, v.setup.morale, v.setup.merged) }] });
   const saved: MenuItem[] = v.saved ? [{ id: 'sm-continue', label: '繼續上一局', sub: v.saved }] : [];   // R074：有存檔才有這顆鍵
   const main: MenuItem[] = v.resume ? [{ id: 'sm-resume', label: '繼續' }, ...saved, { id: 'sm-restart', label: '重新開始' }]   // 布陣中從「選單」鍵叫出來的：「繼續」是回到這一局的布陣，「繼續上一局」是存檔的那一局
     : [...saved, { id: 'sm-start', label: '開始' }];   // 開頁的那一張：有存檔時「繼續上一局」是主鍵
@@ -161,7 +166,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
     return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
-      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}), ...(sk.canMorale ? { morale: sk.morale } : {}), ...(sk.help ? { help: true } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && host.saved?.() ? { saved: host.saved()! } : {}) };
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}), ...(sk.canMorale ? { morale: sk.morale } : {}), ...(sk.help ? { help: true } : {}), ...(sk.merged ? { merged: true } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && host.saved?.() ? { saved: host.saved()! } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
@@ -215,6 +220,8 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     else if (sk && id.startsWith('sm-force-')) { sk.set({ force: Number(id.slice(9)) }); fresh = true; }
     else if (sk && id.startsWith('sm-supply-')) { sk.set({ supply: Number(id.slice(10)) }); fresh = true; }
     else if (id === 'sm-seed-roll') { host.seed?.(randomSeed()); fresh = true; }
+    else if (sk?.merged && id === 'sm-setup-reset') { sk.set({ force: 2, supply: 2 }); sk.choose(null); host.seed?.(DEFAULT_SEED); fresh = true; }   // R076：規則回到預設、當作沒選過
+    else if (sk?.merged && (id === 'sm-real' || id === 'sm-classic')) { sk.choose(id === 'sm-real'); fresh = true; }   // R076 擬真／經典
     else if (sk && id === 'sm-setup-reset') { sk.set({ force: 2, supply: 2, ap: false, morale: false }); host.seed?.(DEFAULT_SEED); fresh = true; }
     else if (sk && id === 'sm-morale') { sk.set({ morale: !sk.morale }); fresh = true; }   // R052 擬真規則的開關
     else if (sk && id === 'sm-ap') { sk.set({ ap: !sk.ap }); fresh = true; }   // R051 擬真規則的開關   // R073 恢復預設：兵力、補給、種子
