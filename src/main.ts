@@ -18,7 +18,7 @@ import { initSandbox, SANDBOX_WHY, sandboxPlacementFeedback, sandboxCapacity, ty
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
 import { BattleView, setStreets } from './render/battle.ts';
 import { BattleAudio } from './render/audio.ts';
-import { STYLE_A, type Style } from './render/post.ts';
+import { STYLE_A, msaaSetting, type Style } from './render/post.ts';
 import { initFireDiscipline, toggleFireDiscipline } from './ui/fireDiscipline.ts';
 import { initDesktopControls, isDesktopPointer } from './ui/desktopControls.ts';
 import { pickUnitAt } from './ui/pick.ts';
@@ -55,7 +55,7 @@ const q = restoreSetup(new URLSearchParams(location.search));   // R073：網址
 const V = valves(q);   // R060 逃生閥表：所有 ?noR<號> 都在 src/valves.ts
 let seed = Number(q.get('seed') ?? SCRIPT_SEED) >>> 0;   // R046：遭遇戰設定可以改
 const skirmish = V.r046 ? initSkirmish(q, V.r026) : undefined;   // R046 遭遇戰設定：兵力、補給速度、亂數村莊（src/ui/skirmish.ts）
-const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)), msaa: V.r065 ? STYLE_A.msaa : 0 };
+const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)), msaa: msaaSetting(q.get('msaa'), V.r065) };
 // 逃生閥：?fx=off 或 window.__noFx＝true 時不產生爆炸、煙（AGENTS.md：新效果都要關得掉）
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
 // R037 手勢計時看事件自己的時間戳（手指真的動、真的放的時刻），不看程式處理到事件的時間：

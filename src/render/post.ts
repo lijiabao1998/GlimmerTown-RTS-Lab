@@ -6,11 +6,21 @@ export interface Style {
   pixelCss: number;   // 每個渲染像素佔幾個 CSS 像素（>1＝低解析度＋最近鄰放大）
   outline: boolean;
   quant: number;      // 調色盤量化階數（0＝不量化）
-  msaa?: number;      // R065 渲染目標的多重取樣數（0＝不取樣＝?noR065=1）；實際不超過顯示卡上限
+  msaa?: number;      // R065 渲染目標的多重取樣數（0＝不取樣）；實際不超過顯示卡上限
 }
 
 // 3D-lab 的畫風 A 是 pixelCss 3。RTS 的單位比建築小很多，預設先用 2（業主未定，見 docs/DECISIONS.md），網址 ?px=3 可以對照。
-export const STYLE_A: Style = { pixelCss: 2, outline: true, quant: 12, msaa: 4 };
+// R079：msaa 預設 0——業主 2026-11-15 看過 R065 的開／關對照圖後定「改回關」（細的深色線會變淡）。要看開著的樣子：網址 ?msaa=4。
+export const STYLE_A: Style = { pixelCss: 2, outline: true, quant: 12, msaa: 0 };
+export const MSAA_MAX = 8;
+// R079：這一頁要幾倍取樣。param＝網址的 ?msaa=（沒寫＝樣式的預設；正整數才算，最多 MSAA_MAX；其餘＝0）；valveOn＝R065 的閥（?noR065=1 關掉＝強制 0，連 ?msaa 也不理）。
+// 這只是「想要幾倍」；實際幾倍還要過下面的 msaaSamples（顯示卡上限、軟體繪圖不取樣）。
+export function msaaSetting(param: string | null, valveOn: boolean): number {
+  if (!valveOn) return 0;
+  if (param === null) return STYLE_A.msaa ?? 0;
+  const n = Number(param);
+  return Number.isInteger(n) && n > 0 ? Math.min(MSAA_MAX, n) : 0;
+}
 
 // R065：渲染目標要幾倍取樣——設定值，但不超過顯示卡上限（WebGL2 的 MAX_SAMPLES）；軟體繪圖不取樣
 export function msaaSamples(style: Style, maxSamples: number, software = false): number {
