@@ -102,8 +102,8 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK reali
 const root = resolve(fileURLToPath(new URL('..', import.meta.url))), temp = mkdtempSync(join(tmpdir(), 'r076-negative-'));
 const SK = 'src/ui/skirmish.ts', SM = 'src/ui/startMenu.ts';
 const mutants = [
-  ['no_default', 'default', SK, "  if (!s) { if (fresh) { q.set('ap', '1'); q.set('morale', '1'); } return q; }", '  if (!s) return q;', 'default: with nothing to go on, a new page takes the default'],
-  ['overrides_links', 'default', SK, '  if (linked) return q;', '  if (linked && !fresh) return q;', 'default: an address that carries seed=7 is left exactly as it is'],
+  ['no_default', 'default', SK, "  if (fresh && !linked && !(memory && loadSetup(memory))) { q.set('ap', '1'); q.set('morale', '1'); }", '', 'default: with nothing to go on, a new page takes the default'],
+  ['overrides_links', 'default', SK, 'if (fresh && !linked && !(memory && loadSetup(memory)))', 'if (fresh && !(memory && loadSetup(memory)))', 'default: an address that carries seed=7 is left exactly as it is'],
   ['old_off_is_a_choice', 'default', SK, "  if (fresh && !chose) { q.set('ap', '1'); q.set('morale', '1'); }", '', 'default: a setup saved before this card with both rules off was never a choice'],
   ['old_on_overridden', 'default', SK, 'chose = s.rules === 1 || !!s.ap || !!s.morale;', 'chose = s.rules === 1;', 'default: a setup saved before this card with one rule on is kept'],
   ['mark_ignored', 'default', SK, 'chose = s.rules === 1 || !!s.ap || !!s.morale;', 'chose = !!s.ap || !!s.morale;', 'default: classic chosen on purpose is not overridden'],

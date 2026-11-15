@@ -71,9 +71,10 @@ export function restoreSetup(q: URLSearchParams, store: Store | null = browserSt
   chose = false;
   memory = V.r069 && V.r046 && V.r073 ? store : null;
   linked = SETUP_PARAMS.some(k => q.has(k) && !(k === 'ap' && !V.r051) && !(k === 'morale' && !V.r052));   // R051、R052 的閥關著時，網址上的 ap、morale 不算帶了設定
-  if (linked) return q;   // 網址帶了任何一項設定：整份照網址（沒寫的規則就是關），跟以前一樣
-  const s = memory ? loadSetup(memory) : null;
-  if (!s) { if (fresh) { q.set('ap', '1'); q.set('morale', '1'); } return q; }   // 沒有任何依據：新預設
+  if (fresh && !linked && !(memory && loadSetup(memory))) { q.set('ap', '1'); q.set('morale', '1'); }   // R076 沒有任何依據（網址沒帶設定、本機也沒存過）：新預設。網址帶了任何一項就整份照網址，跟以前一樣
+  if (!memory || linked) return q;
+  const s = loadSetup(memory);
+  if (!s) return q;
   chose = s.rules === 1 || !!s.ap || !!s.morale;   // 選過，或 R076 之前就開了其中一條（那也是選過的）
   if (s.map !== 'rye') q.set('map', s.map);
   if (s.mode === 'zombies') q.set('mode', 'zombies');
