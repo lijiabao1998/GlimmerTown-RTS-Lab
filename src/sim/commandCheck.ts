@@ -23,7 +23,7 @@ export function isCommand(x: unknown): x is Command {
     case 'fireDiscipline': return side(c.side) && ids(c.ids) && typeof c.hold === 'boolean';
     case 'stop': return side(c.side) && ids(c.ids);
     case 'build': case 'trench': return side(c.side) && int(c.kind) && int(c.x) && int(c.z) && optInt(c.rot);
-    case 'ai': return side(c.side) && int(c.level);
+    case 'ai': return side(c.side) && int(c.level) && optInt(c.v);
     case 'map': return int(c.id) && optInt(c.vegetation);
     case 'eco': return optInt(c.inf) && optInt(c.guns) && optInt(c.tanks) && optInt(c.armor2) && optInt(c.soviet) && optInt(c.international);
     case 'produce': return side(c.side) && int(c.kind);

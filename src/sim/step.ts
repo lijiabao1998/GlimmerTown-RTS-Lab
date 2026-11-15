@@ -11,6 +11,7 @@ import { updateCounterbattery } from './counterbattery.ts';
 import { applyTrench, trenchCover, type TrenchCmd } from './trenches.ts';
 import { applyBuild, type BuildCmd } from './build.ts';
 import { aiThink, setAi, AI_THINK } from './ai.ts';
+import { aiThink2, memoSpotted } from './ai2.ts';
 import { applyMap } from './maps.ts';
 import { applyRules, type RulesCmd } from './rules.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
@@ -33,7 +34,7 @@ export type Command =
   | { t: 'stop'; side: number; ids: number[] }
   | TrenchCmd
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
-  | { t: 'ai'; side: number; level: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）
+  | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
   | { t: 'map'; id: number; vegetation?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
   | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
@@ -56,7 +57,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (cmd.t === 'zombies') return; // 地圖後、eco 前在 step() 開頭套。
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
-  if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0); return; }
+  if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
   if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
@@ -479,7 +480,9 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   if (w.zombies) zombiesStep(w, (a, b) => zombieVision(w, a, b));
   // R018：電腦在玩家指令之後、單位移動之前想（每隔 AI_THINK 步想一次），下的指令跟玩家的一樣套用
   if (w.ai) for (const st of w.ai) if (w.tick >= st.next) {
-    for (const c of aiThink(w, st, spotted)) applyCommand(w, c);
+    const see = st.v === 2 ? memoSpotted(spotted) : spotted;   // R057：第二版先照第一版想一遍，再改寫（沒帶 v 的電腦完全照舊）；兩次想共用「看得到誰」
+    const thought = aiThink(w, st, see);
+    for (const c of st.v === 2 ? aiThink2(w, st, see, thought) : thought) applyCommand(w, c);
     st.next = w.tick + AI_THINK[st.level];
   }
   for (const u of w.units) if (u.alive) moveUnit(w, u);
