@@ -18,7 +18,7 @@ type Spotted = (w: World, side: number, x: number, z: number) => boolean;
 export const AI_THINK = [0, 90, 30, 20];           // 難度 1／2／3：每幾步想一次（4.5、1.5、1 秒）
 const ADVANCE = [0, 4, 6, 8];                       // 難度 1／2／3：每次推進幾格
 const SCOUT = 5;                                    // R044 裝甲車在組的重心前面幾格偵察
-const ARMOR_MEMORY = 1200;                          // R044 看到敵方裝甲後 60 秒內還算「看過」（補給不夠時先存錢補驅逐戰車）
+export const ARMOR_MEMORY = 1200;                          // R044 看到敵方裝甲後 60 秒內還算「看過」（補給不夠時先存錢補驅逐戰車）
 
 // ai 指令：讓電腦接手 side（同一方再送一次＝換難度，版本不換）。v＝2：R057 第二版（ai2.ts 在第一版想完之後改寫指令）；其他值＝第一版
 export function setAi(w: World, side: number, level: number, v?: number): void {
@@ -27,7 +27,7 @@ export function setAi(w: World, side: number, level: number, v?: number): void {
   const corner = side === SIDE_PLAYER ? 5 : w.n - 6;     // 對方的出生角落（開局就知道的地圖情報；32×32 是 26）
   const old = w.ai.find(a => a.side === side);
   if (old) { old.level = level; return; }
-  w.ai.push({ side, level, next: w.tick, ox: center(corner), oz: center(corner), seen: 0, wp: 0, ...(v === 2 ? { v: 2 as const } : {}) });
+  w.ai.push({ side, level, next: w.tick, ox: center(corner), oz: center(corner), seen: 0, wp: 0, ...(v === 2 || v === 3 ? { v } : {}) });   // R057 v＝2、R078 v＝3；其他值＝第一版
   w.ai.sort((a, b) => a.side - b.side);
 }
 

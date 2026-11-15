@@ -227,7 +227,7 @@ export type SimEvent =
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
 export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number }   // R044 armor2：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
 
-export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number; v?: 2; gather?: number; go?: number; size?: number }   // R057 v＝2：第二版（ai2.ts）；gather＝在基地集結從哪一步開始、go＝上一波哪一步出發、size＝那一波幾台   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
+export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number; v?: 2 | 3; gather?: number; go?: number; size?: number }   // R057 v＝2：第二版（ai2.ts）；gather＝在基地集結從哪一步開始、go＝上一波哪一步出發、size＝那一波幾台   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
 export interface SmokeCloud { id: number; side: number; x: number; z: number; born: number; expires: number }
 

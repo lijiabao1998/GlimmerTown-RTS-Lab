@@ -29,7 +29,8 @@ export const rulesCommand = (force: number, supply: number, ap = false, morale =
 export const setupSummary = (force: number, supply: number, seed: number, ap = false, morale = false, merged = false): string =>
   `兵力 ${FORCE_TEXT[force]} · 補給 ${SUPPLY_TEXT[supply]} · 種子 ${seed}${merged && ap === morale ? (ap ? ' · 擬真' : ' · 經典') : `${ap ? ' · 穿甲' : ''}${morale ? ' · 士氣' : ''}`}`;
 // R076：新開的遭遇戰（網址沒帶設定、本機也沒有選過）預設是不是擬真。判準與量到的數字在 docs/tasks/R076-擬真成為預設選項.md：
-// 六條裡「難度還分得出高下」那一條沒過（電腦對電腦時簡單贏困難，經典與擬真都一樣，是電腦的毛病），所以還是 false。那一條修好、重量過了才改成 true。
+// R076 當時六條裡「難度還分得出高下」沒過（電腦對電腦時簡單贏困難）。R078 修了難度之後重量：過四條，第 4 條（普通對簡單在擬真下比經典低 16 點）與第 5 條（萊伊普通對普通偏心差 20 點）沒過，
+// 所以還是 false。數字在 docs/tasks/R078-難度校正.md；六條都過（或業主另有決定）才改成 true。
 export const DEFAULT_REALISM = false;
 export const randomSeed = (): number => crypto.getRandomValues(new Uint32Array(1))[0];
 
