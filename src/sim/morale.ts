@@ -77,6 +77,11 @@ export function suppressBlast(w: World, x: number, z: number, splash: number, dm
   }
 }
 
+// R080 機槍組的掃射區：落點 area 內、開槍那一方的敵人（except＝被直接打中的那個，它已經加過了）各加 amount。掩體等折扣在 suppress 裡照算
+export function suppressZone(w: World, side: number, x: number, z: number, area: number, amount: number, except: Unit | null): void {
+  for (const o of w.units) if (o.alive && o.side !== side && o !== except && dist(o.x, o.z, x, z) <= area) suppress(w, o, amount);
+}
+
 // 直射打在一棟房子或碉堡上：裡面進駐的人也被壓（房子、碉堡的倍率在 coverPct 裡）
 export function suppressHouse(w: World, bld: number, amount: number): void {
   if (!((w.blds[bld - 1]?.hp ?? 0) > 0)) return;   // 已經是瓦礫（砲彈還在飛的時候房子倒了）：沒有人在「裡面」

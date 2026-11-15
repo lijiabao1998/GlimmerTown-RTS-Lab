@@ -3,7 +3,7 @@ import { isqrt, dist } from './math.ts';
 import { fireDisciplineEligible } from './fireDiscipline.ts';
 import { armorPct } from './armor.ts';
 import { apHit } from './ballistics.ts';
-import { suppress, suppressBlast, suppressHouse, moraleStep, reloads, canFire, movePct, SUP_SMALL, SUP_DIRECT } from './morale.ts';
+import { suppress, suppressBlast, suppressHouse, suppressZone, moraleStep, reloads, canFire, movePct, SUP_SMALL, SUP_DIRECT } from './morale.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
 import { smokeBlocks, advanceSmoke, spawnSmoke } from './smoke.ts';
@@ -36,7 +36,7 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
   | { t: 'map'; id: number; vegetation?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
   | RulesCmd;   // R046：第 0 步的遭遇戰設定（兵力、補給速度；地圖之後、喪屍與布陣之前套，見 rules.ts）
 
@@ -58,7 +58,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -276,6 +276,7 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
     if (!spotted(w, u.side, t.x, t.z) || (!k.indirect && firstBlock(w, u.x, u.z, t.x, t.z, homeOf(w, u)) >= 0)) continue;
+    if (k.sup && UNIT_KINDS[t.kind].armored && !UNIT_KINDS[t.kind].openTop) continue;   // R080：機槍組待命時不自己去打封閉車身的裝甲（打不動）
     if (!best || d < bestD || (d === bestD && t.id < best.id)) { best = t; bestD = d; }
   }
   return best ? { x: best.x, z: best.z, unit: best, bld: null } : null;
@@ -388,7 +389,7 @@ function land(w: World, s: Shell): void {
   const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
   if (s.kind === SHELL_AP || s.kind === SHELL_SMALL) {
     let bounce = false;
-    if (s.hitBld) { if (w.rules?.morale) suppressHouse(w, s.hitBld, s.kind === SHELL_SMALL ? SUP_SMALL : SUP_DIRECT); const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一；R052 裡面的人被壓（先壓再算房子，倒了也算）
+    if (s.hitBld) { if (w.rules?.morale) suppressHouse(w, s.hitBld, s.kind === SHELL_SMALL ? k.sup ?? SUP_SMALL : SUP_DIRECT); const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一；R052 裡面的人被壓（先壓再算房子，倒了也算）
     else {
       const t = unitById(w, s.target);
       // R051（rules 帶 ap 才走）：-1 這一發不歸厚度規則管、0 彈開、1 穿透。穿甲彈穿透吃完整傷害；步兵的槍穿透照下面原本的算法；彈開零傷害
@@ -396,7 +397,8 @@ function land(w: World, s: Shell): void {
       if (ap === 0) bounce = s.kind === SHELL_AP;
       else if (ap === 1 && s.kind === SHELL_AP) damageUnit(w, t!, k.dmgUnit);
       else if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, s.kind === SHELL_AP ? Math.floor(k.dmgUnit * armorPct(t, s.sx, s.sz) / 100) : k.dmgUnit));
-      if (w.rules?.morale && t && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) suppress(w, t, s.kind === SHELL_SMALL ? SUP_SMALL : SUP_DIRECT);   // R052（死了、有裝甲的在 suppress 裡擋）
+      if (w.rules?.morale && t && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) suppress(w, t, s.kind === SHELL_SMALL ? k.sup ?? SUP_SMALL : SUP_DIRECT);   // R052（死了、有裝甲的在 suppress 裡擋）
+      if (w.rules?.morale && k.sup && k.supArea && s.kind === SHELL_SMALL) suppressZone(w, s.side, s.ex, s.ez, k.supArea, k.sup >> 1, t && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS ? t : null);   // R080 機槍組的掃射區：落點附近的其他敵人各加一半
     }
     w.events.push(bounce ? { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld, bounce: 1, side: s.side } : { e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: s.hitBld });
     return;

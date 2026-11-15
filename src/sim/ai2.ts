@@ -8,9 +8,9 @@ import { apHit, penetration, ARMOR_MM, PEN_MM } from './ballistics.ts';
 import { coverPct } from './morale.ts';
 import { counterbatteryAreas, COUNTERBATTERY_TTL } from './counterbattery.ts';
 import { freeNear, type AiCmd } from './ai.ts';
-import { produce3 } from './ai3.ts';
+import { produce3, machineGuns3, mgTargetFor } from './ai3.ts';
 import {
-  SUB, center, cellOf, inGrid, blocks, UNIT_KINDS, UK_OBSERVER, UK_INFANTRY, UK_HOWITZER, UK_MORTAR, UK_ATGUN, ORD_ATTACK, ORD_MOVE, ORD_FIRE_AT, SIDE_PLAYER,
+  SUB, center, cellOf, inGrid, blocks, UNIT_KINDS, UK_OBSERVER, UK_INFANTRY, UK_HOWITZER, UK_MORTAR, UK_ATGUN, UK_MG, ORD_ATTACK, ORD_MOVE, ORD_FIRE_AT, SIDE_PLAYER,
   moraleState, MORALE_SHAKEN, MORALE_PINNED, type World, type Unit, type AiState,
 } from './world.ts';
 
@@ -84,7 +84,7 @@ export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[])
   if (hq) {
     const enemyCorner = n - 1 - ownCorner, [rx0, rz0] = toward(w, homeX, homeZ, center(enemyCorner), center(enemyCorner), RALLY_CELLS);
     const at = freeNear(w, rx0, rz0) ?? [rx0, rz0], rallyX = center(at[0]), rallyZ = center(at[1]);
-    const waveKind = (u: Unit) => kind(u).armored || u.kind === UK_INFANTRY, held = (u: Unit) => waveKind(u) || u.kind === UK_MORTAR || u.kind === UK_ATGUN;
+    const waveKind = (u: Unit) => kind(u).armored || u.kind === UK_INFANTRY, held = (u: Unit) => waveKind(u) || u.kind === UK_MORTAR || u.kind === UK_ATGUN || (st.v === 3 && u.kind === UK_MG);
     // 還沒出發過第一波之前，所有人都算在基地（大地圖開局的部隊散在基地外面；不這樣算，一半先走、一半等人，被各個擊破）
     const atBase = (u: Unit) => st.go === undefined || dist(u.x, u.z, rallyX, rallyZ) <= BASE_CELLS * SUB;
     const wave = mine.filter(waveKind), home = wave.filter(atBase);
@@ -194,8 +194,9 @@ export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[])
     }
     if (override.has(g.id)) continue;   // 在基地等、正要移動：不改它的目標
     const ok = seen.filter(t => inReach(t.x, t.z));
-    // 目標：打不穿的車（穿甲規則）→ 迫擊砲先壓還沒被釘住的軟目標（士氣規則）→ 其餘照第一版
+    // 目標：打不穿的車（穿甲規則）→ 對方的機槍組（R080，第三版）→ 迫擊砲先壓還沒被釘住的軟目標（士氣規則）→ 其餘照第一版
     const want = nearest(g, ok.filter(t => hopeless.has(t.id)))
+      ?? (st.v === 3 ? nearest(g, ok.filter(t => t.kind === UK_MG)) : undefined)
       ?? (w.rules?.morale && g.kind === UK_MORTAR ? nearest(g, ok.filter(t => !kind(t).armored && moraleState(t) < MORALE_PINNED)) ?? nearest(g, ok.filter(t => !kind(t).armored)) : undefined);
     if (want) { override.set(g.id, g.order === ORD_ATTACK && g.target === want.id ? null : { t: 'attack', side, ids: [g.id], target: want.id }); continue; }
     // 反砲兵射擊：沒有看得到、打得到的目標，手上沒有在打活的目標，也不是正在（或正要）轟對方指揮部 → 朝聽出來的那一區打；那附近有自己人就不打
@@ -208,6 +209,17 @@ export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[])
     if (!area) continue;
     const ax = clampCell(w, cellOf(area.x)), az = clampCell(w, cellOf(area.z));
     override.set(g.id, g.order === ORD_FIRE_AT && g.tx === ax && g.tz === az && g.target > 0 ? null : { t: 'fireAt', side, ids: [g.id], x: ax, z: az });
+  }
+
+  // ---- 5. 機槍組（R080；只有第三版。場上沒有機槍組時這一段一條指令都不會下）----
+  if (st.v === 3) {
+    for (const [u, c] of machineGuns3(w, st, mine, seen, id => override.has(id))) override.set(u.id, c);
+    const foeMg = seen.filter(t => t.kind === UK_MG);
+    if (foeMg.length) for (const u of mine) {
+      if (!kind(u).armored || kind(u).indirect || override.has(u.id)) continue;   // 直射的車；前面的段落已經替它決定的（在基地等、繞側面、退開）不改
+      const m = mgTargetFor(u, targetOf(u), foeMg);
+      if (m) override.set(u.id, { t: 'attack', side, ids: [u.id], target: m.id });
+    }
   }
 
   // ---- 合起來：第一版的指令拿掉被改寫的單位，再接上第二版的。一條群組指令只留「最後還是歸它管」的那些單位（前面的段落排進去、後面的段落又改掉的不算）----
