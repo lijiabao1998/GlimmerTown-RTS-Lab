@@ -36,7 +36,7 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
   | { t: 'map'; id: number; vegetation?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
   | RulesCmd;   // R046：第 0 步的遭遇戰設定（兵力、補給速度；地圖之後、喪屍與布陣之前套，見 rules.ts）
 
@@ -58,7 +58,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -440,11 +440,22 @@ function updateShells(w: World): void {
   w.shells = keep;
 }
 
+export const END_WAIT_CELLS = 3;   // R077：落點離剩下那棟指揮部的佔地幾格以內的砲彈才等（暫定；遊戲裡最大的殺傷半徑 1.5 格的兩倍）
+// (x, z) 離建築佔地的距離不超過 r（位置單位；用各軸的距離取大的，方形的範圍）
+const nearBld = (b: { x: number; z: number; w: number; d: number }, x: number, z: number, r: number): boolean =>
+  Math.max(b.x * SUB - x, x - (b.x + b.w) * SUB, 0) <= r && Math.max(b.z * SUB - z, z - (b.z + b.d) * SUB, 0) <= r;
 function checkWinner(w: World): void {
   if (w.zombies) {
     const hq = w.eco?.hq[SIDE_PLAYER] ?? 0;
     if (w.winner < 0 && (hq ? !hqAlive(w, SIDE_PLAYER) : !w.units.some(u => u.alive && u.side === SIDE_PLAYER))) w.winner = SIDE_ENEMY;
     return; // 沒有喪屍不算贏；指揮部失守立即結束。
+  }
+  if (w.eco?.end) {   // R077 勝負判定第二版（eco 指令帶 end 才用）：指揮部倒了，只等還打得到另一棟指揮部的砲彈；不相干的砲彈不再拖著不宣布
+    const a = hqAlive(w, SIDE_PLAYER), b = hqAlive(w, SIDE_ENEMY), left = a ?? b;
+    if (w.winner >= 0 || (a && b)) return;
+    if (left && w.shells.some(s => s.kind !== SHELL_SMOKE && (s.hitBld === left.id || nearBld(left, s.ex, s.ez, END_WAIT_CELLS * SUB)))) return;
+    w.winner = !left ? 2 : a ? SIDE_PLAYER : SIDE_ENEMY;
+    return;
   }
   if (w.winner >= 0 || w.shells.some(s => s.kind !== SHELL_SMOKE)) return; // 只等可能改變結局的砲彈；無傷害煙幕不拖延戰報
   if (w.eco) {   // R019：有指揮部時，指揮部塌了才輸（全軍覆沒但指揮部還在可以再出兵）
