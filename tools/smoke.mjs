@@ -545,7 +545,8 @@ await withBrowser({ width: 412, height: 860, mobile: true, port: PORTS.ai }, asy
   const start = (await page.evaluate('__rts.units()')).filter(u => u.side === 1 && u.kind === 0);
   const t = await page.evaluate('__rts.stepN(600 - __rts.tick())'), h = await page.evaluate('__rts.hash()');
   const end = (await page.evaluate('__rts.units()')).filter(u => u.side === 1 && u.kind === 0);
-  const moved = Math.max(...end.map((u, i) => Math.hypot(u.x - start[i].x, u.z - start[i].z) / 256));
+  // 照編號對（R078：第三版的電腦 30 秒內就會多造出坦克，開打時沒有的那幾台不算）
+  const moved = Math.max(...start.map(s => { const u = end.find(e => e.id === s.id); return u ? Math.hypot(u.x - s.x, u.z - s.z) / 256 : 0; }));
   const lg = await page.evaluate('__rts.log()'), nodeH = hashWorld(runLog(createWorld(1944), lg, t));
   log(!!aiCmd && aiCmd.tick === 0 && aiCmd.cmd.side === 1 && aiCmd.cmd.level === 2 && moved > 3 && h === nodeH, '開戰後電腦接手敵方：第 0 步有 ai 指令（普通）；30 秒內敵方坦克離開出生角落；瀏覽器雜湊＝Node 重播',
     `${JSON.stringify(aiCmd)}；坦克最多移動 ${moved.toFixed(1)} 格；tick ${t}：${h} / ${nodeH}`);
