@@ -130,10 +130,13 @@ export async function withBrowser(opt, fn) {
     // 要測開始選單的守衛傳 open(query, { menu: true })。網址自己寫了 noR069 就照它的。
     // R047：每次開頁都當成第一次來——先清掉上一頁存在本機的重播紀錄（同一個設定檔裡前一頁打完的局不影響下一頁）；
     // 要測「存了之後再開頁還在」的守衛傳 open(query, { keep: true })。新手教學、喪屍最佳紀錄那些既有的鍵不清（原本的守衛靠它們跨頁）。
-    const open = async (query, { menu = false, keep = false } = {}) => {
+    // R076：預設在網址加 noR076=1，既有守衛照舊測兩顆開關、預設關的設定頁（它們寫的時候就是這樣）；
+    // 要測「擬真／經典」一個選擇與新預設的守衛傳 open(query, { realism: true })。網址自己寫了 noR076 就照它的。
+    const open = async (query, { menu = false, keep = false, realism = false } = {}) => {
       if (!keep) await page.evaluate("try { localStorage.removeItem('gtrts.v1.replays'); localStorage.removeItem('gtrts.v1.setup'); localStorage.removeItem('gtrts.v1.save'); const set = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (k !== 'gtrts.v1.save') set.call(this, k, v); } } catch {}").catch(() => {});   // R073：上次的設定也清；R074：打到一半的存檔也清——遊戲在頁面離開時（pagehide、切到背景）會自己再存一次，所以清完順手讓這一頁之後寫不進那個鍵
       const q = menu || /(^|&)noR069=/.test(query) ? query : `${query ? query + '&' : ''}noR069=1`;
-      await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/${entry}?${q}` });
+      const full = realism || /(^|&)noR076=/.test(q) ? q : `${q ? q + '&' : ''}noR076=1`;
+      await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/${entry}?${full}` });
       for (let i = 0, t0 = Date.now(); Date.now() - t0 < readyMs; i++) { await sleep(150); if (await page.evaluate(ready).catch(() => false)) break; }
       await sleep(opt.settle ?? 900);   // 讓第一幀以上畫完（陰影貼圖、後製）
     };
