@@ -12,19 +12,23 @@ export interface MenuView {
   maps: MapChoice[]; modes: ModeChoice[];
   aiOn: boolean; rye: boolean; tutorial: boolean; audio: boolean | null;   // audio：null＝沒有音效鍵
   resume: boolean;   // 從「選單」鍵打開（布陣中）：主鍵是「繼續」與「重新開始」，不是「開始」
-  setup?: { force: number; supply: number; seed: number; reset?: boolean; ap?: boolean; morale?: boolean };   // ap（R051）、morale（R052）：有哪一欄，「擬真規則」那一列就有哪一顆   // R046：有才顯示「遭遇戰設定」；reset（R073）：設定頁有「恢復預設」
+  setup?: { force: number; supply: number; seed: number; reset?: boolean; ap?: boolean; morale?: boolean; help?: boolean };   // ap（R051）、morale（R052）：有哪一欄，「擬真規則」那一列就有哪一顆   // R046：有才顯示「遭遇戰設定」；reset（R073）：設定頁有「恢復預設」
   page?: 'setup';                                              // R046：現在看的是設定頁
   replays?: boolean;                                           // R047：有重播面板可開
   saved?: string;                                              // R074：有可以接的存檔（這行字是鍵下面的小字）
 }
 export interface MenuItem { id: string; label: string; sub?: string; pressed?: boolean; input?: boolean }   // input：可以打字的一格（R046 種子）
-export interface MenuLayout { title: string; sub: string; rows: { id: string; title: string; items: MenuItem[] }[]; main: MenuItem[]; extra: MenuItem[] }
+export interface MenuLayout { title: string; sub: string; rows: { id: string; title: string; items: MenuItem[]; note?: string }[]; main: MenuItem[]; extra: MenuItem[] }
 
 const MAP_TEXT: Record<MapChoice, [string, string]> = { rye: ['萊伊', '32×32'], village: ['村莊', '32×32'], large: ['鄉間', '64×64'], town: ['河鎮', '96×96'] };
 const MODE_TEXT: Record<ModeChoice, string> = { battle: '一般對戰', zombies: '喪屍防守', sandbox: '沙盒' };
 export const AI_TEXT = ['', '簡單', '普通', '困難'];
 
 // 選單內容：純資料，不碰 DOM（tests/start-menu.mjs 直接驗）
+// R075 擬真規則的說明（設定頁「擬真規則」那一列下面）：這條規則是什麼、畫面上怎麼看、該怎麼打
+export const AP_NOTE = '穿甲：砲彈的穿深要比被打那一面的裝甲厚才有傷害，否則彈開（「叮」一聲、不扣血）。打側面與後面、靠近一點打；選中自己的車，下面那行字有厚度與穿深。';
+export const MORALE_NOTE = '士氣：步兵與砲組被火力壓住，頭上會出現小方塊——黃色受壓（動作變慢）、橘色釘住（趴下不能動）、紅色垮掉（不開火，會往後跑）。砲彈落在附近就算，停火幾秒恢復。先壓住再衝；碉堡與戰壕最穩。';
+export const rulesNote = (ap: boolean, morale: boolean): string => [ap ? AP_NOTE : '', morale ? MORALE_NOTE : ''].filter(Boolean).join('\n');
 export function menuLayout(v: MenuView): MenuLayout {
   const extra: MenuItem[] = [];
   if (v.kind === 'start' && v.tutorial) extra.push({ id: 'sm-tutorial', label: '新手教學' });
@@ -43,7 +47,7 @@ export function menuLayout(v: MenuView): MenuLayout {
       ...(s.ap === undefined && s.morale === undefined ? [] : [{ id: 'sm-rules', title: '擬真規則', items: [
         ...(s.ap === undefined ? [] : [{ id: 'sm-ap', label: '穿甲與裝甲厚度', sub: s.ap ? '開：穿不透就彈開' : '關：打中就有傷害', pressed: s.ap }]),   // R051
         ...(s.morale === undefined ? [] : [{ id: 'sm-morale', label: '士氣與壓制', sub: s.morale ? '開：被壓住會趴下、會退' : '關：只看血量', pressed: s.morale }]),   // R052
-      ] }]),
+      ], ...(s.help ? { note: rulesNote(s.ap !== undefined, s.morale !== undefined) } : {}) }]),   // R075：這一列下面的說明
       { id: 'sm-seeds', title: '種子（同一個種子＝同一張圖、同一局）', items: [{ id: 'sm-seed', label: String(s.seed), input: true }, { id: 'sm-seed-roll', label: '隨機' }] },
     ] };
   }
@@ -101,6 +105,7 @@ body.r069 #sb-enter, body.r069 #map-pick, body.r069 #zombies-pick, body.r069 #to
   border-radius: 8px; background: rgba(28, 34, 26, 0.95); color: #f3eedf; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
 #start-menu h1 { margin: 0; font-size: 24px; line-height: 1.25; letter-spacing: 1px; }
 #start-menu .sm-sub { margin: 4px 0 14px; color: #c9cdb4; font-size: 13px; line-height: 1.4; }
+#start-menu .sm-note { margin: 6px 2px 0; color: #c9cdb4; font-size: 12px; line-height: 1.45; white-space: pre-line; }
 #start-menu .sm-row { margin: 0 0 12px; }
 #start-menu .sm-row h2 { margin: 0 0 6px; color: #c9cdb4; font-size: 13px; font-weight: 600; }
 #start-menu .sm-seg, #start-menu .sm-extra { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -125,6 +130,7 @@ body.r069 #sb-enter, body.r069 #map-pick, body.r069 #zombies-pick, body.r069 #to
   #start-menu h1 { font-size: 20px; }
   #start-menu .sm-sub { margin-bottom: 8px; }
   #start-menu .sm-row { margin-bottom: 8px; }
+  #start-menu .sm-note { display: none; }   /* R075：矮螢幕（橫放的手機）放不下說明，種子那一列會被擠出畫面 */
 }
 `;
 
@@ -155,13 +161,13 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
     return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
-      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}), ...(sk.canMorale ? { morale: sk.morale } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && host.saved?.() ? { saved: host.saved()! } : {}) };
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}), ...(sk.canMorale ? { morale: sk.morale } : {}), ...(sk.help ? { help: true } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && host.saved?.() ? { saved: host.saved()! } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
     const html = `<div class="sm-panel">
       <div class="sm-head"><h1 id="sm-title">${esc(m.title)}</h1><p class="sm-sub">${esc(m.sub)}</p></div>
-      <div class="sm-rows">${m.rows.map(r => `<div class="sm-row" id="${r.id}">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}<div class="sm-seg">${r.items.map(it => button(it)).join('')}</div></div>`).join('')}</div>
+      <div class="sm-rows">${m.rows.map(r => `<div class="sm-row" id="${r.id}">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}<div class="sm-seg">${r.items.map(it => button(it)).join('')}</div>${r.note ? `<p class="sm-note">${esc(r.note)}</p>` : ''}</div>`).join('')}</div>
       <div class="sm-side"><div class="sm-main">${m.main.map((it, i) => button(it, i === 0 ? 'sm-primary' : '')).join('')}</div>
       <div class="sm-extra${m.extra.length > 3 ? ' sm-many' : ''}">${m.extra.map(it => button(it)).join('')}</div></div>
     </div>`;

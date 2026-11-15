@@ -10,6 +10,7 @@ import * as world from '../src/sim/world.ts';
 import { step, runLog } from '../src/sim/step.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from '../src/sim/script.ts';
 import { reloadStatus } from '../src/ui/reloadStatus.ts';
+import { unitSpec } from '../src/ui/unitSpec.ts';
 import { coverDurability } from '../src/ui/coverDurability.ts';
 const { createWorld, hashWorld, UNIT_KINDS, SIDE_PLAYER, SIDE_ENEMY, SUB, ORD_IDLE, ORD_MOVE,
   UK_TANK, UK_HOWITZER, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_INFANTRY, UK_OBSERVER, UK_ZOMBIE } = world;
@@ -148,7 +149,7 @@ const fixtureValves = (q, over = {}) => Object.defineProperties(valves(q), Objec
 function uiFixture(read, query = '') {
   const f = fixture(); add(f); let stateCalls = 0, vehicleCalls = 0; const document = { body: new Element(), createElement: () => new Element() }; globalThis.document = document;
   const q = new URLSearchParams(query);
-  const c = vm.createContext({ ...world, ...f, vehicleDurability: read, bombardStatus: () => '', reloadStatus, coverDurability, document, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
+  const c = vm.createContext({ ...world, ...f, vehicleDurability: read, bombardStatus: () => '', reloadStatus, unitSpec, coverDurability, document, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he', battleHint: undefined,
     battleAudio: undefined, V: fixtureValves(q, { r009: true, r010: false, r018: false, r015: false, r115: false }), planner: { buildHint: '' }, BUILD_TIP: '布陣說明', q,
     view: { rangeInfo: '原射程', visibleUnit: () => true }, counterbatteryHint: () => '', lastVehicleInfo: '',
     initHud: actions => { const hud = initHud({ ...actions, state: () => { stateCalls++; return actions.state(); } }); return { ...hud, vehicleFrame: info => { vehicleCalls++; hud.vehicleFrame(info); } }; } });

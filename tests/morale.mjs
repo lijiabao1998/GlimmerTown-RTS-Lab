@@ -353,7 +353,7 @@ const groups = {
   rules() {
     const w = createWorld(3); applyRules(w, { morale: 1 });
     assert.deepEqual(w.rules, { morale: 1 }, 'rules: morale 1 is stored');
-    const x = createWorld(3); applyRules(x, { morale: 2 });
+    const x = createWorld(3); applyRules(x, { morale: 3 });   // 2 從 R075 起是士氣第二版（tests/morale2.mjs）
     assert.equal(x.rules, undefined, 'rules: any other value is ignored and leaves no state');
     const a = createWorld(3), b = createWorld(3); applyRules(a, { force: 3 }); applyRules(b, { force: 3, morale: 1 });
     assert.notEqual(hashWorld(a), hashWorld(b), 'rules: the flag is folded into the hash');

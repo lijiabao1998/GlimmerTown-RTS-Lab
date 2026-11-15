@@ -2,6 +2,7 @@ import { valves } from '../src/valves.ts';
 import { vehicleDurability } from '../src/ui/vehicleDurability.ts';
 import { coverDurability } from '../src/ui/coverDurability.ts';
 import { reloadStatus } from '../src/ui/reloadStatus.ts';
+import { unitSpec } from '../src/ui/unitSpec.ts';
 // R110: actual main input handlers/state callback + actual initHud, with a small DOM API stub.
 // This is paused/controller evidence, not a browser/layout or physical-device test.
 // node tests/paused-hint.mjs --mutations checks isolated, in-memory production-source mutants.
@@ -101,7 +102,7 @@ function fixture({ hud = true, enabled = true } = {}) {
     q, V: fixtureValves(q, { r109: enabled, r009: true, r010: false, r012: false, r018: false, r015: true, r115: true }),
     w, selected, battleHint: undefined, hud: undefined, paused: true, phase: 'battle', speed: 1, fireMode: false, ammo: 'he',
     battleAudio: undefined, syncBattleAudio() {}, // This guard exercises the original no-audio HUD/input path.
-    bombardStatus: () => '', reloadStatus, coverDurability, vehicleDurability, counterbatteryHint: () => '', BUILD_TIP: '布陣說明',
+    bombardStatus: () => '', reloadStatus, unitSpec, coverDurability, vehicleDurability, counterbatteryHint: () => '', BUILD_TIP: '布陣說明',
     SIDE_PLAYER, SIDE_ENEMY, SUB, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UNIT_KINDS,
     routeBattleOrder, bombardCommand, bombardTarget, inSelectionRect, document, canvas,
     pointers: new Map(), dragged: false, pinchD: 0, dragV: { vx: 2, vy: 3, t: 4 }, lastTap: { id: 0, t: 0 },
