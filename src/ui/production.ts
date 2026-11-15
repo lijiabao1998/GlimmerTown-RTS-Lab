@@ -7,6 +7,7 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
   const root = document.createElement('div');
   root.id = 'prodbar'; root.className = 'bar';
   root.classList.toggle('production-countdown', !!a.countdown);
+  root.classList.toggle('prod-many', items.filter(it => !it.group).length > 11);   // R080：通用裝備第 12 顆（機槍組）之後，橫放的矮螢幕要排緊一點才塞得進同一列（index.html）
   const groups = [...new Set(items.map(it => it.group ?? '通用裝備'))];
   let feedbackKind: number | undefined, feedbackContext: object | undefined;
   root.innerHTML = `${items.map(it => `<button id="pb-k${it.kind}" title="${it.label}：補給 ${it.cost}">${it.label}<b>${it.cost}</b></button>`).join('')}
