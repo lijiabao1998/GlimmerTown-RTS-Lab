@@ -159,7 +159,7 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url))), temp = mkdt
 const WAIT = 'if (left && w.shells.some(s => s.kind !== SHELL_SMOKE && (s.hitBld === left.id || nearBld(left, s.ex, s.ez, END_WAIT_CELLS * SUB)))) return;';
 const mutants = [
   ['unhashed', 'flag', 'world.ts', ' if (e.end) f.int(0x454e).int(e.end);', '', 'flag: end is folded into the hash'],
-  ['never_stored', 'flag', 'eco.ts', '...(end ? { end: 1 } : {})', '', 'flag: end arrives through the eco command'],
+  ['never_stored', 'flag', 'eco.ts', '...(end ? { end: 1 } : {}), ', '', 'flag: end arrives through the eco command'],
   ['always_new', 'legacy', 'step.ts', '  if (w.eco?.end) {', '  if (w.eco) {', 'legacy: without end the far shell still delays the result'],
   ['waits_for_everything', 'quick', 'step.ts', WAIT, WAIT.replace('(s.hitBld === left.id || nearBld(left, s.ex, s.ez, END_WAIT_CELLS * SUB))', '(s.id > 0)'), 'quick: with end the result is declared the same step'],
   ['waits_for_nothing', 'threat', 'step.ts', WAIT, '', 'threat: a shell that can still reach the other headquarters delays the result'],

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
-  SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_ZOMBIE, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
+  SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_ZOMBIE, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
   SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, moraleState, MORALE_PINNED, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { spotted } from '../sim/step.ts';
@@ -47,7 +47,7 @@ const vehSize = (kind: number) => ART44[kind] ? Math.max(ART44[kind].hull[0], AR
 const muzzleL = (kind: number) => ART44[kind] ? 0.42 * ART44[kind].top[0] + ART44[kind].fwd : 0.44 * (TANK_SCALE23[kind] ?? 1);
 const muzzleY = (kind: number) => ART44[kind] ? 0.195 * ART44[kind].top[1] + 0.15 * (ART44[kind].hull[1] - ART44[kind].top[1]) : 0.2;
 // R022 砲的網格縮放（長、高、寬）：榴彈砲原樣；反戰車砲壓低放平；迫擊砲短而翹
-const GUN_SCALE22: Record<number, [number, number, number]> = { ...INTERNATIONAL_GUN_ART, ...SOVIET_GUNS, [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4] };
+const GUN_SCALE22: Record<number, [number, number, number]> = { ...INTERNATIONAL_GUN_ART, ...SOVIET_GUNS, [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4], [UK_MG]: [0.36, 0.5, 0.34] };   // R080 機槍組：同一個砲的網格縮得很小（三腳架上的重機槍）
 // 一班六個人的位置（班長前進方向的本地座標：兩排三列）
 const SLOTS: [number, number][] = [[0.07, -0.15], [0.07, 0], [0.07, 0.15], [-0.11, -0.15], [-0.11, 0], [-0.11, 0.15]];
 const C_BODY = [new THREE.Color(0x3c4526), new THREE.Color(0x4a4944)];
@@ -132,7 +132,7 @@ export class BattleView {
   private zombieBodies = new Uint8Array(BODY_CAP);
   private bodyBorn = new Float32Array(BODY_CAP);
   private lastMen = new Int8Array(MAX_UNITS + 1).fill(-1);
-  readonly menDbg = { alive: 0, prone: 0 };
+  readonly menDbg = { alive: 0, prone: 0, crew: 0 };   // crew（R080）：這一幀畫了幾個砲組、機槍組的組員
   private discs: THREE.InstancedMesh;
   private rings: THREE.InstancedMesh;
   private armorArcs: THREE.InstancedMesh | null = null;
@@ -573,7 +573,7 @@ export class BattleView {
   // ---- 每一幀 ----
   update(alpha: number, simT: number, selected: Set<number>, showRanges = true) {
     const w = this.w, m = this.tmp;
-    this.menDbg.alive = 0; this.menDbg.prone = 0;
+    this.menDbg.alive = 0; this.menDbg.prone = 0; this.menDbg.crew = 0;
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
@@ -617,7 +617,7 @@ export class BattleView {
         m.position.set(x + bx * 0.1, back * 0.035, z + bz * 0.1); m.rotation.set(0, u.pathIdx < u.path.length ? this.yaw[u.id] + Math.PI : aim, u.alive ? -back * 0.12 : 0.2); m.scale.set(gx, gy, gz); m.updateMatrix();
         this.gun.setMatrixAt(ng, m.matrix); this.gun.setColorAt(ng, col);
         ng++;
-        if (u.kind === UK_MORTAR && u.alive) nm = this.crew22(u, x, z, col, nm);
+        if ((u.kind === UK_MORTAR || u.kind === UK_MG) && u.alive) nm = this.crew22(u, x, z, col, nm);
       }
       if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(u, x, z, simT, u.kind === UK_ZOMBIE ? C_ZOMBIE : col, nm);
       if (u.kind === UK_OBSERVER) {
@@ -769,7 +769,7 @@ export class BattleView {
     if (e.e === 'fire') {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
-      if (u.kind === UK_INFANTRY) {   // R021 步槍：小小的槍口火光
+      if (u.kind === UK_INFANTRY || u.kind === UK_MG) {   // R021 步槍、R080 機槍：小小的槍口火光
         const a = Math.atan2(u.aimZ, u.aimX), x0 = e.x / SUB + Math.cos(a) * 0.18, z0 = e.z / SUB + Math.sin(a) * 0.18, y0 = this.unitHeight(u) + 0.16;
         this.glow!.spawn({ x: x0, y: y0, z: z0, t0: t, life: 0.06, s0: 0.03, s1: 0.07, c0: 0xfff6c8, c1: 0xffa040, fog: u.side !== SIDE_PLAYER });
         return;
@@ -824,7 +824,7 @@ export class BattleView {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
       const x = u.x / SUB, z = u.z / SUB, fog = u.side !== SIDE_PLAYER;
-      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) {
+      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY || u.kind === UK_MG || u.kind === UK_ZOMBIE) {
         for (let k = 0; k < 3; k++) this.puff!.spawn({ x, y: 0.08, z, vy: 0.2, t0: t + 0.05 * k, life: 1.4, s0: 0.06, s1: 0.22, c0: 0x9a8b74, c1: 0xa59c8c, fog });
         return;
       }
@@ -1065,11 +1065,11 @@ export class BattleView {
   }
   // R022 迫擊砲的兩個砲手：蹲在砲後面（共用小兵網格；血少於一半剩一個）
   private crew22(u: Unit, x: number, z: number, col: THREE.Color, n: number): number {
-    const k = UNIT_KINDS[u.kind], men = u.hp * 2 > k.hp ? 2 : 1, aim = Math.atan2(-u.aimZ, u.aimX), ca = Math.cos(aim), sa = Math.sin(aim), m = this.tmp;
+    const k = UNIT_KINDS[u.kind], men = k.men ? Math.ceil((u.hp * k.men) / k.hp) : u.hp * 2 > k.hp ? 2 : 1, aim = Math.atan2(-u.aimZ, u.aimX), ca = Math.cos(aim), sa = Math.sin(aim), m = this.tmp;   // R080 機槍組三個人（少一個人少畫一個）
     for (let i = 0; i < men && n < MEN_CAP; i++) {
-      const ax = -0.2, az = i ? 0.13 : -0.13;
+      const ax = i === 2 ? -0.36 : -0.2, az = i === 2 ? 0 : i ? 0.13 : -0.13;
       m.position.set(x + ax * ca + az * sa, 0, z - ax * sa + az * ca); m.rotation.set(0, aim, 0); m.scale.set(1, i ? 0.8 : 1, 1); m.updateMatrix();
-      this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, col); n++;
+      this.men.setMatrixAt(n, m.matrix); this.men.setColorAt(n, col); n++; this.menDbg.crew++;
     }
     return n;
   }

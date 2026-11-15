@@ -10,7 +10,7 @@ import { unitSpec } from './ui/unitSpec.ts';
 import * as THREE from 'three';
 import { internationalItems } from './ui/internationalCatalog.ts';
 import { sovietItems } from './ui/sovietCatalog.ts';
-import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UNIT_KINDS, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UNIT_KINDS, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, enemyPlan } from './sim/build.ts';
 import { step, runLog, commandTick, type Command, type LoggedCommand } from './sim/step.ts';
 import { createSandboxWorld, sandboxPlaceError, type SandboxCommand, type SandboxError } from './sim/sandbox.ts';
@@ -128,7 +128,7 @@ const planner = new BuildPlanner({
   world: () => w, view: () => view, building: () => phase === 'build', simT: () => simT(), ui: () => ui(), hud: () => hud?.update(), size: () => [innerWidth, innerHeight],
 }, { trenches: V.r118, walls: V.r120, wire: V.r121, materials: V.r105, kinds: BUILD_KINDS_NOW });
 document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
-const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r077 ? { end: 1 } : {}) });
+const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r080 ? { mg: 1 } : {}) });
 let prodBar: ProdBar | undefined;
 // R018 電腦難度：?ai=1|2|3
 let aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));   // R069：開始選單可以改
@@ -428,7 +428,7 @@ hud = initHud({
       build: phase === 'build', hint: phase === 'build' ? planner.buildHint || BUILD_TIP : battleHint,
       mine: mine.length, theirs: theirs.length, ai: V.r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
-      observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
+      observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, mg: sel.filter(u => !!UNIT_KINDS[u.kind].sup).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR).length,
       info: V.r009 && sel.length ? selInfo(sel, !vehicleInfo) : undefined,
       vehicleInfo,
       rangeInfo: phase === 'battle' ? view.rangeInfo : undefined,
@@ -453,7 +453,7 @@ hud = initHud({
 reportView = initReportView({ again: () => reset() });
 const fireDisciplineFrame = V.r143 ? initFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue, { show: !(V.r070 && isDesktopPointer()) }) : undefined;
 if (V.r901) initMobileChrome(canvas);
-prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []),
+prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []), ...(V.r080 ? [{ kind: UK_MG, label: '機槍組', cost: UNIT_KINDS[UK_MG].cost }] : []),
   ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
   ...(V.r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : []),
   ...(V.r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : []), ...(V.r140 ? sovietItems() : []), ...(V.r142 ? internationalItems() : [])], {
@@ -621,7 +621,7 @@ const rts = {
   rangePreview: () => view.range113 ? { ...view.range113.solution, triangles: view.range113.mesh.geometry.drawRange.count / 3, shown: view.range113.mesh.visible } : null,
   holes: () => ({ count: view.holeCount, instances: view.holeInstances }),
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0, armor2: w.eco.armor2 ?? 0 } : null),
-  men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n, prone: view.menDbg.prone }),
+  men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n, prone: view.menDbg.prone, crew: view.menDbg.crew }),
   map: () => w.map ?? 0,
   mapSize: () => w.n,   // R043：地圖邊長（萊伊 32、鄉間大地圖 64）
   vegetation: () => ({ version: w.vegetation?.version ?? 0, cells: w.vegetation ? [...w.vegetation.cells] : [],
