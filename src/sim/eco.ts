@@ -42,7 +42,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
 }
 
 // eco 指令：只在第 0 步有效；雙方各放一座指揮部、開始累積補給
-export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0): void {
+export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0): void {
   if (w.eco || w.tick !== 0) return;
   const hq = [0, 0];
   for (const side of (w.zombies ? [SIDE_PLAYER] : [SIDE_PLAYER, SIDE_ENEMY])) {
@@ -56,7 +56,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, sov
     w.events.push({ e: 'build', bld: id });
     hq[side] = id;
   }
-  w.eco = { supply: [ECO_START, w.zombies ? 0 : ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}), ...(soviet ? { soviet: 1 } : {}), ...(international ? { international: 1 } : {}), ...((w.map === MAP_LARGE || w.map === MAP_TOWN) ? { pop: LARGE_POP } : {}) };
+  w.eco = { supply: [ECO_START, w.zombies ? 0 : ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}), ...(soviet ? { soviet: 1 } : {}), ...(international ? { international: 1 } : {}), ...((w.map === MAP_LARGE || w.map === MAP_TOWN) ? { pop: LARGE_POP } : {}), ...(end ? { end: 1 } : {}) };   // R077 end：勝負判定第二版（step.ts checkWinner）
   if (inf) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_INFANTRY, b); }   // R021：雙方各一班步兵
 }
 
