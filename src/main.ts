@@ -539,7 +539,7 @@ renderer.setAnimationLoop(() => {
   syncBattleAudio();
   let steps = 0;
   // 只在即時迴圈收新事件；所有同步stepN／playLog／SCRIPT都不會走這裡。
-  while (acc >= 1 / TICK_HZ && steps < 8 && netReady(w.tick)) { acc -= 1 / TICK_HZ; tick(); battleAudio?.enqueue(w, w.events, view); steps++; }
+  while (acc >= 1 / TICK_HZ && steps < 8) { if (!netReady(w.tick)) break; acc -= 1 / TICK_HZ; tick(); battleAudio?.enqueue(w, w.events, view); steps++; }
   battleAudio?.flush();
   if (steps === 8) acc = 0; else if (netLive()) acc = Math.min(acc, 1 / TICK_HZ);   // 機器太慢：丟掉積欠的時間，不追；R083 審查：連線時等對方的時間不存起來（不然之後自己暫停也停不住）
   const alpha = Math.min(1, acc * TICK_HZ);
