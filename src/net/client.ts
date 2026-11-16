@@ -18,14 +18,18 @@ export function initNet(h: NetHost): void {
   });
 }
 export const netAvailable = (): boolean => !!host;
-export const netLive = (): boolean => !!session?.live();
+// 本機換了世界（重開、回主選單、看重播、沙盒、讀存檔）：這一局連線結束——斷線（對方收到「離開」自己繼續打），之後照單機（R083 審查）
+function dropIfStale(): void { if (session?.stale()) { sock?.close(); sock = null; session = null; stalledSince = -1; paint(); } }
+export const netLive = (): boolean => { dropIfStale(); return !!session?.live(); };
 export function netReady(t: number): boolean {
+  dropIfStale();
   const ok = !session || session.ready(t);
   if (ok) { if (stalledSince >= 0) { stalledSince = -1; paint(); } }
   else if (stalledSince < 0) { stalledSince = performance.now(); setTimeout(paint, STALL_MS + 20); }
   return ok;
 }
 export function netFeed(w: World, pending: readonly Command[]): Command[] | null {
+  dropIfStale();
   if (!session) return null;
   const before = session.live(), cmds = session.feed(w, pending);
   if (!before && session.live()) paint();
@@ -45,6 +49,7 @@ function connect(role: Role, room: string, url: string): void {
   const s = new Session(role, host, m => { if (sock?.readyState === 1) sock.send(JSON.stringify(m)); });
   session = s; rtt = -1;
   let ws: WebSocket;
+  if (location.protocol === 'https:' && /^ws:/i.test(url) && !/^ws:\/\/(127\.0\.0\.1|localhost)[:/]/i.test(url)) { s.state = 'error'; s.why = 'https 的頁面連不了 ws://（瀏覽器擋掉）：開轉發伺服器印出來的 http 網址，或用 wss:// 的伺服器'; paint(); return; }   // R083 審查
   try { ws = new WebSocket(`${url}${url.includes('?') ? '&' : '?'}room=${encodeURIComponent(room.toUpperCase())}&role=${role}`); }
   catch { s.state = 'error'; s.why = '伺服器位址不對'; paint(); return; }
   sock = ws;
@@ -56,12 +61,13 @@ function connect(role: Role, room: string, url: string): void {
     s.receive(m);
     if (m.t === 'welcome') { try { localStorage.setItem('gtrts.v1.relay', url); } catch { /* 存不了就算了 */ } }
     if (m.t === 'welcome' && role === 'host' && wasHosting !== 'ready') { const next = afterHost; afterHost = null; closePanel(); next?.(); }
-    if (m.t === 'start') closePanel();
+    if (m.t === 'start') { closePanel(); (document.querySelector('#start-menu:not([hidden]) #sm-start, #start-menu:not([hidden]) #sm-resume') as HTMLElement | null)?.click(); }   // 用連結加入的人，開始選單還開著：關掉（R083 審查）
+    if (m.t === 'welcome' && role === 'join' && !panel) waitingPanel();
     paint();
   };
   ws.onopen = () => { clearInterval(pingTimer); pingTimer = window.setInterval(() => { if (ws.readyState === 1 && s.peer) ws.send(JSON.stringify({ t: 'ping', id: performance.now() })); }, 2000); };
   ws.onerror = () => { if (s.state === 'connecting') { s.state = 'error'; s.why = `連不上伺服器 ${url}`; paint(); } };
-  ws.onclose = () => { clearInterval(pingTimer); if (session === s && s.state !== 'error') { if (!s.ls) s.state = 'ended'; if (!s.why) s.why = '跟伺服器斷線了'; } paint(); };
+  ws.onclose = () => { clearInterval(pingTimer); if (session === s) s.disconnected(); paint(); };
   paint();
 }
 
@@ -73,7 +79,7 @@ function statusText(): string {
   if (s.state === 'connecting') return '連線中…';
   const ls = s.ls;
   if (ls && ls.desync >= 0) return `不同步（第 ${ls.desync} 步）：這一局停在這裡`;
-  if (ls && s.peerLeft) return '對方離線了：你繼續打';
+  if (ls && s.peerLeft) return s.why || '對方離線了：你繼續打';
   if (ls && stalledSince >= 0 && performance.now() - stalledSince >= STALL_MS) return '等另一位玩家…';
   if (s.state === 'ended') return `連線：${s.why || '結束了'}`;
   const who = s.peer ? '2 人' : s.role === 'host' ? '等第二位玩家（把房號告訴他）' : '等房主';
@@ -115,7 +121,18 @@ export function openNetPanel(onHosted: () => void): void {
   (document.getElementById('net-room') as HTMLInputElement).value = randomRoom();
   document.getElementById('net-host')!.onclick = () => { afterHost = onHosted; connect('host', val('net-room'), val('net-relay')); };
   document.getElementById('net-join')!.onclick = () => connect('join', val('net-room'), val('net-relay'));
-  document.getElementById('net-close')!.onclick = () => { if (session?.role === 'join' && !session.ls) { sock?.close(); session = null; paint(); } closePanel(); onHosted(); };
+  document.getElementById('net-close')!.onclick = () => { if (session && !session.ls && (session.role === 'join' || session.state !== 'ready')) { sock?.close(); sock = null; session = null; paint(); } closePanel(); onHosted(); };   // R083 審查：開房失敗的也清掉
   paint();
 }
 function closePanel(): void { panel?.remove(); panel = null; }
+// 用連結（?room=…&net=join）加入的人：蓋一層「等房主開戰」，不讓開始選單在等的時候被按（R083 審查）
+function waitingPanel(): void {
+  panel = document.createElement('div');
+  panel.id = 'net-panel';
+  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true');
+  panel.style.cssText = 'position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(10,12,10,.6);font:15px/1.5 system-ui,sans-serif;color:#f2ecd8';
+  panel.innerHTML = `<div style="width:min(92vw,380px);padding:16px 18px;border-radius:10px;background:#22251f"><h2 style="margin:0 0 6px;font-size:18px">連線合作</h2><p id="net-msg" style="min-height:1.5em;margin:0 0 10px"></p><button id="net-close" style="min-width:96px;min-height:44px;font:inherit;border-radius:6px;border:1px solid #c9b77a;background:#4a4630;color:inherit">取消</button></div>`;
+  document.body.appendChild(panel);
+  document.getElementById('net-close')!.onclick = () => { sock?.close(); sock = null; session = null; closePanel(); paint(); };
+  paint();
+}

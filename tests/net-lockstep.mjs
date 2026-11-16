@@ -10,6 +10,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
+import net from 'node:net';
+import vm from 'node:vm';
+import { stripTypeScriptTypes } from 'node:module';
 import { createWorld, hashWorld, SIDE_PLAYER, SIDE_ENEMY, UK_TANK } from '../src/sim/world.ts';
 import { step, runLog } from '../src/sim/step.ts';
 import { Lockstep, NET_DELAY, NET_HASH_EVERY } from '../src/net/lockstep.ts';
@@ -158,7 +161,44 @@ const groups = {
     assert.equal(lone.live(), false, 'start: and stays offline');
     const off = new Session('join', fake, () => {});
     assert.equal(off.feed({ tick: 5, seed: 1 }, [mv(1, 1, 1)]), null, 'start: before the host starts, feed gives nothing (tick() keeps using its own commands)');
+    let gw = { tick: 0, seed: 1 };
+    const g = new Session('join', { ...fake, world: () => gw, begin: s => { gw = { tick: 0, seed: s }; } }, () => {});
+    g.receive({ t: 'welcome', you: 1, room: 'X', players: 2 });
+    g.receive({ t: 'tick', at: 5, cmds: [mv(1, 1, 1)], from: 0 });   // 房主的包比開局先到（真的伺服器不會這樣；保險）
+    g.receive({ t: 'start', seed: 1, setup: [], delay: NET_DELAY, from: 0 });
+    for (let t = 1; t <= 4; t++) g.ls.take(t, []);
+    assert(g.ls.ready(5) && g.ls.take(5, []).cmds[0]?.ids[0] === 1, 'start: a packet that arrives before the opening is kept for its step');
   },
+};
+
+// 一局結束與斷線（R083 審查）：本機換了世界＝這一局不算數；自己斷線＝跟對方離線一樣繼續打；新的人進來清掉「對方離線」
+groups.teardown = () => {
+  const { a, b, advance } = pair({ seed: 3, hi: 80 });
+  advance(150);
+  assert.equal(a.session.stale(), false, 'fixture: while the same world is running the session is current');
+  a.w = createWorld(99);   // 房主重開（再來一局、回主選單、看重播、沙盒、讀存檔都會換掉世界）
+  assert.equal(a.session.stale(), true, 'teardown: once the world is replaced the online game is over (the client then disconnects)');
+  const stay = pair({ seed: 4, hi: 80 });
+  stay.advance(150);
+  stay.b.session.disconnected();
+  stay.advance(600, { gone: new Set([stay.a]) });
+  assert(stay.b.w.tick >= 600 && stay.b.session.peerLeft, `teardown: after losing its own connection a player carries on alone (step ${stay.b.w.tick})`);
+  const fake = { world: () => ({ tick: 0, seed: 1 }), log: () => [], hash: () => '', phase: () => 'build', begin() {}, tick() {}, remake() {}, focus() {} };
+  const h = new Session('host', fake, () => {});
+  h.receive({ t: 'welcome', you: 0, room: 'X', players: 1 });
+  h.receive({ t: 'joined', who: 1 }); h.receive({ t: 'left', who: 1 }); h.receive({ t: 'joined', who: 1 });
+  assert(h.peer && !h.peerLeft, 'teardown: a new guest joining clears the earlier 對方離線');
+};
+// 迴圈（真的 main.ts 那一段）：連線時等對方的時間不存起來；單機照舊
+groups.frame = () => {
+  const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'), from = main.indexOf('  let steps = 0;'), to = main.indexOf('  const alpha =', from);
+  assert(from > 0 && to > from, 'fixture: the frame loop is where it was');
+  const chunk = stripTypeScriptTypes(main.slice(from, to));
+  const run = (acc, live, ready) => { const c = vm.createContext({ acc, TICK_HZ: 20, w: { tick: 0, events: [] }, view: {}, battleAudio: undefined, ticks: 0, netLive: () => live, netReady: () => ready }); c.tick = () => { c.ticks++; }; vm.runInContext(chunk, c); return { acc: c.acc, ticks: c.ticks }; };
+  const waiting = run(30, true, false);
+  assert(waiting.ticks === 0 && waiting.acc <= 1 / 20 + 1e-9, `frame: online, the time spent waiting for the other player is not banked (${waiting.acc} s left)`);
+  assert.deepEqual(run(0.12, false, true), { acc: 0.12 - 2 / 20, ticks: 2 }, 'frame: single player is unchanged (two steps, the rest carried over)');
+  assert.deepEqual(run(30, false, true), { acc: 0, ticks: 8 }, 'frame: single player still drops the backlog after 8 steps');
 };
 
 // ---- 轉發伺服器：真的開一個行程 ----
@@ -214,6 +254,27 @@ async function relayGroup() {
     const none = await fetch(`http://127.0.0.1:${srv2.port}/`);
     assert(none.status === 503 && /npm run build/.test(await none.text()), 'relay: without a built page it says to run npm run build');
     assert.equal((await fetch(`http://127.0.0.1:${srv.port}/..%2fsecret.txt`)).status, 404, 'relay: nothing outside dist/ is served');
+    // 壞的請求不讓整個行程掛掉（R083 審查）
+    const raw = text => new Promise(res => { const c = net.connect(srv.port, '127.0.0.1', () => c.write(text)); c.on('data', () => { c.resetAndDestroy(); res(); }); c.on('error', () => res()); setTimeout(res, 1500); });
+    await raw('GET /% HTTP/1.1\r\nHost: x\r\n\r\n');
+    await raw('GET /nope HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n');
+    await raw('GET /relay?room=Q HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n');
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(srv.p.exitCode, null, 'relay: a malformed URL or a reset on a refused upgrade does not bring the server down');
+    assert.equal((await fetch(`http://127.0.0.1:${srv.port}/%E4%B8`)).status, 400, 'relay: a bad percent-escape gets 400');
+    const d1 = await open('DEEP', 'host'); await d1.next();
+    const d2 = await open('DEEP', 'join'); await d2.next(); await d1.next();
+    d2.ws.send(`{"t":"tick","x":${'['.repeat(30000)}${']'.repeat(30000)}}`);
+    assert.deepEqual(await d1.next(), { t: 'left', who: 1 }, 'relay: a message that cannot be forwarded (nested too deep) drops its sender, not the server');
+    assert.equal(srv.p.exitCode, null, 'relay: and the server is still up');
+    // 房主走了之後，留下來的人送的不會轉給同一個房號的新房主
+    const s1 = await open('STALE', 'host'); await s1.next();
+    const s2 = await open('STALE', 'join'); await s2.next(); await s1.next();
+    s1.ws.close(); await s2.next();
+    const s3 = await open('STALE', 'host'); await s3.next();
+    s2.ws.send(JSON.stringify({ t: 'tick', at: 9, cmds: [] }));
+    assert.equal(await s3.next(400), null, 'relay: someone left behind in a closed room does not reach the new host of the same code');
+    for (const x of [d1, s2, s3]) x.ws.close();
   } finally {
     srv.p.kill(); srv2.p.kill();
     rmSync(base, { recursive: true, force: true }); rmSync(empty, { recursive: true, force: true });
@@ -237,7 +298,16 @@ const mutants = [
   ['no_delay', 'sync', 'src/net/lockstep.ts', '      this.put(t + this.delay, this.me, own);\n      out.push({ t: \'tick\', at: t + this.delay, cmds: own });', '      this.put(t + 1, this.me, own);\n      out.push({ t: \'tick\', at: t + 1, cmds: own });', 'sync: with 0–300 ms of network delay the battle keeps pace'],
   ['hash_ignored', 'desync', 'src/net/lockstep.ts', '      if (hq !== mine) { if (this.desync < 0 || t < this.desync) this.desync = t; }', '      if (false) { this.desync = t; }', 'desync: both sides stop at the next hash check'],
   ['leave_ignored', 'leave', 'src/net/lockstep.ts', '  leave(p: number): void { if (p !== this.me) this.gone.add(p); }', '  leave(p: number): void { }', 'leave: the player who stayed carries on'],
-  ['late_join_accepted', 'start', 'src/net/session.ts', "case 'joined': if (!this.ls && this.host.world().tick === 0) this.peer = true;", "case 'joined': if (!this.ls) this.peer = true;", 'start: someone joining after the battle started'],
+  ['late_join_accepted', 'start', 'src/net/session.ts', "case 'joined': if (!this.ls && this.host.world().tick === 0) {", "case 'joined': if (!this.ls) {", 'start: someone joining after the battle started'],
+  ['early_dropped', 'start', 'src/net/session.ts', "else if (this.role === 'join' && this.early.length < 1000) this.early.push(m);", ";", 'start: a packet that arrives before the opening'],
+  ['never_stale', 'teardown', 'src/net/session.ts', '  stale(): boolean { return !!this.ls && this.host.world() !== this.world; }', '  stale(): boolean { return false; }', 'teardown: once the world is replaced'],
+  ['disconnect_waits', 'teardown', 'src/net/session.ts', '    if (this.ls) { for (const p of this.ls.stillHere()) if (p !== this.me) this.ls.leave(p);', '    if (this.ls) { for (const p of [] as number[]) this.ls.leave(p);', 'teardown: after losing its own connection'],
+  ['left_sticky', 'teardown', 'src/net/session.ts', '{ this.peer = true; this.peerLeft = false; }', '{ this.peer = true; }', 'teardown: a new guest joining clears'],
+  ['banks_wait', 'frame', 'src/main.ts', ' else if (netLive()) acc = Math.min(acc, 1 / TICK_HZ);', ';', 'frame: online, the time spent waiting'],
+  ['relay_url_crash', 'relay', 'server/relay.mjs', "  try { url = new URL(req.url, 'http://x'); rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname); }\n  catch {", "  { url = new URL(req.url, 'http://x'); rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname); }\n  if (false) {", 'relay: a malformed URL or a reset'],
+  ['relay_reset_crash', 'relay', 'server/relay.mjs', "  socket.on('error', () => socket.destroy());   // R083 審查", "  // R083 審查", 'relay: a malformed URL or a reset'],
+  ['relay_deep_crash', 'relay', 'server/relay.mjs', "    try { others(room, you, { ...msg, from: you }); } catch { ws.close(1007); }", "    others(room, you, { ...msg, from: you });", 'relay: a message that cannot be forwarded'],
+  ['relay_stale_member', 'relay', 'server/relay.mjs', "    if (you < 0 || rooms.get(room)?.[you] !== ws || !msg", "    if (you < 0 || !msg", 'relay: someone left behind in a closed room'],
   ['relay_echo', 'relay', 'server/relay.mjs', 'if (m && i !== you) m.send(', 'if (m) m.send(', 'relay: the host is told'],   // 轉回給自己：房主開房那一刻就先聽到自己進來
   ['relay_no_cap', 'relay', 'server/relay.mjs', '  if (free < 0 || free >= MAX_PLAYERS) return', '  if (false) return', 'relay: a third player cannot get in'],
   ['relay_keeps_room', 'relay', 'server/relay.mjs', '    if (you === 0 || members.every(m => !m)) rooms.delete(room);', '    if (members.every(m => !m)) rooms.delete(room);', 'relay: when the host leaves the room closes'],
@@ -248,6 +318,7 @@ try {
     const dir = join(temp, name);
     mkdirSync(join(dir, 'tests'), { recursive: true }); mkdirSync(join(dir, 'src'), { recursive: true });
     for (const d of ['src/sim', 'src/net', 'server']) cpSync(join(root, d), join(dir, d), { recursive: true });
+    cpSync(join(root, 'src/main.ts'), join(dir, 'src/main.ts'));
     cpSync(join(root, 'tests/net-lockstep.mjs'), join(dir, 'tests/net-lockstep.mjs'));
     writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
     const path = join(dir, file), source = readFileSync(path, 'utf8');

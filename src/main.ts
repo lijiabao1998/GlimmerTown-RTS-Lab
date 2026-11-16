@@ -229,7 +229,7 @@ const simT = (alpha = 0) => (w.tick + alpha) / TICK_HZ;
 
 function tick() {
   view.snapshot();
-  const now = netFeed(w, pending) ?? replay?.feed(w, pending) ?? pending; pending = [];   // R047：正在重播就餵紀錄裡這一步的指令（玩家這時下的不進世界）；不是重播時 feed 只負責在分出勝負那一刻存檔
+  const now = replay?.feed(w, pending) ?? netFeed(w, pending) ?? pending; pending = [];   // R047：正在重播就餵紀錄裡這一步的指令（玩家這時下的不進世界）；不是重播時 feed 只負責在分出勝負那一刻存檔
   const priorWinner = w.winner, priorMap = w.map;
   sandboxPlacementResults.length = 0;
   step(w, now, sandboxPlacementResults);
@@ -541,7 +541,7 @@ renderer.setAnimationLoop(() => {
   // 只在即時迴圈收新事件；所有同步stepN／playLog／SCRIPT都不會走這裡。
   while (acc >= 1 / TICK_HZ && steps < 8 && netReady(w.tick)) { acc -= 1 / TICK_HZ; tick(); battleAudio?.enqueue(w, w.events, view); steps++; }
   battleAudio?.flush();
-  if (steps === 8) acc = 0;   // 機器太慢：丟掉積欠的時間，不追
+  if (steps === 8) acc = 0; else if (netLive()) acc = Math.min(acc, 1 / TICK_HZ);   // 機器太慢：丟掉積欠的時間，不追；R083 審查：連線時等對方的時間不存起來（不然之後自己暫停也停不住）
   const alpha = Math.min(1, acc * TICK_HZ);
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.setSize(innerWidth, innerHeight, true);

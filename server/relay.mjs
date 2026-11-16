@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const arg = (name, def) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? def : process.argv[i + 1]; };
 const PORT = Number(arg('port', process.env.PORT ?? 8788)), HOST = arg('host', '0.0.0.0');
 const DIST = path.resolve(arg('dist', path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist')));
-const MAX_MESSAGE = 256 * 1024, MAX_PLAYERS = 2, ROOM_RE = /^[A-Za-z0-9]{1,12}$/;
+const MAX_MESSAGE = 256 * 1024, MAX_PLAYERS = 2, ROOM_RE = /^[A-Za-z0-9]{1,12}$/, MAX_CONNECTIONS = 200, IDLE_MS = 60000;   // R083 審查：連線數上限；60 秒沒收到任何東西（瀏覽器會自動回 ping）就關
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
@@ -31,11 +31,15 @@ function wsAccept(req, socket, onMessage, onClose) {
   socket.setNoDelay(true);
   let buf = Buffer.alloc(0), parts = [], closed = false;
   const ws = {
+    seen: Date.now(),
+    ping() { if (!closed) socket.write(frame(9, Buffer.alloc(0))); },
+    kill() { closed = true; socket.destroy(); },
     send(text) { if (!closed) socket.write(frame(1, Buffer.from(text))); },
     close(code = 1000) { if (closed) return; closed = true; const b = Buffer.alloc(2); b.writeUInt16BE(code); socket.write(frame(8, b)); socket.end(); },
   };
   const fail = () => { ws.close(1002); };
   socket.on('data', chunk => {
+    ws.seen = Date.now();
     buf = Buffer.concat([buf, chunk]);
     for (;;) {
       if (buf.length < 2) return;
@@ -59,10 +63,12 @@ function wsAccept(req, socket, onMessage, onClose) {
   });
   const end = () => { if (!closed) closed = true; onClose(); };
   socket.on('close', end); socket.on('error', () => socket.destroy());
+  live.add(ws); socket.on('close', () => live.delete(ws));
   return ws;
 }
 
 // ---- 房間 ----
+const live = new Set();   // 開著的 WebSocket（心跳用）
 const rooms = new Map();   // 房號 → [0 號, 1 號]（沒人＝null）
 function join(ws, room, role) {
   const members = rooms.get(room);
@@ -78,7 +84,9 @@ function join(ws, room, role) {
 function others(room, you, msg) { for (const [i, m] of (rooms.get(room) ?? []).entries()) if (m && i !== you) m.send(JSON.stringify(msg)); }
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://x'), rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
+  let url, rel;
+  try { url = new URL(req.url, 'http://x'); rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname); }
+  catch { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('bad request\n'); }   // R083 審查：壞的百分比編碼、解不開的網址
   const file = path.resolve(DIST, '.' + rel);
   if (!file.startsWith(DIST + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
     const missing = rel === '/index.html' && !fs.existsSync(path.join(DIST, 'index.html'));
@@ -89,14 +97,17 @@ const server = http.createServer((req, res) => {
   fs.createReadStream(file).pipe(res);
 });
 server.on('upgrade', (req, socket) => {
-  const url = new URL(req.url, 'http://x'), room = (url.searchParams.get('room') ?? '').toUpperCase(), role = url.searchParams.get('role') === 'join' ? 'join' : 'host';
+  socket.on('error', () => socket.destroy());   // R083 審查：被拒絕的連線也要有錯誤處理（不然對方一重設，整個行程就掛了）
+  let url;
+  try { url = new URL(req.url, 'http://x'); } catch { socket.destroy(); return; }
+  const room = (url.searchParams.get('room') ?? '').toUpperCase(), role = url.searchParams.get('role') === 'join' ? 'join' : 'host';
   if (url.pathname !== '/relay') { socket.end('HTTP/1.1 404 Not Found\r\n\r\n'); return; }
   let you = -1;
   const ws = wsAccept(req, socket, text => {
     let msg;
     try { msg = JSON.parse(text); } catch { return; }
-    if (you < 0 || !msg || typeof msg !== 'object' || Array.isArray(msg)) return;
-    others(room, you, { ...msg, from: you });
+    if (you < 0 || rooms.get(room)?.[you] !== ws || !msg || typeof msg !== 'object' || Array.isArray(msg)) return;   // R083 審查：房間關掉之後留下來的人送的不轉
+    try { others(room, you, { ...msg, from: you }); } catch { ws.close(1007); }   // 巢狀太深的 JSON：JSON.stringify 會丟例外
   }, () => {
     const members = rooms.get(room);
     if (you < 0 || !members || members[you] !== ws) return;
@@ -112,6 +123,8 @@ server.on('upgrade', (req, socket) => {
   ws.send(JSON.stringify({ t: 'welcome', you, room, players: rooms.get(room).filter(Boolean).length }));
   others(room, you, { t: 'joined', who: you });
 });
+server.maxConnections = MAX_CONNECTIONS;
+setInterval(() => { const now = Date.now(); for (const ws of live) { if (now - ws.seen > IDLE_MS) ws.kill(); else ws.ping(); } }, 30000).unref();
 server.listen(PORT, HOST, () => {
   const lan = Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === 'IPv4' && !a.internal).map(a => a.address);
   const port = server.address().port;
