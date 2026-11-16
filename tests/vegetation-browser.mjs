@@ -418,7 +418,7 @@ async function main() {
       await fresh('noR026=1');
       const randomOpening=await sample();
       assert.equal(randomOpening.state.hash,hashWorld(village),`${label}: normal map0 opening uses its own deterministic foliage layout`);
-      assert.deepEqual(randomOpening.state.log,[{tick:0,cmd:{t:'map',id:0,vegetation:1}}],`${label}: random village records map0 vegetation explicitly`);
+      assert.deepEqual(randomOpening.state.log,[{tick:0,cmd:{t:'map',id:0,vegetation:1,sym:1}}],`${label}: random village records map0 vegetation explicitly`);   // R084：新開的局多帶 sym
       assert.deepEqual(randomOpening.state.cells,Array.from(village.vegetation.cells),`${label}: normal map0 foliage matches Node`);
       budget(randomOpening,true,`${label} map0 opening`); await shot(`r116-${label}-map0-opening.png`);
       await legacyCheck(); await button('b-restart',mobile); await settle();
