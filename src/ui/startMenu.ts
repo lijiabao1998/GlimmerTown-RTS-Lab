@@ -3,7 +3,7 @@
 // 電腦難度、暫停、音效由 main.ts 接線傳進來（音效要真的手指點才開得了，不能用程式按舊鍵）。
 // R046 遭遇戰設定：多一顆「遭遇戰設定」鍵與設定頁（兵力、補給速度、種子）、地圖多一顆「村莊」；host.skirmish 沒有（?noR046=1）時跟 R069 一模一樣。
 import { FORCE_TEXT, FORCE_SUB, SUPPLY_TEXT, SUPPLY_SUB, DEFAULT_SEED, setupSummary, parseSeed, randomSeed, type Skirmish } from './skirmish.ts';
-export type MapChoice = 'rye' | 'village' | 'large' | 'town';
+export type MapChoice = 'rye' | 'village' | 'hills' | 'large' | 'town';
 export type ModeChoice = 'battle' | 'zombies' | 'sandbox';
 export type MenuKind = 'start' | 'pause';
 export interface MenuView {
@@ -20,7 +20,7 @@ export interface MenuView {
 export interface MenuItem { id: string; label: string; sub?: string; pressed?: boolean; input?: boolean }   // input：可以打字的一格（R046 種子）
 export interface MenuLayout { title: string; sub: string; rows: { id: string; title: string; items: MenuItem[]; note?: string }[]; main: MenuItem[]; extra: MenuItem[] }
 
-const MAP_TEXT: Record<MapChoice, [string, string]> = { rye: ['萊伊', '32×32'], village: ['村莊', '32×32'], large: ['鄉間', '64×64'], town: ['河鎮', '96×96'] };
+const MAP_TEXT: Record<MapChoice, [string, string]> = { rye: ['萊伊', '32×32'], village: ['村莊', '32×32'], hills: ['丘陵', '32×32'], large: ['鄉間', '64×64'], town: ['河鎮', '96×96'] };
 const MODE_TEXT: Record<ModeChoice, string> = { battle: '一般對戰', zombies: '喪屍防守', sandbox: '沙盒' };
 export const AI_TEXT = ['', '簡單', '普通', '困難'];
 
@@ -164,7 +164,8 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     const maps: MapChoice[] = ['rye', ...(el('map-pick') ? ['large' as const] : []), ...(el('town-pick') ? ['town' as const] : [])];
     const modes: ModeChoice[] = ['battle', ...(el('zombies-pick') ? ['zombies' as const] : []), ...(el('sb-enter') ? ['sandbox' as const] : [])];
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
-    return { kind, map: sk?.village && s.map === 'rye' ? 'village' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
+    if (sk?.canHills) maps.splice(maps.indexOf('village') + 1 || 1, 0, 'hills');   // R055：丘陵（有高度的地圖）排在 32×32 那幾張的最後
+    return { kind, map: sk?.village && s.map === 'rye' ? 'village' : sk?.hills && s.map === 'rye' ? 'hills' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
       ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}), ...(sk.canMorale ? { morale: sk.morale } : {}), ...(sk.help ? { help: true } : {}), ...(sk.merged ? { merged: true } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && host.saved?.() ? { saved: host.saved()! } : {}) };
   };
@@ -211,10 +212,10 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (id === 'sm-audio') { if (trusted) host.audio?.(); return render(); }
     if (id === 'sm-setup' || id === 'sm-setup-done') { page = id === 'sm-setup' ? 'setup' : undefined; render(); return focus(page ? '.sm-primary' : '#sm-setup'); }
     // R046：村莊＝萊伊那一格換成亂數村莊（地圖 0）。先改設定，再照舊按舊鍵走到 32×32；一顆都不用按時（萊伊↔村莊）自己重開一局
-    const village = id === 'sm-map-village';
-    let fresh = !!sk && id.startsWith('sm-map-') && sk.village !== village;
-    if (fresh) sk!.set({ village });
-    if (id.startsWith('sm-map-')) for (let i = 0, b; i < 3 && (b = mapStep(host.state().map, village ? 'rye' : id.slice(7) as MapChoice)); i++) { press(b); fresh = false; }
+    const village = id === 'sm-map-village', hills = id === 'sm-map-hills';   // R055：丘陵跟村莊一樣，是 32×32 那一格的另一張圖
+    let fresh = !!sk && id.startsWith('sm-map-') && (sk.village !== village || sk.hills !== hills);
+    if (fresh) sk!.set({ village, hills });
+    if (id.startsWith('sm-map-')) for (let i = 0, b; i < 3 && (b = mapStep(host.state().map, village || hills ? 'rye' : id.slice(7) as MapChoice)); i++) { press(b); fresh = false; }
     else if (id.startsWith('sm-mode-')) for (let i = 0, b; i < 3 && (b = modeStep(host.state().mode, id.slice(8) as ModeChoice)); i++) press(b);
     else if (id.startsWith('sm-ai-')) { host.ai(Number(id.slice(6))); sk?.set({ ai: Number(id.slice(6)) }); }   // R073：難度也記下來（換難度不會重開一局）
     else if (sk && id.startsWith('sm-force-')) { sk.set({ force: Number(id.slice(9)) }); fresh = true; }

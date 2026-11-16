@@ -1,5 +1,6 @@
 // 戰場畫面：只讀世界、不改世界（AGENTS.md 規則 2）。兩個 tick 之間用 alpha 插值，畫面 60fps、模擬 20 步／秒。
 import * as THREE from 'three';
+import { reliefShade } from './relief.ts';
 import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
@@ -460,6 +461,7 @@ export class BattleView {
       }
       const trench = !b ? this.trench118.pixel(i, px, py) : -1;
       if (trench >= 0) { r = trench >>> 16; g = (trench >>> 8) & 255; bl = trench & 255; }
+      if (w.height) { const k = reliefShade(w, x, z, px, py, PX); r *= k[0]; g *= k[1]; bl *= k[2]; }   // R055：起伏畫在地面貼圖上（幾何還是平的）
       const o = (gz * W + gx) * 4;
       this.groundPx[o] = Math.max(0, Math.min(255, r)); this.groundPx[o + 1] = Math.max(0, Math.min(255, g));
       this.groundPx[o + 2] = Math.max(0, Math.min(255, bl)); this.groundPx[o + 3] = 255;

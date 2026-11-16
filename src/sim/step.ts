@@ -3,6 +3,7 @@ import { isqrt, dist } from './math.ts';
 import { fireDisciplineEligible } from './fireDiscipline.ts';
 import { armorPct } from './armor.ts';
 import { apHit } from './ballistics.ts';
+import { ridgeBlocks, highSight } from './terrain.ts';
 import { suppress, suppressBlast, suppressHouse, suppressZone, moraleStep, reloads, canFire, movePct, SUP_SMALL, SUP_DIRECT } from './morale.ts';
 import { findPath } from './path.ts';
 import { randSym } from './rng.ts';
@@ -110,7 +111,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
     } else delete u.fireAmmo;
     u.order = ORD_FIRE_AT; u.tx = gx; u.tz = gz;
     u.target = smoke || !standing ? FIRE_AT_ROUNDS : 0;
-    u.path = inRange(u, center(gx), center(gz)) ? [] : findPath(w, ux, uz, gx, gz, 0, 0, u.kind); u.pathIdx = 0;
+    u.path = inRange(u, center(gx), center(gz)) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, center(gx), center(gz))) ? [] : findPath(w, ux, uz, gx, gz, 0, 0, u.kind); u.pathIdx = 0;   // R055：直射的在射程內但被稜線擋住，也要往前開
   });
 }
 
@@ -142,6 +143,8 @@ export function lineCells(x0: number, z0: number, x1: number, z1: number, n = 32
 }
 
 // 從 (ax,az) 到 (bx,bz)（位置單位），回傳第一個擋住的建築格（不含起點格）；沒有擋就回傳 -1
+// R055：(ax,az) 到 (bx,bz)（位置單位）的直射射線有沒有被稜線擋住；沒有高度表的世界永遠是 false
+export const ridge = (w: World, ax: number, az: number, bx: number, bz: number): boolean => !!w.height && ridgeBlocks(w, lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz), w.n));
 export function firstBlock(w: World, ax: number, az: number, bx: number, bz: number, ignoreBuilding = 0): number {
   return firstBlockCells(w, lineCells(cellOf(ax), cellOf(az), cellOf(bx), cellOf(bz), w.n), ignoreBuilding);
 }
@@ -156,10 +159,11 @@ function firstBlockCells(w: World, cells: readonly number[], ignoreBuilding = 0)
 export function spotted(w: World, side: number, x: number, z: number, ignoreSmokeId = 0): boolean {
   if (!inGrid(w, cellOf(x), cellOf(z))) return false;
   for (const u of w.units) {
-    if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight) continue;
+    if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight + highSight(w, u.x, u.z, x, z)) continue;   // R055：站得比那一格高，多看一兩格（沒有高度表＝0）
     if (smokeBlocks(w, u.x, u.z, x, z, ignoreSmokeId)) continue;
     const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z), w.n);
     if (w.vegetation && vegetationBlocks(w, cells)) continue;
+    if (w.height && ridgeBlocks(w, cells)) continue;   // R055：稜線擋住
     const home = UNIT_KINDS[u.kind].garrison ? bldAt(w, cellOf(u.x), cellOf(u.z)) : null;
     const block = firstBlockCells(w, cells, home?.id ?? 0);
     if (block < 0 || block === cellIdx(w, cellOf(x), cellOf(z))) return true;
@@ -173,10 +177,10 @@ function moveUnit(w: World, u: Unit): void {
     if (!t || !t.alive || tooClose(u, t.x, t.z)) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }   // 目標死了或鑽進最小射程：放棄，回到自己找目標
     // 舊指令可盲射最後座標；失去視野後不追蹤敵人的新位置。
     if (spotted(w, u.side, t.x, t.z)) { u.tx = t.x; u.tz = t.z; }
-    if (inRange(u, u.tx, u.tz)) { u.path = []; u.pathIdx = 0; return; }
+    if (inRange(u, u.tx, u.tz) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, u.tx, u.tz))) { u.path = []; u.pathIdx = 0; return; }   // R055：直射的被稜線擋住就繼續往前開，開到看得到
     if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(u.tx), cellOf(u.tz), 0, 0, u.kind); u.pathIdx = 0; }
   }
-  if (u.order === ORD_FIRE_AT && inRange(u, center(u.tx), center(u.tz))) { u.path = []; u.pathIdx = 0; }
+  if (u.order === ORD_FIRE_AT && inRange(u, center(u.tx), center(u.tz)) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, center(u.tx), center(u.tz)))) { u.path = []; u.pathIdx = 0; }
   if (u.pathIdx >= u.path.length) {
     if (u.order === ORD_MOVE) u.order = ORD_IDLE;
     else if (u.order === ORD_FIRE_AT && !inRange(u, center(u.tx), center(u.tz))) u.order = ORD_IDLE;   // 走到底還打不到：放棄
@@ -276,6 +280,7 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
     if (!spotted(w, u.side, t.x, t.z) || (!k.indirect && firstBlock(w, u.x, u.z, t.x, t.z, homeOf(w, u)) >= 0)) continue;
+    if (!k.indirect && ridge(w, u.x, u.z, t.x, t.z)) continue;   // R055：直射的不挑被稜線擋住的目標
     if (k.sup && UNIT_KINDS[t.kind].armored && !UNIT_KINDS[t.kind].openTop) continue;   // R080：機槍組待命時不自己去打封閉車身的裝甲（打不動）
     if (!best || d < bestD || (d === bestD && t.id < best.id)) { best = t; bestD = d; }
   }
@@ -330,6 +335,7 @@ function fireUnit(w: World, u: Unit): void {
   if (!aim) return;
   const dx = aim.x - u.x, dz = aim.z - u.z, d = isqrt(dx * dx + dz * dz);
   if (d > k.range || d < k.minRange) return;
+  if (!k.indirect && ridge(w, u.x, u.z, aim.x, aim.z)) return;   // R055：直射要看得到才打得到
   if (dx || dz) { u.aimX = dx; u.aimZ = dz; }
   if (u.cooldown > 0) return;
   u.cooldown = k.reload;
@@ -482,7 +488,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
     w.sandbox.frame++;
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {
-  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined);   // 地圖最先套；R130 id 3 也保留明確的植被旗標。
+  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 4 || c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined);   // 地圖最先套；R130 id 3 也保留明確的植被旗標。
   for (const c of cmds) if (c.t === 'rules') applyRules(w, c);   // R046：地圖之後、喪屍與布陣之前
   for (const c of cmds) if (c.t === 'zombies') startZombies(w);
   if (w.zombies) cmds = cmds.filter(c => !('side' in c) || c.side === SIDE_PLAYER); // 布陣也走同一個敵方命令禁令。

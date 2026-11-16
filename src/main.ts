@@ -29,7 +29,7 @@ import { initMobileChrome, touchBoxArmed } from './ui/mobileChrome.ts';
 import { initCommandMenu, bombardCommand, bombardTarget, type CommandMenu } from './ui/commandMenu.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
-import { applyMap, MAP_RYE } from './sim/maps.ts';
+import { applyMap, MAP_RYE, MAP_HILLS } from './sim/maps.ts';
 import { MAP_LARGE } from './sim/largeMap.ts';
 import { MAP_TOWN } from './sim/expandedMap.ts';
 import { initMapPick, initTownPick, type MapPick } from './ui/mapPick.ts';
@@ -140,7 +140,7 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   w = sandbox ? createSandboxWorld(s) : createWorld(s);
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
-  const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : skirmish?.village ? 0 : MAP_RYE) : 0;   // R046：村莊＝地圖 0（createWorld 的亂數村莊）
+  const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : skirmish?.village ? 0 : skirmish?.hills ? MAP_HILLS : MAP_RYE) : 0;   // R046：村莊＝地圖 0（createWorld 的亂數村莊）
   if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
   const rules = !sandbox && (map || vegetation) ? skirmish?.start(w) : undefined;   // R046：一般開局才套（布陣時就看得到）；腳本、重播、沙盒不套
   const zombies = !sandbox && (map || vegetation) && V.r045 && q.get('mode') === 'zombies';
@@ -497,7 +497,7 @@ if (V.r128) sandboxBar = initSandbox({
   side: side => { sandboxSide = side; sandboxHint = ''; },
 });
 if (V.r043) mapPick = initMapPick({
-  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: V.r026, expanded }),
+  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: V.r026, expanded, hills: !!skirmish?.hills }),
   toggle: () => { if (expanded) { expanded = false; large = false; } else large = !large; reset(); },
 });
 if (V.r130) townPick = initTownPick({

@@ -5,6 +5,7 @@ import { applyRules, type RulesCmd } from '../sim/rules.ts';
 import { SCRIPT_SEED } from '../sim/script.ts';
 import type { World } from '../sim/world.ts';
 import { valves } from '../valves.ts';
+import { MAP_HILLS } from '../sim/hillMap.ts';
 import { browserStore, type Store } from './replayStore.ts';
 
 export const FORCE_TEXT = ['', '精簡', '標準', '加倍'];
@@ -38,7 +39,7 @@ export const randomSeed = (): number => crypto.getRandomValues(new Uint32Array(1
 export const SETUP_KEY = 'gtrts.v1.setup';
 export const DEFAULT_SEED = SCRIPT_SEED;
 export const SETUP_PARAMS = ['seed', 'map', 'mode', 'ai', 'force', 'supply', 'ap', 'morale'];   // 網址帶了其中任何一項＝整份照網址，不用存下來的
-export type SetupMap = 'rye' | 'village' | '64' | '96';
+export type SetupMap = 'rye' | 'village' | '64' | '96' | 'hills';   // hills：R055 丘陵
 export interface SavedSetup { v: 1; map: SetupMap; mode: 'battle' | 'zombies'; ai: number; force: number; supply: number; seed: number; ap?: 1; morale?: 1; rules?: 1 }   // ap（R051）、morale（R052）：開著才有這一欄；rules（R076）：擬真／經典是玩家自己選過的（沒有這一欄、兩條又都沒開＝當時只是預設值）
 const aiLevel = (v: unknown): number => (v === 1 || v === 3 ? v : 2);
 const three = (v: unknown): number => (v === 1 || v === 3 ? v : 2);
@@ -53,7 +54,7 @@ export function loadSetup(store: Store | null): SavedSetup | null {
     const r = x as Record<string, unknown>;
     if (r.v !== 1) return null;
     const seed = typeof r.seed === 'number' && Number.isInteger(r.seed) && r.seed >= 0 && r.seed <= SEED_MAX ? r.seed : DEFAULT_SEED;
-    return { v: 1, map: r.map === 'village' || r.map === '64' || r.map === '96' ? r.map : 'rye', mode: r.mode === 'zombies' ? 'zombies' : 'battle', ai: aiLevel(r.ai), force: three(r.force), supply: three(r.supply), seed, ...(r.ap === 1 ? { ap: 1 as const } : {}), ...(r.morale === 1 ? { morale: 1 as const } : {}), ...(r.rules === 1 ? { rules: 1 as const } : {}) };
+    return { v: 1, map: r.map === 'village' || r.map === '64' || r.map === '96' || r.map === 'hills' ? r.map : 'rye', mode: r.mode === 'zombies' ? 'zombies' : 'battle', ai: aiLevel(r.ai), force: three(r.force), supply: three(r.supply), seed, ...(r.ap === 1 ? { ap: 1 as const } : {}), ...(r.morale === 1 ? { morale: 1 as const } : {}), ...(r.rules === 1 ? { rules: 1 as const } : {}) };
   } catch { return null; }
 }
 export function saveSetup(store: Store | null, setup: SavedSetup): void {
@@ -92,6 +93,8 @@ export function restoreSetup(q: URLSearchParams, store: Store | null = browserSt
 export interface Skirmish {
   readonly force: number; readonly supply: number;
   readonly village: boolean;    // 現在選的是不是亂數村莊（R026 閥關著時萊伊那一格本來就是村莊，這裡永遠是 false）
+  readonly hills: boolean;      // R055：現在選的是不是丘陵（跟村莊一樣是 32×32 那一格的另一張圖）
+  readonly canHills: boolean;   // R055：這一頁有丘陵可選（閥開著）
   readonly remembers: boolean;  // R073：這一頁會把設定存到本機（設定頁才有「恢復預設」）
   readonly ap: boolean;         // R051：穿甲與裝甲厚度開著
   readonly canAp: boolean;      // R051：這一頁有這顆開關（閥開著）
@@ -100,7 +103,7 @@ export interface Skirmish {
   readonly merged: boolean;     // R076：設定頁是「擬真／經典」一個選擇（閥開著、兩條規則的閥也都開著）
   choose: (real: boolean | null) => void;   // R076：選擬真（true）、經典（false）；null＝回到預設、當作沒選過
   readonly canMorale: boolean;  // R052：這一頁有這顆開關（閥開著）
-  set: (patch: { force?: number; supply?: number; village?: boolean; ai?: number; ap?: boolean; morale?: boolean }) => void;
+  set: (patch: { force?: number; supply?: number; village?: boolean; hills?: boolean; ai?: number; ap?: boolean; morale?: boolean }) => void;
   start: (w: World) => RulesCmd | undefined;   // 新的一局：直接套到世界上（布陣時就看得到），回傳要記進紀錄的指令
   adopt: (w: World) => void;                   // R074：接回一局存檔——照那個世界把設定對齊（之後「重新開始」是同一種局），不動世界
 }
@@ -108,22 +111,23 @@ export interface Skirmish {
 // canVillage：R026 閥開著（萊伊在）才另外有「村莊」可選
 export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish {
   const store = memory, canAp = valves(q).r051;
+  const canHills = valves(q).r055, keptHills = !canHills && loadSetup(store)?.map === 'hills';   // R055：閥關著的這一頁不洗掉本機記著的丘陵
   const canMorale = valves(q).r052, keptMorale = !canMorale && loadSetup(store)?.morale === 1;   // R052：跟 ap 一樣，閥關著的這一頁不洗掉本機記著的那一項
   const keptAp = !canAp && loadSetup(store)?.ap === 1;   // R051 的閥關著的這一頁：本機原本記著的 ap 原樣留著，不因為這一頁看不到就洗掉
   let owned = !linked, pristine: string | null = null;   // 用連結開的頁：第一次只記下「連結給的那一份」，之後跟它不一樣了才開始存
   const merged = valves(q).r076 && canAp && canMorale;
   let chosen = merged ? chose : loadSetup(store)?.rules === 1;   // R076：存檔要不要帶「選過」的記號（閥關著的這一頁：原本有就留著，自己不加）
-  const s = { force: level(q.get('force')), supply: level(q.get('supply')), village: canVillage && q.get('map') === 'village', ai: Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2)), ap: canAp && q.get('ap') === '1', morale: canMorale && q.get('morale') === '1' };   // 難度的讀法跟 main.ts 一樣
+  const s = { force: level(q.get('force')), supply: level(q.get('supply')), village: canVillage && q.get('map') === 'village', hills: canHills && q.get('map') === 'hills', ai: Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2)), ap: canAp && q.get('ap') === '1', morale: canMorale && q.get('morale') === '1' };   // 難度的讀法跟 main.ts 一樣
   // R073：最近開的那一局是哪張圖、哪個模式、哪個種子（start() 從世界讀）；還沒開過局就還沒有東西可存
   let last: { map: SetupMap; mode: 'battle' | 'zombies'; seed: number } | null = null;
   const persist = () => {
     if (!store || !last) return;
-    const now: SavedSetup = { v: 1, ...last, ai: s.ai, force: s.force, supply: s.supply, ...(s.ap || keptAp ? { ap: 1 as const } : {}), ...(s.morale || keptMorale ? { morale: 1 as const } : {}), ...(chosen ? { rules: 1 as const } : {}) }, text = JSON.stringify(now);
+    const now: SavedSetup = { v: 1, ...last, ...(keptHills && last.map === 'rye' ? { map: 'hills' as const } : {}), ai: s.ai, force: s.force, supply: s.supply, ...(s.ap || keptAp ? { ap: 1 as const } : {}), ...(s.morale || keptMorale ? { morale: 1 as const } : {}), ...(chosen ? { rules: 1 as const } : {}) }, text = JSON.stringify(now);
     if (!owned) { if (pristine === null) { pristine = text; return; } if (text === pristine) return; owned = true; }
     saveSetup(store, now);
   };
   return {
-    get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, remembers: !!store, get ap() { return s.ap; }, canAp, get morale() { return s.morale; }, canMorale, help: valves(q).r075, merged,
+    get force() { return s.force; }, get supply() { return s.supply; }, get village() { return s.village; }, get hills() { return s.hills; }, canHills, remembers: !!store, get ap() { return s.ap; }, canAp, get morale() { return s.morale; }, canMorale, help: valves(q).r075, merged,
     choose: real => {
       const on = real ?? (DEFAULT_REALISM && merged);
       s.ap = canAp && on; s.morale = canMorale && on; chosen = merged && real !== null;
@@ -132,7 +136,8 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
     set: p => {
       if (p.force !== undefined) s.force = level(String(p.force));
       if (p.supply !== undefined) s.supply = level(String(p.supply));
-      if (p.village !== undefined) s.village = canVillage && p.village;
+      if (p.village !== undefined) { s.village = canVillage && p.village; if (s.village) s.hills = false; }
+      if (p.hills !== undefined) { s.hills = canHills && p.hills; if (s.hills) s.village = false; }   // R055：村莊與丘陵是同一格的兩張圖，選一張
       if (p.ai !== undefined) s.ai = aiLevel(p.ai);
       if (p.ap !== undefined) s.ap = canAp && p.ap;
       if (p.morale !== undefined) s.morale = canMorale && p.morale;
@@ -143,16 +148,16 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
       if (cmd) applyRules(w, cmd);
       if (w.sandbox) return cmd;   // 沙盒不記（main.ts 本來就不會拿沙盒世界來，這裡再擋一次）
       // 地圖、種子從世界讀；模式跟 main.ts 的 reset() 用同一個條件（喪屍要等這裡回去之後才開始，世界上還看不到）
-      last = { map: w.map === 2 ? '64' : w.map === 3 ? '96' : w.map === 1 ? 'rye' : 'village', mode: valves(q).r045 && q.get('mode') === 'zombies' ? 'zombies' : 'battle', seed: w.seed };
+      last = { map: w.map === 2 ? '64' : w.map === 3 ? '96' : w.map === MAP_HILLS ? 'hills' : w.map === 1 ? 'rye' : 'village', mode: valves(q).r045 && q.get('mode') === 'zombies' ? 'zombies' : 'battle', seed: w.seed };
       persist();
       return cmd;
     },
     adopt: w => {
       s.force = three(w.rules?.force); s.supply = three(w.rules?.income); s.ap = canAp && w.rules?.ap === 1; s.morale = canMorale && !!w.rules?.morale;
-      s.village = canVillage && !w.map && w.n === 32;
+      s.village = canVillage && !w.map && w.n === 32; s.hills = canHills && w.map === MAP_HILLS;
       s.ai = aiLevel(w.ai?.find(a => a.side === 1)?.level ?? s.ai);
       if (w.sandbox) return;
-      last = { map: w.map === 2 ? '64' : w.map === 3 ? '96' : w.map === 1 ? 'rye' : 'village', mode: w.zombies ? 'zombies' : 'battle', seed: w.seed };
+      last = { map: w.map === 2 ? '64' : w.map === 3 ? '96' : w.map === MAP_HILLS ? 'hills' : w.map === 1 ? 'rye' : 'village', mode: w.zombies ? 'zombies' : 'battle', seed: w.seed };
       persist();
     },
   };

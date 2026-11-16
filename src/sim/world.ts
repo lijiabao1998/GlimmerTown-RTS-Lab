@@ -260,6 +260,7 @@ export interface World extends RngState {
   vegetation?: { version: number; cells: Uint8Array }; // R116：明確啟用才保存，0 空／1 樹籬／2 小樹林
   wires?: { version: 1; segments: Building[] }; // R121：沿用耐久資料，不佔blds/occ、不冒充房屋
   trenches?: { version: 1; segments: TrenchSegment[] }; // R118：只有成功布陣才保存
+  height?: Uint8Array;    // R055 每格的高度（0–3 階）；只有帶高度的地圖（丘陵）才有，規則在 terrain.ts
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
   rules?: { force?: number; income?: number; ap?: number; morale?: number };   // R046 遭遇戰設定（rules 指令；只存不是標準值的欄位，全是標準就沒有這一欄）
   smoke?: { windX: number; windZ: number; clouds: SmokeCloud[] }; // R107 首次落地才初始化，風向整局保留
@@ -443,6 +444,7 @@ export function hashWorld(w: World): string {
     f.int(0x5647).int(w.vegetation.version).int(w.vegetation.cells.length);
     for (const c of w.vegetation.cells) f.int(c);
   }
+  if (w.height) { f.int(0x4854).int(w.height.length); for (const h of w.height) f.int(h); }   // R055：有高度表才折
   if (w.trenches) {
     f.int(0x5452).int(w.trenches.version).int(w.trenches.segments.length);
     for (const s of w.trenches.segments) f.int(s.side).int(s.kind).int(s.x).int(s.z).int(s.rot);
