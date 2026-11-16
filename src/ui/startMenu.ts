@@ -3,6 +3,7 @@
 // 電腦難度、暫停、音效由 main.ts 接線傳進來（音效要真的手指點才開得了，不能用程式按舊鍵）。
 // R046 遭遇戰設定：多一顆「遭遇戰設定」鍵與設定頁（兵力、補給速度、種子）、地圖多一顆「村莊」；host.skirmish 沒有（?noR046=1）時跟 R069 一模一樣。
 import { FORCE_TEXT, FORCE_SUB, SUPPLY_TEXT, SUPPLY_SUB, DEFAULT_SEED, setupSummary, parseSeed, randomSeed, type Skirmish } from './skirmish.ts';
+import { netAvailable, openNetPanel } from '../net/client.ts';   // R083 連線合作
 export type MapChoice = 'rye' | 'village' | 'hills' | 'large' | 'town';
 export type ModeChoice = 'battle' | 'zombies' | 'sandbox';
 export type MenuKind = 'start' | 'pause';
@@ -16,6 +17,7 @@ export interface MenuView {
   page?: 'setup';                                              // R046：現在看的是設定頁
   replays?: boolean;                                           // R047：有重播面板可開
   saved?: string;                                              // R074：有可以接的存檔（這行字是鍵下面的小字）
+  net?: boolean;                                               // R083：有「連線合作」
 }
 export interface MenuItem { id: string; label: string; sub?: string; pressed?: boolean; input?: boolean }   // input：可以打字的一格（R046 種子）
 export interface MenuLayout { title: string; sub: string; rows: { id: string; title: string; items: MenuItem[]; note?: string }[]; main: MenuItem[]; extra: MenuItem[] }
@@ -34,7 +36,8 @@ export function menuLayout(v: MenuView): MenuLayout {
   const extra: MenuItem[] = [];
   if (v.kind === 'start' && v.tutorial) extra.push({ id: 'sm-tutorial', label: '新手教學' });
   extra.push({ id: 'sm-help', label: '怎麼玩' });
-  if (v.kind === 'start' && v.replays) extra.push({ id: 'sm-replays', label: '重播' });   // R047：開戰後的暫停選單沒有（看重播會丟掉正在打的這一局）
+  if (v.kind === 'start' && v.replays) extra.push({ id: 'sm-replays', label: '重播' });
+  if (v.kind === 'start' && v.net) extra.push({ id: 'sm-net', label: '連線合作' });   // R083：開戰後的暫停選單沒有   // R047：開戰後的暫停選單沒有（看重播會丟掉正在打的這一局）
   if (v.audio !== null) extra.push({ id: 'sm-audio', label: v.audio ? '音效：開' : '音效：關', pressed: v.audio });
   if (v.kind === 'pause') {
     return { title: '暫停', sub: '戰鬥已暫停', rows: [], extra,
@@ -167,7 +170,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (sk?.canHills) maps.splice(maps.indexOf('village') + 1 || 1, 0, 'hills');   // R055：丘陵（有高度的地圖）排在 32×32 那幾張的最後
     return { kind, map: sk?.village && s.map === 'rye' ? 'village' : sk?.hills && s.map === 'rye' ? 'hills' : s.map, mode: s.mode, ai: host.ai(), maps, modes, aiOn: host.aiOn, rye: s.rye,
       tutorial: !!tut && !tut.hidden, audio: audio && host.audio ? audio.getAttribute('aria-pressed') === 'true' : null, resume: kind === 'start' && resume,
-      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}), ...(sk.canMorale ? { morale: sk.morale } : {}), ...(sk.help ? { help: true } : {}), ...(sk.merged ? { merged: true } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && host.saved?.() ? { saved: host.saved()! } : {}) };
+      ...(sk && host.seed ? { setup: { force: sk.force, supply: sk.supply, seed: host.seed(), ...(sk.remembers ? { reset: true } : {}), ...(sk.canAp ? { ap: sk.ap } : {}), ...(sk.canMorale ? { morale: sk.morale } : {}), ...(sk.help ? { help: true } : {}), ...(sk.merged ? { merged: true } : {}) }, page } : {}), ...(host.replays ? { replays: true } : {}), ...(kind === 'start' && host.saved?.() ? { saved: host.saved()! } : {}), ...(netAvailable() ? { net: true } : {}) };
   };
   function render() {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
@@ -208,6 +211,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     if (id === 'sm-main') { host.saveNow?.(); close(); press('b-restart'); return open('start'); }   // R074：回主選單之前先存，等一下還接得回來
     if (id === 'sm-help') { close(); return press('b-help'); }
     if (id === 'sm-replays') { close(); return host.replays?.(); }
+    if (id === 'sm-net') { close(); return openNetPanel(() => open('start')); }
     if (id === 'sm-tutorial') { close(); return press('tutorial-open'); }
     if (id === 'sm-audio') { if (trusted) host.audio?.(); return render(); }
     if (id === 'sm-setup' || id === 'sm-setup-done') { page = id === 'sm-setup' ? 'setup' : undefined; render(); return focus(page ? '.sm-primary' : '#sm-setup'); }

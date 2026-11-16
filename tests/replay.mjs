@@ -151,7 +151,7 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK repla
   const main = read('../src/main.ts'), valves = read('../src/valves.ts');
   assert.match(valves, /get r047\(\) \{ return on\('047'\); \}/, 'valve: r047 is on the table');
   assert.equal((main.match(/const replay = V\.r047 \? initReplay\(/g) ?? []).length, 1, 'wiring: main.ts creates the replay once, only with the valve on');
-  assert.match(main, /const now = replay\?\.feed\(w, pending\) \?\? pending; pending = \[\];/, 'wiring: tick() asks the replay first, then falls back to the player commands');
+  assert.match(main, /const now = netFeed\(w, pending\) \?\? replay\?\.feed\(w, pending\) \?\? pending; pending = \[\];/, 'wiring: tick() asks the network (R083, null when not connected) first, then the replay, then falls back to the player commands');
   assert.match(read('../tools/cdp.mjs'), /gtrts\.v1\.replays/, 'harness: cdp open() clears stored replays unless a guard keeps them');
   assert.match(read('../AGENTS.md'), /keep: true/, 'rules: AGENTS.md tells guard writers about { keep: true }');
   console.log('OK replay/record, round trip, decode, storage, wiring');
