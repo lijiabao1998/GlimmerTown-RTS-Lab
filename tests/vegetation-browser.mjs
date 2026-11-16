@@ -298,7 +298,7 @@ async function main() {
       const s = await inspect();
       assert.deepEqual(s.cells, Array.from(opening.vegetation.cells), 'generation: ordinary new game enables the deterministic two-type vegetation layout');
       assert.equal(s.hash, hashWorld(opening), 'generation: pre-applied opening matches Node including RNG');
-      assert.deepEqual(s.log, [{ tick: 0, cmd: { t: 'map', id: 1, vegetation: 1 } }], 'generation: new game records exactly one explicit vegetation map command');
+      assert.deepEqual(s.log, [{ tick: 0, cmd: { t: 'map', id: 1, vegetation: 1, sym: 1 } }], 'generation: new game records exactly one explicit vegetation map command');   // R084：新開的局多帶 sym
     };
     const placeNative = async mobile => {
       await E(`__rts.focus(${buildCell.x+0.5},${buildCell.z+0.5},1.25)`); await settle();

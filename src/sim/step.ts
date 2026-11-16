@@ -36,7 +36,7 @@ export type Command =
   | TrenchCmd
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
-  | { t: 'map'; id: number; vegetation?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
+  | { t: 'map'; id: number; vegetation?: number; sym?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
   | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
   | RulesCmd;   // R046：第 0 步的遭遇戰設定（兵力、補給速度；地圖之後、喪屍與布陣之前套，見 rules.ts）
@@ -48,6 +48,12 @@ export const commandTick = (w: World): number => w.sandbox?.frame ?? w.tick;
 export const FIRE_AT_ROUNDS = 4;      // 對空地射擊打幾發就停（對建築：打到變瓦礫為止）
 const AP_HIT_RADIUS = 180;            // 穿甲彈落點離目標多近算命中（位置單位）
 const FORMATION: [number, number][] = [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [0, -1], [-1, -1], [2, 0], [0, 2]];
+// 多選移動時第 k 台的偏移。表偏向 +x、+z：右下那一方（往左上打）的隊員排到目標後面、左上那一方的排到前面。
+// R084 左右對稱：左上那一方用鏡像的表（雙方都排到目標靠自己家那一邊）
+export function formationAt(w: World, side: number, k: number): [number, number] {
+  const [ox, oz] = FORMATION[k % FORMATION.length];
+  return w.sym && side === SIDE_ENEMY ? [0 - ox, 0 - oz] : [ox, oz];
+}
 
 const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.units.length ? w.units[id - 1] : null);
 
@@ -80,7 +86,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
       let gx = cx(cmd.x), gz = cx(cmd.z);
       // 觀測員照舊不排隊形；R021 步兵點到房子時直接進去、點地面照隊形
       const garr = UNIT_KINDS[u.kind].garrison, intoBld = garr && blocks(w, gx, gz);
-      const [ox, oz] = u.kind === UK_OBSERVER || intoBld ? [0, 0] : FORMATION[k % FORMATION.length];
+      const [ox, oz] = u.kind === UK_OBSERVER || intoBld ? [0, 0] : formationAt(w, u.side, k);
       if (inGrid(w, gx + ox, gz + oz) && !blocks(w, gx + ox, gz + oz) && !wireBlocks(w, gx + ox, gz + oz, u.kind)) { gx += ox; gz += oz; }
       u.order = ORD_MOVE; u.tx = gx; u.tz = gz; u.target = 0;
       u.path = findPath(w, ux, uz, gx, gz, garr ? (bldAt(w, gx, gz)?.id ?? 0) : 0, garr ? (bldAt(w, ux, uz)?.id ?? 0) : 0, u.kind); u.pathIdx = 0;
@@ -491,6 +497,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {
   { const m = cmds.find(c => c.t === 'map'); if (m?.t === 'map' && m.id === MAP_HILLS) applyMap(w, MAP_HILLS, m.vegetation); }   // R055 丘陵：植被旗標照收；同一步只看第一個 map 指令（跟舊地圖一樣先到先套）。下一行的舊條件原樣不動（有守衛錨著它）；丘陵套好之後下一行再套一次不會動它
+  for (const c of cmds) if (c.t === 'map') { if (c.sym === 1 && w.tick === 0) w.sym = 1; break; }   // R084 左右對稱：只在第 0 步、只看第一個 map 指令；要在 eco 之前（指揮部、出生格照它）
   for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined);   // 地圖最先套；R130 id 3 也保留明確的植被旗標。
   for (const c of cmds) if (c.t === 'rules') applyRules(w, c);   // R046：地圖之後、喪屍與布陣之前
   for (const c of cmds) if (c.t === 'zombies') startZombies(w);
