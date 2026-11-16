@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { stripTypeScriptTypes } from 'node:module';
 import vm from 'node:vm';
-import { createWorld, hashWorld, center, cellOf, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, ORD_MOVE, ORD_ATTACK, SIDE_PLAYER, SIDE_ENEMY, BK_WIRE,
+import { createWorld, hashWorld, center, cellOf, cellIdx, blocks, SUB, UNIT_KINDS, ORD_IDLE, ORD_MOVE, ORD_ATTACK, SIDE_PLAYER, SIDE_ENEMY, BK_WIRE,
   SOVIET_KINDS, INTERNATIONAL_KINDS, UK_TANK, UK_OBSERVER, UK_INFANTRY, UK_MORTAR, UK_MG } from '../src/sim/world.ts';
 import { step, ridge } from '../src/sim/step.ts';
 import { findPath } from '../src/sim/path.ts';
@@ -23,7 +23,7 @@ import { machineGuns3, mgTargetFor, canHit, mgBusy, MG_SHIFT, MG_WALK } from '..
 import { isCommand } from '../src/sim/commandCheck.ts';
 import { runScript } from '../src/sim/script.ts';
 import { newStats, statsStep, makeReport } from '../src/ui/report.ts';
-import { pickUnitAt, STACK_PX } from '../src/ui/pick.ts';
+import { pickUnitAt, STACK_PX, KEEP_PX } from '../src/ui/pick.ts';
 import { routeBattleOrder } from '../src/ui/smoke.ts';
 import { bombardCommand, bombardTarget } from '../src/ui/commandMenu.ts';
 import { duel, ECO } from '../tools/duel.mjs';
@@ -180,6 +180,12 @@ const groups = {
     const c1 = classic(1), c2 = classic(2);
     assert(c1.walls >= 20 && c1.open.hp === UNIT_KINDS[UK_INFANTRY].hp, `fixture: under classic rules the first version keeps firing into the garrisoned house (${c1.walls} of ${c1.all}) and never at the squad in the open`);
     assert(c2.walls === 0 && c2.open.hp < UNIT_KINDS[UK_INFANTRY].hp, `target: under classic rules the version-2 computer does not fire into the house of a garrisoned target (it does nothing there) and shoots the squad in the open instead (${c2.walls} into the house, open squad hp ${c2.open.hp})`);
+    // 第二次審查：遠的那一班在另一棟房子後面——經典規則下為它換位置，不因為近的那一班（打不到）就停著
+    { const w = field(2), g = put(w, ME, UK_MG, 10, 12, true); put(w, ME, UK_TANK, 8, 12); put(w, ME, UK_TANK, 8, 13);
+      house(w, 13, 12, 150); put(w, FOE, UK_INFANTRY, 13, 12); const open = put(w, FOE, UK_INFANTRY, 14, 19); house(w, 12, 16);
+      setAi(w, ME, 3, 3);
+      const n = bursts(w, g, 600);
+      assert(n.walls === 0 && open.hp < UNIT_KINDS[UK_INFANTRY].hp, `target: under classic rules, with the nearer squad garrisoned, it moves for the one in the open behind another house and hits it (${n.all} bursts, ${n.walls} into houses, open squad hp ${open.hp})`); }
   },
   // 換位置：目標都被擋住 → 移動指令，目的地在 MG_SHIFT 格內、從那裡打得到；找不到就跟著主力
   shift() {
@@ -210,6 +216,19 @@ const groups = {
       assert(canHit(w, center(8), center(16), t) && walk(8, 16) > 2 * MG_WALK, `fixture: the nearest cell with a line to the target is across the wire, a long walk round (${walk(8, 16)} steps)`);
       const c = machineGuns3(w, w.ai[0], w.units.filter(u => u.side === ME), [t], () => false)[0]?.[1];
       assert(c?.t === 'move' && walk(c.x, c.z) <= MG_WALK && canHit(w, center(c.x), center(c.z), t), `shift: it picks a cell it can walk to in a few steps, not one across the wire (${c?.x},${c?.z}: ${c ? walk(c.x, c.z) : '-'} steps)`); }
+    // 第二次審查：房子圍著它（兩邊與前面）——挑的是 3 格內打得到的格子裡走得最少的，不是房子、不切角、不只看直線距離
+    { const w = field(2, true), g = put(w, ME, UK_MG, 6, 16); put(w, ME, UK_TANK, 3, 16); put(w, ME, UK_TANK, 3, 17);
+      const t = put(w, FOE, UK_INFANTRY, 14, 16);
+      for (const [x, z] of [[7, 15], [7, 16], [7, 17], [6, 15], [6, 17]]) house(w, x, z);
+      setAi(w, ME, 3, 3);
+      const walk = (x, z) => findPath(w, cellOf(g.x), cellOf(g.z), x, z, 0, 0, UK_MG).length;
+      let least = Infinity;
+      for (let dz = -MG_SHIFT; dz <= MG_SHIFT; dz++) for (let dx = -MG_SHIFT; dx <= MG_SHIFT; dx++) {
+        const x = cellOf(g.x) + dx, z = cellOf(g.z) + dz;
+        if ((dx || dz) && !blocks(w, x, z) && Math.hypot(center(x) - t.x, center(z) - t.z) <= UNIT_KINDS[UK_MG].range && canHit(w, center(x), center(z), t)) least = Math.min(least, walk(x, z));
+      }
+      const c = machineGuns3(w, w.ai[0], w.units.filter(u => u.side === ME), [t], () => false)[0]?.[1];
+      assert(c?.t === 'move' && !blocks(w, c.x, c.z) && walk(c.x, c.z) === least, `shift: with houses all round it picks the cell it can reach in the fewest steps (${c?.x},${c?.z}: ${c && !blocks(w, c.x, c.z) ? walk(c.x, c.z) : 'a house'}, least ${least})`); }
   },
   // 集結：在基地等波次、射程內有打得到的目標的機槍組，不被叫去集結點；沒有的照舊跟波次一起集結
   gather() {
@@ -263,14 +282,16 @@ const groups = {
     assert(sum(fixed.start[ME]) > sum(old.start[ME]), `report: the opening counts the units the economy hands out at step 0 (${sum(old.start[ME])} -> ${sum(fixed.start[ME])})`);
     assert.deepEqual([fixed.kills, fixed.lost], [0, 0], 'report: with those counted, nothing is killed or lost at the start');
     // 萊伊、經典規則、雙方第三版困難互打到分出勝負；測試自己數 kill 事件
-    const whole = ecoStart => {
-      const w = createWorld(1), st = newStats(w), dead = [0, 0];
+    const whole = (ecoStart, rebuild = false) => {
+      const w = createWorld(1), dead = [0, 0];
+      let st = newStats(w);
       const cmds = [{ t: 'map', id: 1, vegetation: 1 }, { ...ECO, end: 1, mg: 2 }, { t: 'ai', side: FOE, level: 3, v: 3 }, { t: 'ai', side: ME, level: 3, v: 3 }];
       let mid = null, midDead = null;   // 打到第 2,000 步存一次檔（分出勝負的局不能存）
       for (let i = 0; w.winner < 0 && w.tick < 24000; i++) {
         step(w, i ? [] : cmds);
         for (const e of w.events) if (e.e === 'kill') dead[w.units[e.unit - 1].side]++;
         statsStep(st, w, w.events, ecoStart);
+        if (rebuild && i === 0) st = newStats(w, ecoStart);   // 重播：第一步之後重建（src/main.ts 的 remake）
         if (w.tick === 2000 && w.winner < 0) { mid = makeSave(w, [], null, 'test', st); midDead = st.dead?.slice(); }
       }
       return { w, st, r: makeReport(w, st), dead, mid, midDead };
@@ -280,6 +301,8 @@ const groups = {
     assert.notDeepEqual([before.r.kills, before.r.lost], [before.dead[FOE], before.dead[ME]], `fixture: with units built during the battle the old count (opening minus alive) is wrong (${before.r.kills}/${before.r.lost} against ${before.dead[FOE]}/${before.dead[ME]})`);
     assert.deepEqual([now.r.kills, now.r.lost], [now.dead[FOE], now.dead[ME]], `report: after a whole battle with units built on the way, kills and losses are the units that really died (${now.r.kills}/${now.r.lost})`);
     assert(now.mid && now.midDead && now.midDead[0] + now.midDead[1] > 0, `fixture: a save in the middle of the battle, after some units died (${now.midDead})`);
+    const replayed = whole(true, true);
+    assert.deepEqual([replayed.r.kills, replayed.r.lost], [replayed.dead[FOE], replayed.dead[ME]], `report: a replay, which rebuilds the stats after the first step, shows the same kills and losses (${replayed.r.kills}/${replayed.r.lost}; R081 second review)`);
     const loaded = checkSave(now.mid);
     assert(loaded.ok && loaded.save.stats?.dead?.join() === now.midDead.join(), `report: a save keeps the death counts (${loaded.ok ? JSON.stringify(loaded.save.stats?.dead) : loaded.why})`);
   },
@@ -300,6 +323,10 @@ const groups = {
     assert.equal(tap(sel(a.id), beside), beside.id, 'pick: a tap on an enemy right beside the stack still picks the enemy (R081 review)');
     assert.equal(tap({ keep: c.id }), c.id, 'pick: the quick second tap of a double tap stays on the unit the first tap chose');
     assert.deepEqual([tap({ keep: far.id }), tap({ keep: beside.id })], [a.id, a.id], 'pick: a kept unit that is not in the stack (or not ours) is ignored');
+    { const v = field(2), p = put(v, ME, UK_INFANTRY, 10, 10), q = put(v, ME, UK_TANK, 10, 10); q.x += Math.round(0.6 * SUB);   // 旁邊 6 像素的另一個
+      const on = u => pickUnitAt(v, view, u.x / SUB * 10, u.z / SUB * 10, 400, 400, { keep: p.id });
+      assert.equal(KEEP_PX, 2, 'fixture: the double-tap tie tolerance on the card');
+      assert.deepEqual([on(p), on(q)], [p.id, q.id], 'pick: a quick tap on another own unit right beside the first one picks that one, not the first (R081 second review)'); }
     assert.equal(STACK_PX, 8, 'fixture: the stack tolerance on the card');
   },
   // 真的 main.ts 輸入處理：隔一下再點換選；雙擊照樣跟車；點、右鍵、長按旁邊的敵人照樣打它（R081 複查）
@@ -315,6 +342,10 @@ const groups = {
     assert.deepEqual(f.issued.at(-1), { t: 'attack', side: ME, ids: [b.id], target: foe.id }, `input: a tap on an enemy beside the stack orders the attack (${JSON.stringify(f.issued.at(-1))})`);
     f.tapOn(9000, a); f.tapOn(10000, foe, { pointerType: 'mouse', button: 2 });
     assert.deepEqual(f.issued.at(-1), { t: 'attack', side: ME, ids: [a.id], target: foe.id }, `input: so does a right-click a while after the last tap (${JSON.stringify(f.issued.at(-1))})`);
+    { const v = field(2), p = put(v, ME, UK_INFANTRY, 10, 10), q = put(v, ME, UK_TANK, 10, 10); q.x += Math.round(0.6 * SUB);
+      const g = await inputFixture(v);
+      g.tapOn(1000, p); g.tapOn(1200, q);
+      assert.deepEqual([g.glides.length, g.selected()], [0, [q.id]], 'input: a quick tap on another own unit right beside the first one selects that one (no camera follow)'); }
   },
 };
 
@@ -332,6 +363,7 @@ for (const [name, run] of Object.entries(groups)) { await run(); console.log(`OK
   assert.equal(main.split('unit: pickUnit(cx, cy),').length - 1, 2, 'wiring: orders and long presses pick without a time, so they never cycle');
   assert.match(main, /const hit = pickUnit\(cx, cy, t\)/, 'wiring: tap() hands its own event time to the picker (the same clock as the double tap)');
   assert.match(main, /statsStep\(stats, w, w\.events, V\.r081\);/, 'wiring: the report counts the step-0 units behind the valve');
+  assert.match(main, /remake: \(\) => \{ view\.dispose\(\); view = view\.recreate\(w\); stats = newStats\(w, V\.r081\); ui\(\); \}/, 'wiring: a replay rebuilds the stats with the death count behind the valve');
   assert.match(read('../README.md'), /\?noR081=1/, 'readme: the valve is documented');
   console.log('OK machine-gun2/files');
 }
@@ -350,6 +382,10 @@ const mutants = [
   ['rifles_spare', 'house', 'sim/step.ts', 'k.sup && mgSecond(w) ? s.side : -1', 'mgSecond(w) ? s.side : -1', 'house: rifles and guns still suppress everyone in a house they hit'],
   ['no_shift', 'shift', 'sim/ai3.ts', '      if (spot) { out.push([g, { t: \'move\', side, ids: [g.id], x: spot[0], z: spot[1] }]); continue; }', '', 'shift: to a cell within'],   // 拿掉換位置，它照舊往主力走（也是移動指令），差在目的地打不到
   ['shift_ignores_walk', 'shift', 'sim/ai3.ts', 'const x = gx + dx, z = gz + dz, s = steps[(dz + MG_WALK) * S + dx + MG_WALK];', 'const x = gx + dx, z = gz + dz, s = inGrid(w, x, z) && !blocks(w, x, z) && !wireBlocks(w, x, z, UK_MG) ? 0 : -1;', 'shift: it picks a cell it can walk to in a few steps'],
+  ['bfs_ignores_houses', 'shift', 'sim/ai3.ts', 'inGrid(w, x, z) && !blocks(w, x, z) && !wireBlocks(w, x, z, UK_MG);', 'inGrid(w, x, z) && !wireBlocks(w, x, z, UK_MG);', 'shift: with houses all round it picks'],
+  ['bfs_cuts_corners', 'shift', 'sim/ai3.ts', ' || (k >= 4 && (!free(nx, z) || !free(x, nz)))) continue;', ') continue;', 'shift: with houses all round it picks'],
+  ['rank_by_distance', 'shift', 'sim/ai3.ts', 'if (!best || s < bs || (s === bs && d < bd))', 'if (!best || d < bd)', 'shift: with houses all round it picks'],
+  ['classic_shift_stalls', 'target', 'sim/ai3.ts', 'const reachable = inRange.filter(e => !!w.rules?.morale || !(UNIT_KINDS[e.kind].garrison && blocks(w, cellOf(e.x), cellOf(e.z))));', 'const reachable = inRange.slice();', 'target: under classic rules, with the nearer squad garrisoned'],
   ['shift_too_far', 'shift', 'sim/ai3.ts', 'for (let dz = -MG_SHIFT; dz <= MG_SHIFT; dz++) for (let dx = -MG_SHIFT; dx <= MG_SHIFT; dx++) {', 'for (let dz = -MG_SHIFT * 3; dz <= MG_SHIFT * 3; dz++) for (let dx = -MG_SHIFT * 3; dx <= MG_SHIFT * 3; dx++) {', 'shift: to a cell within'],   // R081 複查之後：搜得太遠，第一個場面就挑到 3 格外
   ['gather_pulls', 'gather', 'sim/ai2.ts', ' && !mgBusy(w, u, seen));', ');', 'gather: a team with a target it can hit stays and shoots'],
   ['busy_ungated', 'gather', 'sim/ai3.ts', '  if (!mgSecond(w)) return false;\n', '', 'gather: the first version still walks to the rally point'],
@@ -360,11 +396,13 @@ const mutants = [
   ['report_unfixed', 'report', 'ui/report.ts', '  if (ecoStart && w.tick === 1 && w.eco) st.start = [count(w, SIDE_PLAYER, false), count(w, SIDE_ENEMY, false)];\n', '', 'report: the opening counts the units the economy hands out at step 0'],
   ['report_dead_unused', 'report', 'ui/report.ts', 'kills: st.dead ? st.dead[SIDE_ENEMY] : sum(', 'kills: sum(', 'report: after a whole battle with units built on the way'],
   ['report_dead_never', 'report', 'ui/report.ts', '  if (ecoStart && w.tick === 1 && w.eco) st.dead = [0, 0];\n', '', 'report: after a whole battle with units built on the way'],
+  ['replay_drops_dead', 'report', 'ui/report.ts', ', ...(ecoStart && w.tick === 1 && w.eco ? { dead: [0, 0] } : {}) };', ' };', 'report: a replay, which rebuilds the stats'],
   ['save_drops_dead', 'report', 'ui/saveGame.ts', ', ...(r.dead ? { dead: [...(r.dead as number[])] } : {})', '', 'report: a save keeps the death counts'],
   ['pick_no_cycle', 'pick', 'ui/pick.ts', '    if (at >= 0 && ids.length > 1) return ids[(at + 1) % ids.length];', '', 'pick: tapping a stack again cycles'],
   ['pick_cycles_enemy', 'pick', 'ui/pick.ts', 'if (stack && u.side === SIDE_PLAYER && d < 26 * 26)', 'if (stack && d < 26 * 26)', 'pick: tapping a stack again cycles'],
   ['pick_over_enemy', 'pick', 'ui/pick.ts', ' && w.units[best - 1]?.side === SIDE_PLAYER) {', ') {', 'pick: a tap on an enemy right beside the stack still picks the enemy'],
-  ['pick_no_keep', 'pick', 'ui/pick.ts', '    if (stack.keep && ids.includes(stack.keep)) return stack.keep;\n', '', 'pick: the quick second tap of a double tap stays'],
+  ['pick_no_keep', 'pick', 'ui/pick.ts', '    if (kept && kept[0] <= near + KEEP_PX) return kept[1];\n', '', 'pick: the quick second tap of a double tap stays'],
+  ['keep_no_tie', 'pick', 'ui/pick.ts', 'if (kept && kept[0] <= near + KEEP_PX) return', 'if (kept && kept[0] <= near + STACK_PX) return', 'pick: a quick tap on another own unit right beside the first one'],
   ['input_no_keep', 'input', 'main.ts', ': { keep: lastTap.id }) : undefined', ': {}) : undefined', 'input: a double tap on the stack still makes the camera follow'],
 ];
 try {

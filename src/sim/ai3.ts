@@ -122,7 +122,9 @@ export function machineGuns3(w: World, st: AiState, mine: Unit[], seen: Unit[], 
     const near = inRange.filter(t => !second || canHit(w, g.x, g.z, t)).sort((a, b) => pinned(a) - pinned(b) || dist(g.x, g.z, a.x, a.z) - dist(g.x, g.z, b.x, b.z) || a.id - b.id);
     if (near.length) { out.push([g, g.order === ORD_ATTACK && g.target === near[0].id ? null : { t: 'attack', side, ids: [g.id], target: near[0].id }]); continue; }
     if (second && inRange.length && g.pathIdx >= g.path.length) {   // R081：射程內的都被擋住：換到打得到的位置（找不到就照下面跟主力）
-      const t = inRange.slice().sort((a, b) => dist(g.x, g.z, a.x, a.z) - dist(g.x, g.z, b.x, b.z) || a.id - b.id)[0], spot = shiftSpot(w, g, t);
+      // R081 第二次審查：經典規則下進駐在房子裡的從哪裡都打不到（canHit），不拿它當換位置的目標
+      const reachable = inRange.filter(e => !!w.rules?.morale || !(UNIT_KINDS[e.kind].garrison && blocks(w, cellOf(e.x), cellOf(e.z))));
+      const t = reachable.sort((a, b) => dist(g.x, g.z, a.x, a.z) - dist(g.x, g.z, b.x, b.z) || a.id - b.id)[0], spot = t ? shiftSpot(w, g, t) : null;
       if (spot) { out.push([g, { t: 'move', side, ids: [g.id], x: spot[0], z: spot[1] }]); continue; }
     }
     const chasing = g.order === ORD_ATTACK;   // 手上的目標跑出射程（或看不到）了：不追，回去跟主力

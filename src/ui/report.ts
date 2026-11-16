@@ -18,8 +18,9 @@ export interface Report {
 const sameCol = (kind: number, k: number) => kind === k || (INTERNATIONAL_KINDS.includes(kind) && k === (INTERNATIONAL_GUNS.includes(kind) ? UK_HOWITZER : UK_TANK)) || (kind >= 12 && (k === UK_TANK ? kind <= 20 : k === UK_HOWITZER && kind >= 21 && kind <= 22)) || (k === UK_HOWITZER && (kind === UK_ATGUN || kind === UK_MORTAR)) || (k === UK_TANK && (kind === UK_LIGHT || kind === UK_HEAVY || kind === UK_ARMORED_CAR || kind === UK_DESTROYER || kind === UK_ASSAULT)) || (k === UK_INFANTRY && kind === UK_MG);   // R022 反戰車砲、迫擊砲算在「砲」那一欄；R023 輕、重坦克（R044 裝甲車、驅逐戰車、突擊砲）算在「坦克」
 const count = (w: World, side: number, alive: boolean) => KINDS.map(k => w.units.filter(u => u.side === side && sameCol(u.kind, k) && (!alive || u.alive)).length);
 
-export function newStats(w: World): BattleStats {
-  return { start: [count(w, SIDE_PLAYER, false), count(w, SIDE_ENEMY, false)], fires: [0, 0], lastKill: null, endTick: -1 };
+// ecoStart（R081 第二次審查）：重播在第一步之後重建統計，這時候也要從這一步開始數陣亡
+export function newStats(w: World, ecoStart = false): BattleStats {
+  return { start: [count(w, SIDE_PLAYER, false), count(w, SIDE_ENEMY, false)], fires: [0, 0], lastKill: null, endTick: -1, ...(ecoStart && w.tick === 1 && w.eco ? { dead: [0, 0] } : {}) };
 }
 
 // 每一步之後呼叫（events＝這一步的模擬事件）
