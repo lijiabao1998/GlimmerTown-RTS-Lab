@@ -111,7 +111,8 @@ export interface Skirmish {
 // canVillage：R026 閥開著（萊伊在）才另外有「村莊」可選
 export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish {
   const store = memory, canAp = valves(q).r051;
-  const canHills = valves(q).r055, keptHills = !canHills && loadSetup(store)?.map === 'hills';   // R055：閥關著的這一頁不洗掉本機記著的丘陵
+  const canHills = valves(q).r055 && canVillage, fallback: SetupMap = canVillage ? 'rye' : 'village';   // R055：丘陵跟村莊一樣，是萊伊那一格的另一張圖（R026 的閥關著就沒有）；不能選的時候開出來的是 fallback
+  let keptHills = !canHills && loadSetup(store)?.map === 'hills';   // 這一頁不能選丘陵：本機記著的丘陵不洗掉，直到玩家在這一頁選了別的地圖
   const canMorale = valves(q).r052, keptMorale = !canMorale && loadSetup(store)?.morale === 1;   // R052：跟 ap 一樣，閥關著的這一頁不洗掉本機記著的那一項
   const keptAp = !canAp && loadSetup(store)?.ap === 1;   // R051 的閥關著的這一頁：本機原本記著的 ap 原樣留著，不因為這一頁看不到就洗掉
   let owned = !linked, pristine: string | null = null;   // 用連結開的頁：第一次只記下「連結給的那一份」，之後跟它不一樣了才開始存
@@ -122,7 +123,8 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
   let last: { map: SetupMap; mode: 'battle' | 'zombies'; seed: number } | null = null;
   const persist = () => {
     if (!store || !last) return;
-    const now: SavedSetup = { v: 1, ...last, ...(keptHills && last.map === 'rye' ? { map: 'hills' as const } : {}), ai: s.ai, force: s.force, supply: s.supply, ...(s.ap || keptAp ? { ap: 1 as const } : {}), ...(s.morale || keptMorale ? { morale: 1 as const } : {}), ...(chosen ? { rules: 1 as const } : {}) }, text = JSON.stringify(now);
+    if (keptHills && last.map !== fallback) keptHills = false;   // 玩家在這一頁選了別的地圖：那才是新的選擇
+    const now: SavedSetup = { v: 1, ...last, ...(keptHills ? { map: 'hills' as const } : {}), ai: s.ai, force: s.force, supply: s.supply, ...(s.ap || keptAp ? { ap: 1 as const } : {}), ...(s.morale || keptMorale ? { morale: 1 as const } : {}), ...(chosen ? { rules: 1 as const } : {}) }, text = JSON.stringify(now);
     if (!owned) { if (pristine === null) { pristine = text; return; } if (text === pristine) return; owned = true; }
     saveSetup(store, now);
   };

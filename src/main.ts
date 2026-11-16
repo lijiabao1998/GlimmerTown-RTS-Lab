@@ -414,7 +414,7 @@ function selInfo(sel: typeof w.units, showAverage = true): string {
   const hp = showAverage ? `血量 ${Math.round((100 * sel.reduce((p, u) => p + u.hp / UNIT_KINDS[u.kind].hp, 0)) / sel.length)}%｜` : '';
   const n = [0, 0, 0, 0];
   for (const u of sel) n[u.order] = (n[u.order] ?? 0) + 1;
-  return `${hp}${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}${V.r075 ? unitSpec(w, selected, phase === 'battle', '｜') : ''}`;   // R075：厚度、穿深、士氣
+  return `${hp}${n.map((k, i) => (k ? `${ORD_NAME[i]} ${k}` : '')).filter(Boolean).join('、')}${V.r075 ? unitSpec(w, selected, phase === 'battle', '｜') : ''}${!V.r075 && w.height ? unitSpec(w, selected, phase === 'battle', '｜', false) : ''}`;   // R075：厚度、穿深、士氣
 }
 
 // ---- HUD ----

@@ -17,7 +17,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r055-browser-'));
 const mutations = {
   nomap: ['src/main.ts', 'skirmish?.hills ? MAP_HILLS : MAP_RYE', "skirmish?.hills && !location.search.includes('__r055mutant=nomap') ? MAP_HILLS : MAP_RYE", 1],
   valve: ['src/valves.ts', "get r055() { return on('055'); }", "get r055() { return on('055') || location.search.includes('__r055mutant=valve'); }", 1],
-  height: ['src/ui/unitSpec.ts', 'if (hi > 0) parts.push(', "if (hi > 0 && !location.search.includes('__r055mutant=height')) parts.push(", 1],
+  height: ['src/ui/unitSpec.ts', 'return hi > 0 ? (', "return hi > 0 && !location.search.includes('__r055mutant=height') ? (", 1],
   forgot: ['src/ui/skirmish.ts', "w.map === MAP_HILLS ? 'hills' :", "w.map === MAP_HILLS && !location.search.includes('__r055mutant=forgot') ? 'hills' :", 2],
 };
 const applied = new Set();
@@ -97,6 +97,7 @@ async function main() {
     const s = await E('({tick:__rts.tick(),hash:__rts.hash(),seed:__rts.seed(),log:__rts.log()})');
     assert.equal(node(s.seed, s.log, s.tick), s.hash, 'battle: Node reproduces a battle on the hill map from its log');
     await climbs();
+    await climbs('&noR075=1');   // 高度不綁在 R075 的閥上
     assert.equal(page.errors.length, 0, `browser: zero page errors (${page.errors.join(' | ')})`);
     console.log(`OK R055: 丘陵 offered and chosen (map 4), remembered, valve (falls back to 萊伊, memory kept), ${s.tick} steps equal to Node, height in the hint`);
 

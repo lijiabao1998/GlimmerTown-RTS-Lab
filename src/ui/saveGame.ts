@@ -97,7 +97,7 @@ export function clearSave(store: SaveStore | null): void {
 }
 export const browserSaveStore = (): SaveStore | null => { try { return localStorage; } catch { return null; } };
 
-const MAP_NAME: Record<number, string> = { 0: '村莊', 1: '萊伊', 2: '鄉間', 3: '河鎮' };
+const MAP_NAME: Record<number, string> = { 0: '村莊', 1: '萊伊', 2: '鄉間', 3: '河鎮', 4: '丘陵' };   // 4：R055
 // 「繼續上一局」那顆鍵下面的小字：哪張圖、打到幾分幾秒、種子
 export function saveTitle(save: SaveGame): string {
   const w = save.world, s = Math.floor(w.tick / 20);

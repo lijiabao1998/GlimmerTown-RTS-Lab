@@ -972,6 +972,7 @@ export class BattleView {
       if (!u.alive || UNIT_KINDS[u.kind].radius === 0) continue;   // 步兵（觀測員、步兵班）不壓車轍
       const dx = u.x - this.prevX[u.id], dz = u.z - this.prevZ[u.id];
       if (!dx && !dz) continue;
+      if (this.w.height && u.side !== SIDE_PLAYER && !this.visibleUnit(u)) continue;   // R055：有高度的圖上，看不到的敵車不壓車轍（不然地上的車轍會洩漏反斜面後面的車；舊地圖照舊）
       const len = Math.hypot(dx, dz), px = -dz / len, pz = dx / len, off = UNIT_KINDS[u.kind].armored ? (ART44[u.kind] ? 0.13 * ART44[u.kind].hull[2] : 0.13 * (TANK_SCALE23[u.kind] ?? 1)) : 0.11;
       // 兩條車轍：沿這一步走過的線段，每 1/8 格蓋一個像素；同一條車轍連續壓到同一個像素只算一次
       const steps = Math.max(1, Math.ceil((len / SUB) * PX));

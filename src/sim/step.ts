@@ -181,6 +181,7 @@ function moveUnit(w: World, u: Unit): void {
     if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(u.tx), cellOf(u.tz), 0, 0, u.kind); u.pathIdx = 0; }
   }
   if (u.order === ORD_FIRE_AT && inRange(u, center(u.tx), center(u.tz)) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, center(u.tx), center(u.tz)))) { u.path = []; u.pathIdx = 0; }
+  if (u.order === ORD_FIRE_AT && u.pathIdx >= u.path.length && (w.tick + u.id) % 20 === 0 && !UNIT_KINDS[u.kind].indirect && inRange(u, center(u.tx), center(u.tz)) && ridge(w, u.x, u.z, center(u.tx), center(u.tz))) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), u.tx, u.tz, 0, 0, u.kind); u.pathIdx = 0; }   // R055：直射的對房子砲擊被擠回稜線後面、路又走完了：每秒重新算一次路往前開（攻擊指令本來就會重算）
   if (u.pathIdx >= u.path.length) {
     if (u.order === ORD_MOVE) u.order = ORD_IDLE;
     else if (u.order === ORD_FIRE_AT && !inRange(u, center(u.tx), center(u.tz))) u.order = ORD_IDLE;   // 走到底還打不到：放棄
@@ -305,6 +306,7 @@ function zombieVision(w: World, u: Unit, target: Unit): boolean {
   if (dist(u.x, u.z, target.x, target.z) > UNIT_KINDS[UK_ZOMBIE].sight || !spotted(w, SIDE_PLAYER, u.x, u.z) || smokeBlocks(w, u.x, u.z, target.x, target.z)) return false;
   const ray = lineCells(cellOf(u.x), cellOf(u.z), cellOf(target.x), cellOf(target.z), w.n);
   if (w.vegetation && vegetationBlocks(w, ray)) return false;
+  if (w.height && ridgeBlocks(w, ray)) return false;   // R055：喪屍看人也被稜線擋住
   const block = firstBlockCells(w, ray);
   return block < 0 || block === cellIdx(w, cellOf(target.x), cellOf(target.z));
 }
@@ -488,7 +490,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
     w.sandbox.frame++;
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {
-  for (const c of cmds) if (c.t === 'map' && c.id === MAP_HILLS) applyMap(w, MAP_HILLS, c.vegetation);   // R055 丘陵：植被旗標照收。下一行的舊條件原樣不動（有守衛錨著它）；丘陵套好之後下一行再套一次不會動它
+  { const m = cmds.find(c => c.t === 'map'); if (m?.t === 'map' && m.id === MAP_HILLS) applyMap(w, MAP_HILLS, m.vegetation); }   // R055 丘陵：植被旗標照收；同一步只看第一個 map 指令（跟舊地圖一樣先到先套）。下一行的舊條件原樣不動（有守衛錨著它）；丘陵套好之後下一行再套一次不會動它
   for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined);   // 地圖最先套；R130 id 3 也保留明確的植被旗標。
   for (const c of cmds) if (c.t === 'rules') applyRules(w, c);   // R046：地圖之後、喪屍與布陣之前
   for (const c of cmds) if (c.t === 'zombies') startZombies(w);
