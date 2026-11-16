@@ -128,7 +128,7 @@ const planner = new BuildPlanner({
   world: () => w, view: () => view, building: () => phase === 'build', simT: () => simT(), ui: () => ui(), hud: () => hud?.update(), size: () => [innerWidth, innerHeight],
 }, { trenches: V.r118, walls: V.r120, wire: V.r121, materials: V.r105, kinds: BUILD_KINDS_NOW });
 document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
-const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r080 ? { mg: 1 } : {}) });
+const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) });
 let prodBar: ProdBar | undefined;
 // R018 電腦難度：?ai=1|2|3
 let aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));   // R069：開始選單可以改
@@ -245,13 +245,13 @@ function tick() {
   if (V.r109 && priorWinner < 0 && w.winner >= 0) clearGestureInput();
   view.onEvents(w.events, simT());
   if (minimap && (priorMap !== w.map || w.events.some(e => e.e === 'stage' || e.e === 'build' || e.e === 'trench' || (e.e === 'impact' && e.kind === SHELL_HE)))) minimap.dirty();   // R015 地形變了才重畫底圖
-  statsStep(stats, w, w.events);
+  statsStep(stats, w, w.events, V.r081);
 }
 
 // ---- 輸入：單指點＝選取／下指令；單指拖＝平移；雙指＝縮放；滾輪＝縮放；右鍵＝下指令 ----
 const pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 let dragged = false, pinchD = 0;
-const pickUnit = (cx: number, cy: number) => pickUnitAt(w, view, cx, cy, innerWidth, innerHeight);   // R070 內容搬到 src/ui/pick.ts（R124／R123 的守衛會注入這個名字）
+const pickUnit = (cx: number, cy: number, t = performance.now()) => pickUnitAt(w, view, cx, cy, innerWidth, innerHeight, V.r081 && t - lastTap.t >= 350 ? selected : undefined);   // R070 內容搬到 src/ui/pick.ts（R124／R123 的守衛會注入這個名字）
 
 // R110：暫停時沒有下一個模擬秒，清提示必須同步刷新 HUD。
 function clearBattleHint() {
@@ -277,7 +277,7 @@ function order(cx: number, cy: number) {
 function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {
   if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
   if (V.r109) clearBattleHint();
-  const hit = pickUnit(cx, cy), u = hit ? w.units[hit - 1] : null;
+  const hit = pickUnit(cx, cy, t), u = hit ? w.units[hit - 1] : null;
   if (u && u.side === SIDE_PLAYER) {
     // 雙擊：鏡頭跟過去。兩次放手的間隔用事件時間量（R037）；滑過去的動畫照樣用現在的時間起算
     if (V.r012 && lastTap.id === u.id && t - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, performance.now() / 1000);

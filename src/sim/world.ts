@@ -307,7 +307,10 @@ export function wireAt(w: World, x: number, z: number): Building | null {
   if (!Number.isInteger(x) || !Number.isInteger(z) || !inGrid(w, x, z)) return null;
   return w.wires?.segments.find(s => x >= s.x && z >= s.z && x < s.x + s.w && z < s.z + s.d) ?? null;
 }
+// R081：機槍組第二版（eco 的 mg ≥ 2）
+export const mgSecond = (w: World): boolean => (w.eco?.mg ?? 0) >= 2;
 export function wireBlocks(w: World, x: number, z: number, kind: number): boolean {
+  if (kind === UK_MG && mgSecond(w)) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R081：第二版的機槍組也是徒步，鐵絲網擋得住（下一行原樣不動，有守衛錨著）
   return onFoot(kind) && (wireAt(w, x, z)?.hp ?? 0) > 0;
 }
 

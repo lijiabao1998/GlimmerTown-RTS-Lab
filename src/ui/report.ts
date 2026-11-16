@@ -23,7 +23,9 @@ export function newStats(w: World): BattleStats {
 }
 
 // 每一步之後呼叫（events＝這一步的模擬事件）
-export function statsStep(st: BattleStats, w: World, events: SimEvent[]): void {
+// ecoStart（R081）：打完第一步、世界有補給時，把開局重算一次（第 0 步補給送的步兵班、機槍組才算得進去）
+export function statsStep(st: BattleStats, w: World, events: SimEvent[], ecoStart = false): void {
+  if (ecoStart && w.tick === 1 && w.eco) st.start = [count(w, SIDE_PLAYER, false), count(w, SIDE_ENEMY, false)];
   for (const e of events) {
     if (e.e === 'fire') { const u = w.units[e.unit - 1]; if (u && (u.side === SIDE_PLAYER || u.side === SIDE_ENEMY)) st.fires[u.side]++; }
     else if (e.e === 'kill') { const u = w.units[e.unit - 1]; if (u) st.lastKill = { x: u.x, z: u.z, tick: w.tick - 1 }; }

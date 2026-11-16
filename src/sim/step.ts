@@ -21,7 +21,7 @@ import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.
 import { startZombies, zombiesStep, finishZombiesStep, zombieAim } from './zombies.ts';
 import {
   SUB, HALF, cellIdx, inGrid, gridLimit, cellOf, center, blocks, wireBlocks, bldAt, speedPct, stageOf,
-  UNIT_KINDS, UK_OBSERVER, UK_HOWITZER, UK_ZOMBIE, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SHELL_MELEE, SIDE_PLAYER, SIDE_ENEMY,
+  UNIT_KINDS, mgSecond, UK_OBSERVER, UK_HOWITZER, UK_ZOMBIE, BK_PILLBOX, SHELL_SMALL, ORD_IDLE, ORD_MOVE, ORD_ATTACK, ORD_FIRE_AT, SHELL_AP, SHELL_HE, SHELL_SMOKE, SHELL_MELEE, SIDE_PLAYER, SIDE_ENEMY,
   type World, type Unit, type Building, type Shell,
 } from './world.ts';
 
@@ -59,7 +59,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -397,7 +397,7 @@ function land(w: World, s: Shell): void {
   const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
   if (s.kind === SHELL_AP || s.kind === SHELL_SMALL) {
     let bounce = false;
-    if (s.hitBld) { if (w.rules?.morale) suppressHouse(w, s.hitBld, s.kind === SHELL_SMALL ? k.sup ?? SUP_SMALL : SUP_DIRECT); const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一；R052 裡面的人被壓（先壓再算房子，倒了也算）
+    if (s.hitBld) { if (w.rules?.morale) suppressHouse(w, s.hitBld, s.kind === SHELL_SMALL ? k.sup ?? SUP_SMALL : SUP_DIRECT, k.sup && mgSecond(w) ? s.side : -1); const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一；R052 裡面的人被壓（先壓再算房子，倒了也算）
     else {
       const t = unitById(w, s.target);
       // R051（rules 帶 ap 才走）：-1 這一發不歸厚度規則管、0 彈開、1 穿透。穿甲彈穿透吃完整傷害；步兵的槍穿透照下面原本的算法；彈開零傷害

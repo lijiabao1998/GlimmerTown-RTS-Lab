@@ -8,7 +8,7 @@ import { apHit, penetration, ARMOR_MM, PEN_MM } from './ballistics.ts';
 import { coverPct } from './morale.ts';
 import { counterbatteryAreas, COUNTERBATTERY_TTL } from './counterbattery.ts';
 import { freeNear, type AiCmd } from './ai.ts';
-import { produce3, machineGuns3, mgTargetFor } from './ai3.ts';
+import { produce3, machineGuns3, mgTargetFor, mgBusy } from './ai3.ts';
 import {
   SUB, center, cellOf, inGrid, blocks, UNIT_KINDS, UK_OBSERVER, UK_INFANTRY, UK_HOWITZER, UK_MORTAR, UK_ATGUN, UK_MG, ORD_ATTACK, ORD_MOVE, ORD_FIRE_AT, SIDE_PLAYER,
   moraleState, MORALE_SHAKEN, MORALE_PINNED, type World, type Unit, type AiState,
@@ -84,7 +84,7 @@ export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[])
   if (hq) {
     const enemyCorner = n - 1 - ownCorner, [rx0, rz0] = toward(w, homeX, homeZ, center(enemyCorner), center(enemyCorner), RALLY_CELLS);
     const at = freeNear(w, rx0, rz0) ?? [rx0, rz0], rallyX = center(at[0]), rallyZ = center(at[1]);
-    const waveKind = (u: Unit) => kind(u).armored || u.kind === UK_INFANTRY, held = (u: Unit) => waveKind(u) || u.kind === UK_MORTAR || u.kind === UK_ATGUN || (st.v === 3 && u.kind === UK_MG);
+    const waveKind = (u: Unit) => kind(u).armored || u.kind === UK_INFANTRY, held = (u: Unit) => waveKind(u) || u.kind === UK_MORTAR || u.kind === UK_ATGUN || (st.v === 3 && u.kind === UK_MG && !mgBusy(w, u, seen));   // R081：射程內有打得到的目標的機槍組留下來打
     // 還沒出發過第一波之前，所有人都算在基地（大地圖開局的部隊散在基地外面；不這樣算，一半先走、一半等人，被各個擊破）
     const atBase = (u: Unit) => st.go === undefined || dist(u.x, u.z, rallyX, rallyZ) <= BASE_CELLS * SUB;
     const wave = mine.filter(waveKind), home = wave.filter(atBase);
@@ -217,7 +217,7 @@ export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[])
     const foeMg = seen.filter(t => t.kind === UK_MG);
     if (foeMg.length) for (const u of mine) {
       if (!kind(u).armored || kind(u).indirect || override.has(u.id)) continue;   // 直射的車；前面的段落已經替它決定的（在基地等、繞側面、退開）不改
-      const m = mgTargetFor(u, targetOf(u), foeMg);
+      const m = mgTargetFor(u, targetOf(u), foeMg, w);
       if (m) override.set(u.id, { t: 'attack', side, ids: [u.id], target: m.id });
     }
   }
