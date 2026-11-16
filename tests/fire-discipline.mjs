@@ -61,7 +61,7 @@ const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'r143-negative-'));
 try {
  fs.cpSync(new URL('../src/sim/',import.meta.url),tmp,{recursive:true});
  const file=path.join(tmp,'step.ts'),src=fs.readFileSync(file,'utf8');
- const gate='if (u.holdFire === 1 && fireDisciplineEligible(u)) { if (k.indirect) syncRanging(w, u, null); return; }';
+ const gate='if (u.holdFire === 1 && fireDisciplineEligible(u, w)) { if (k.indirect) syncRanging(w, u, null); return; }';   // R085：資格多看世界（sym 的局第 1 方也算）
  assert.ok(src.includes(gate)); fs.writeFileSync(file,src.replace(gate,''));
  const broken=await import(pathToFileURL(file));
  assert.throws(()=>combatChecks(broken.step),/hold prevents fresh shell|held unit never fired/);

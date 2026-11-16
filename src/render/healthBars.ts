@@ -3,7 +3,8 @@
 // 建築：我方單位正在砲擊的那棟畫耐久條，標出「空殼」門檻（70%）。
 // R123：所有底先排、填色後排，但只送一個網格（?noR123=1 回到底、填色兩個網格）。
 import * as THREE from 'three';
-import { SUB, cellIdx, UK_OBSERVER, stageOf, STAGE_ROOFLESS, SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, moraleState, type Unit, type World } from '../sim/world.ts';
+import { SUB, cellIdx, UK_OBSERVER, stageOf, STAGE_ROOFLESS, UNIT_KINDS, ORD_FIRE_AT, moraleState, type Unit, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { wallHeight, wallShown, roofRise } from './buildings.ts';
 import type { Lerp, MakeInst, Sight } from './painter.ts';
 

@@ -1,9 +1,10 @@
 import { fireDisciplineEligible } from '../sim/fireDiscipline.ts';
 import type { World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085 停火鍵送自己那一方（以前寫死 0）
 import type { Command } from '../sim/step.ts';
 
 export function fireDisciplineState(w: World, selected: Iterable<number>, pending: readonly Command[] = []) {
-  const units = [...new Set(selected)].map(id => w.units[id - 1]).filter(u => u && fireDisciplineEligible(u));
+  const units = [...new Set(selected)].map(id => w.units[id - 1]).filter(u => u && fireDisciplineEligible(u, w));
   let held = 0;
   for (const u of units) {
     let hold = u.holdFire === 1;
@@ -20,7 +21,7 @@ export function toggleFireDiscipline(read: () => FireDisciplineRead, issue: (cmd
   const s = read(); if (!s.active) return false;
   const state = fireDisciplineState(s.world, s.selected, s.pending);
   if (!state.ids.length) return false;
-  issue({ t: 'fireDiscipline', side: 0, ids: state.ids, hold: state.hold });
+  issue({ t: 'fireDiscipline', side: SIDE_PLAYER, ids: state.ids, hold: state.hold });
   return true;
 }
 

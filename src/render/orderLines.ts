@@ -1,7 +1,8 @@
 // ======== R011 指令回饋（R063 從 battle.ts 搬出，畫法逐行不變）========
 // 只畫被選取的我方單位：剩下的路（綠／紅／橘，越遠越淡）、終點方塊、攻擊線（看得到畫到目標身上，看不到畫到最後已知位置）、砲擊準星
 import * as THREE from 'three';
-import { SUB, SIDE_PLAYER, ORD_ATTACK, ORD_FIRE_AT, type World } from '../sim/world.ts';
+import { SUB, ORD_ATTACK, ORD_FIRE_AT, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { Lerp, MakeInst, Sight } from './painter.ts';
 
 export const DASH_CAP = 900;                 // R011 地上短線最多幾段

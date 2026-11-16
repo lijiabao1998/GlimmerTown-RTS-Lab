@@ -1,4 +1,5 @@
-import { INTERNATIONAL_KINDS, SOVIET_KINDS, SIDE_PLAYER, UNIT_KINDS, UK_HOWITZER, UK_ATGUN, UK_MORTAR, type World } from '../sim/world.ts';
+import { INTERNATIONAL_KINDS, SOVIET_KINDS, UNIT_KINDS, UK_HOWITZER, UK_ATGUN, UK_MORTAR, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 // R135: read existing HP only; durability is not armor or firing eligibility.
 export function vehicleDurability(w: World, selected: ReadonlySet<number>, enabled = true): string {

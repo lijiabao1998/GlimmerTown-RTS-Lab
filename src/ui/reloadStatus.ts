@@ -1,4 +1,5 @@
-import { INTERNATIONAL_KINDS, SOVIET_KINDS, SIDE_PLAYER, TICK_HZ, UNIT_KINDS, UK_HOWITZER, UK_ATGUN, UK_MORTAR, moraleState, type World } from '../sim/world.ts';
+import { INTERNATIONAL_KINDS, SOVIET_KINDS, TICK_HZ, UNIT_KINDS, UK_HOWITZER, UK_ATGUN, UK_MORTAR, moraleState, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 // R123: presentation only. A loaded weapon may still lack range, LOS or a valid target.
 export function reloadStatus(w: World, selected: ReadonlySet<number>, enabled = true): string {

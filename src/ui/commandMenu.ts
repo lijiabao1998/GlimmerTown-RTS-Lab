@@ -1,5 +1,6 @@
 // R109：只讀世界的砲擊快捷選單。選單保存格子，按下彈種時才檢查目前選取。
-import { SUB, SIDE_PLAYER, UK_HOWITZER, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SUB, UK_HOWITZER, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { Command } from '../sim/step.ts';
 import type { AmmoMode, OrderHit } from './smoke.ts';
 

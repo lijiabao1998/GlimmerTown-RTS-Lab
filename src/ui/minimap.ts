@@ -1,5 +1,6 @@
 // R015 小地圖：上半是純函式（座標換算、要畫哪些點，Node 守衛直接測），下半是 DOM 畫布。只讀世界、不改世界。
-import { cellIdx, TER_ROAD, TER_FIELD, TER_MUD, SIDE_PLAYER, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
+import { cellIdx, TER_ROAD, TER_FIELD, TER_MUD, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { drawCounterbattery } from './counterbattery.ts';
 import { VEG_HEDGE, VEG_WOOD, vegetationAt } from '../sim/vegetation.ts';
 import { TrenchRaster, TRENCH_E, TRENCH_S, TRENCH_W, TRENCH_N, TRENCH_MINI_COLORS } from '../render/trenches.ts';

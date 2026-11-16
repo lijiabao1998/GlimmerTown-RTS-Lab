@@ -1,6 +1,7 @@
 // R107 必要的煙幕標記：只讀世界，復用既有池／舊效果網格，不留下事件驅動的隱藏狀態。
 import * as THREE from 'three';
-import { SIDE_PLAYER, SUB, UNIT_KINDS, type SmokeCloud, type World } from '../sim/world.ts';
+import { SUB, UNIT_KINDS, type SmokeCloud, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { SMOKE_CAP, SMOKE_RADIUS } from '../sim/smoke.ts';
 import { spotted } from '../sim/step.ts';
 import { HIGH_SIGHT_MAX } from '../sim/terrain.ts';

@@ -1,9 +1,10 @@
 // R113：只讀目前已套用的單選射擊解。圈線共用自己的固定網格，不占既有選取／路線／效果池。
 import * as THREE from 'three';
 import {
-  SUB, SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, SHELL_HE, SHELL_SMOKE,
+  SUB, UNIT_KINDS, ORD_FIRE_AT, SHELL_HE, SHELL_SMOKE,
   bldAt, center, inGrid, type Unit, type World,
 } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { dist } from '../sim/math.ts';
 import { spotted } from '../sim/step.ts';
 

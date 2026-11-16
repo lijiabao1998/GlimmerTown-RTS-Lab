@@ -2,7 +2,8 @@
 // 只讀世界、只呼叫傳進來的動作；按鍵本身的純邏輯在 src/ui/keys.ts（Node 守衛測那一支）。
 // 說明、戰報、開始選單開著時整組不作用；?noR070=1 時 main.ts 根本不呼叫這裡。
 import type { World } from '../sim/world.ts';
-import { SIDE_PLAYER, SUB } from '../sim/world.ts';
+import { SUB } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { BattleView } from '../render/battle.ts';
 import type { Fling, Glide } from './camera.ts';
 import type { Hud } from './hud.ts';

@@ -1,6 +1,7 @@
 // R128：DOM 只讀狀態與發出動作；容量與落點是否合法由模擬層判斷。
 import { SANDBOX_CAP, type SandboxError } from '../sim/sandbox.ts';
-import { UK_TANK, UK_HOWITZER, SIDE_PLAYER, SIDE_ENEMY, type World } from '../sim/world.ts';
+import { UK_TANK, UK_HOWITZER, type World } from '../sim/world.ts';
+import { SIDE_PLAYER, SIDE_ENEMY } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 export const SANDBOX_WHY: Record<SandboxError, string> = { mode: '目前不是沙盒。', side: '請選我方或敵方。', kind: '僅能放置坦克或榴彈砲。', map: '超出地圖。', building: '有建築擋住這一格。', unit: '已有單位，請換一格。', capacity: '已達 32 輛上限（含殘骸）；請重置後再放置。' };
 

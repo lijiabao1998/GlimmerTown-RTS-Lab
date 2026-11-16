@@ -292,7 +292,7 @@ const mutants = [
   ['no_prefill', 'prefill', 'src/net/lockstep.ts', '    for (let t = from; t < from + delay; t++) for (const p of this.players) this.put(t, p, []);\n', '', 'prefill: the first steps count as empty packets'],
   ['no_wait', 'wait', 'src/net/lockstep.ts', "    return this.players.every(p => at?.has(p) || (this.gone.has(p) && t > (this.last.get(p) ?? -1)));", '    return true;', "wait: without the other player's packet"],
   ['arrival_order', 'order', 'src/net/lockstep.ts', '    for (const p of this.players) cmds.push(...(at?.get(p) ?? []));', '    for (const v of at?.values() ?? []) cmds.push(...v);', 'order: commands are merged by player number'],
-  ['no_check', 'order', 'src/net/lockstep.ts', '    at.set(p, cmds.filter(c => isCommand(c)) as Command[]);', '    at.set(p, cmds as Command[]);', 'order: malformed commands from the network are dropped'],
+  ['no_check', 'order', 'src/net/lockstep.ts', 'cmds.filter(c => isCommand(c) && (!this.versus', 'cmds.filter(c => (!this.versus', 'order: malformed commands from the network are dropped'],   // R085：同一行多了對戰的篩選
   ['no_log', 'sync', 'src/net/session.ts', '      for (const c of cmds) log.push({ tick: t, cmd: structuredClone(c) });\n', '', 'sync: every command both players gave is in the log'],
   ['guest_no_setup', 'sync', 'src/net/session.ts', '    ls.put(0, 0, setup); ls.put(0, 1, []);', '    ls.put(0, 0, []); ls.put(0, 1, []);', 'sync: no desync reported'],
   ['no_delay', 'sync', 'src/net/lockstep.ts', '      this.put(t + this.delay, this.me, own);\n      out.push({ t: \'tick\', at: t + this.delay, cmds: own });', '      this.put(t + 1, this.me, own);\n      out.push({ t: \'tick\', at: t + 1, cmds: own });', 'sync: with 0–300 ms of network delay the battle keeps pace'],

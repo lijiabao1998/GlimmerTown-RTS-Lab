@@ -1,5 +1,6 @@
 // R107：輸入路由只讀世界、產生指令。命中的單位由畫面先做可見性篩選。
-import { SUB, SIDE_PLAYER, UK_HOWITZER, UNIT_KINDS, bldAt, type World } from '../sim/world.ts';
+import { SUB, UK_HOWITZER, UNIT_KINDS, bldAt, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { Command } from '../sim/step.ts';
 
 export type AmmoMode = 'he' | 'smoke';

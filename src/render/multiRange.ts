@@ -1,6 +1,7 @@
 // R122: read-only nominal multi-selection ranges. One fixed quad, analytical annuli per fragment.
 import * as THREE from 'three';
-import { SUB, SIDE_PLAYER, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SUB, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 export const MULTI_RANGE_CAP = 512; // Same capacity as the existing battle unit renderer.
 export class MultiRangePreview {

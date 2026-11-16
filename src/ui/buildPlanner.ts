@@ -1,7 +1,8 @@
 // R062 布陣計畫：玩家這一局要蓋的房子、圍牆、鐵絲網、戰壕；點地面放下或拿掉、建材、提示文字、布陣列的狀態與按鈕。
 // 原本整段寫在 main.ts 裡；搬出來後 main.ts 只接線，守衛直接建這個類別測，不再切 main.ts 的原文。
 // 預覽＝真的世界的複本套上計畫（同一支 applyBuild／applyTrench，規則只有一份）；計畫本身不碰真的世界。
-import { SIDE_PLAYER, BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, type World } from '../sim/world.ts';
+import { BK_COTTAGE, BK_WIRE, BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind, bldMaxHp, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { BUILD_KINDS, BUILD_KINDS_24, WIRE_KIND, WALL_KINDS, BUILD_POINTS, applyBuild, buildError, buildKind, type BuildCmd } from '../sim/build.ts';
 import { TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, type TrenchCmd } from '../sim/trenches.ts';
 import { materialBuildDetail } from './materials.ts';

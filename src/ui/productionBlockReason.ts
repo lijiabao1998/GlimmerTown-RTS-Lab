@@ -1,6 +1,7 @@
 // R126: read-only explanation of the existing purchase guards, not deployment limits.
 import { ECO_QUEUE, PRODUCIBLE, ARMOR2, hqAlive } from '../sim/eco.ts';
-import { INTERNATIONAL_KINDS, SOVIET_KINDS, SIDE_PLAYER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_MG, UNIT_KINDS, type World } from '../sim/world.ts';
+import { INTERNATIONAL_KINDS, SOVIET_KINDS, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_MG, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 export function productionBlockReason(w: World, kind: number, enabled = true): string {
   if (!enabled || !w.eco || w.winner >= 0) return '';

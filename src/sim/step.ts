@@ -77,7 +77,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   us.forEach((u, k) => {
     const ux = cellOf(u.x), uz = cellOf(u.z);
     if (cmd.t === 'fireDiscipline') {
-      if (fireDisciplineEligible(u) && typeof cmd.hold === 'boolean') { if (cmd.hold) u.holdFire = 1; else delete u.holdFire; }
+      if (fireDisciplineEligible(u, w) && typeof cmd.hold === 'boolean') { if (cmd.hold) u.holdFire = 1; else delete u.holdFire; }
       return;
     }
     if (cmd.t === 'stop') { delete u.fireAmmo; u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
@@ -334,7 +334,7 @@ function fireUnit(w: World, u: Unit): void {
   if (u.cooldown > 0 && (!w.rules?.morale || reloads(w, u))) u.cooldown--;   // R052：受壓每 2 步、釘住每 4 步才裝填一步
   const k = UNIT_KINDS[u.kind];
   if (w.rules?.morale && !canFire(u)) { if (k.indirect) syncRanging(w, u, null); return; }   // R052：潰退不開火
-  if (u.holdFire === 1 && fireDisciplineEligible(u)) { if (k.indirect) syncRanging(w, u, null); return; }
+  if (u.holdFire === 1 && fireDisciplineEligible(u, w)) { if (k.indirect) syncRanging(w, u, null); return; }
   if (u.order !== ORD_FIRE_AT) delete u.fireAmmo;
   const smoke = u.fireAmmo === SHELL_SMOKE;
   const aim = pickAim(w, u);

@@ -1,4 +1,5 @@
-import { INTERNATIONAL_KINDS, SOVIET_KINDS, SIDE_PLAYER, ORD_FIRE_AT, SHELL_SMOKE, UNIT_KINDS, UK_HOWITZER, UK_ATGUN, UK_MORTAR, bldAt, bldMaterial, BLD_MATERIAL_NAMES, stageOf, type Building, type World } from '../sim/world.ts';
+import { INTERNATIONAL_KINDS, SOVIET_KINDS, ORD_FIRE_AT, SHELL_SMOKE, UNIT_KINDS, UK_HOWITZER, UK_ATGUN, UK_MORTAR, bldAt, bldMaterial, BLD_MATERIAL_NAMES, stageOf, type Building, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 // R124: the same public building state as R009's bombardment target bars.
 // Never inspect enemy orders or occupants; stored maxHp also preserves legacy saves.

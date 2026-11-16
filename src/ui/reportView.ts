@@ -1,6 +1,7 @@
 // R010 戰報畫面（DOM）：只顯示傳進來的戰報、只呼叫傳進來的動作。
 import type { Report } from './report.ts';
 import { zombiesBest } from './zombiesMode.ts';
+import { SIDE_PLAYER, SIDE_ENEMY } from '../side.ts';   // R085 勝負照「我方」
 
 export interface ReportView { show: (r: Report) => void; hide: () => void; visible: () => boolean }
 
@@ -15,9 +16,9 @@ export function initReportView(actions: { again: () => void }): ReportView {
   const units = (c: number[]) => `坦克 ${c[0]}・砲 ${c[1]}・觀測 ${c[2]}${c[3] ? `・步兵 ${c[3]}` : ''}`;
   function show(r: Report) {
     last = r;
-    const title = r.zombies ? '防線失守' : r.winner === 0 ? '勝利' : r.winner === 1 ? '戰敗' : '同歸於盡';
+    const title = r.zombies ? '防線失守' : r.winner === SIDE_PLAYER ? '勝利' : r.winner === SIDE_ENEMY ? '戰敗' : '同歸於盡';
     const survival = r.zombies ? `<p class="survival">撐到第 ${r.zombies.wave} 波 · 擊倒 ${r.zombies.killed} 隻 · 我方損失 ${r.zombies.lost}<br>最佳：第 ${zombiesBest(r.zombies.wave, document.getElementById('replay-bar')?.hidden !== false)} 波</p>` : '';
-    root.className = r.winner === 0 ? 'win' : r.winner === 1 ? 'lose' : 'draw';
+    root.className = r.winner === SIDE_PLAYER ? 'win' : r.winner === SIDE_ENEMY ? 'lose' : 'draw';
     root.innerHTML = `
       <div class="panel">
         <h2>${title}</h2>

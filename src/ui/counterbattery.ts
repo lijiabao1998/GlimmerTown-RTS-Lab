@@ -1,5 +1,6 @@
 // R115：只用當級公開投影，不能由隱藏單位的位置／存亡修正歷史砲聲。
-import { SUB, SIDE_PLAYER, type World } from '../sim/world.ts';
+import { SUB, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { counterbatteryAreasInto, hasCounterbattery, type CounterbatteryAreaBuffer } from '../sim/counterbattery.ts';
 
 export const COUNTERBATTERY_SEGMENTS = 40;
