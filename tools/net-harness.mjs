@@ -1,5 +1,6 @@
 // R083 連線的瀏覽器守衛共用（tests/net-browser.mjs、tests/net-browser-negative.mjs）：建一份遊戲頁、開本機的轉發伺服器、兩個真的 Chrome，
-// 給幾個場面：play（開房、加入、開戰、雙方各下一個指令、走到 TICKS 步）、together（同一局、雜湊比過、紀錄重播）、teardown（房主換了世界）、menu（開始選單的鍵與那一頁）。
+// 給幾個場面：play（開房、加入、開戰、雙方各下一個指令、走到 TICKS 步）、together（同一局、雜湊比過、紀錄重播）、teardown（房主換了世界）、menu（開始選單的鍵與那一頁）、
+// versus（R085 對戰：tests/versus-browser.mjs、versus-browser-negative.mjs）。
 // 守衛單支有 120 秒上限（tools/unit.mjs），所以正向與故意弄壞分兩支。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -93,7 +94,56 @@ export async function netHarness({ plugins = [], ports = [8671, 8673] } = {}, fn
             await A.open(`noR083=1${extra ? '&' + extra : ''}`, { menu: true });
             assert(!(await E(A, "!!document.getElementById('sm-net')")), 'menu: ?noR083=1 has no 連線合作 button');
           };
-          await fn({ A, B, errors, together, teardown, menu });
+          // R085 對戰：房主（右下、第 0 方）開對戰的房，對方用連結加入（開始選單開著）；等的時候鍵盤留在那一層；開戰後兩邊各自的「我方」
+          const versus = async (extra = '') => {
+            const code = `VS${++room}`;
+            await A.open(`room=${code}&net=host&vs=1&relay=${encodeURIComponent(url)}${extra}`);
+            await until('fixture: the host opens the versus room', async () => (await net(A)).state === 'ready');
+            await B.open(`room=${code}&net=join&relay=${encodeURIComponent(url)}${extra}`, { menu: true });
+            await until('fixture: the guest joins', async () => (await net(B)).state === 'waiting' && (await net(A)).peer);
+            for (let i = 0; i < 4; i++) await E(B, "window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))");
+            assert(await E(B, "!!document.activeElement?.closest('#net-panel')"), 'keyboard: Tab stays inside the waiting overlay (the start menu behind it cannot be reached)');
+            await E(B, "document.getElementById('sm-setup')?.click()");   // 後面的開始選單停在設定頁（人點不到，守衛用程式點）
+            assert(await E(B, "!!document.getElementById('sm-setup-done')"), 'fixture: the guest start menu is on its setup page');
+            await E(A, '__rts.startBattle()');
+            await until('start: the guest is in the same battle once the host starts', async () => (await net(B)).live && (await net(A)).live);
+            assert(await E(B, "document.getElementById('start-menu').hidden && !document.getElementById('net-panel')"), "keyboard: when the host starts, the guest's start menu closes even from its setup page");
+            const [na, nb] = [await net(A), await net(B)];
+            assert(na.versus && nb.versus, 'versus: both sides know it is a versus battle');
+            assert.deepEqual([na.side, nb.side], [SIDE_PLAYER, 1], 'versus: the host commands side 0, the guest side 1');
+            await until('fixture: the battle runs on both sides', async () => (await E(A, '__rts.tick()')) > 40 && (await E(B, '__rts.tick()')) > 40);
+            assert.deepEqual([(await net(A)).ai, (await net(B)).ai], [0, 0], 'versus: no computer on either side');
+            const units = await E(A, '__rts.units()'), ids = s => units.filter(u => u.alive && u.side === s).map(u => u.id), all = units.filter(u => u.alive).map(u => u.id);
+            assert.deepEqual(await E(A, `__rts.select(${JSON.stringify(all)})`), ids(0), 'versus: selecting everything on the host gets side 0 only');
+            assert.deepEqual(await E(B, `__rts.select(${JSON.stringify(all)})`), ids(1), 'versus: and on the guest side 1 only');
+            const n = await E(B, '__rts.mapSize()'), ca = await E(A, '__rts.cam()'), cb = await E(B, '__rts.cam()');
+            assert(cb.x < n / 2 && cb.z < n / 2 && ca.x > n / 2 && ca.z > n / 2, `versus: the guest camera starts on the top-left, the host on the bottom-right (${JSON.stringify([ca, cb])})`);
+            const seenB = await E(B, '__rts.seen()');
+            assert(ids(1).every(id => seenB.includes(id)) && ids(0).some(id => !seenB.includes(id)), `versus: the guest sees its own units and not the host's in the fog (${seenB.length} seen)`);
+            await E(B, "document.getElementById('pb-k3')?.click()");   // 生產列的步兵班
+            await until("versus: the guest's production bar orders for side 1", async () => (await E(A, '__rts.log()')).some(e => e.tick > 0 && e.cmd.t === 'produce' && e.cmd.side === 1));
+            const [u0, u1] = [ids(0)[0], ids(1)[0]], mv = (s, id, x, z) => `__rts.issue(${JSON.stringify({ t: 'move', side: s, ids: [id], x, z })})`;
+            await E(B, mv(1, u1, 9, 9)); await E(B, mv(0, u0, 3, 3));     // 對方：自己的一個、偷下房主那一方的一個
+            await E(A, mv(0, u0, 20, 21)); await E(A, mv(1, u1, 4, 3));   // 房主：一樣
+            await until(`sync: both sides get past step ${TICKS}`, async () => (await E(A, '__rts.tick()')) > TICKS && (await E(B, '__rts.tick()')) > TICKS, 60000);
+            await E(A, '__rts.pause(true)'); await sleep(1000);
+            const s = { la: await E(A, '__rts.log()'), lb: await E(B, '__rts.log()'), ta: await E(A, '__rts.tick()'), tb: await E(B, '__rts.tick()'), ha: await E(A, '__rts.hash()'), hb: await E(B, '__rts.hash()'), seed: await E(A, '__rts.seed()') };
+            const [a, b] = [await net(A), await net(B)];
+            assert(a.checks >= 2 && b.checks >= 2 && a.desync < 0 && b.desync < 0, `sync: the hash was compared at least twice with no desync (${a.checks}, ${b.checks}, ${a.desync}, ${b.desync})`);
+            const has = (log, x, z) => log.some(e => e.tick > 0 && e.cmd.t === 'move' && e.cmd.x === x && e.cmd.z === z);
+            assert(has(s.la, 9, 9) && has(s.lb, 9, 9) && has(s.la, 20, 21) && has(s.lb, 20, 21), "versus: each side's own orders reach both logs");
+            assert(!has(s.la, 3, 3) && !has(s.lb, 3, 3) && !has(s.la, 4, 3) && !has(s.lb, 4, 3), "versus: an order for the other player's side is dropped on both sides");
+            assert(!s.la.some(e => e.cmd.t === 'ai') && !s.lb.some(e => e.cmd.t === 'ai'), 'versus: neither log has an ai command');
+            assert.equal(hashWorld(runLog(createWorld(s.seed), s.la, s.ta)), s.ha, "logs: the host's log replays in Node to the host's own world");
+            assert.equal(hashWorld(runLog(createWorld(s.seed), s.lb, s.tb)), s.hb, "logs: the guest's log replays in Node to the guest's own world");
+            await E(B, '__rts.runScript(50)');   // 對方換了世界（回主選單、重開一樣）：連線結束，「我方」回到第 0 方
+            await until('versus: once the guest leaves the battle 我方 is side 0 again', async () => (await net(B)).side === SIDE_PLAYER && (await net(B)).state === 'off', 10000);
+            await A.open('', { menu: true });
+            assert(await E(A, "!!document.getElementById('sm-vs')"), 'menu: the start menu offers 連線對戰');
+            await A.open('noR085=1', { menu: true });
+            assert(!(await E(A, "!!document.getElementById('sm-vs')")), 'menu: ?noR085=1 has no 連線對戰 button');
+          };
+          await fn({ A, B, errors, together, teardown, menu, versus });
         }));
     } finally { srv.p.kill(); }
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
