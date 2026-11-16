@@ -268,7 +268,7 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK machi
   const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
   const main = read('../src/main.ts');
   assert.match(read('../src/valves.ts'), /get r080\(\) \{ return on\('080'\); \}/, 'valve: r080 is on the table');
-  assert.match(main, /\.\.\.\(V\.r080 \? \{ mg: 1 \} : \{\}\) \}\);/, 'wiring: a new battle carries mg behind the valve');
+  assert.match(main, /\.\.\.\(V\.r080 \? \{ mg: V\.r081 \? 2 : 1 \} : \{\}\) \}\);/, 'wiring: a new battle carries mg behind the valve (R081: version 2 unless ?noR081=1)');
   assert.match(main, /\.\.\.\(V\.r080 \? \[\{ kind: UK_MG, label: '機槍組', cost: UNIT_KINDS\[UK_MG\]\.cost \}\] : \[\]\)/, 'wiring: the production bar offers the team behind the valve');
   assert.match(read('../README.md'), /\?noR080=1/, 'readme: the valve is documented');
   console.log('OK machine-gun/files');
@@ -313,12 +313,12 @@ const mutants = [
   ['reaches_too_far', 'use', 'ai3.ts', 'targets.filter(t => dist(g.x, g.z, t.x, t.z) <= range)', 'targets.filter(t => dist(g.x, g.z, t.x, t.z) <= range + SUB)', 'use: a target beyond range is left alone'],
   ['never_settles', 'use', 'ai3.ts', '    if (!chasing && dist(g.x, g.z, cx, cz) <= MG_FOLLOW * SUB) continue;\n', '', 'use: within three cells of the armour it stays put'],
   ['chases', 'use', 'ai3.ts', 'const chasing = g.order === ORD_ATTACK;', 'const chasing = false;', 'use: a target that left its range is not chased'],
-  ['walks_off_alone', 'use', 'ai2.ts', ' || (st.v === 3 && u.kind === UK_MG);', ';', 'use: it gathers with the wave'],
+  ['walks_off_alone', 'use', 'ai2.ts', ' || (st.v === 3 && u.kind === UK_MG && !mgBusy(w, u, seen));', ';', 'use: it gathers with the wave'],
   ['second_version_commands', 'use', 'ai2.ts', '  if (st.v === 3) {\n    for (const [u, c] of machineGuns3(', '  if (st.v) {\n    for (const [u, c] of machineGuns3(', 'quiet: the second version never commands a machine-gun team'],
   ['armor_dropped', 'counter', 'ai3.ts', 'if (target && (UNIT_KINDS[target.kind].armored || target.kind === UK_MG)) return undefined;', 'if (target && target.kind === UK_MG) return undefined;', 'counter: a tank busy with armour keeps its target'],
   ['chases_far_gun', 'counter', 'ai3.ts', 'const reach = k.range + (k.setup ? 0 : MG_CHASE * SUB);', 'const reach = k.range + 3 * SUB;', 'counter: a machine gun beyond its own range is not chased'],
   ['mortar_ignores_gun', 'counter', 'ai2.ts', '      ?? (st.v === 3 ? nearest(g, ok.filter(t => t.kind === UK_MG)) : undefined)\n', '', 'counter: the mortar shells the machine gun first'],
-  ['tank_ignores_gun', 'counter', 'ai2.ts', 'const m = mgTargetFor(u, targetOf(u), foeMg);', 'const m = undefined as Unit | undefined;', 'counter: the tank turns its gun on the machine gun'],
+  ['tank_ignores_gun', 'counter', 'ai2.ts', 'const m = mgTargetFor(u, targetOf(u), foeMg, w);', 'const m = undefined as Unit | undefined;', 'counter: the tank turns its gun on the machine gun'],
   ['mortar_peeks', 'counter', 'ai2.ts', 'nearest(g, ok.filter(t => t.kind === UK_MG))', 'nearest(g, w.units.filter(t => t.alive && t.side !== side && t.kind === UK_MG && inReach(t.x, t.z)))', 'counter: an unseen machine gun is not acted on'],
 ];
 try {

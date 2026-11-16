@@ -83,9 +83,10 @@ export function suppressZone(w: World, side: number, x: number, z: number, area:
 }
 
 // 直射打在一棟房子或碉堡上：裡面進駐的人也被壓（房子、碉堡的倍率在 coverPct 裡）
-export function suppressHouse(w: World, bld: number, amount: number): void {
+// spare（R081）：這一方的人不壓（機槍組第二版的點射打在房子上，只壓屋裡的敵人；-1＝不分，R052 的原規則）
+export function suppressHouse(w: World, bld: number, amount: number, spare = -1): void {
   if (!((w.blds[bld - 1]?.hp ?? 0) > 0)) return;   // 已經是瓦礫（砲彈還在飛的時候房子倒了）：沒有人在「裡面」
-  for (const u of w.units) if (u.alive && UNIT_KINDS[u.kind].garrison && bldAt(w, cellOf(u.x), cellOf(u.z))?.id === bld) suppress(w, u, amount);
+  for (const u of w.units) if (u.alive && u.side !== spare && UNIT_KINDS[u.kind].garrison && bldAt(w, cellOf(u.x), cellOf(u.z))?.id === bld) suppress(w, u, amount);
 }
 
 // 潰退：步兵、觀測員人在空地上（沒有任何掩體，彈坑也算掩體）才退；往自己那一側退 ROUT_CELLS 格，三個方向都找不到路就原地趴著。

@@ -14,7 +14,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'r080-browser-'));
 const COST = UNIT_KINDS[UK_MG].cost;
 // 故意弄壞（只編進 broken 那一份，網址帶 __r080mutant 才生效）
 const mutations = {
-  flag: ['src/main.ts', '...(V.r080 ? { mg: 1 } : {}) });', "...(V.r080 && !location.search.includes('__r080mutant=flag') ? { mg: 1 } : {}) });", 1],
+  flag: ['src/main.ts', '...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) });', "...(V.r080 && !location.search.includes('__r080mutant=flag') ? { mg: V.r081 ? 2 : 1 } : {}) });", 1],
   valve: ['src/valves.ts', "get r080() { return on('080'); }", "get r080() { return on('080') || location.search.includes('__r080mutant=valve'); }", 1],
   hint: ['src/ui/hud.ts', "${s.mg ? ` 機槍組 ${s.mg}` : ''}", "${s.mg && !location.search.includes('__r080mutant=hint') ? ` 機槍組 ${s.mg}` : ''}", 1],
   crew: ['src/render/battle.ts', '(u.kind === UK_MORTAR || u.kind === UK_MG) && u.alive) nm = this.crew22(', "(u.kind === UK_MORTAR || (u.kind === UK_MG && !location.search.includes('__r080mutant=crew'))) && u.alive) nm = this.crew22(", 1],
@@ -55,7 +55,7 @@ async function main() {
     // ---- 共用的檢查（正向與故意弄壞都跑同一段）----
     const starts = async (extra = '') => {
       const b = await battle(extra);
-      assert.equal(b.eco?.mg, 1, 'start: a new battle carries mg in its eco command');
+      assert.equal(b.eco?.mg, 2, 'start: a new battle carries mg in its eco command');   // R081 起新開的局是第二版
       assert.deepEqual([b.mine.length, b.theirs.length], [1, 1], 'start: both sides begin with one machine-gun team');
       return b;
     };

@@ -56,7 +56,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, sov
     w.events.push({ e: 'build', bld: id });
     hq[side] = id;
   }
-  w.eco = { supply: [ECO_START, w.zombies ? 0 : ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}), ...(soviet ? { soviet: 1 } : {}), ...(international ? { international: 1 } : {}), ...((w.map === MAP_LARGE || w.map === MAP_TOWN) ? { pop: LARGE_POP } : {}), ...(end ? { end: 1 } : {}), ...(mg ? { mg: 1 } : {}) };   // R077 end：勝負判定第二版（step.ts checkWinner）
+  w.eco = { supply: [ECO_START, w.zombies ? 0 : ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}), ...(soviet ? { soviet: 1 } : {}), ...(international ? { international: 1 } : {}), ...((w.map === MAP_LARGE || w.map === MAP_TOWN) ? { pop: LARGE_POP } : {}), ...(end ? { end: 1 } : {}), ...(mg ? { mg: mg >= 2 ? 2 : 1 } : {}) };   // R081：mg 存版本（1 或 2）   // R077 end：勝負判定第二版（step.ts checkWinner）
   if (inf) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_INFANTRY, b); }   // R021：雙方各一班步兵
   if (mg) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_MG, b); }   // R080：雙方各一組機槍組（mg 旗標；也是可以生產它的開關）
 }

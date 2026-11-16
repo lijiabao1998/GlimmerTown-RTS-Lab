@@ -20,7 +20,7 @@ const ADVANCE = [0, 4, 6, 8];                       // 難度 1／2／3：每次
 const SCOUT = 5;                                    // R044 裝甲車在組的重心前面幾格偵察
 export const ARMOR_MEMORY = 1200;                          // R044 看到敵方裝甲後 60 秒內還算「看過」（補給不夠時先存錢補驅逐戰車）
 
-// ai 指令：讓電腦接手 side（同一方再送一次＝換難度，版本不換）。v＝2：R057 第二版（ai2.ts 在第一版想完之後改寫指令）；其他值＝第一版
+// ai 指令：讓電腦接手 side（同一方再送一次＝換難度，版本不換）。v＝2：R057 第二版（ai2.ts 在第一版想完之後改寫指令）；v＝3：R078 第三版（戰術同第二版，生產照 ai3.ts）；其他值＝第一版
 export function setAi(w: World, side: number, level: number, v?: number): void {
   if ((side !== 0 && side !== 1) || !(level >= 1 && level <= 3) || (level | 0) !== level) return;
   if (!w.ai) w.ai = [];

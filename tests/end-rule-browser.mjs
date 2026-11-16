@@ -68,12 +68,12 @@ async function main() {
     const sendsEnd = async (extra = '') => {
       await opened(extra); await press('sm-start');
       await E('(() => { __rts.startBattle(); __rts.pause(true); })()');
-      assert.deepEqual(await ecoCmds(), [{ ...ECO, end: 1, mg: 1 }], 'start: a new battle carries the new end rule on its eco command');   // mg：R080 之後新開的局也帶機槍組
+      assert.deepEqual(await ecoCmds(), [{ ...ECO, end: 1, mg: 2 }], 'start: a new battle carries the new end rule on its eco command');   // mg：R080 之後新開的局也帶機槍組（R081 起是第二版，2）
     };
     const valved = async (extra = '') => {
       await opened(`noR077=1${extra}`); await press('sm-start');
       await E('(() => { __rts.startBattle(); __rts.pause(true); })()');
-      assert.deepEqual(await ecoCmds(), [{ ...ECO, mg: 1 }], 'valve: noR077 starts a battle with the old end rule');
+      assert.deepEqual(await ecoCmds(), [{ ...ECO, mg: 2 }], 'valve: noR077 starts a battle with the old end rule');
     };
     // 接回一份「分出勝負前 BEFORE 步」的存檔，往下打：跟 Node 在同一步分出勝負、同一個贏家、同一個雜湊
     const decides = async (b, what) => {

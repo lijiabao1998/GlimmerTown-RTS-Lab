@@ -2,7 +2,7 @@
 import { INTERNATIONAL_KINDS, INTERNATIONAL_GUNS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, SIDE_PLAYER, SIDE_ENEMY, STAGE_ROOFLESS, stageOf, type World, type SimEvent } from '../sim/world.ts';
 
 const KINDS = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY];   // R021 加步兵
-export interface BattleStats { start: number[][]; fires: number[]; lastKill: { x: number; z: number; tick: number } | null; endTick: number; bounces?: number[] }   // bounces（R051）：雙方各有幾發穿甲彈被彈開；有發生才有這一欄
+export interface BattleStats { start: number[][]; fires: number[]; lastKill: { x: number; z: number; tick: number } | null; endTick: number; bounces?: number[]; dead?: number[] }   // bounces（R051）：雙方各有幾發穿甲彈被彈開；有發生才有這一欄。dead（R081）：雙方各陣亡幾個（數 kill 事件；有補給的新局才有）
 export interface Report {
   zombies?: { wave: number; killed: number; lost: number };
   winner: number; endTick: number; seconds: number;
@@ -18,15 +18,24 @@ export interface Report {
 const sameCol = (kind: number, k: number) => kind === k || (INTERNATIONAL_KINDS.includes(kind) && k === (INTERNATIONAL_GUNS.includes(kind) ? UK_HOWITZER : UK_TANK)) || (kind >= 12 && (k === UK_TANK ? kind <= 20 : k === UK_HOWITZER && kind >= 21 && kind <= 22)) || (k === UK_HOWITZER && (kind === UK_ATGUN || kind === UK_MORTAR)) || (k === UK_TANK && (kind === UK_LIGHT || kind === UK_HEAVY || kind === UK_ARMORED_CAR || kind === UK_DESTROYER || kind === UK_ASSAULT)) || (k === UK_INFANTRY && kind === UK_MG);   // R022 反戰車砲、迫擊砲算在「砲」那一欄；R023 輕、重坦克（R044 裝甲車、驅逐戰車、突擊砲）算在「坦克」
 const count = (w: World, side: number, alive: boolean) => KINDS.map(k => w.units.filter(u => u.side === side && sameCol(u.kind, k) && (!alive || u.alive)).length);
 
-export function newStats(w: World): BattleStats {
-  return { start: [count(w, SIDE_PLAYER, false), count(w, SIDE_ENEMY, false)], fires: [0, 0], lastKill: null, endTick: -1 };
+// ecoStart（R081 第二次審查）：重播在第一步之後重建統計，這時候也要從這一步開始數陣亡
+export function newStats(w: World, ecoStart = false): BattleStats {
+  return { start: [count(w, SIDE_PLAYER, false), count(w, SIDE_ENEMY, false)], fires: [0, 0], lastKill: null, endTick: -1, ...(ecoStart && w.tick === 1 && w.eco ? { dead: [0, 0] } : {}) };
 }
 
 // 每一步之後呼叫（events＝這一步的模擬事件）
-export function statsStep(st: BattleStats, w: World, events: SimEvent[]): void {
+// ecoStart（R081）：打完第一步、世界有補給時，把開局重算一次（第 0 步補給送的步兵班、機槍組才算得進去），
+// 並且從這一步起數雙方的陣亡（R081 複查：有補給的局會造新的，「開局減還活著的」會少算、甚至是負的）
+export function statsStep(st: BattleStats, w: World, events: SimEvent[], ecoStart = false): void {
+  if (ecoStart && w.tick === 1 && w.eco) st.start = [count(w, SIDE_PLAYER, false), count(w, SIDE_ENEMY, false)];
+  if (ecoStart && w.tick === 1 && w.eco) st.dead = [0, 0];
   for (const e of events) {
     if (e.e === 'fire') { const u = w.units[e.unit - 1]; if (u && (u.side === SIDE_PLAYER || u.side === SIDE_ENEMY)) st.fires[u.side]++; }
-    else if (e.e === 'kill') { const u = w.units[e.unit - 1]; if (u) st.lastKill = { x: u.x, z: u.z, tick: w.tick - 1 }; }
+    else if (e.e === 'kill') {
+      const u = w.units[e.unit - 1];
+      if (u) st.lastKill = { x: u.x, z: u.z, tick: w.tick - 1 };
+      if (u && st.dead && (u.side === SIDE_PLAYER || u.side === SIDE_ENEMY) && KINDS.some(k => sameCol(u.kind, k))) st.dead[u.side]++;
+    }
     else if (e.e === 'impact' && e.bounce && (e.side === SIDE_PLAYER || e.side === SIDE_ENEMY)) (st.bounces ??= [0, 0])[e.side]++;
   }
   if (w.winner >= 0 && st.endTick < 0) st.endTick = w.tick;
@@ -40,7 +49,7 @@ export function makeReport(w: World, st: BattleStats): Report {
     ...(w.zombies ? { zombies: { wave: w.zombies.wave, killed: w.zombies.killed, lost: w.zombies.lost } } : {}),
     winner: w.winner, endTick, seconds: Math.floor(endTick / 20),
     start: st.start.map(a => a.slice()), left,
-    kills: sum(st.start[SIDE_ENEMY]) - sum(left[SIDE_ENEMY]), lost: sum(st.start[SIDE_PLAYER]) - sum(left[SIDE_PLAYER]),
+    kills: st.dead ? st.dead[SIDE_ENEMY] : sum(st.start[SIDE_ENEMY]) - sum(left[SIDE_ENEMY]), lost: st.dead ? st.dead[SIDE_PLAYER] : sum(st.start[SIDE_PLAYER]) - sum(left[SIDE_PLAYER]),
     rubble: w.blds.filter(b => b.hp <= 0).length, roofless: w.blds.filter(b => stageOf(b) === STAGE_ROOFLESS).length,
     fires: st.fires.slice(), ...(st.bounces ? { bounces: st.bounces.slice() } : {}),
     built: w.blds.filter(b => b.builtBy === SIDE_PLAYER).length, builtStanding: w.blds.filter(b => b.builtBy === SIDE_PLAYER && b.hp > 0).length,
