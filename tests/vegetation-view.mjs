@@ -281,7 +281,7 @@ const groups = {
   main_setup() {
     const c = mainFixture(); c.reset();
     assert(c.w.vegetation, 'main_setup: default new village explicitly enables vegetation');
-    assert.deepEqual(JSON.parse(JSON.stringify(c.log)), [{ tick: 0, cmd: { t: 'map', id: 0, vegetation: 1 } }], 'main_setup: preview and command recording use the same optional setting');
+    assert.deepEqual(JSON.parse(JSON.stringify(c.log)), [{ tick: 0, cmd: { t: 'map', id: 0, vegetation: 1, sym: 1 } }], 'main_setup: preview and command recording use the same optional setting');   // R084：新開的局 map 指令多帶 sym
     const before = hashWorld(c.w), recorded = JSON.parse(JSON.stringify(c.log)), replay = createWorld(1944); c.tick(); runLog(replay, recorded, 1); assert.equal(hashWorld(c.w), hashWorld(replay));
     c.reset(1944, false, false, false, true); assert.equal(c.w.map, 1); assert.equal(c.log[0].cmd.vegetation, 1);
     c.reset(1944, false, false, false, false, false); assert.equal(c.w.vegetation, undefined); assert.equal(c.log.length, 0);

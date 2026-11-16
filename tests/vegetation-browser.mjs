@@ -298,7 +298,7 @@ async function main() {
       const s = await inspect();
       assert.deepEqual(s.cells, Array.from(opening.vegetation.cells), 'generation: ordinary new game enables the deterministic two-type vegetation layout');
       assert.equal(s.hash, hashWorld(opening), 'generation: pre-applied opening matches Node including RNG');
-      assert.deepEqual(s.log, [{ tick: 0, cmd: { t: 'map', id: 1, vegetation: 1 } }], 'generation: new game records exactly one explicit vegetation map command');
+      assert.deepEqual(s.log, [{ tick: 0, cmd: { t: 'map', id: 1, vegetation: 1, sym: 1 } }], 'generation: new game records exactly one explicit vegetation map command');   // R084：新開的局多帶 sym
     };
     const placeNative = async mobile => {
       await E(`__rts.focus(${buildCell.x+0.5},${buildCell.z+0.5},1.25)`); await settle();
@@ -418,7 +418,7 @@ async function main() {
       await fresh('noR026=1');
       const randomOpening=await sample();
       assert.equal(randomOpening.state.hash,hashWorld(village),`${label}: normal map0 opening uses its own deterministic foliage layout`);
-      assert.deepEqual(randomOpening.state.log,[{tick:0,cmd:{t:'map',id:0,vegetation:1}}],`${label}: random village records map0 vegetation explicitly`);
+      assert.deepEqual(randomOpening.state.log,[{tick:0,cmd:{t:'map',id:0,vegetation:1,sym:1}}],`${label}: random village records map0 vegetation explicitly`);   // R084：新開的局多帶 sym
       assert.deepEqual(randomOpening.state.cells,Array.from(village.vegetation.cells),`${label}: normal map0 foliage matches Node`);
       budget(randomOpening,true,`${label} map0 opening`); await shot(`r116-${label}-map0-opening.png`);
       await legacyCheck(); await button('b-restart',mobile); await settle();

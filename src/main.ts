@@ -154,7 +154,7 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   planner.clear(); phase = build ? 'build' : 'battle';
   battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
   if (sandbox) paused = true;
-  if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}) });
+  if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}), ...(V.r084 ? { sym: 1 } : {}) });   // R084 左右對稱：新開的局
   if (rules) issue(rules);
   if (zombies) issue({ t: 'zombies' });
   if (build) { paused = true; planner.refreshPreview(); }

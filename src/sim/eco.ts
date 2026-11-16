@@ -24,7 +24,8 @@ const corner = (w: World, side: number) => (side === SIDE_PLAYER ? w.n - 1 : 0);
 function hqSpot(w: World, side: number): [number, number] | null {
   const c = corner(w, side), cand: [number, number, number][] = [];
   for (let z = 0; z + 1 < w.n; z++) for (let x = 0; x + 1 < w.n; x++) cand.push([Math.abs(2 * x + 1 - 2 * c) + Math.abs(2 * z + 1 - 2 * c), x, z]);   // 佔地中心到角落的曼哈頓距離（兩倍座標）
-  cand.sort((a, b) => a[0] - b[0] || a[2] - b[2] || a[1] - b[1]);
+  const m = w.sym && side === SIDE_ENEMY ? -1 : 1;   // R084：左上那一方平手時照鏡像（佔地 (x,z) 的鏡像是 (n−2−x, n−2−z)，所以先比大的 z、再比大的 x）
+  cand.sort((a, b) => a[0] - b[0] || m * (a[2] - b[2]) || m * (a[1] - b[1]));
   const unitCells = new Set(w.units.filter(u => u.alive).map(u => cellIdx(w, cellOf(u.x), cellOf(u.z))));
   for (const [, x, z] of cand) {
     let ok = true;
@@ -101,8 +102,9 @@ function spawnUnit(w: World, side: number, kind: number, hq: Building): void {
   if (!spot) return;
   const id = w.units.length + 1;
   w.units.push({ id, side, kind, x: center(spot[0]), z: center(spot[1]), hp: UNIT_KINDS[kind].hp, alive: true, order: ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: side === SIDE_PLAYER ? -SUB : SUB, aimZ: side === SIDE_PLAYER ? -SUB : SUB, ...(UNIT_KINDS[kind].armored ? { hullX: side === SIDE_PLAYER ? -SUB : SUB, hullZ: side === SIDE_PLAYER ? -SUB : SUB } : {}) });
-  const u = w.units[id - 1], hx = hq.x + 1, hz = hq.z + 1, mid = w.n >> 1;
-  const rx = Math.max(0, Math.min(w.n - 1, hx + Math.sign(mid - hx) * 4)), rz = Math.max(0, Math.min(w.n - 1, hz + Math.sign(mid - hz) * 4));
+  const mir = !!w.sym && hq.builtBy === SIDE_ENEMY;   // R084：左上那一方的「指揮部朝中央那一欄」是 hq.x（右下那一方是 hq.x＋1），中央用兩倍座標比
+  const u = w.units[id - 1], hx = mir ? hq.x : hq.x + 1, hz = mir ? hq.z : hq.z + 1, mid = w.n >> 1;
+  const rx = Math.max(0, Math.min(w.n - 1, hx + (w.sym ? Math.sign(w.n - 1 - 2 * hx) : Math.sign(mid - hx)) * 4)), rz = Math.max(0, Math.min(w.n - 1, hz + (w.sym ? Math.sign(w.n - 1 - 2 * hz) : Math.sign(mid - hz)) * 4));
   const p = findPath(w, spot[0], spot[1], rx, rz, 0, 0, kind);
   if (p.length) { u.order = ORD_MOVE; u.tx = rx; u.tz = rz; u.path = p; u.pathIdx = 0; }
 }
@@ -114,8 +116,8 @@ function spawnCell(w: World, hq: Building): [number, number] | null {
   for (let z = hq.z - 1; z <= hq.z + hq.d; z++) for (let x = hq.x - 1; x <= hq.x + hq.w; x++) {
     if (!inGrid(w, x, z) || blocks(w, x, z) || w.occ[cellIdx(w, x, z)] || wireAt(w, x, z)) continue;
     if (w.units.some(u => u.alive && UNIT_KINDS[u.kind].radius > 0 && Math.abs(u.x - center(x)) < SUB && Math.abs(u.z - center(z)) < SUB)) continue;
-    const d = Math.abs(x - mid) + Math.abs(z - mid);
-    if (!best || d < bd) { best = [x, z]; bd = d; }
+    const d = w.sym ? Math.abs(2 * x + 1 - w.n) + Math.abs(2 * z + 1 - w.n) : Math.abs(x - mid) + Math.abs(z - mid);   // R084：離真的中央（兩倍座標）
+    if (!best || d < bd || (w.sym && d === bd && hq.builtBy === SIDE_ENEMY)) { best = [x, z]; bd = d; }   // R084：左上那一方平手時挑後掃到的（＝鏡像裡先掃到的）
   }
   return best;
 }

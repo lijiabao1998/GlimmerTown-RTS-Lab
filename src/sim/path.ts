@@ -55,12 +55,17 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
     return memo[i] === 2;
   };
   const g = new Int32Array(K).fill(-1), came = new Int32Array(K).fill(-1), done = new Uint8Array(K);
+  // R084 左右對稱：堆的鍵＝f×M＋次序。原本次序＝格索引（平手時偏向小編號那一邊）；有 sym 時次序看「這一格與它的點鏡像那一格」這一對（小的那個索引×2），
+  // 同一對裡的先後看終點在哪一半（fl）——終點跟它的鏡像一定在不同的兩半，所以鏡像的問題每一個鍵都跟原本那一格的一樣、每一個平手做的是鏡像的選擇。
+  // f 平手時先比離終點的估計（h 小的先）：對稱不靠它（審查之後），留著是因為同樣 f 時先展開離終點近的格、搜得少
+  const HB = 14 * n + 1, key = (f: number, h: number, i: number) => (w.sym ? (f * HB + h) * M + enc(i) : f * M + enc(i)), fl = goal > K - 1 - goal ? 1 : 0;
+  const M = w.sym ? 2 * K : K, enc = (i: number) => (w.sym ? 2 * Math.min(i, K - 1 - i) + ((i > K - 1 - i ? 1 : 0) ^ fl) : i), dec = (e: number) => (w.sym ? ((e & 1) ^ fl ? K - 1 - (e >> 1) : e >> 1) : e);
   const open = new Heap();
   g[start] = 0;
-  open.push(heur(sx, sz, gx, gz) * K + start);
+  open.push(key(heur(sx, sz, gx, gz), heur(sx, sz, gx, gz), start));
   let best = start, bestH = heur(sx, sz, gx, gz);
   while (open.size) {
-    const cur = open.pop() % K;
+    const cur = dec(open.pop() % M);
     if (done[cur]) continue;
     done[cur] = 1;
     const cx = cur % n, cz = (cur - cx) / n;
@@ -75,7 +80,7 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
       const ni = cellIdx(w, nx, nz), ng = g[cur] + stepCost(w, nx, nz, diag);
       if (done[ni] || (g[ni] >= 0 && g[ni] <= ng)) continue;
       g[ni] = ng; came[ni] = cur;
-      open.push((ng + heur(nx, nz, gx, gz)) * K + ni);
+      open.push(key(ng + heur(nx, nz, gx, gz), heur(nx, nz, gx, gz), ni));
     }
   }
   const end = done[goal] ? goal : best;
