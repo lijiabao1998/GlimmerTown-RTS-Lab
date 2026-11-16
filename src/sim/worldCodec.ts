@@ -3,6 +3,7 @@
 // 世界裡大部分是普通的數字與陣列，原樣留著；整張圖大小的表（型別陣列）用「值、連續幾格」壓起來。
 // 只給畫面看的事件清單不存。之後哪張卡往 World 加新的型別陣列，要在這裡加一行（守衛會擋）。
 import { UNIT_KINDS, type World } from './world.ts';
+import { HEIGHT_MAX } from './terrain.ts';
 
 export const CODEC_MAX_N = 512;   // 邊長上限（現在的地圖是 32、64、96）
 
@@ -34,7 +35,7 @@ function unpack<T extends Uint8Array | Int32Array>(x: unknown, into: T, lo: numb
 
 export function encodeWorld(w: World): unknown {
   return {
-    ...w, events: [], ter: pack(w.ter), occ: pack(w.occ), crater: pack(w.crater),
+    ...w, events: [], ter: pack(w.ter), occ: pack(w.occ), crater: pack(w.crater), ...(w.height ? { height: pack(w.height) } : {}),
     ...(w.vegetation ? { vegetation: { ...w.vegetation, cells: pack(w.vegetation.cells) } } : {}),
   };
 }
@@ -66,5 +67,7 @@ export function decodeWorld(x: unknown): World | null {
     if (!grid) return null;
     vegetation = { ...(v as { version: number }), cells: grid };
   }
-  return { ...(r as unknown as World), ter, occ, crater, events: [], ...(vegetation ? { vegetation } : {}) };
+  let height: Uint8Array | null | undefined;
+  if (r.height !== undefined && !(height = unpack(r.height, new Uint8Array(cells), 0, HEIGHT_MAX))) return null;   // R055：高度表（有才有；長度不對、值超出 0–3 就不收）
+  return { ...(r as unknown as World), ter, occ, crater, events: [], ...(vegetation ? { vegetation } : {}), ...(height ? { height } : {}) };
 }

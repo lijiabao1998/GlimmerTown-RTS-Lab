@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SIDE_PLAYER, SUB, UNIT_KINDS, type SmokeCloud, type World } from '../sim/world.ts';
 import { SMOKE_CAP, SMOKE_RADIUS } from '../sim/smoke.ts';
 import { spotted } from '../sim/step.ts';
+import { HIGH_SIGHT_MAX } from '../sim/terrain.ts';
 import { hash2 } from '../sim/rng.ts';
 import type { Pool } from './fx.ts';
 
@@ -17,7 +18,7 @@ export function smokeSurfaceVisible(w: World, cloud: SmokeCloud): boolean {
   for (const u of w.units) {
     if (!u.alive || u.side !== SIDE_PLAYER) continue;
     const dx = u.x - cloud.x, dz = u.z - cloud.z, d = Math.hypot(dx, dz);
-    if (d <= SMOKE_RADIUS || d > UNIT_KINDS[u.kind].sight + SMOKE_RADIUS) continue;
+    if (d <= SMOKE_RADIUS || d > UNIT_KINDS[u.kind].sight + (w.height ? HIGH_SIGHT_MAX * SUB : 0) + SMOKE_RADIUS) continue;   // R055：站在高處的多看兩格（模擬的 spotted 會算，這裡的預篩也要放寬）
     if (spotted(w, SIDE_PLAYER, cloud.x + Math.round(dx * SMOKE_RADIUS / d), cloud.z + Math.round(dz * SMOKE_RADIUS / d), cloud.id)) return true;
   }
   for (const [dx, dz] of EDGE) {
