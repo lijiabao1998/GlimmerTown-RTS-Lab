@@ -97,7 +97,7 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url))), temp = mkdt
 const mutants = [
   ['not_dispatched', 'shape', 'maps.ts', 'if (id === MAP_HILLS) { applyHills(w, vegetation); return; }', '', 'shape: map 4 is the hill map'],
   ['four_levels', 'shape', 'hillMap.ts', 'let h = d <= 1 ? 3 : d <= 3 ? 2', 'let h = d <= 1 ? 4 : d <= 3 ? 2', 'shape: the highest ground is three levels'],
-  ['no_vegetation_flag', 'shape', 'step.ts', 'c.id === 4 || c.id === 0 || c.id === 1', 'c.id === 0 || c.id === 1', 'shape: with the flag it grows its woods and hedges'],
+  ['no_vegetation_flag', 'shape', 'step.ts', 'applyMap(w, MAP_HILLS, c.vegetation);', 'applyMap(w, MAP_HILLS, undefined);', 'shape: with the flag it grows its woods and hedges'],
   ['lopsided', 'symmetry', 'hillMap.ts', 'put(x, z); put(n - x - bw, n - z - bd);', 'put(x, z); put(n - x - bw, z);', 'symmetry: the ground at'],
   ['no_pass', 'fair', 'hillMap.ts', '  if (x === 15 || x === 16) h = Math.min(h, 1);\n  else if (x === 14 || x === 17) h = Math.min(h, 2);\n', '  if (x === 14 || x === 17) h = Math.min(h, 2);\n', 'fair: the pass road is no higher than one level'],
   ['barn_in_the_corner', 'fair', 'hillMap.ts', 'bld(BK_BARN, 2, 22, 2, 1, 1);', 'bld(BK_BARN, 24, 24, 2, 1, 1);', 'fair: the spawn corners are empty and flat'],

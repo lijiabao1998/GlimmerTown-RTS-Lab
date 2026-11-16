@@ -13,7 +13,7 @@ import { applyTrench, trenchCover, type TrenchCmd } from './trenches.ts';
 import { applyBuild, type BuildCmd } from './build.ts';
 import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { aiThink2, memoSpotted } from './ai2.ts';
-import { applyMap } from './maps.ts';
+import { applyMap, MAP_HILLS } from './maps.ts';
 import { applyRules, type RulesCmd } from './rules.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
@@ -488,7 +488,8 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
     w.sandbox.frame++;
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {
-  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 4 || c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined);   // 地圖最先套；R130 id 3 也保留明確的植被旗標。
+  for (const c of cmds) if (c.t === 'map' && c.id === MAP_HILLS) applyMap(w, MAP_HILLS, c.vegetation);   // R055 丘陵：植被旗標照收。下一行的舊條件原樣不動（有守衛錨著它）；丘陵套好之後下一行再套一次不會動它
+  for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined);   // 地圖最先套；R130 id 3 也保留明確的植被旗標。
   for (const c of cmds) if (c.t === 'rules') applyRules(w, c);   // R046：地圖之後、喪屍與布陣之前
   for (const c of cmds) if (c.t === 'zombies') startZombies(w);
   if (w.zombies) cmds = cmds.filter(c => !('side' in c) || c.side === SIDE_PLAYER); // 布陣也走同一個敵方命令禁令。

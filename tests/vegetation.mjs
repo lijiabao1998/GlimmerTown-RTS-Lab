@@ -60,7 +60,7 @@ group('activation', () => {
     const w = createWorld(1944); applyMap(w, map, value); assert.equal(w.vegetation, undefined, 'activation: only numeric one enables');
     const command = createWorld(1944); step(command, [{ t: 'map', id: map, vegetation: value }]); assert.equal(command.vegetation, undefined, 'activation: command validates exact optional value');
   }
-  for (const id of [-1, 4, 1.5, NaN, '1', null]) {
+  for (const id of [-1, 5, 1.5, NaN, '1', null]) {   // R055 之後 4 是丘陵（有自己的植被），不認得的換成 5
     const w = createWorld(1944); applyMap(w, id, 1); assert.equal(w.vegetation, undefined, 'activation: helper rejects invalid map id');
     step(w, [{ t: 'map', id, vegetation: 1 }]); assert.equal(w.vegetation, undefined, 'activation: command cannot coerce invalid id into enabled terrain');
   }
