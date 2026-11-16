@@ -562,7 +562,8 @@ renderer.setAnimationLoop(() => {
   const reloadInfo = reloadStatus(w, selected, phase === 'battle' && V.r123);
   if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
   const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);
-  if (vehicleInfo !== lastVehicleInfo) { lastVehicleInfo = vehicleInfo; hud?.vehicleFrame(vehicleInfo); }   // 只更新R135前綴，不替其他提示補跑其自身的刷新路徑。
+  // 只更新R135前綴，不替其他提示補跑其自身的刷新路徑。
+  if (vehicleInfo !== lastVehicleInfo) { lastVehicleInfo = vehicleInfo; hud?.vehicleFrame(vehicleInfo); }
   const vegetationInfo = view.vegetationInfo;
   if (vegetationInfo !== lastVegetationInfo) { lastVegetationInfo = vegetationInfo; hud?.update(); }
   // 暫停／重播也檢查當前世界；同 tick 換世界不能沿用上一局的提示。

@@ -26,7 +26,8 @@ const groups = {
     const chunk = plain(s.slice(begin, end));
     for (const [elapsed, count] of [[0,0],[0.151,3],[0.6,8]]) {
       const calls = [], w = { tick: 7, events: [] }, view = {};
-      const c = vm.createContext({ acc: elapsed, TICK_HZ: 20, w, view,
+      const c = vm.createContext({ acc: elapsed, TICK_HZ: 20, w, view, netReady: () => true,   // R083：迴圈也等連線（沒有連線＝永遠可以走）
+
         syncBattleAudio: () => calls.push('sync'),
         tick: () => { w.tick++; w.events = [{ tick: w.tick }]; calls.push(`tick:${w.tick}`); },
         battleAudio: { enqueue: (world,events,visible) => { assert.equal(world,w); assert.equal(visible,view); assert.equal(events,w.events); calls.push(`enqueue:${events[0].tick}`); }, flush: () => calls.push('flush') },

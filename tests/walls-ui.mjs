@@ -70,6 +70,7 @@ function controller(query = '') {
   const q = new URLSearchParams(query);
   const c = vm.createContext({
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, replay: undefined,   // R047: tick() asks replay first; absent here = ordinary play
+    netLive: () => false, netFeed: () => null, netReady: () => true,   // R083：沒有連線的局（main.ts 的 issue／tick／迴圈會問）
     // Existing construction fixture; use the real map constant.
     structuredClone, createWorld, hashWorld, isWallKind, bldMaxHp, buildKind, buildError, applyBuild, TRENCH_KINDS, trenchKind, trenchCells, trenchError, applyTrench, step, runLog, materialBuildDetail,
     enemyPlan(w, kinds) { enemyArgs.push(kinds); return enemyPlan(w, kinds); }, setWalls: flag => wallFlags.push(flag),
