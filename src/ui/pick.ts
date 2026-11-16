@@ -5,10 +5,14 @@ import type { World } from '../sim/world.ts';
 import { SUB, SIDE_PLAYER } from '../sim/world.ts';
 import type { BattleView } from '../render/battle.ts';
 
-// selected（R081）：給了的話，點的位置上疊著好幾個我方單位、而現在唯一選著的就是其中一個 → 換選下一個（照編號輪流）。
-// 「疊著」＝離點的位置跟最近那一個差不到 STACK_PX 像素。很快地連點（雙擊跟車）由呼叫的人不給 selected。
+// stack（R081，只有點選才給；下指令、長按不給）：點到的最近那一個是我方的、而且那一點疊著好幾個我方單位
+// （離點的位置跟最近那一個差不到 STACK_PX 像素）時——
+//   selected：現在唯一選著的就是其中一個 → 換選下一個（照編號輪流）；
+//   keep：很快地連點的第二下，第一下選到的那一個也在裡面 → 留在它身上（雙擊跟車照舊跟得到）。
+// 最近的是敵人就照舊回傳敵人：疊著的旁邊的敵人照樣點得到（R081 複查）。
 export const STACK_PX = 8;
-export function pickUnitAt(w: World, view: BattleView, cx: number, cy: number, cssW: number, cssH: number, selected?: ReadonlySet<number>): number {
+export type StackPick = { selected?: ReadonlySet<number>; keep?: number };
+export function pickUnitAt(w: World, view: BattleView, cx: number, cy: number, cssW: number, cssH: number, stack?: StackPick): number {
   let best = 0, bestD = 26 * 26;
   const mine: [number, number][] = [];   // R081：（距離、編號）——只收我方的
   for (const u of w.units) {
@@ -16,12 +20,13 @@ export function pickUnitAt(w: World, view: BattleView, cx: number, cy: number, c
     const [sx, sy] = view.screenOf(u.x / SUB, view.unitHeight(u) + 0.15, u.z / SUB, cssW, cssH);
     const d = (sx - cx) ** 2 + (sy - cy) ** 2;
     if (d < bestD) { bestD = d; best = u.id; }
-    if (selected && u.side === SIDE_PLAYER && d < 26 * 26) mine.push([Math.sqrt(d), u.id]);
+    if (stack && u.side === SIDE_PLAYER && d < 26 * 26) mine.push([Math.sqrt(d), u.id]);
   }
-  if (selected && selected.size === 1 && mine.length > 1) {
-    const near = Math.min(...mine.map(([d]) => d)), stack = mine.filter(([d]) => d <= near + STACK_PX).map(([, id]) => id).sort((a, b) => a - b);
-    const at = stack.indexOf([...selected][0]);
-    if (at >= 0 && stack.length > 1) return stack[(at + 1) % stack.length];
+  if (stack && mine.length > 1 && w.units[best - 1]?.side === SIDE_PLAYER) {
+    const near = Math.min(...mine.map(([d]) => d)), ids = mine.filter(([d]) => d <= near + STACK_PX).map(([, id]) => id).sort((a, b) => a - b);
+    if (stack.keep && ids.includes(stack.keep)) return stack.keep;
+    const sel = stack.selected, at = sel && sel.size === 1 ? ids.indexOf([...sel][0]) : -1;
+    if (at >= 0 && ids.length > 1) return ids[(at + 1) % ids.length];
   }
   return best;
 }

@@ -49,9 +49,10 @@ function readStats(x: unknown): BattleStats | null {
   const row = (v: unknown, n: number): v is number[] => Array.isArray(v) && v.length === n && v.every(nat);
   if (!Array.isArray(r.start) || r.start.length !== 2 || !r.start.every(a => row(a, 4)) || !row(r.fires, 2) || r.endTick !== -1) return null;
   if (r.bounces !== undefined && !row(r.bounces, 2)) return null;
+  if (r.dead !== undefined && !row(r.dead, 2)) return null;   // R081：雙方的陣亡數（舊存檔沒有）
   const k = r.lastKill as Record<string, unknown> | null;
   if (k !== null && !(typeof k === 'object' && int(k.x, -1e8, 1e8) && int(k.z, -1e8, 1e8) && int(k.tick, 0, MAX_TICK))) return null;
-  return { start: (r.start as number[][]).map(a => [...a]), fires: [...r.fires], lastKill: k ? { x: k.x as number, z: k.z as number, tick: k.tick as number } : null, endTick: -1, ...(r.bounces ? { bounces: [...(r.bounces as number[])] } : {}) };
+  return { start: (r.start as number[][]).map(a => [...a]), fires: [...r.fires], lastKill: k ? { x: k.x as number, z: k.z as number, tick: k.tick as number } : null, endTick: -1, ...(r.bounces ? { bounces: [...(r.bounces as number[])] } : {}), ...(r.dead ? { dead: [...(r.dead as number[])] } : {}) };
 }
 
 // 讀回來：下面每一條都要成立，少一條就不算有存檔。不管塞什麼進來都只回「不行」與原因，不丟例外

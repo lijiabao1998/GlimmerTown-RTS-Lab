@@ -49,14 +49,16 @@ export function produce3(w: World, st: AiState, mine: Unit[], seen: Unit[]): num
 export const MG_FOLLOW = 3;   // 離主力重心超過幾格就跟上去（跟反戰車砲一樣）
 export const MG_CHASE = 0;    // 直射的車為了打對方的機槍組，願意開出自己射程外幾格（0＝只打射程內的）
 export const MG_SHIFT = 3;    // R081：射程內的目標都被擋住時，往自己幾格內找一個打得到的位置
+export const MG_WALK = 2 * MG_SHIFT;   // R081 複查：換位置最多走幾步（隔著鐵絲網、房子要繞遠路的格子不算）
 
-// R081：從 (x, z) 打不打得到 t——中間沒有房子、沒有稜線；或 t 就進駐在射線上的第一棟房子裡（打那棟房子就是在壓它）
+// R081：從 (x, z) 打不打得到 t——中間沒有房子、沒有稜線；或 t 就進駐在射線上的第一棟房子裡、而且有士氣規則
+// （打那棟房子就是在壓它；經典規則下點射打房子只扣房子 1 點、碉堡 0 點，屋裡的人不受影響，所以不算——R081 複查）
 export function canHit(w: World, x: number, z: number, t: Unit): boolean {
   if (ridge(w, x, z, t.x, t.z)) return false;
   const c = firstBlock(w, x, z, t.x, t.z, 0);
   if (c < 0) return true;
   const home = UNIT_KINDS[t.kind].garrison ? bldAt(w, cellOf(t.x), cellOf(t.z)) : null;
-  return !!home && home.hp > 0 && w.occ[c] === home.id;
+  return !!w.rules?.morale && !!home && home.hp > 0 && w.occ[c] === home.id;
 }
 // R081：直射的車打 t 的射線清不清楚（沒有房子、沒有稜線；機槍組不會進駐，所以不用管它在屋裡）
 const clearShot = (w: World, u: Unit, t: Unit): boolean => !ridge(w, u.x, u.z, t.x, t.z) && firstBlock(w, u.x, u.z, t.x, t.z, 0) < 0;
@@ -66,17 +68,38 @@ export function mgBusy(w: World, g: Unit, seen: Unit[]): boolean {
   const range = UNIT_KINDS[UK_MG].range;
   return seen.some(t => soft(t) && dist(g.x, g.z, t.x, t.z) <= range && canHit(w, g.x, g.z, t));
 }
-// R081：t 在射程內卻被擋住——在機槍組 MG_SHIFT 格內找一格空的、從那裡打得到 t 的位置（最近的；平手照 z 再照 x）
+// R081 複查：從 (gx, gz) 往外走 MG_WALK 步以內，每一格最少要幾步（-1＝走不到）。規則跟 findPath 一樣：八方向、不切過擋路格的角，
+// 房子與機槍組過不去的鐵絲網擋路。只看 (2·MG_WALK+1)² 格的方塊，不配置整張地圖。
+const STEP_X = [1, -1, 0, 0, 1, 1, -1, -1], STEP_Z = [0, 0, 1, -1, 1, -1, 1, -1];
+function walkSteps(w: World, gx: number, gz: number): Int8Array {
+  const R = MG_WALK, S = 2 * R + 1, steps = new Int8Array(S * S).fill(-1);
+  const at = (x: number, z: number) => (z - gz + R) * S + (x - gx + R);
+  const free = (x: number, z: number) => Math.abs(x - gx) <= R && Math.abs(z - gz) <= R && inGrid(w, x, z) && !blocks(w, x, z) && !wireBlocks(w, x, z, UK_MG);
+  let ring: [number, number][] = [[gx, gz]];
+  steps[at(gx, gz)] = 0;
+  for (let s = 1; s <= R && ring.length; s++) {
+    const next: [number, number][] = [];
+    for (const [x, z] of ring) for (let k = 0; k < 8; k++) {
+      const nx = x + STEP_X[k], nz = z + STEP_Z[k];
+      if (!free(nx, nz) || steps[at(nx, nz)] >= 0 || (k >= 4 && (!free(nx, z) || !free(x, nz)))) continue;
+      steps[at(nx, nz)] = s; next.push([nx, nz]);
+    }
+    ring = next;
+  }
+  return steps;
+}
+// R081：t 在射程內卻被擋住——在機槍組 MG_SHIFT 格內找一格走得到（MG_WALK 步內）、從那裡打得到 t 的位置
+// （走的步數最少的；平手比直線距離，再平手照 z 再照 x）
 function shiftSpot(w: World, g: Unit, t: Unit): [number, number] | null {
-  const gx = cellOf(g.x), gz = cellOf(g.z), range = UNIT_KINDS[UK_MG].range;
-  let best: [number, number] | null = null, bd = 0;
+  const gx = cellOf(g.x), gz = cellOf(g.z), range = UNIT_KINDS[UK_MG].range, steps = walkSteps(w, gx, gz), S = 2 * MG_WALK + 1;
+  let best: [number, number] | null = null, bs = 0, bd = 0;
   for (let dz = -MG_SHIFT; dz <= MG_SHIFT; dz++) for (let dx = -MG_SHIFT; dx <= MG_SHIFT; dx++) {
-    const x = gx + dx, z = gz + dz;
-    if ((!dx && !dz) || !inGrid(w, x, z) || blocks(w, x, z) || wireBlocks(w, x, z, UK_MG)) continue;
+    const x = gx + dx, z = gz + dz, s = steps[(dz + MG_WALK) * S + dx + MG_WALK];
+    if ((!dx && !dz) || s < 0) continue;   // 走不到（出了地圖、房子、鐵絲網，或要繞超過 MG_WALK 步）
     const cx = center(x), cz = center(z);
     if (dist(cx, cz, t.x, t.z) > range || !canHit(w, cx, cz, t)) continue;
     const d = dist(g.x, g.z, cx, cz);
-    if (!best || d < bd) { best = [x, z]; bd = d; }
+    if (!best || s < bs || (s === bs && d < bd)) { best = [x, z]; bs = s; bd = d; }
   }
   return best;
 }

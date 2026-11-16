@@ -251,7 +251,7 @@ function tick() {
 // ---- 輸入：單指點＝選取／下指令；單指拖＝平移；雙指＝縮放；滾輪＝縮放；右鍵＝下指令 ----
 const pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 let dragged = false, pinchD = 0;
-const pickUnit = (cx: number, cy: number, t = performance.now()) => pickUnitAt(w, view, cx, cy, innerWidth, innerHeight, V.r081 && t - lastTap.t >= 350 ? selected : undefined);   // R070 內容搬到 src/ui/pick.ts（R124／R123 的守衛會注入這個名字）
+const pickUnit = (cx: number, cy: number, t?: number) => pickUnitAt(w, view, cx, cy, innerWidth, innerHeight, V.r081 && t !== undefined ? (t - lastTap.t >= 350 ? { selected } : { keep: lastTap.id }) : undefined);   // R070 內容搬到 src/ui/pick.ts（R124／R123 的守衛會注入這個名字）；R081：只有 tap() 給 t（換選疊著的），下指令、長按不給
 
 // R110：暫停時沒有下一個模擬秒，清提示必須同步刷新 HUD。
 function clearBattleHint() {
