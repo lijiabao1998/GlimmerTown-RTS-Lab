@@ -22,6 +22,7 @@ import { STYLE_A, msaaSetting, type Style } from './render/post.ts';
 import { initFireDiscipline, toggleFireDiscipline } from './ui/fireDiscipline.ts';
 import { initDesktopControls, isDesktopPointer } from './ui/desktopControls.ts';
 import { pickUnitAt } from './ui/pick.ts';
+import { initNet, netFeed, netReady, netLive } from './net/client.ts';   // R083 連線合作
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
 import { Gestures, inSelectionRect, type SelectionRect } from './ui/gestures.ts';
@@ -220,7 +221,7 @@ function startBattle() {
 }
 
 function issue(cmd: Command) {
-  log.push({ tick: w.sandbox ? commandTick(w) : w.tick, cmd });
+  if (!netLive()) log.push({ tick: w.sandbox ? commandTick(w) : w.tick, cmd });   // R083：連線的局由 netFeed 照實際執行的那一步記
   pending.push(cmd);
 }
 
@@ -228,7 +229,7 @@ const simT = (alpha = 0) => (w.tick + alpha) / TICK_HZ;
 
 function tick() {
   view.snapshot();
-  const now = replay?.feed(w, pending) ?? pending; pending = [];   // R047：正在重播就餵紀錄裡這一步的指令（玩家這時下的不進世界）；不是重播時 feed 只負責在分出勝負那一刻存檔
+  const now = replay?.feed(w, pending) ?? netFeed(w, pending) ?? pending; pending = [];   // R047：正在重播就餵紀錄裡這一步的指令（玩家這時下的不進世界）；不是重播時 feed 只負責在分出勝負那一刻存檔
   const priorWinner = w.winner, priorMap = w.map;
   sandboxPlacementResults.length = 0;
   step(w, now, sandboxPlacementResults);
@@ -512,6 +513,7 @@ if (V.r045) zombiesPick = initZombiesPick({
 const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
 // R069 開始選單（src/ui/startMenu.ts）：地圖、模式、重來、說明、教學都按原本那幾顆鍵；這裡只接難度、暫停與音效
 const replay = V.r047 ? initReplay({ world: () => w, log: () => log, hash: () => hashWorld(w), begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w, V.r081); ui(); }, focus: (x, z) => view.target.set(x, 0, z), leave: () => reset() }) : undefined;   // R047 重播（src/ui/replay.ts）
+if (V.r083) initNet({ world: () => w, log: () => log, hash: () => hashWorld(w), phase: () => phase, begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w, V.r081); ui(); }, focus: () => { if (w.map === MAP_LARGE) view.target.set(55, 0, 55); if (w.map === MAP_TOWN) view.target.set(87, 0, 87); } });   // R083：加入的人照重播那一條路建世界
 const saves = V.r074 && V.r069 ? initSaves({ world: () => w, log: () => log, battle: () => phase === 'battle', replaying: () => !!replay?.playing(), cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }), stats: () => stats, adopt: (world, lg, cam, st) => { reset(world.seed, false, false, false, false, false); w = world; log = lg; pending = lg.filter(c => c.tick === w.tick).map(c => c.cmd); seed = world.seed; aiLevel = world.ai?.find(a => a.side === SIDE_ENEMY)?.level ?? aiLevel; large = V.r043 && world.map === MAP_LARGE; expanded = V.r130 && world.map === MAP_TOWN; if (world.zombies) q.set('mode', 'zombies'); else q.delete('mode'); skirmish?.adopt(world); view.dispose(); view = view.recreate(w); if (cam) { view.target.set(cam.x, 0, cam.z); view.zoom = cam.zoom; } stats = st ?? newStats(w); paused = true; ui(); syncBattleAudio(); } }) : undefined;   // R074 繼續上一局（src/ui/saveGame.ts）：adopt＝把遊戲換成存檔裡的那一局，停在暫停（紀錄裡步數等於現在這一步的指令還沒進世界，重新排進去）。沒有開始選單（noR069）就沒有地方按「繼續上一局」，所以也不存
 if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: n => (aiLevel = n ?? aiLevel), paused: v => { if (v !== undefined) { paused = v; syncBattleAudio(); hud?.update(); } return paused; },
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
@@ -537,9 +539,9 @@ renderer.setAnimationLoop(() => {
   syncBattleAudio();
   let steps = 0;
   // 只在即時迴圈收新事件；所有同步stepN／playLog／SCRIPT都不會走這裡。
-  while (acc >= 1 / TICK_HZ && steps < 8) { acc -= 1 / TICK_HZ; tick(); battleAudio?.enqueue(w, w.events, view); steps++; }
+  while (acc >= 1 / TICK_HZ && steps < 8) { if (!netReady(w.tick)) break; acc -= 1 / TICK_HZ; tick(); battleAudio?.enqueue(w, w.events, view); steps++; }
   battleAudio?.flush();
-  if (steps === 8) acc = 0;   // 機器太慢：丟掉積欠的時間，不追
+  if (steps === 8) acc = 0; else if (netLive()) acc = Math.min(acc, 1 / TICK_HZ);   // 機器太慢：丟掉積欠的時間，不追；R083 審查：連線時等對方的時間不存起來（不然之後自己暫停也停不住）
   const alpha = Math.min(1, acc * TICK_HZ);
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.setSize(innerWidth, innerHeight, true);
@@ -551,8 +553,7 @@ renderer.setAnimationLoop(() => {
   }
   if (glide.active) { glide.at(t / 1000, camStep); view.target.x = camStep.x; view.target.z = camStep.z; }
   view.update(alpha, simT(alpha), selected, phase === 'battle');
-  // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
-  const rangeInfo = view.rangeInfo;
+  const rangeInfo = view.rangeInfo;   // R113：校準／視線／選取在同一秒也會變，提示不等下一個整秒。
   if (rangeInfo !== lastRangeInfo) { lastRangeInfo = rangeInfo; hud?.update(); }
   const coverInfo = coverDurability(w, selected, phase === 'battle' && V.r124);
   if (coverInfo !== lastCoverInfo) { lastCoverInfo = coverInfo; hud?.update(); }
@@ -562,9 +563,7 @@ renderer.setAnimationLoop(() => {
   if (reloadInfo !== lastReloadInfo) { lastReloadInfo = reloadInfo; hud?.update(); }
   const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);
   // 只更新R135前綴，不替其他提示補跑其自身的刷新路徑。
-  if (vehicleInfo !== lastVehicleInfo) {
-    lastVehicleInfo = vehicleInfo; hud?.vehicleFrame(vehicleInfo);
-  }
+  if (vehicleInfo !== lastVehicleInfo) { lastVehicleInfo = vehicleInfo; hud?.vehicleFrame(vehicleInfo); }
   const vegetationInfo = view.vegetationInfo;
   if (vegetationInfo !== lastVegetationInfo) { lastVegetationInfo = vegetationInfo; hud?.update(); }
   // 暫停／重播也檢查當前世界；同 tick 換世界不能沿用上一局的提示。
