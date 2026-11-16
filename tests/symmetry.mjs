@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createWorld, hashWorld, cellIdx, cellOf, inGrid, blocks, SIDE_PLAYER, SIDE_ENEMY, UK_INFANTRY, UK_MG, UK_TANK } from '../src/sim/world.ts';
-import { step, formationAt } from '../src/sim/step.ts';
+import { step, formationAt, applyCommand } from '../src/sim/step.ts';
 import { findPath } from '../src/sim/path.ts';
 import { isCommand } from '../src/sim/commandCheck.ts';
 import { runScript } from '../src/sim/script.ts';
@@ -34,6 +34,8 @@ const groups = {
     assert.equal(opened(false).sym, undefined, 'fixture: without it there is no flag');
     const late = opened(false); step(late, [{ t: 'map', id: HILLS, sym: 1 }]);
     assert.equal(late.sym, undefined, 'flag: a later map command does not set it');
+    { const two = createWorld(1944); step(two, [{ t: 'map', id: HILLS }, { t: 'map', id: HILLS, sym: 1 }]);
+      assert.equal(two.sym, undefined, 'flag: only the first map command at step 0 counts'); }   // 審查 R084-guard-first-map-only
     assert.notEqual(hashWorld(opened(true)), hashWorld(opened(false)), 'flag: the flag is in the hash');
     assert.deepEqual([isCommand({ t: 'map', id: 0, sym: 1 }), isCommand({ t: 'map', id: 0, sym: 'x' })], [true, false], 'flag: the command check takes 1 and refuses text');
   },
@@ -45,6 +47,23 @@ const groups = {
       assert.deepEqual([bx, bz], [-ax || 0, -az || 0].map(v => v + 0), `formation: unit ${k} of the top-left side gets the mirrored offset`);
       assert.deepEqual(formationAt(off, FOE, k), formationAt(off, ME, k), 'fixture: without the flag both sides use the same table');
     }
+    // 真的下指令（審查 R084-guard-formation-wiring）：雙方全選、往互為鏡像的目標走，第 k 台的目的地與路都是鏡像
+    let pairs = 0;
+    for (const [gx, gz] of [[10, 12], [16, 16], [20, 9], [12, 22], [5, 26], [26, 5], [15, 18]]) {
+      const w = opened(true, HILLS, [ECO]), n = w.n;
+      const a = w.units.filter(u => u.alive && u.side === ME), b = w.units.filter(u => u.alive && u.side === FOE);
+      applyCommand(w, { t: 'move', side: ME, ids: a.map(u => u.id), x: gx, z: gz });
+      applyCommand(w, { t: 'move', side: FOE, ids: b.map(u => u.id), x: n - 1 - gx, z: n - 1 - gz });
+      assert.equal(a.length, b.length, 'fixture: both sides have the same units');
+      for (let k = 0; k < a.length; k++) {
+        const p = a[k], q = b[k];
+        assert(p.kind === q.kind && cellOf(q.x) === n - 1 - cellOf(p.x) && cellOf(q.z) === n - 1 - cellOf(p.z), 'fixture: the k-th units of both sides stand on mirrored cells');
+        assert(q.tx === n - 1 - p.tx && q.tz === n - 1 - p.tz, `formation: a multi-select move sends the k-th unit of each side to mirrored cells (goal ${gx},${gz}, unit ${k})`);
+        assert.equal(JSON.stringify(q.path), JSON.stringify(p.path.map(c => mirror(w, c))), `formation: and along mirrored paths (goal ${gx},${gz}, unit ${k})`);
+        pairs++;
+      }
+    }
+    assert(pairs >= 40, `fixture: enough unit pairs (${pairs})`);
   },
   // 尋路：在點對稱的丘陵上，從 A 的鏡像到 B 的鏡像的路＝A 到 B 那條路的鏡像
   path() {
@@ -64,6 +83,20 @@ const groups = {
     const off = count(false), on = count(true);
     assert(off.differ > 0, `fixture: without the flag some paths are not the mirror of their mirror (${off.differ} of 400)`);
     assert.equal(on.differ, 0, `path: with the flag every path from the mirrored start to the mirrored goal is the mirror (${on.same} of 400; first odd pair ${JSON.stringify(pairs[0] ?? null)})`);
+    // 中央四格點對稱的障礙：終點附近一對鏡像格 f、h 都一樣（審查 R084-astar-orbit-tie）；終點走不到時停的那一格也要是鏡像
+    for (const extra of [[], [[15, 16], [16, 15]]]) {
+      const w = opened(true), n = w.n;
+      for (const [x, z] of [[14, 16], [17, 15], [15, 17], [16, 14], ...extra]) { const id = w.blds.length + 1; w.blds.push({ id, kind: 1, x, z, w: 1, d: 1, floors: 1, hp: 100, maxHp: 100 }); w.occ[cellIdx(w, x, z)] = id; }
+      let asym = 0; for (let i = 0; i < n * n; i++) if (!!w.occ[i] !== !!w.occ[mirror(w, i)] || w.ter[i] !== w.ter[mirror(w, i)]) asym++;
+      assert.equal(asym, 0, 'fixture: the centre blocks are point-symmetric');
+      let same = 0, odd = null;
+      for (let sz = 0; sz < n; sz += 2) for (let sx = 0; sx < n; sx += 2) { if (blocks(w, sx, sz)) continue;
+        for (let gz = 13; gz < 19; gz++) for (let gx = 13; gx < 19; gx++) {
+          const p = findPath(w, sx, sz, gx, gz, 0, 0, UK_TANK), q = findPath(w, n - 1 - sx, n - 1 - sz, n - 1 - gx, n - 1 - gz, 0, 0, UK_TANK);
+          if (JSON.stringify(p.map(c => mirror(w, c))) === JSON.stringify(q)) same++; else odd ??= [sx, sz, gx, gz];
+        } }
+      assert.equal(odd, null, `path: with point-symmetric blocks at the centre every path is still the mirror (${same} mirrored; first odd ${JSON.stringify(odd)}; extra ${extra.length})`);
+    }
   },
   // 指揮部、第一班步兵與機槍組的出生格與集結點：左上那一方是右下那一方的鏡像
   eco() {
@@ -108,8 +141,10 @@ const mutants = [
   ['not_hashed', 'flag', 'src/sim/world.ts', '  if (w.sym) f.int(0x5359).int(w.sym);   // R084 只在有時折\n', '', 'flag: the flag is in the hash'],
   ['unchecked', 'flag', 'src/sim/commandCheck.ts', ' && optInt(c.sym);', ';', 'flag: the command check takes 1 and refuses text'],
   ['same_table', 'formation', 'src/sim/step.ts', '  return w.sym && side === SIDE_ENEMY ? [0 - ox, 0 - oz] : [ox, oz];', '  return [ox, oz];', 'formation: unit'],
-  ['index_ties', 'path', 'src/sim/path.ts', 'enc = (i: number) => (w.sym ? (i <= K - 1 - i ? 2 * i : 2 * (K - 1 - i) + 1) : i)', 'enc = (i: number) => (w.sym ? 2 * i : i)', 'path: with the flag every path'],
-  ['no_goal_tie', 'path', 'src/sim/path.ts', '(w.sym ? (f * HB + h) * M + enc(i)', '(w.sym ? (f * HB) * M + enc(i)', 'path: with the flag every path'],
+  ['later_map', 'flag', 'src/sim/step.ts', 'w.sym = 1; break; }', 'w.sym = 1; }', 'flag: only the first map command'],
+  ['call_site', 'formation', 'src/sim/step.ts', 'formationAt(w, u.side, k);', 'FORMATION[k % FORMATION.length];', 'formation: a multi-select move'],
+  ['orient', 'path', 'src/sim/path.ts', 'fl = goal > K - 1 - goal ? 1 : 0;', 'fl = 0;', 'path: with point-symmetric blocks'],
+  ['index_ties', 'path', 'src/sim/path.ts', 'enc = (i: number) => (w.sym ? 2 * Math.min(i, K - 1 - i) + ((i > K - 1 - i ? 1 : 0) ^ fl) : i)', 'enc = (i: number) => (w.sym ? 2 * i : i)', 'path: with the flag every path'],
   ['hq_ties', 'eco', 'src/sim/eco.ts', '  const m = w.sym && side === SIDE_ENEMY ? -1 : 1;', '  const m = 1;', 'eco: with the corners taken the two headquarters'],
   ['spawn_ties', 'eco', 'src/sim/eco.ts', ' || (w.sym && d === bd && hq.builtBy === SIDE_ENEMY)) { best', ') { best', 'eco: the first infantry squad'],
   ['rally_column', 'eco', 'src/sim/eco.ts', '  const mir = !!w.sym && hq.builtBy === SIDE_ENEMY;', '  const mir = false;', 'eco: and walk to mirrored rally points'],
