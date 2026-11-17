@@ -64,6 +64,8 @@ export async function netHarness({ plugins = [], ports = [8671, 8673] } = {}, fn
           const together = async (extra = '') => {
             await play(extra);
             await E(A, '__rts.pause(true)'); await sleep(1000);   // 房主停下來；對方最多再走 delay 步就停在等房主
+            // R086 順手修：房主停下來之後對方一定會碰到「還沒到的包」——沒有等的那一道（nogate）在這裡一定出錯，不再靠時序（R085 合併後 main 偶發沒紅）
+            if (errors().length) throw new assert.AssertionError({ message: `sync: no page errors on either side (${errors().join(' | ').slice(0, 300)})` });
             const [a, b] = [await net(A), await net(B)];
             const s = { la: await E(A, '__rts.log()'), lb: await E(B, '__rts.log()'), ta: await E(A, '__rts.tick()'), tb: await E(B, '__rts.tick()'), ha: await E(A, '__rts.hash()'), hb: await E(B, '__rts.hash()'), seed: await E(A, '__rts.seed()') };
             assert(a.checks >= 2 && b.checks >= 2 && a.desync < 0 && b.desync < 0, `sync: the hash was compared at least twice with no desync (${a.checks}, ${b.checks}, ${a.desync}, ${b.desync})`);

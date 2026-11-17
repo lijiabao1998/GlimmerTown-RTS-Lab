@@ -50,6 +50,53 @@ export class Geo {
     }
   }
 
+  // R086 四坡屋頂：屋脊沿 x（alongX）或 z、從兩頭各內縮半個跨度；兩個梯形坡面＋兩個三角形的端坡（6 個三角形，跟雙坡一樣）。
+  // 跨度比長度長（方的）時屋脊縮成一點＝四角錐。
+  hip(x0: number, z0: number, x1: number, z1: number, h: number, rise: number, alongX: boolean, roof: THREE.Color) {
+    const t = h + rise;
+    if (alongX) {
+      const mz = (z0 + z1) / 2, r = (z1 - z0) / 2, a = Math.min(x0 + r, (x0 + x1) / 2), b = Math.max(x1 - r, (x0 + x1) / 2);
+      this.face4([x0, h, z0], [x1, h, z0], [b, t, mz], [a, t, mz], [0, 1, -1], roof);
+      this.face4([x0, h, z1], [x1, h, z1], [b, t, mz], [a, t, mz], [0, 1, 1], roof);
+      this.face3([x0, h, z0], [x0, h, z1], [a, t, mz], [-1, 1, 0], roof);
+      this.face3([x1, h, z0], [x1, h, z1], [b, t, mz], [1, 1, 0], roof);
+    } else {
+      const mx = (x0 + x1) / 2, r = (x1 - x0) / 2, a = Math.min(z0 + r, (z0 + z1) / 2), b = Math.max(z1 - r, (z0 + z1) / 2);
+      this.face4([x0, h, z0], [x0, h, z1], [mx, t, b], [mx, t, a], [-1, 1, 0], roof);
+      this.face4([x1, h, z0], [x1, h, z1], [mx, t, b], [mx, t, a], [1, 1, 0], roof);
+      this.face3([x0, h, z0], [x1, h, z0], [mx, t, a], [0, 1, -1], roof);
+      this.face3([x0, h, z1], [x1, h, z1], [mx, t, b], [0, 1, 1], roof);
+    }
+  }
+  // R086 半四坡：山牆只到六成高，上面四成是小小的端坡；屋脊從兩頭各內縮 0.4 個半跨度。
+  // 每邊坡面是六邊形（在同一個平面上，4 個三角形）＋兩頭的梯形山牆（牆色，各 2 個）＋兩個端坡（各 1 個）＝14 個三角形
+  halfHip(x0: number, z0: number, x1: number, z1: number, h: number, rise: number, alongX: boolean, roof: THREE.Color, wall: THREE.Color) {
+    const t = h + rise, k = h + 0.6 * rise;
+    if (alongX) {
+      const mz = (z0 + z1) / 2, r = (z1 - z0) / 2, c = 0.4 * r, a = x0 + c, b = x1 - c;
+      for (const [ze, s] of [[z0, -1], [z1, 1]] as const) {
+        const zk = mz + s * c;   // 山牆被切掉的那條線跟坡面交在離屋脊 0.4 個半跨度的地方
+        this.face4([x0, h, ze], [x1, h, ze], [x1, k, zk], [x0, k, zk], [0, 1, s], roof);
+        this.face4([x0, k, zk], [x1, k, zk], [b, t, mz], [a, t, mz], [0, 1, s], roof);
+      }
+      for (const [xe, ap, s] of [[x0, a, -1], [x1, b, 1]] as const) {
+        this.face4([xe, h, z0], [xe, h, z1], [xe, k, mz + c], [xe, k, mz - c], [s, 0, 0], wall);
+        this.face3([xe, k, mz - c], [xe, k, mz + c], [ap, t, mz], [s, 1, 0], roof);
+      }
+    } else {
+      const mx = (x0 + x1) / 2, r = (x1 - x0) / 2, c = 0.4 * r, a = z0 + c, b = z1 - c;
+      for (const [xe, s] of [[x0, -1], [x1, 1]] as const) {
+        const xk = mx + s * c;
+        this.face4([xe, h, z0], [xe, h, z1], [xk, k, z1], [xk, k, z0], [s, 1, 0], roof);
+        this.face4([xk, k, z0], [xk, k, z1], [mx, t, b], [mx, t, a], [s, 1, 0], roof);
+      }
+      for (const [ze, ap, s] of [[z0, a, -1], [z1, b, 1]] as const) {
+        this.face4([x0, h, ze], [x1, h, ze], [mx + c, k, ze], [mx - c, k, ze], [0, 0, s], wall);
+        this.face3([mx - c, k, ze], [mx + c, k, ze], [mx, t, ap], [0, 1, s], roof);
+      }
+    }
+  }
+
   // 四角錐（尖塔）
   pyramid(x0: number, z0: number, x1: number, z1: number, h: number, rise: number, col: THREE.Color) {
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, apex: V3 = [mx, h + rise, mz];

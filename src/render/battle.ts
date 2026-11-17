@@ -10,7 +10,7 @@ import {
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
-import { buildTown, smokeSources, buildingGeo, bldColors, wallHeight, wallShown, wallBounds, RUBBLE_COLORS, roofRise } from './buildings.ts';
+import { buildTown, smokeSources, buildingGeo, bldColorsOf, wallHeight, wallShown, wallBounds, RUBBLE_COLORS, roofRise } from './buildings.ts';
 import { Geo } from './geo.ts';
 import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING, RISE_S } from './fx.ts';
 import { tankHull, tankTurret, howitzer, observer, soldier } from './unitArt.ts';
@@ -806,7 +806,7 @@ export class BattleView {
       }
       this.glow!.spawn({ x, y: b ? 0.3 : 0.15, z, t0: t, life: 0.07, s0: 0.08, s1: 0.26, c0: 0xfff2c0, c1: 0xffa040, fog });
       if (b) {
-        const wall = bldColors(b.kind).wall.getHex();
+        const wall = bldColorsOf(b).wall.getHex();
         for (let k = 0; k < 6; k++) {
           const a = H(k, 1) * Math.PI * 2, v = 0.6 + 1.2 * H(k, 2);
           this.debris!.spawn({ x, y: 0.25 + 0.15 * H(k, 3), z, vx: Math.cos(a) * v, vz: Math.sin(a) * v, vy: 1.5 + 1.8 * H(k, 4), g: 10, t0: t, life: 2.2 + H(k, 5), s0: 0.035 + 0.035 * H(k, 6), s1: 0.03, c0: k % 3 ? wall : RUBBLE_COLORS[k % RUBBLE_COLORS.length].getHex(), spin: 10, seed: H(k, 7), fog });
@@ -856,7 +856,7 @@ export class BattleView {
   // 建築換階段：完好 → 沒屋頂＝屋頂炸飛、起火；任何 → 瓦礫＝倒塌殘影沉進地面、大團揚塵、碎塊四散
   private stage4(b: Building, from: number, to: number, t: number) {
     const s = this.fxSeq++, H = (k: number, salt: number) => hash2(s, k, salt);
-    const cx = b.x + b.w / 2, cz = b.z + b.d / 2, wallH = wallHeight(b), rise = roofRise(b.kind), col = bldColors(b.kind);
+    const cx = b.x + b.w / 2, cz = b.z + b.d / 2, wallH = wallHeight(b), rise = roofRise(b.kind), col = bldColorsOf(b);
     const bounds = wallShown(b) ? wallBounds(b) : null;
     const fx = bounds?.x0 ?? b.x, fz = bounds?.z0 ?? b.z, fw = bounds ? bounds.x1 - bounds.x0 : b.w, fd = bounds ? bounds.z1 - bounds.z0 : b.d;
     const wall = col.wall.getHex(), roof = col.roof.getHex();
