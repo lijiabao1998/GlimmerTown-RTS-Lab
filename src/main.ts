@@ -22,7 +22,7 @@ import { STYLE_A, msaaSetting, type Style } from './render/post.ts';
 import { initFireDiscipline, toggleFireDiscipline } from './ui/fireDiscipline.ts';
 import { initDesktopControls, isDesktopPointer } from './ui/desktopControls.ts';
 import { pickUnitAt } from './ui/pick.ts';
-import { initNet, netFeed, netReady, netLive, netVersus } from './net/client.ts'; import { SIDE_PLAYER, SIDE_ENEMY, setViewSide } from './side.ts';   // R083 連線合作；R085「我方」可以換（連線對戰）
+import { initNet, netFeed, netReady, netLive, netVersus, netVersusNext } from './net/client.ts'; import { SIDE_PLAYER, SIDE_ENEMY, setViewSide } from './side.ts';   // R083 連線合作；R085「我方」可以換（連線對戰）
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
 import { Gestures, inSelectionRect, type SelectionRect } from './ui/gestures.ts';
@@ -86,7 +86,7 @@ setFacades(V.r028);
 setStreets(V.r027);
 function startOrder() {
   // 開戰這一刻 eco／ai 指令還在佇列裡沒套用：看同一組開關（V.r019 指揮部、V.r018 電腦），不看世界
-  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, V.r019, V.r018 ? AI_NAME[aiLevel] : undefined, !!w.zombies));
+  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, V.r019, V.r018 && !netVersusNext() ? AI_NAME[aiLevel] : undefined, !!w.zombies));   // R085 審查：對戰的局沒有電腦
 }
 function startBanner() {
   const el = document.createElement('div');
@@ -491,7 +491,7 @@ if (battleAudio) {
 
 if (V.r128) sandboxBar = initSandbox({
   state: () => ({ active: !!w.sandbox, running: !!w.sandbox?.running, count: w.units.length, tool: sandboxTool, side: sandboxSide, hint: sandboxHint, summary: sandboxCapacity(w, V.r136) }),
-  enter: () => { sandboxTool = UK_TANK; sandboxSide = SIDE_PLAYER; speed = 1; reset(seed, false, false, false, false, false, true); },
+  enter: () => { sandboxTool = UK_TANK; speed = 1; reset(seed, false, false, false, false, false, true); sandboxSide = SIDE_PLAYER; },
   exit: () => { sandboxTool = null; sandboxSide = SIDE_PLAYER; speed = 1; paused = false; reset(); },
   run: () => setPaused(!paused), reset: () => sandboxAction({ t: 'sandboxReset' }),
   pick: kind => { clearGestureInput(); sandboxTool = kind; sandboxHint = ''; selected.clear(); fireMode = false; ammo = 'he'; ui(); },

@@ -42,7 +42,7 @@ export function initDesktopControls(d: DesktopDeps): void {
   let tabAt = 0;
   const select = (ids: Iterable<number>) => {
     d.selected.clear();
-    for (const id of ids) if (d.world().units[id - 1]?.alive) d.selected.add(id);
+    for (const id of ids) { const u = d.world().units[id - 1]; if (u?.alive && u.side === SIDE_PLAYER) d.selected.add(id); }   // R085 審查：編號跨局留著，連線對戰換了邊不能叫到對方的
   };
   // H：回我方指揮部；還沒設置（布陣中）時退回我方單位重心。
   const home = () => {

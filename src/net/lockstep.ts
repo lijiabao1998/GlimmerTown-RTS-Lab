@@ -9,6 +9,9 @@ import { isCommand } from '../sim/commandCheck.ts';
 
 export const NET_DELAY = 4;          // 0.2 秒（20 步／秒）
 export const NET_HASH_EVERY = 100;   // 5 秒比一次
+// R085 對戰的開局（第 0 步，房主送）：地圖、規則、補給這類沒有 side 的、房主自己那一方（第 0 方）的、左上那一方的布陣（build、trench：電腦代排）；
+// 不能有 ai、不能替左上那一方下別的指令（審查）。第 1 步以後：只收那個玩家自己那一方的、也不收 ai（審查：對戰沒有電腦）
+export const versusOpening = (c: { t: string; side?: unknown }): boolean => c.t !== 'ai' && (c.side === undefined || c.side === 0 || c.t === 'build' || c.t === 'trench');
 export type NetPacket = { t: 'tick'; at: number; cmds: Command[] } | { t: 'hash'; at: number; h: string };
 
 export class Lockstep {
@@ -31,7 +34,7 @@ export class Lockstep {
     let at = this.got.get(t);
     if (!at) this.got.set(t, (at = new Map()));
     if (at.has(p)) return;   // 同一步同一個人只收第一包
-    at.set(p, cmds.filter(c => isCommand(c) && (!this.versus || t < this.from || (c as { side?: unknown }).side === p)) as Command[]);   // R085 對戰：只收自己那一方的
+    at.set(p, cmds.filter(c => isCommand(c) && (!this.versus || (t < this.from ? versusOpening(c as Command) : (c as Command).t !== 'ai' && (c as { side?: unknown }).side === p))) as Command[]);   // R085 對戰：只收自己那一方的
     if (t > (this.last.get(p) ?? -1)) this.last.set(p, t);
   }
   // 第 t 步可以走了嗎：每個還在的玩家都有這一步的包；離開的人只等到他最後一包

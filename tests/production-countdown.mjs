@@ -46,7 +46,8 @@ let code = source;
 if (mutant) {
   const m = mutations[mutant]; assert.ok(m, 'known mutant');
   for (const [from,to] of m.edits) { assert.equal(code.split(from).length-1,1,`${mutant}: unique mutation anchor`); code=code.replace(from,to); }
-  code = code.replace('import { SIDE_PLAYER,', 'import { SIDE_ENEMY, SIDE_PLAYER,');
+  code = code.replace('import { SIDE_PLAYER }', 'import { SIDE_ENEMY, SIDE_PLAYER }');   // R085：「我方」改從 side.ts 匯入（那一行只剩 SIDE_PLAYER）
+  assert.ok(code.includes('SIDE_ENEMY, SIDE_PLAYER'), `${mutant}: the SIDE_ENEMY import was added`);
 }
 const js = stripTypeScriptTypes(code).replace(/from '([^']+)'/g, (_,s) => `from '${new URL(s,url).href}'`);
 const { productionCountdown: read } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);

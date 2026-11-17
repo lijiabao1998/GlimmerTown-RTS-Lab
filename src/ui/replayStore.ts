@@ -9,7 +9,7 @@ export const REPLAY_KEEP = 10;                 // 本機最多留幾筆（最新
 export const REPLAY_MAX_TEXT = 1_000_000;      // 一筆紀錄的文字最多幾個字元（半小時的一局大約二十萬）
 export const REPLAY_BUDGET = 1_500_000;        // 本機全部紀錄加起來最多幾個字元（這個網域跟另外三條線共用本機空間）
 
-export interface ReplayMeta { map: number; n: number; winner: number; seconds: number; wave?: number }   // 只給列表顯示，不影響重播
+export interface ReplayMeta { map: number; n: number; winner: number; seconds: number; wave?: number; side?: 1 }   // 只給列表顯示，不影響重播；side（R085）：連線對戰的加入的人＝左上那一方的角度（沒有＝右下）
 export interface ReplayRecord { v: 1; seed: number; ticks: number; hash: string; log: LoggedCommand[]; at: string; meta: ReplayMeta }
 export type Decoded = { ok: true; rec: ReplayRecord } | { ok: false; why: string };
 export interface Store { getItem(key: string): string | null; setItem(key: string, value: string): void }
@@ -34,7 +34,7 @@ export function checkRecord(x: unknown): Decoded {
   const m = (typeof r.meta === 'object' && r.meta !== null ? r.meta : {}) as Record<string, unknown>;
   const meta: ReplayMeta = {
     map: int(m.map, 0, 99) ? m.map : 0, n: int(m.n, 1, 4096) ? m.n : 0, winner: int(m.winner, -1, 2) ? m.winner : -1,
-    seconds: int(m.seconds, 0, MAX_TICK) ? m.seconds : Math.floor(r.ticks / 20), ...(int(m.wave, 0, 1000000) ? { wave: m.wave } : {}),
+    seconds: int(m.seconds, 0, MAX_TICK) ? m.seconds : Math.floor(r.ticks / 20), ...(int(m.wave, 0, 1000000) ? { wave: m.wave } : {}), ...(m.side === 1 ? { side: 1 as const } : {}),
   };
   return { ok: true, rec: { v: 1, seed: r.seed, ticks: r.ticks, hash: r.hash, log: r.log as LoggedCommand[], at: typeof r.at === 'string' ? r.at.slice(0, 40) : '', meta } };
 }
@@ -86,6 +86,6 @@ function when(at: string): string {
 }
 // 列表上的兩行字
 export function replayTitle(rec: ReplayRecord): { label: string; sub: string } {
-  const m = rec.meta, result = m.wave !== undefined ? `喪屍第 ${m.wave} 波` : m.winner === 0 ? '勝利' : m.winner === 1 ? '戰敗' : m.winner === 2 ? '同歸於盡' : '未分勝負';
+  const m = rec.meta, me = m.side ?? 0, result = m.wave !== undefined ? `喪屍第 ${m.wave} 波` : m.winner === me ? '勝利' : m.winner === 1 - me ? '戰敗' : m.winner === 2 ? '同歸於盡' : '未分勝負';
   return { label: `${result} · ${MAP_NAME[m.map] ?? '地圖'}${m.n ? ` ${m.n}×${m.n}` : ''}`, sub: `${clock(m.seconds)} · 種子 ${rec.seed}${when(rec.at) ? ` · ${when(rec.at)}` : ''}` };
 }

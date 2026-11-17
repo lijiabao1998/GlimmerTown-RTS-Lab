@@ -10,7 +10,9 @@ import { SIDE_PLAYER, setViewSide } from '../side.ts';
 let host: NetHost | null = null, session: Session | null = null, sock: WebSocket | null = null, bar: HTMLElement | null = null, panel: HTMLElement | null = null;
 let rtt = -1, stalledSince = -1, afterHost: (() => void) | null = null;
 const versusWorlds = new WeakSet<World>();   // R085：對戰的世界（對方離線之後照樣算：左上那一方沒有電腦，不自動存）
-const STALL_MS = 500;
+const STALL_MS = 500, VERSUS_STALL_MS = 60000;   // R085 審查：對戰中對方停住（暫停、切到別的分頁）超過一分鐘＝當成離線
+const GAVE_UP = '對方停了超過一分鐘（暫停或切到別的分頁）：當成離線，你繼續打';
+let gaveUp: Session | null = null;
 
 export function initNet(h: NetHost): void {
   host = h;
@@ -35,15 +37,20 @@ export const netAvailable = (): boolean => !!host;
 export const netVersusAvailable = (): boolean => !!host?.versus;   // R085：開始選單有「連線對戰」
 // R085：現在這個世界是連線對戰的局（對方離線之後照樣是）——main.ts 不自動存它
 export const netVersus = (): boolean => !!host && versusWorlds.has(host.world());
+// R085 審查：房主開了對戰的房、對方在、還沒開戰——開局卡片不說「敵方由電腦指揮」
+export const netVersusNext = (): boolean => !!session?.versus && !session.ls && session.state === 'ready' && session.peer;
 const mark = (): void => { if (session?.versus && session.world) versusWorlds.add(session.world); };
 // 本機換了世界（重開、回主選單、看重播、沙盒、讀存檔）：這一局連線結束——斷線（對方收到「離開」自己繼續打），之後照單機（R083 審查）
 function dropIfStale(): void { if (session?.stale()) { sock?.close(); sock = null; session = null; stalledSince = -1; paint(); } }
 export const netLive = (): boolean => { dropIfStale(); return !!session?.live(); };
 export function netReady(t: number): boolean {
   dropIfStale();
-  const ok = !session || session.ready(t);
+  let ok = !session || session.ready(t);
   if (ok) { if (stalledSince >= 0) { stalledSince = -1; paint(); } }
   else if (stalledSince < 0) { stalledSince = performance.now(); setTimeout(paint, STALL_MS + 20); }
+  else if (session?.versus && session.ls && performance.now() - stalledSince > VERSUS_STALL_MS) {   // 對戰不能讓一方拿暫停把比賽卡住：斷線，對方收到「離開」；自己從他最後一包之後不再等
+    const s = session; gaveUp = s; s.disconnected(); s.why = GAVE_UP; sock?.close(); sock = null; stalledSince = -1; ok = s.ready(t); paint();
+  }
   return ok;
 }
 export function netFeed(w: World, pending: readonly Command[]): Command[] | null {
@@ -90,7 +97,7 @@ function connect(role: Role, room: string, url: string, versus = false): void {
   let ping = 0;   // R083 第二輪審查：每條連線自己的計時器（舊連線關掉時不會清到新連線的）
   ws.onopen = () => { ping = window.setInterval(() => { if (ws.readyState === 1 && s.peer) ws.send(JSON.stringify({ t: 'ping', id: performance.now() })); }, 2000); };
   ws.onerror = () => { if (s.state === 'connecting') { s.state = 'error'; s.why = `連不上伺服器 ${url}`; paint(); } };
-  ws.onclose = () => { clearInterval(ping); if (session === s) s.disconnected(); paint(); };
+  ws.onclose = () => { clearInterval(ping); if (session === s) { s.disconnected(); if (gaveUp === s) s.why = GAVE_UP; } paint(); };
   paint();
 }
 

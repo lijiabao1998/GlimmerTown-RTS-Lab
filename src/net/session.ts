@@ -2,7 +2,7 @@
 // 不碰 DOM、不碰 WebSocket：網路由呼叫的人接（src/net/client.ts 接真的 WebSocket，tests/net-lockstep.mjs 接假的）。
 import type { World } from '../sim/world.ts';
 import type { Command, LoggedCommand } from '../sim/step.ts';
-import { Lockstep, NET_DELAY, type NetPacket } from './lockstep.ts';
+import { Lockstep, NET_DELAY, versusOpening, type NetPacket } from './lockstep.ts';
 
 export interface NetHost {
   world(): World;
@@ -52,9 +52,9 @@ export class Session {
       return cmds;
     }
     if (this.role === 'host' && this.state === 'ready' && this.peer && w.tick === 0 && this.host.phase() === 'battle' && !w.sandbox) {
-      // R085 對戰：不叫電腦——開局的 ai 指令送出去之前拿掉，自己的紀錄也拿掉；喪屍模式沒有左上那一方，照合作開
-      const vs = this.versus && !w.zombies, setup = vs ? pending.filter(c => c.t !== 'ai') : pending;
-      if (vs) { const log = this.host.log(); for (let i = log.length - 1; i >= 0; i--) if (log[i].tick === 0 && log[i].cmd.t === 'ai') log.splice(i, 1); }
+      // R085 對戰：不叫電腦、不替左上那一方下指令（布陣除外）——開局送出去之前照 versusOpening 篩，自己的紀錄也篩；喪屍模式沒有左上那一方，照合作開
+      const vs = this.versus && !w.zombies, setup = vs ? pending.filter(versusOpening) : pending;
+      if (vs) { const log = this.host.log(); for (let i = log.length - 1; i >= 0; i--) if (log[i].tick === 0 && !versusOpening(log[i].cmd)) log.splice(i, 1); }
       this.send({ t: 'start', seed: w.seed, setup: setup.map(c => structuredClone(c)), delay: NET_DELAY, ...(vs ? { vs: 1 as const } : {}) });
       this.versus = vs;
       this.ls = new Lockstep(0, [0, 1], 1, NET_DELAY, vs); this.world = w;

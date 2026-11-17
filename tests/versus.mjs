@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
-import { createWorld, center, UK_TANK, UK_HOWITZER } from '../src/sim/world.ts';
+import { createWorld, center, UK_TANK, UK_HOWITZER, ORD_FIRE_AT } from '../src/sim/world.ts';
 import { step } from '../src/sim/step.ts';
 import { Lockstep } from '../src/net/lockstep.ts';
 import { Session } from '../src/net/session.ts';
@@ -19,6 +19,8 @@ import * as side from '../src/side.ts';
 import { newStats, statsStep, makeReport } from '../src/ui/report.ts';
 import { fireDisciplineState, toggleFireDiscipline } from '../src/ui/fireDiscipline.ts';
 import { menuLayout } from '../src/ui/startMenu.ts';
+import { bombardStatus } from '../src/ui/bombardStatus.ts';
+import { makeRecord, encodeReplay, decodeReplay, replayTitle } from '../src/ui/replayStore.ts';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const src = rel => readFileSync(join(root, rel), 'utf8');
@@ -31,7 +33,8 @@ function game(world) {
   c.host = { world: () => c.w, log: () => c.log, hash: () => 'h', phase: () => 'battle', begin: s => { c.begun.push(s); c.w = { tick: 0, seed: s }; }, tick() {}, remake() {}, focus() {} };
   return c;
 }
-const OPENING = [{ t: 'map', id: 4, vegetation: 1, sym: 1 }, { t: 'build', side: 0, kind: 1, x: 20, z: 24 }, { t: 'build', side: 1, kind: 1, x: 8, z: 4 }, { t: 'eco', inf: 1, guns: 1, tanks: 1, end: 1, mg: 2 }, { t: 'ai', side: 1, level: 3, v: 3 }];
+const OPENING = [{ t: 'map', id: 4, vegetation: 1, sym: 1 }, { t: 'build', side: 0, kind: 1, x: 20, z: 24 }, { t: 'build', side: 1, kind: 1, x: 8, z: 4 }, { t: 'eco', inf: 1, guns: 1, tanks: 1, end: 1, mg: 2 }, { t: 'ai', side: 1, level: 3, v: 3 }, { t: 'fireDiscipline', side: 1, ids: [9], hold: true }];
+const KEPT = OPENING.filter(c => c.t !== 'ai' && c.t !== 'fireDiscipline');   // 對戰的開局：不叫電腦、不替左上那一方下布陣以外的指令
 function hostLive(versus, world = { tick: 0, seed: 9 }) {
   const c = game(world), sent = [];
   const s = new Session('host', c.host, m => sent.push(m), versus);
@@ -69,8 +72,8 @@ const groups = {
   // 對戰的鎖步：第 1 步以後只收自己那一方的（沒有 side 的也丟）；第 0 步不篩；合作全收；兩邊一樣
   lockstep() {
     const host = [{ t: 'move', side: 0, ids: [2], x: 6, z: 6 }, { t: 'move', side: 1, ids: [6], x: 7, z: 7 }, { t: 'fireDiscipline', side: 0, ids: [2], hold: true }];
-    const guest = [{ t: 'move', side: 1, ids: [5], x: 3, z: 3 }, { t: 'move', side: 0, ids: [1], x: 4, z: 4 }, { t: 'map', id: 1 }, { t: 'produce', side: 1, kind: 3 }, { t: 'stop', side: 1, ids: [5] }];
-    const opening = [{ t: 'build', side: 1, kind: 1, x: 2, z: 2 }, { t: 'map', id: 1 }];
+    const guest = [{ t: 'move', side: 1, ids: [5], x: 3, z: 3 }, { t: 'move', side: 0, ids: [1], x: 4, z: 4 }, { t: 'map', id: 1 }, { t: 'produce', side: 1, kind: 3 }, { t: 'stop', side: 1, ids: [5] }, { t: 'ai', side: 1, level: 3, v: 3 }];
+    const opening = [{ t: 'build', side: 1, kind: 1, x: 2, z: 2 }, { t: 'map', id: 1 }, { t: 'move', side: 1, ids: [5], x: 9, z: 9 }, { t: 'ai', side: 1, level: 3 }, { t: 'fireDiscipline', side: 1, ids: [5], hold: true }, { t: 'move', side: 0, ids: [1], x: 20, z: 20 }];
     const run = (me, versus) => {
       const L = new Lockstep(me, [0, 1], 1, 4, versus);
       L.put(0, 0, opening); L.put(0, 1, []);
@@ -78,19 +81,20 @@ const groups = {
       return { zero: L.take(0, []).cmds, five: L.take(5, []).cmds };
     };
     const a = run(0, true), b = run(1, true), coop = run(0, false);
-    assert.deepEqual(a.five, [host[0], host[2], guest[0], guest[3], guest[4]], 'lockstep: versus drops orders for the other side and commands without a side (after step 0)');
+    assert.deepEqual(a.five, [host[0], host[2], guest[0], guest[3], guest[4]], 'lockstep: versus drops orders for the other side, commands without a side and ai (after step 0)');
     assert.deepEqual(b.five, a.five, 'lockstep: both players drop the same ones');
-    assert.deepEqual(a.zero, opening, "lockstep: the opening at step 0 is not filtered (the host's deployment for both sides)");
-    assert.deepEqual(coop.five, [...host, ...guest], 'lockstep: co-op keeps everything');
+    assert.deepEqual(a.zero, [opening[0], opening[1], opening[5]], "lockstep: the opening keeps the deployment for both sides, the map and the host's own orders, and drops ai and other orders for side 1");
+    assert.deepEqual(b.zero, a.zero, 'lockstep: both players check the opening the same way');
+    assert.deepEqual([coop.zero, coop.five], [opening, [...host, ...guest]], 'lockstep: co-op keeps everything');
   },
   // 房主的開局、加入的人、R083 第二輪審查的兩條
   session() {
     const v = hostLive(true), start = v.sent.find(m => m.t === 'start');
-    const noAi = OPENING.filter(c => c.t !== 'ai');
+    const noAi = KEPT;
     assert(start && start.vs === 1, 'session: the versus opening says vs');
-    assert.deepEqual(start.setup, noAi, 'session: the versus opening has no ai command');
-    assert.deepEqual(v.out, noAi, 'session: and the host steps without it');
-    assert.deepEqual(v.c.log.map(e => e.cmd), noAi, "session: and the host's own log has no ai command either");
+    assert.deepEqual(start.setup, KEPT, 'session: the versus opening drops ai and orders for side 1 (its deployment stays)');
+    assert.deepEqual(v.out, KEPT, 'session: and the host steps without them');
+    assert.deepEqual(v.c.log.map(e => e.cmd), KEPT, "session: and the host's own log drops them too");
     assert(v.s.versus && v.s.ls.versus, 'session: the host lockstep is versus');
     const coop = hostLive(false), cs = coop.sent.find(m => m.t === 'start');
     assert(cs && cs.vs === undefined && coop.out === null && coop.c.log.length === OPENING.length && !coop.s.ls.versus, 'session: co-op is unchanged (ai kept, no vs)');
@@ -133,6 +137,13 @@ const groups = {
       toggleFireDiscipline(() => ({ world: w, selected: [1], pending: [], active: true }), c => issued.push(c));
     } finally { side.setViewSide(); }
     assert.equal(issued[0]?.side, 1, 'fire: and sends it for side 1 (it used to be written as 0)');
+    // 砲擊任務那一行（R145）：左上那一方的砲也算（審查 P1）
+    const b = createWorld(1944); step(b, [{ t: 'map', id: 1, vegetation: 1, sym: 1 }]);
+    const gun = b.units.find(u => u.side === 1 && u.kind === UK_HOWITZER); gun.order = ORD_FIRE_AT; gun.target = 3;
+    side.setViewSide(1);
+    let line;
+    try { line = bombardStatus(b, new Set([gun.id])); } finally { side.setViewSide(); }
+    assert.match(line, /砲擊任務/, 'fire: the bombard status line shows the versus guest its own guns');
   },
   // 戰報與勝負照「我方」
   async report() {
@@ -164,7 +175,8 @@ const groups = {
   // client.ts：https 的本機位址、每條連線自己的 ping 計時器（假的 WebSocket、計時器、DOM）
   async client() {
     const active = new Set(); let next = 0;
-    const KEYS = ['location', 'window', 'clearInterval', 'addEventListener', 'document', 'WebSocket', 'localStorage'];
+    const KEYS = ['location', 'window', 'clearInterval', 'addEventListener', 'document', 'WebSocket', 'localStorage', 'setTimeout', 'performance'];
+    let now = 0;
     const saved = Object.fromEntries(KEYS.map(k => [k, Object.getOwnPropertyDescriptor(globalThis, k)]));   // Node 自己的 WebSocket、clearInterval 用完要還回去
     class El { constructor() { this.style = {}; this.value = ''; this.hidden = false; this.textContent = ''; } setAttribute() {} appendChild() {} focus() {} remove() {} querySelectorAll() { return []; } }
     const byId = new Map(), sockets = [];
@@ -177,6 +189,8 @@ const groups = {
       WebSocket: class { constructor(url) { this.url = url; this.readyState = 0; sockets.push(this); } send() {} close() { this.readyState = 3; } },
     });
     Object.defineProperty(globalThis, 'localStorage', { value: { getItem: () => null, setItem() {} }, configurable: true, writable: true });
+    Object.defineProperty(globalThis, 'setTimeout', { value: () => 0, configurable: true, writable: true });
+    Object.defineProperty(globalThis, 'performance', { value: { now: () => now }, configurable: true, writable: true });
     try {
       const client = await import('../src/net/client.ts');
       for (const url of ['ws://localhost', 'ws://localhost:8788/relay', 'ws://[::1]:8788/relay', 'ws://game.localhost:8788/relay', 'ws://127.0.0.2:8788/relay', 'wss://example.org/relay'])
@@ -195,6 +209,25 @@ const groups = {
       const second = next;
       sockets[0].onclose();
       assert(active.has(second) && !active.has(first), "client: an old connection closing late stops its own ping timer, not the new one's");
+      // 對方停住（暫停、切到別的分頁）：對戰等一分鐘就當成離線；合作照舊一直等（審查 NET-3）。開戰前房主知道這一局沒有電腦（審查 P3）
+      const stall = (search, versus) => {
+        location.search = search;
+        const lw = { tick: 0, seed: 1 }, net = () => window.__net();
+        client.initNet({ world: () => lw, log: () => [], hash: () => 'h', phase: () => 'battle', begin() {}, tick() {}, remake() {}, focus() {}, versus: true });
+        const ws = sockets.at(-1), msg = m => ws.onmessage({ data: JSON.stringify(m) });
+        ws.readyState = 1; ws.onopen(); msg({ t: 'welcome', you: 0, room: 'S', players: 1 }); msg({ t: 'joined', who: 1 });
+        const next = client.netVersusNext();
+        client.netFeed(lw, []);   // 第 0 步：房主開戰
+        for (lw.tick = 1; lw.tick < 5; lw.tick++) { assert(client.netReady(lw.tick), 'fixture: the first steps are prefilled'); client.netFeed(lw, []); }   // 自己的包送到第 8 步
+        now = 1000; const t0 = client.netReady(5); now = 1000 + 59000; const t59 = client.netReady(5); now = 1000 + 61000; const t61 = client.netReady(5);
+        ws.onclose();
+        return { versus: net().versus, next, t0, t59, t61, why: net().why, closed: ws.readyState === 3 };
+      };
+      const vs = stall('?room=VS&net=host&vs=1'), co = stall('?room=CO&net=host');
+      assert.deepEqual([vs.versus, vs.next, co.next], [true, true, false], 'client: before the start the host knows it is about to start a versus battle (and not co-op)');
+      assert.deepEqual([vs.t0, vs.t59, vs.t61, vs.closed], [false, false, true, true], 'client: in versus, after a minute of waiting the other player counts as gone and the battle goes on');
+      assert.match(vs.why, /停了超過一分鐘/, 'client: and the status line says why (also after the socket closes)');
+      assert.deepEqual([co.versus, co.t61, co.closed], [false, false, false], 'client: co-op does not give up on a partner who paused');
     } finally {
       for (const k of KEYS) { delete globalThis[k]; if (saved[k]) Object.defineProperty(globalThis, k, saved[k]); }
     }
@@ -229,6 +262,13 @@ const groups = {
       h.close();
     } finally { p.kill(); rmSync(base, { recursive: true, force: true }); }
   },
+  // 重播：記下是誰的角度；列表的勝負照它（審查 P2）
+  replay() {
+    const rec = meta => makeRecord(1, 10, 'abcdef12', [{ tick: 0, cmd: { t: 'map', id: 1 } }], { map: 1, n: 32, winner: 1, seconds: 60, ...meta }, '2026-11-17T00:00:00Z');
+    const back = meta => { const d = decodeReplay(encodeReplay(rec(meta))); assert(d.ok, 'fixture: the record decodes'); return d.rec; };
+    assert.deepEqual([back({ side: 1 }).meta.side, back({}).meta.side, back({ side: 'x' }).meta.side], [1, undefined, undefined], 'replay: the side survives export and import (anything else is dropped)');
+    assert.deepEqual([replayTitle(back({ side: 1 })).label.split(' ')[0], replayTitle(back({})).label.split(' ')[0]], ['勝利', '戰敗'], "replay: a versus guest's win (side 1) is listed as 勝利; the host's view is unchanged");
+  },
   // 接線（原始碼）：每開一局換回第 0 方、加入的人的鏡頭、對戰不自動存、閥、開始選單、勝負橫幅、腳下的圈
   wiring() {
     const main = src('src/main.ts');
@@ -241,6 +281,12 @@ const groups = {
     assert.deepEqual([ids({ ...view, vs: true }).includes('sm-vs'), ids(view).includes('sm-vs'), ids({ ...view, net: false, vs: true }).includes('sm-vs')], [true, false, false], 'wiring: the start menu offers 連線對戰 only when versus is on');
     assert.match(main, /winner: w\.winner === SIDE_ENEMY \? 1 : w\.winner === SIDE_PLAYER \? 0 : w\.winner, report: V\.r010,/, 'wiring: the win banner gets the winner from 我方 point of view');
     assert.match(src('src/render/battle.ts'), /this\.discs\.setColorAt\(nd, TEAM_COL\[u\.side === SIDE_PLAYER \? 0 : 1\]\)/, 'wiring: the ring under each unit is blue for 我方');
+    const replay = src('src/ui/replay.ts');
+    assert.match(replay, /\.\.\.\(SIDE_PLAYER === 1 \? \{ side: 1 as const \} : \{\}\) \};/, 'wiring: a replay remembers it was played from the top-left side');
+    assert.match(replay, /host\.begin\(rec\.seed\);\n {4}setViewSide\(rec\.meta\.side\);/, 'wiring: a replay of the top-left side is watched from the top-left side');
+    assert.match(main, /startOrderText\(w\.map \?\? 0, V\.r019, V\.r018 && !netVersusNext\(\) \? AI_NAME\[aiLevel\] : undefined,/, 'wiring: the start order does not promise a computer in a versus battle');
+    assert.match(src('src/ui/desktopControls.ts'), /if \(u\?\.alive && u\.side === SIDE_PLAYER\) d\.selected\.add\(id\);/, 'wiring: desktop control groups only recall 我方 units');
+    assert.match(main, /reset\(seed, false, false, false, false, false, true\); sandboxSide = SIDE_PLAYER; \},/, 'wiring: entering the sandbox picks 我方 after the reset (side 0)');
   },
 };
 
@@ -253,10 +299,23 @@ const temp = mkdtempSync(join(tmpdir(), 'r085-negative-'));
 const mutants = [
   ['sim_imports_side', 'imports', 'src/sim/eco.ts', "import { trenchAt } from './trenches.ts';", "import { trenchAt } from './trenches.ts'; import { SIDE_PLAYER as VIEW } from '../side.ts'; void VIEW;", 'imports: the simulation never imports'],
   ['ui_world_side', 'imports', 'src/ui/pick.ts', "import { SUB } from '../sim/world.ts';\nimport { SIDE_PLAYER } from '../side.ts';", "import { SUB, SIDE_PLAYER } from '../sim/world.ts';", 'imports: no interface'],
-  ['no_filter', 'lockstep', 'src/net/lockstep.ts', "(!this.versus || t < this.from || (c as { side?: unknown }).side === p)", 'true', 'lockstep: versus drops'],
-  ['filter_opening', 'lockstep', 'src/net/lockstep.ts', '(!this.versus || t < this.from ||', '(!this.versus ||', 'lockstep: the opening at step 0'],
-  ['keep_ai', 'session', 'src/net/session.ts', "setup = vs ? pending.filter(c => c.t !== 'ai') : pending;", 'setup = pending;', 'session: the versus opening has no ai'],
-  ['log_ai', 'session', 'src/net/session.ts', "if (log[i].tick === 0 && log[i].cmd.t === 'ai') log.splice(i, 1);", ';', "session: and the host's own log"],
+  ['no_filter', 'lockstep', 'src/net/lockstep.ts', "(c as Command).t !== 'ai' && (c as { side?: unknown }).side === p", 'true', 'lockstep: versus drops'],
+  ['ai_after', 'lockstep', 'src/net/lockstep.ts', "(c as Command).t !== 'ai' && (c as { side?: unknown }).side === p", '(c as { side?: unknown }).side === p', 'lockstep: versus drops'],
+  ['filter_opening', 'lockstep', 'src/net/lockstep.ts', '(t < this.from ? versusOpening(c as Command) :', '(t < this.from ? true :', 'lockstep: the opening keeps'],
+  ['opening_rule', 'lockstep', 'src/net/lockstep.ts', "c.t !== 'ai' && (c.side === undefined || c.side === 0 || c.t === 'build' || c.t === 'trench')", "c.t !== 'ai'", 'lockstep: the opening keeps'],
+  ['keep_ai', 'session', 'src/net/session.ts', 'setup = vs ? pending.filter(versusOpening) : pending;', 'setup = pending;', 'session: the versus opening drops'],
+  ['log_ai', 'session', 'src/net/session.ts', 'if (log[i].tick === 0 && !versusOpening(log[i].cmd)) log.splice(i, 1);', ';', "session: and the host's own log"],
+  ['bombard_w', 'fire', 'src/ui/bombardStatus.ts', 'fireDisciplineEligible(u, w)) continue;', 'fireDisciplineEligible(u)) continue;', 'fire: the bombard status line'],
+  ['replay_title', 'replay', 'src/ui/replayStore.ts', "m.winner === me ? '勝利' : m.winner === 1 - me ? '戰敗'", "m.winner === 0 ? '勝利' : m.winner === 1 ? '戰敗'", "replay: a versus guest's win"],
+  ['replay_meta', 'wiring', 'src/ui/replay.ts', ', ...(SIDE_PLAYER === 1 ? { side: 1 as const } : {}) };', ' };', 'wiring: a replay remembers'],
+  ['replay_view', 'wiring', 'src/ui/replay.ts', '    setViewSide(rec.meta.side);', '   ', 'wiring: a replay of the top-left side'],
+  ['start_order', 'wiring', 'src/main.ts', 'V.r018 && !netVersusNext() ?', 'V.r018 ?', 'wiring: the start order'],
+  ['groups_side', 'wiring', 'src/ui/desktopControls.ts', 'if (u?.alive && u.side === SIDE_PLAYER) d.selected.add(id);', 'if (u?.alive) d.selected.add(id);', 'wiring: desktop control groups'],
+  ['sandbox_side', 'wiring', 'src/main.ts', 'reset(seed, false, false, false, false, false, true); sandboxSide = SIDE_PLAYER; },', 'sandboxSide = SIDE_PLAYER; reset(seed, false, false, false, false, false, true); },', 'wiring: entering the sandbox'],
+  ['stall_any', 'client', 'src/net/client.ts', 'else if (session?.versus && session.ls && performance.now()', 'else if (session?.ls && performance.now()', 'client: co-op does not give up'],
+  ['stall_never', 'client', 'src/net/client.ts', '> VERSUS_STALL_MS) {', '> VERSUS_STALL_MS * 1000) {', 'client: in versus, after a minute'],
+  ['stall_why', 'client', 'src/net/client.ts', 's.disconnected(); if (gaveUp === s) s.why = GAVE_UP; }', 's.disconnected(); }', 'client: and the status line says why'],
+  ['versus_next', 'client', 'src/net/client.ts', 'export const netVersusNext = (): boolean => !!session?.versus &&', 'export const netVersusNext = (): boolean => false &&', 'client: before the start the host knows'],
   ['guest_coop', 'session', 'src/net/session.ts', 'this.begin(m.seed, m.setup, m.vs === 1);', 'this.begin(m.seed, m.setup, false);', 'session: a guest who gets vs'],
   ['joined_live', 'session', 'src/net/session.ts', "else this.send({ t: 'error', why: this.ls ?", "else if (!this.ls) this.send({ t: 'error', why: this.ls ?", 'session: someone joining a live battle'],
   ['gone_packets', 'session', 'src/net/lockstep.ts', 'if (from === this.me || this.gone.has(from)) return;', 'if (from === this.me) return;', 'session: packets from a player who left'],
