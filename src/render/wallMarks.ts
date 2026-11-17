@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { SUB, UK_HOWITZER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_INTACT, UNIT_KINDS, type Building, type SimEvent, type World } from '../sim/world.ts';
 import { hash2 } from '../sim/rng.ts';
-import { bldColorsOf, wallHeight, wallShown, wallBounds } from './buildings.ts';
+import { bldColorsOf, wallHeight, wallShown, wallBounds, markFace } from './buildings.ts';
 import type { MakeInst, Sight } from './painter.ts';
 
 export const HOLE_CAP = 160;                 // R014 牆上痕跡最多幾個（滿了丟最舊的）
@@ -103,6 +103,14 @@ export class WallMarks {
       const half = H.w[i] * scale / 2 + 0.006;
       if (axis === 0) H.z[i] = Math.max(lo + half, Math.min(hi - half, H.z[i])); else H.x[i] = Math.max(lo + half, Math.min(hi - half, H.x[i]));
       H.y[i] = Math.max(H.h[i] * scale / 2 + 0.006, Math.min(top - H.h[i] * scale / 2 - 0.006, H.y[i]));
+    }
+    const oct = markFace(b, axis, axis === 0 ? nx : nz, H.x[i], H.z[i], H.y[i], H.h[i] * (kind === 0 ? 1.55 : 1) / 2 + 0.006);   // R087：烘爐、風車塔身是八角，貼到正對的那一個平面上、寬度與高度夾在那一面裡
+    if (oct) {
+      const scale = kind === 0 ? 1.55 : 1;
+      H.y[i] = oct.y;
+      H.w[i] = Math.min(H.w[i], (oct.hi - oct.lo - 0.012) / scale);
+      const half = H.w[i] * scale / 2 + 0.006;
+      if (axis === 0) { H.x[i] = oct.at; H.z[i] = Math.max(oct.lo + half, Math.min(oct.hi - half, H.z[i])); } else { H.z[i] = oct.at; H.x[i] = Math.max(oct.lo + half, Math.min(oct.hi - half, H.x[i])); }
     }
     const wall = bldColorsOf(b).wall;
     H.r[i] = wall.r + (1 - wall.r) * 0.35; H.g[i] = wall.g + (1 - wall.g) * 0.35; H.b[i] = wall.b + (1 - wall.b) * 0.35;   // 碎掉的灰泥：牆色偏亮

@@ -21,7 +21,7 @@ import { step, runLog, commandTick } from '../src/sim/step.ts';
 import { applyMap, applyMoreHouses, MAP_RYE, MAP_HILLS } from '../src/sim/maps.ts';
 import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
-import { RYE_MILL, RYE_QUAYS, moreCorner } from '../src/sim/moreHouses.ts';
+import { RYE_MILL, RYE_QUAYS } from '../src/sim/moreHouses.ts';
 import { isCommand } from '../src/sim/commandCheck.ts';
 import { encodeWorld, decodeWorld } from '../src/sim/worldCodec.ts';
 import { runScript } from '../src/sim/script.ts';
@@ -72,7 +72,7 @@ const soak = (map, sym, more, ticks = 3000, v = 3, seed = 1944) => {
 };
 // 原本的（不用表、照定義一棟一棟比）規矩，拿來對照 moreHouses.ts 的快版
 function ruleBreaks(w, b, others) {
-  const n = w.n, c = moreCorner(n), why = [];
+  const n = w.n, c = n === 32 ? 10 : 12, why = [];   // 開局角落：守衛自己的數字，不拿施工那份的（審查 R087-guard-corner；卡面的 8×8 是下限）
   if (b.x < 2 || b.z < 2 || b.x + b.w > n - 2 || b.z + b.d > n - 2) why.push('edge');
   for (let dz = 0; dz < b.d; dz++) for (let dx = 0; dx < b.w; dx++) {
     const x = b.x + dx, z = b.z + dz, i = cellIdx(w, x, z);
@@ -291,7 +291,23 @@ export const groups = {
       // 欄位順序：R084 的 sym 在頁面上比 rules 晚折（R084 就是這樣，跟 R087 無關）；拿掉 sym 之後一模一樣，more 緊跟在地圖的欄位後面
       const keys = o => Object.keys(o).filter(k => k !== 'sym');
       assert.deepEqual(keys(page), keys(replay), `page: the world's own field order matches the replay (${tag})`);
-      if (r087) assert.equal(keys(page)[keys(page).indexOf('more') - 1], keys(replay)[keys(replay).indexOf('more') - 1], `page: more sits right after the map's own fields (${tag})`);
+      if (r087) { const kp = keys(page), ref = keys(opened(map, 1944, true)), i = kp.indexOf('more'); assert(i > 0 && kp[i - 1] === ref[ref.indexOf('more') - 1], `page: more sits right after the map's own fields (${tag})`); }   // 審查 R087-guard-key-order：跟只套了地圖的世界比
+    }
+    // 沒有遭遇戰設定（?noR046=1，main.ts 不建 skirmish）：新房子跟著遭遇戰設定放，這時新開的局沒有新房子、map 指令也不帶 more；頁面照樣等於重播（審查 R087-wiring-r046）
+    for (const map of [MAP_RYE, MAP_LARGE]) {
+      const q = new URLSearchParams('noR046=1');
+      const c = vm.createContext({
+        setViewSide() {}, clearGestureInput() {}, battleAudio: undefined, createWorld, createSandboxWorld: createWorld, applyMap, applyMoreHouses, startZombies, MAP_RYE, MAP_HILLS, MAP_LARGE, MAP_TOWN, SIDE_ENEMY, seed: 1944,
+        V: { r006: false, r018: true, r019: true, r026: true, r045: true, r057: true, r078: true, r084: true, r087: true, r109: false },
+        large: map === MAP_LARGE, expanded: false, q, skirmish: undefined, netLive: () => false, commandTick, pending: [],
+        makeView() {}, view: { target: { set() {} } }, selected: new Set(), newStats: () => ({}), reportView: undefined, planner: { clear() {}, refreshPreview() {} }, ui() {}, syncBattleAudio() {},
+        ecoCmd: () => ECO, aiLevel: 2,
+      });
+      vm.runInContext(reset + issue, c); c.reset();
+      const log = JSON.parse(JSON.stringify(c.log));
+      assert.deepEqual([c.w.more, log[0].cmd.more], [undefined, undefined], `page: without the skirmish setup (?noR046=1) a new battle has no new houses and sends no more (map ${map})`);
+      step(c.w, log.map(e => e.cmd));
+      assert.equal(hashWorld(c.w), hashWorld(runLog(createWorld(1944), log, 1)), `page: without the skirmish setup the page still equals the replay (map ${map})`);
     }
   },
   // 效能：96 圖 applyMoreHouses 的中位數 ≤ 30 毫秒
@@ -306,8 +322,8 @@ export const groups = {
   soak() {
     const out = [];
     for (const map of MAPS) for (const v of [2, 3]) for (const seed of [1, 2, 3]) {
-      const a = soak(map, 1, true, 6000, v, seed), b = seed === 1 ? soak(map, 1, true, 6000, v, seed) : a;
-      assert.equal(a.hash, b.hash, `soak: two runs give the same hash (map ${map}, v${v}, seed ${seed})`);
+      const a = soak(map, 1, true, 6000, v, seed);
+      if (seed === 1) assert.equal(soak(map, 1, true, 6000, v, seed).hash, a.hash, `soak: two runs give the same hash (map ${map}, v${v}, seed ${seed})`);   // 跑兩次只做種子 1（時間）
       out.push(`${map}/v${v}/${seed}:${a.tick}t,${a.garrisons}g`);
     }
     console.log(`  soak (map/version/seed: ticks, times a new house was garrisoned): ${out.join(' ')}`);

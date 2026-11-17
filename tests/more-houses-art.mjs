@@ -16,6 +16,7 @@ import * as B from '../src/render/buildings.ts';
 import * as M from '../src/render/moreArt.ts';
 import { Geo } from '../src/render/geo.ts';
 import { luma } from '../src/render/houseArt.ts';
+import { WallMarks } from '../src/render/wallMarks.ts';
 
 const { BK_OAST, BK_MILL, BK_WAREHOUSE, BK_HOUSE, BK_COTTAGE, BK_BARN, STAGE_INTACT, STAGE_ROOFLESS, STAGE_RUBBLE } = W;
 const NEW = [BK_OAST, BK_MILL, BK_WAREHOUSE], MAPS = [0, 1, 2, 3, 4];
@@ -75,8 +76,11 @@ const groups = {
         assert(low >= 0.95, `shape: the lowest sail tip stays at 0.95 or higher (building ${b.id}: ${low.toFixed(3)})`);
         assert(top >= M.MILL.bodyTop + M.MILL.capRise + 0.10, `shape: the mill has something at least 0.10 above its tower and cap (building ${b.id})`);
       } else {
-        const h = B.wallHeight(b), wallTop = Math.max(...t.filter(x => x.c === TAR && Math.abs(x.n[1]) < 0.1).flatMap(x => x.p.map(p => p[1])).filter(y => y <= h + 0.001));
-        assert(Math.abs(wallTop - 1.18) <= 0.01 && Math.abs(h - 1.18) <= 0.01, `shape: the warehouse walls stand 1.18 high (building ${b.id})`);
+        // 牆頂：落在四面牆平面上的焦油色直立面（不算山牆的三角、吊貨小屋）的最高點（審查 R087-guard-wall-height）
+        const x0 = b.x + 0.1, x1 = b.x + b.w - 0.1, z0 = b.z + 0.1, z1 = b.z + b.d - 0.1, on = (v, a, c) => Math.abs(v - a) < 1e-4 || Math.abs(v - c) < 1e-4;
+        // 山牆的三角在屋簷外 0.04、吊貨小屋不在牆面上，都不會算進來
+        const wallTop = Math.max(...t.filter(x => x.c === TAR && ((Math.abs(x.n[0]) > 0.9 && x.p.every(p => on(p[0], x0, x1))) || (Math.abs(x.n[2]) > 0.9 && x.p.every(p => on(p[2], z0, z1))))).flatMap(x => x.p.map(p => p[1])));
+        assert(Math.abs(wallTop - 1.18) <= 0.01 && Math.abs(B.wallHeight(b) - 1.18) <= 0.01, `shape: the warehouse walls stand 1.18 high (building ${b.id}: ${wallTop.toFixed(3)})`);
         const alongX = b.w >= b.d, out = x => alongX ? x.p.every(p => p[2] > b.z + b.d - 0.1 + 0.02) : x.p.every(p => p[0] > b.x + b.w - 0.1 + 0.02);
         assert(t.some(x => x.c === TAR && out(x) && x.p.every(p => p[1] >= 0.95)), `shape: the warehouse has a lucam out from its visible long side (building ${b.id})`);
         const doors = new Set(t.filter(x => x.c === QUAY_DOOR).map(x => Math.round(Math.min(...x.p.map(p => p[1])) * 100)));
@@ -129,11 +133,48 @@ const groups = {
     }
     for (const k of NEW) { const p = B.bldColors(k); assert(p && p.wall && p.roof, `look: bldColors has a palette for kind ${k}`); }
   },
+  // 同一個平面上不同顏色的面疊在一起會閃（z-fighting）：完好、空殼、瓦礫上站著的那一截、遠景兩層都查（審查 R087-shell-coplanar）。
+  // 瓦礫堆本身是 R138 通用的（每一種房子都一樣），不在這張卡的範圍
+  coplanar() {
+    prod();
+    const overlap = (a, b, u, v) => { const box = t => [Math.min(...t.p.map(p => p[u])), Math.max(...t.p.map(p => p[u])), Math.min(...t.p.map(p => p[v])), Math.max(...t.p.map(p => p[v]))]; const [a0, a1, a2, a3] = box(a), [b0, b1, b2, b3] = box(b); return Math.max(0, Math.min(a1, b1) - Math.max(a0, b0)) * Math.max(0, Math.min(a3, b3) - Math.max(a2, b2)); };
+    for (const b of all()) for (const [label, g] of [['intact', geoOf(b)], ['roofless', geoOf(b, STAGE_ROOFLESS)], ['rubble stump', (() => { const g = new Geo(); M.moreRubble(g, b); return g; })()], ['lod1', B.buildTown({ blds: [b], wires: { segments: [] } }, undefined, 1)], ['lod2', B.buildTown({ blds: [b], wires: { segments: [] } }, undefined, 2)]]) {
+      const planes = new Map();
+      for (const t of tris(g)) {
+        const ax = [0, 1, 2].find(k => Math.abs(t.n[k]) > 0.999); if (ax === undefined) continue;
+        const key = `${ax}${Math.sign(t.n[ax])}${t.p[0][ax].toFixed(4)}`; planes.set(key, [...(planes.get(key) ?? []), t]);
+      }
+      for (const [key, list] of planes) {
+        const ax = +key[0], [u, v] = [0, 1, 2].filter(k => k !== ax);
+        for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (list[i].c !== list[j].c && list[i].c !== 0x2b2724 && list[j].c !== 0x2b2724)
+          assert(overlap(list[i], list[j], u, v) < 1e-6, `coplanar: no two different colours share a face (building ${b.id} kind ${b.kind}, ${label}, ${list[i].c.toString(16)} / ${list[j].c.toString(16)})`);
+      }
+    }
+  },
+  // R014 彈痕貼在牆上：風車與烘房的八角面上不浮在半空（真的 WallMarks.mark14，從彈痕往牆裡打回去，要在 0.02 之內碰到模型；審查 R087-marks）
+  marks() {
+    prod();
+    const rayTri = (o, d, a, b, c) => { const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], p = [d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]], det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2]; if (Math.abs(det) < 1e-12) return null; const s0 = [o[0] - a[0], o[1] - a[1], o[2] - a[2]], u = (s0[0] * p[0] + s0[1] * p[1] + s0[2] * p[2]) / det; if (u < -1e-9 || u > 1 + 1e-9) return null; const q = [s0[1] * e1[2] - s0[2] * e1[1], s0[2] * e1[0] - s0[0] * e1[2], s0[0] * e1[1] - s0[1] * e1[0]], v = (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) / det; if (v < -1e-9 || u + v > 1 + 1e-9) return null; const t = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det; return t > -1e-6 ? t : null; };
+    for (const b of all().filter(b => b.kind === BK_MILL || b.kind === BK_OAST)) {
+      const g = geoOf(b), wm = new WallMarks(8, new THREE.Object3D()), H = wm.holes, cx = b.x + b.w / 2, cz = b.z + b.d / 2;
+      for (let k = 0; k < 40; k++) {
+        const a = (k / 40) * Math.PI / 2, kind = k % 5 === 4 ? 1 : 0;   // 看得到的那一象限（+x 到 +z），每五發一發是高爆的燻黑
+        const before = H.next; wm.mark14(b, kind, cx + 6 * Math.cos(a) + 0.05 * (k % 3), cz + 6 * Math.sin(a), cx, cz);
+        if (H.next === before) continue;
+        const i = before, sc = kind === 0 ? 1.55 : 1, hw = H.w[i] * sc / 2, tan = H.nx[i] ? [0, 0, 1] : [1, 0, 0], d = [-H.nx[i], 0, -H.nz[i]];
+        for (const [name, along] of [['centre', 0], ['left', -hw], ['right', hw]]) {
+          const o = [H.x[i] + H.nx[i] * 0.006 + tan[0] * along, H.y[i], H.z[i] + H.nz[i] * 0.006 + tan[2] * along];
+          let best = null; for (let j = 0; j < g.pos.length; j += 9) { const t = rayTri(o, d, g.pos.slice(j, j + 3), g.pos.slice(j + 3, j + 6), g.pos.slice(j + 6, j + 9)); if (t !== null && (best === null || t < best)) best = t; }
+          assert(best !== null && best <= 0.02, `marks: a ${kind ? 'soot patch' : 'shell hole'} lies on the wall, not in the air (building ${b.id} kind ${b.kind}, ${name}: ${best === null ? 'nothing behind' : best.toFixed(3)})`);
+        }
+      }
+    }
+  },
   // 三角形：每一棟、遠景、整鎮的增加
   budget() {
     prod();
     for (const b of all()) {
-      const lim = PER[b.kind], cap0 = b.kind === BK_WAREHOUSE && b.w === 2 && b.d === 2 ? 300 : lim[0];
+      const lim = PER[b.kind], cap0 = lim[0];   // 卡面驗收第 13 條：倉庫 240，2×2 也一樣（審查 R087-guard-2x2-cap）
       assert(geoOf(b).triangles <= cap0, `budget: an intact ${b.kind} stays within ${cap0} triangles (building ${b.id}: ${geoOf(b).triangles})`);
       for (const lod of [1, 2]) { const n = B.buildTown({ blds: [b], wires: { segments: [] } }, undefined, lod).triangles; assert(n <= lim[lod], `budget: the distant level ${lod} of a ${b.kind} stays within ${lim[lod]} (building ${b.id}: ${n})`); }
     }
@@ -175,6 +216,9 @@ const mutants = [
   ['fat_mill', 'budget', 'src/render/moreArt.ts', '  for (const y of [0.62, 0.95]) {', '  for (const y of [0.62, 0.95, 0.4, 0.42, 0.45, 0.48, 0.5, 0.52, 0.55, 0.58, 0.7, 0.72, 0.75, 0.78, 0.8, 0.85, 0.9, 1.0, 1.05, 1.1, 0.35]) {', 'budget: an intact 12 stays within 160'],
   ['low_sails', 'shape', 'src/render/moreArt.ts', 'sail1: 0.62,', 'sail1: 0.72,', 'shape: the lowest sail tip'],
   ['no_lucam', 'shape', 'src/render/moreArt.ts', "    g.box(x1 - 0.12, ly0, m - lw, x1 + ld, ly1, m + lw, TAR, null); g.gable(x1 - 0.12, m - lw - 0.01, x1 + ld + 0.01, m + lw + 0.01, ly1, 0.08, true, look.roof, TAR);", "    void ly1;", 'shape: the warehouse has a lucam'],
+  ['tall_quay', 'shape', 'src/render/moreArt.ts', '  g.box(x0, Q.brick, z0, x1, h, z1, TAR, null);', '  g.box(x0, Q.brick, z0, x1, h + 0.3, z1, TAR, null);', 'shape: the warehouse walls stand 1.18 high'],
+  ['shell_coplanar', 'coplanar', 'src/render/moreArt.ts', '  g.box(x0 - 0.005, 0, z0 - 0.005, x1 + 0.005, QUAY.brick, z1 + 0.005, look.brick, null);', '  g.box(x0, 0, z0, x1, QUAY.brick, z1, look.brick, null);', 'coplanar: no two different colours share a face'],
+  ['floating_marks', 'marks', 'src/render/wallMarks.ts', '    if (oct) {\n', '    if (oct && false) {\n', 'marks: a'],
   ['leaks', 'inert', 'src/render/buildings.ts', 'const moreShown = (b: Building) => moreArtOn && isMoreKind(b.kind);', 'const moreShown = (b: Building) => moreArtOn && (isMoreKind(b.kind) || b.kind === BK_BARN);', 'inert: a world without more draws exactly what R086 drew'],
 ];
 try {

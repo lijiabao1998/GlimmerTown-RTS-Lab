@@ -173,7 +173,7 @@ function mill(g: Geo, b: Building, look: MoreLook): void {
 }
 function millShell(g: Geo, b: Building, look: MoreLook): void {
   const M = MILL, cx = b.x + 0.5, cz = b.z + 0.5;
-  octo(g, cx, cz, 0, M.baseTop, M.base, M.base, look.brick, null);
+  octo(g, cx, cz, 0, M.baseTop, M.base, M.base, look.brick, look.brick);   // 基座頂面蓋起來（完好時有平台蓋著；審查 R087-open-ring）
   octo(g, cx, cz, M.baseTop, 0.95, M.body0, M.body0 - (M.body0 - M.body1) * 0.6, look.wall, CHAR);   // 塔身燒剩下半截，沒有帽子與帆
 }
 
@@ -206,8 +206,33 @@ function quay(g: Geo, b: Building, look: MoreLook, h: number): void {
 }
 function quayShell(g: Geo, b: Building, look: MoreLook, h: number): void {
   const x0 = b.x + 0.1, z0 = b.z + 0.1, x1 = b.x + b.w - 0.1, z1 = b.z + b.d - 0.1;
-  g.box(x0, 0, z0, x1, QUAY.brick, z1, look.brick, null);
+  g.box(x0 - 0.005, 0, z0 - 0.005, x1 + 0.005, QUAY.brick, z1 + 0.005, look.brick, null);   // 一樓的磚往外 0.005：跟燒剩的木板牆不在同一個面上（審查 R087-shell-coplanar）
   shell(g, b, x0, z0, x1, z1, h * 0.72, TAR);   // 屋頂沒了，上面的木板燒剩七成
+}
+
+// R014 彈痕貼在牆上：風車的塔身與烘房的烘爐是八角，彈痕要貼在正對 ±x／±z 的那一個平面（不是外框的長方體，不然會浮在半空；審查 R087-marks）。
+// axis 0＝x 面（法線 ±x）、1＝z 面；n＝法線的正負；(px, pz)＝原本落在外框上的點；y＝彈痕中心的高度、hh＝半高。
+// 回傳那一面的平面座標 at、沿牆的範圍 [lo, hi]、夾過的中心高度 y（風車：整片在磚基座 0–0.30 或塔身 0.33–1.35 裡，不跨過那一圈木平台；烘爐：在 0.76 以下）；
+// 烘房儲藏間的長邊回儲藏間那一段的牆（不伸到烘爐上）、儲藏間的盡頭回 null（照外框）。
+export function moreMarkFace(b: Building, axis: number, n: number, px: number, pz: number, y: number, hh: number): { at: number; lo: number; hi: number; y: number } | null {
+  let cx: number, cz: number, r: number;
+  const band = (lo: number, hi: number) => Math.max(lo + hh, Math.min(hi - hh, y));
+  if (b.kind === BK_MILL) {
+    const M = MILL, stageTop = M.baseTop + 0.03; cx = b.x + 0.5; cz = b.z + 0.5;
+    y = y < M.baseTop ? band(0, M.baseTop) : band(stageTop, M.bodyTop);
+    r = y < M.baseTop ? M.base : M.body0 + (M.body1 - M.body0) * Math.min(1, (y - stageTop) / (M.bodyTop - stageTop));
+  } else if (b.kind === BK_OAST) {
+    const f = oastFrame(b); cx = f.kx; cz = f.kz; r = OAST.drum;
+    const end = f.alongX ? axis === 0 : axis === 1;   // 長邊的盡頭那一面
+    if (end && n < 0) return null;   // 儲藏間那一頭的盡頭：整面是長方形的牆
+    if (!end && (f.alongX ? px <= f.kx : pz <= f.kz)) {   // 長邊上還在儲藏間的那一段：照原本的牆面，只是不要伸過儲藏間的盡頭（那裡是烘爐）
+      const at = axis === 0 ? (n > 0 ? b.x + b.w - 0.1 : b.x + 0.1) : (n > 0 ? b.z + b.d - 0.1 : b.z + 0.1);
+      return f.alongX ? { at, lo: b.x + 0.1, hi: f.kx, y } : { at, lo: b.z + 0.1, hi: f.kz, y };
+    }
+    y = band(0, OAST.drumTop);
+  } else return null;
+  const half = r * Math.tan(Math.PI / 8), c = axis === 0 ? cz : cx;
+  return { at: (axis === 0 ? cx : cz) + n * r, lo: c - half, hi: c + half, y };
 }
 
 // ---- 給 buildings.ts 叫的 ----
@@ -255,7 +280,7 @@ export function moreDistant(g: Geo, b: Building, lod: number, stage: number, h: 
       g.quad(q(-M.sail1, -w), q(M.sail1, -w), q(M.sail1, w), q(-M.sail1, w), AX, SAIL);
     }
     if (lod > 1) return;
-    g.box(cx - M.base, 0, cz - M.base, cx + M.base, M.baseTop, cz + M.base, look.brick, null);
+    g.box(cx - M.base, 0, cz - M.base, cx + M.base, M.baseTop, cz + M.base, look.brick);
     g.pyramid(cx - 0.2, cz - 0.2, cx + 0.2, cz + 0.2, M.bodyTop, M.capRise, look.roof);
     return;
   }

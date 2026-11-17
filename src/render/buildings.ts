@@ -1,7 +1,7 @@
 // 村莊建築：每棟照損壞三段畫（完好 → 沒屋頂的空殼 → 瓦礫堆）。只讀世界，不改世界。
 // 三段的畫法照 GlimmerTown3D-lab@bece722 src/render/scene.ts:210-231（牆降高、屋頂消失、瓦礫用雜湊散落），改成二戰村莊的配色。
 import * as THREE from 'three';
-import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant } from './moreArt.ts';
+import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant, moreMarkFace } from './moreArt.ts';
 import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
 import { houseLook, civilian, ROOF_HIP, roof as artRoof, ridgeCap, stack, stackAt, plinth, plinthColor, eaveBand, hood, windows as artWindows, shopFront, barnDoor, loft, thatchBand, churchDetails, type Look, type Frame } from './houseArt.ts';
@@ -53,6 +53,8 @@ export function setHouseArt(on: boolean): void { houseArtOn = on; }
 let moreArtOn = false;   // R087 三種新房型的模型（moreArt.ts）；關著時照看起來像的舊種類畫（MORE_LIKE）
 export function setMoreArt(on: boolean): void { moreArtOn = on; }
 const moreShown = (b: Building) => moreArtOn && isMoreKind(b.kind);
+// R014 彈痕：八角的烘爐、風車塔身那一面（見 moreArt.ts 的 moreMarkFace）；不是新房型或模組關著回 null
+export const markFace = (b: Building, axis: number, n: number, px: number, pz: number, y: number, hh: number) => (moreShown(b) ? moreMarkFace(b, axis, n, px, pz, y, hh) : null);
 const trimOn = () => houseArtOn && buildingDetailsOn; // R086 trim：看不見的兩面（−x、−z；鏡頭固定從 +x、+z 看）不畫細節
 const artOn = () => houseArtOn && buildingDetailsOn; // R086 art：每棟自己的樣子與新零件
 const civilianDamage = (b: Building) => damageDetailsOn && [BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP].includes(b.kind);
