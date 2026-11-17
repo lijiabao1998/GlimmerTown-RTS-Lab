@@ -187,7 +187,7 @@ export const groups = {
         assert.deepEqual(why, [], `rules: a new house follows every placement rule (map ${map}, seed ${seed}, building ${o.id} kind ${o.kind} at ${o.x},${o.z})`);
       }
     }
-    for (const map of MAPS) for (const sym of [0, 1]) for (const seed of SEEDS.filter(s => s % 5 === 0).concat([1944])) {
+    for (const map of MAPS) for (const sym of [0, 1]) for (const seed of SEEDS.concat([1944])) {
       const w = opened(map, seed, true, [ECO], sym), off = opened(map, seed, false, [ECO], sym);
       assert.deepEqual(hqCells(w), hqCells(off), `rules: the headquarters stand on the same cells with and without the flag (map ${map}, sym ${sym}, seed ${seed})`);
       const added = w.blds.filter(b => b.id > off.blds.length - 2 && b.kind !== BK_HQ);
