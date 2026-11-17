@@ -60,6 +60,9 @@ const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const groups = {
   // 閥：關著每一個指紋都等於 d5dd980；開著時指揮部、碉堡、圍牆一點不動
   valve() {
+    // 模組預設要是關的（其他守衛凍結的指紋靠這個）：先不碰 setHouseArt，只開別的
+    B.setWalls(true); B.setWireDetail(true); B.setMaterials(true); B.setBuildingDetails(true); B.setDamageDetails(true); B.setFacades(true);
+    assert.equal(fp(B.buildTown(worlds[1])), FROZEN[1].town, 'valve: with R086 off until the hub turns it on (module default)');
     prod(B, false);
     for (const m of MAPS) {
       const w = worlds[m], f = FROZEN[m], town = B.buildTown(w);
@@ -226,6 +229,7 @@ const groups = {
       }
       assert(pairs > 5 && same <= pairs * 0.1, `variety: neighbours rarely look exactly alike on map ${m} (${same} of ${pairs})`);
     }
+    for (const b of Object.values(worlds).flatMap(w => w.blds).filter(b => B.houseLookOf(b)?.form === A.ROOF_HIP)) assert(Math.min(b.w, b.d) === 1 && b.w !== b.d, `variety: full hips only on one-cell-deep oblong plots (a square plot would be a pyramid; building ${b.id} ${b.w}x${b.d})`);
     const hc = w96.blds.filter(b => (b.kind === BK_HOUSE || b.kind === BK_COTTAGE));
     for (const [form, name] of [[A.ROOF_HIP, 'hip'], [A.ROOF_HALF, 'half-hip']]) {
       const ok = hc.filter(b => A.formAllowed(b, form)), got = ok.filter(b => B.houseLookOf(b).form === form);
@@ -291,7 +295,7 @@ const mutants = [
   ['trim_flip', 'trim', 'src/render/buildings.ts', 'if (trimOn() && dir < 0) continue;   // R086 trim facade', 'if (trimOn() && dir > 0) continue;   // R086 trim facade', 'trim: every removed triangle'],
   ['awning_deep', 'shape', 'src/render/houseArt.ts', 'zf = z + 0.095;', 'zf = z + 0.2;', 'shape: everything stays inside'],
   ['stack_middle', 'heights', 'src/render/houseArt.ts', 'return end ? Math.min(hi, r1 - 0.12) : Math.max(lo, r0 + 0.12);', 'return end ? Math.min(hi, r1 - 0.12) : (lo + hi) / 2;', 'heights: every civilian cell centre'],
-  ['hip_anywhere', 'heights', 'src/render/houseArt.ts', '  if (form === ROOF_HIP) return lo === 1 && hi > 1;', '  if (form === ROOF_HIP) return hi > 1;', 'heights: every civilian cell centre'],
+  ['hip_anywhere', 'variety', 'src/render/houseArt.ts', '  if (form === ROOF_HIP) return lo === 1 && hi > 1;', '  if (form === ROOF_HIP) return hi > 1;', 'variety: full hips only'],   // 現有的房子短邊最多 2 格：格子中心離兩邊一樣遠，四坡跟雙坡在那裡一樣高，高度那一群碰不到
   ['lod_palette', 'lod', 'src/render/buildings.ts', '  const p = paletteOf(b), x0 = b.x + 0.1, z0 = b.z + 0.1,', '  const p = palette(b.kind), x0 = b.x + 0.1, z0 = b.z + 0.1,', 'lod: every colour'],
   ['lod_outline', 'lod', 'src/render/buildings.ts', '  if (artOn() && civilian(b.kind) && lookOf(b).form) g.hip(', '  if (false && artOn() && civilian(b.kind) && lookOf(b).form) g.hip(', 'lod: hipped and half-hipped roofs'],
   ['flat_colour', 'look', 'src/render/houseArt.ts', 'const BRICK_VARIANTS: RGB[] = [[1, 1, 1], [1.19, 1.2, 1.16], [0.86, 0.63, 0.67]];', 'const BRICK_VARIANTS: RGB[] = [[1, 1, 1], [1, 1, 1], [1, 1, 1]];', 'look: every kind has at least two'],
