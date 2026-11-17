@@ -13,6 +13,7 @@ import { applyLarge, MAP_LARGE } from './largeMap.ts';
 import { applyExpandedTown, MAP_TOWN } from './expandedMap.ts';
 import { MAP_HILLS, applyHills } from './hillMap.ts';
 export { MAP_HILLS } from './hillMap.ts';
+export { applyMoreHouses } from './moreHouses.ts';   // R087 更多房屋（main.ts 開局也從這裡拿）
 
 export const MAP_RYE = 1;
 const RYE_N = 32;   // Rye 資料表的邊長

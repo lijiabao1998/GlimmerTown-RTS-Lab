@@ -13,7 +13,7 @@ import { applyTrench, trenchCover, type TrenchCmd } from './trenches.ts';
 import { applyBuild, type BuildCmd } from './build.ts';
 import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { aiThink2, memoSpotted } from './ai2.ts';
-import { applyMap, MAP_HILLS } from './maps.ts';
+import { applyMap, MAP_HILLS, applyMoreHouses } from './maps.ts';
 import { applyRules, type RulesCmd } from './rules.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
@@ -36,7 +36,7 @@ export type Command =
   | TrenchCmd
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
-  | { t: 'map'; id: number; vegetation?: number; sym?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
+  | { t: 'map'; id: number; vegetation?: number; sym?: number; more?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
   | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
   | RulesCmd;   // R046：第 0 步的遭遇戰設定（兵力、補給速度；地圖之後、喪屍與布陣之前套，見 rules.ts）
@@ -498,6 +498,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   } else {
   { const m = cmds.find(c => c.t === 'map'); if (m?.t === 'map' && m.id === MAP_HILLS) applyMap(w, MAP_HILLS, m.vegetation); }   // R055 丘陵：植被旗標照收；同一步只看第一個 map 指令（跟舊地圖一樣先到先套）。下一行的舊條件原樣不動（有守衛錨著它）；丘陵套好之後下一行再套一次不會動它
   for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined);   // 地圖最先套；R130 id 3 也保留明確的植被旗標。
+  for (const c of cmds) if (c.t === 'map') { if (c.more === 1 && w.tick === 0) applyMoreHouses(w); break; }   // R087 更多房屋：只在第 0 步、只看第一個 map 指令；套完地圖之後、sym 之前（頁面開局也是套地圖、多放房子，第 0 步才折 sym：世界的欄位順序一樣）
   for (const c of cmds) if (c.t === 'map') { if (c.sym === 1 && w.tick === 0) w.sym = 1; break; }   // R084 左右對稱：只在第 0 步、只看第一個 map 指令；要在 eco 之前（指揮部、出生格照它）、地圖之後（世界的欄位順序跟頁面上一樣：頁面開局先套地圖，第 0 步才折 sym）
   for (const c of cmds) if (c.t === 'rules') applyRules(w, c);   // R046：地圖之後、喪屍與布陣之前
   for (const c of cmds) if (c.t === 'zombies') startZombies(w);

@@ -37,7 +37,7 @@ import { initMapPick, initTownPick, type MapPick } from './ui/mapPick.ts';
 import { startZombies } from './sim/zombies.ts';
 import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
 import { BuildPlanner, BUILD_TIP, type PlanCmd } from './ui/buildPlanner.ts';
-import { setDamageDetails, setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls, setHouseArt } from './render/buildings.ts';
+import { setDamageDetails, setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls, setHouseArt, setMoreArt } from './render/buildings.ts';
 import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
@@ -80,7 +80,7 @@ let lastCounterbatteryWorld: World | undefined;
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
 setMaterials(V.r105); // R105 材質視覺提示；只關畫面，模擬不變
-setBuildingDetails(V.r134 && V.r131); setHouseArt(V.r086);   // R086 房屋細化（只在 R134 開著時有作用）
+setBuildingDetails(V.r134 && V.r131); setHouseArt(V.r086); setMoreArt(V.r087);   // R086 房屋細化（只在 R134 開著時有作用）；R087 三種新房型的模型（關掉時照看起來像的舊種類畫）
 setDamageDetails(V.r138);
 setFacades(V.r028);
 setStreets(V.r027);
@@ -220,7 +220,7 @@ function startBattle() {
   ui();
 }
 
-function issue(cmd: Command) {
+function issue(cmd: Command) { if (cmd.t === 'map' && w.more && !w.tick) cmd = { ...cmd, more: 1 };   // R087：開局已經多放了房子（skirmish.start），第 0 步的 map 指令就帶 more＝1（紀錄、連線送出去的跟世界一樣）
   if (!netLive()) log.push({ tick: w.sandbox ? commandTick(w) : w.tick, cmd });   // R083：連線的局由 netFeed 照實際執行的那一步記
   pending.push(cmd);
 }
