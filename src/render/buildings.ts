@@ -1,11 +1,12 @@
 // 村莊建築：每棟照損壞三段畫（完好 → 沒屋頂的空殼 → 瓦礫堆）。只讀世界，不改世界。
 // 三段的畫法照 GlimmerTown3D-lab@bece722 src/render/scene.ts:210-231（牆降高、屋頂消失、瓦礫用雜湊散落），改成二戰村莊的配色。
 import * as THREE from 'three';
+import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant } from './moreArt.ts';
 import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
 import { houseLook, civilian, ROOF_HIP, roof as artRoof, ridgeCap, stack, stackAt, plinth, plinthColor, eaveBand, hood, windows as artWindows, shopFront, barnDoor, loft, thatchBand, churchDetails, type Look, type Frame } from './houseArt.ts';
 import {
-  stageOf, STAGE_INTACT, STAGE_ROOFLESS, STAGE_RUBBLE, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX,
+  stageOf, STAGE_INTACT, STAGE_ROOFLESS, STAGE_RUBBLE, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX, BK_OAST, BK_MILL, BK_WAREHOUSE,
   BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind,
   bldMaterial, BM_WOOD, BM_BRICK, BM_STONE, BM_CONCRETE, type World, type Building,
 } from '../sim/world.ts';
@@ -49,6 +50,9 @@ export function setDamageDetails(on: boolean): void { damageDetailsOn = on; }
 // R086 房屋細化（src/render/houseArt.ts）：模組層級預設關，main.ts 照 ?noR086=1 打開；只在 R134 開著時有作用（R134 關＝跟關 R086 一樣）
 let houseArtOn = false;
 export function setHouseArt(on: boolean): void { houseArtOn = on; }
+let moreArtOn = false;   // R087 三種新房型的模型（moreArt.ts）；關著時照看起來像的舊種類畫（MORE_LIKE）
+export function setMoreArt(on: boolean): void { moreArtOn = on; }
+const moreShown = (b: Building) => moreArtOn && isMoreKind(b.kind);
 const trimOn = () => houseArtOn && buildingDetailsOn; // R086 trim：看不見的兩面（−x、−z；鏡頭固定從 +x、+z 看）不畫細節
 const artOn = () => houseArtOn && buildingDetailsOn; // R086 art：每棟自己的樣子與新零件
 const civilianDamage = (b: Building) => damageDetailsOn && [BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP].includes(b.kind);
@@ -86,14 +90,14 @@ for (const kind of [BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP]) MATERIAL
 let wallsOn = true;
 export function setWalls(on: boolean): void { wallsOn = on; }
 export const wallShown = (b: Building): boolean => wallsOn && isWallKind(b.kind);
-const visibleKind = (kind: number) => !wallsOn && isWallKind(kind) ? BK_HOUSE : kind;
-const palette = (kind: number) => { kind = visibleKind(kind); return materialsOn ? MATERIAL_PAL[kind] ?? PAL[kind] ?? PAL[BK_HOUSE] : PAL[kind] ?? PAL[BK_HOUSE]; };
+const visibleKind = (kind: number) => !wallsOn && isWallKind(kind) ? BK_HOUSE : !moreArtOn && isMoreKind(kind) ? MORE_LIKE[kind] : kind;   // R087：新房型關著時照舊種類
+const palette = (kind: number) => { kind = visibleKind(kind); if (isMoreKind(kind)) return MORE_PAL[kind]; return materialsOn ? MATERIAL_PAL[kind] ?? PAL[kind] ?? PAL[BK_HOUSE] : PAL[kind] ?? PAL[BK_HOUSE]; };
 // R086：一棟的配色（關著＝那一種的配色）。碎片、彈痕、損壞階段、遠景都照它，跟完好時同一棟同一個顏色（R004）
 const lookOf = (b: Building): Look => houseLook(b, palette(b.kind), facadeStyle(b) === FAC_TIMBER, PLASTER, facadeStyle(b) === FAC_TILE);
-const paletteOf = (b: Building) => (artOn() && civilian(b.kind) ? lookOf(b) : palette(b.kind));
+const paletteOf = (b: Building) => (moreShown(b) ? moreLook(b) : artOn() && civilian(b.kind) ? lookOf(b) : palette(b.kind));
 const plasterOf = (b: Building) => (artOn() && civilian(b.kind) ? lookOf(b).plaster : PLASTER);
 // ?noR120=1：紀錄裡的牆畫成房子——碎片、彈痕也照畫出來的那一棟（審查 compat-1）
-const shownAs = (b: Building): Building => (!wallsOn && isWallKind(b.kind) ? { ...b, kind: BK_HOUSE } : b);
+const shownAs = (b: Building): Building => (!wallsOn && isWallKind(b.kind) ? { ...b, kind: BK_HOUSE } : !moreArtOn && isMoreKind(b.kind) ? { ...b, kind: MORE_LIKE[b.kind] } : b);
 export function bldColorsOf(b: Building): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return paletteOf(shownAs(b)); }
 export function houseLookOf(b: Building): Look | null { b = shownAs(b); return artOn() && civilian(b.kind) ? lookOf(b) : null; }   // 守衛數樣式用
 const rubbleColors = (kind: number) => {
@@ -317,6 +321,7 @@ function intact(g: Geo, b: Building) {
   if (wallShown(b)) { boundaryWall(g, b, false); return; }
   if (b.kind === BK_HQ) { hq(g, b); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, false); return; }
+  if (moreShown(b)) { moreIntact(g, b, wallHeight(b)); return; }   // R087 烘房、風車、倉庫
   if (artOn() && (civilian(b.kind) || (b.kind === BK_CHURCH && b.w >= 2 && b.d >= 2))) { artIntact(g, b); return; }   // R086 房屋細化
   const p = palette(b.kind), m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   if (b.kind === BK_CHURCH) {
@@ -453,6 +458,7 @@ function damagedRubble(g: Geo, b: Building) {
 
 // 沒屋頂：四面薄牆剩七成高，牆頂鋸齒，屋裡焦黑，幾根斷梁
 function roofless(g: Geo, b: Building, allowDamage = true) {
+  if (moreShown(b)) { moreShell(g, b, wallHeight(b)); return; }   // R087：烘房沒有圓錐與風帽、風車沒有帽子與帆、倉庫沒有屋頂
   if (allowDamage && civilianDamage(b)) { damagedShell(g, b); return; }
   if (wallShown(b)) { boundaryWall(g, b, true); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, true); return; }
@@ -477,6 +483,7 @@ function roofless(g: Geo, b: Building, allowDamage = true) {
 }
 
 function rubble(g: Geo, b: Building, allowDamage = true) {
+  if (moreShown(b)) { damagedRubble(g, b); moreRubble(g, b); return; }   // R087：瓦礫堆照通用的，烘爐與風車的磚基座還站著一截
   if (allowDamage && civilianDamage(b)) { damagedRubble(g, b); return; }
   const n = 6 + b.w * b.d * 3, colors = rubbleColors(b.kind);
   for (let k = 0; k < n; k++) {
@@ -491,6 +498,7 @@ function rubble(g: Geo, b: Building, allowDamage = true) {
 export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
   const allowDamage = !isWallKind(b.kind); // noR120 fallback houses remain boundary walls, outside R138.
   if (!wallsOn && isWallKind(b.kind)) b = { ...b, kind: BK_HOUSE };
+  if (!moreArtOn && isMoreKind(b.kind)) b = { ...b, kind: MORE_LIKE[b.kind] };   // R087 閥關著：照看起來像的舊種類畫
   if (stage === STAGE_INTACT) intact(g, b); else if (stage === STAGE_ROOFLESS) roofless(g, b, allowDamage); else rubble(g, b, allowDamage);
   return g;
 }
@@ -498,6 +506,8 @@ export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
 // skip：這一刻先不畫的建築（R016 正在從地面升起的，由殘影網格畫）
 // R130：只供新大圖的遠景層級；建築佔格與完整點選模型仍是原資料。
 function distantBuilding(g: Geo, b: Building, lod: number): void {
+  if (!moreArtOn && isMoreKind(b.kind)) b = { ...b, kind: MORE_LIKE[b.kind] };   // R087
+  if (moreShown(b)) { moreDistant(g, b, lod, stageOf(b), wallHeight(b), rubbleColors(b.kind)[0]); return; }
   if (isWallKind(b.kind) || b.kind === BK_HQ || b.kind === BK_PILLBOX) { buildingGeo(g, b, stageOf(b)); return; }
   const p = paletteOf(b), x0 = b.x + 0.1, z0 = b.z + 0.1, x1 = b.x + b.w - 0.1, z1 = b.z + b.d - 0.1;
   const stage = stageOf(b), h = wallHeight(b), wall = facadeStyle(b) === FAC_TIMBER ? plasterOf(b) : p.wall;
@@ -533,6 +543,7 @@ export function buildTown(w: World, skip?: (b: Building) => boolean, lod = 0): G
 export function bldColors(kind: number): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return palette(kind); }
 export const RUBBLE_COLORS = RUBBLE;
 export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22, [BK_HQ]: 0.16, [BK_PILLBOX]: 0.06, [BK_WALL_BRICK]: 0, [BK_WALL_STONE]: 0, [BK_WALL_CONCRETE]: 0 };
+for (const k of [BK_OAST, BK_MILL, BK_WAREHOUSE]) ROOF_RISE[k] = MORE_RISE[k];   // R087（roofRise 先照閥換成舊種類）
 export const roofRise = (kind: number): number => ROOF_RISE[visibleKind(kind)] ?? 0.32;
 
 // 冒煙點：沒屋頂的房子從屋裡冒煙（渲染端的效果用）

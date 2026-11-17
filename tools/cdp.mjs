@@ -137,7 +137,10 @@ export async function withBrowser(opt, fn) {
       if (!keep) await page.evaluate("try { localStorage.removeItem('gtrts.v1.replays'); localStorage.removeItem('gtrts.v1.setup'); localStorage.removeItem('gtrts.v1.save'); const set = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (k !== 'gtrts.v1.save') set.call(this, k, v); } } catch {}").catch(() => {});   // R073：上次的設定也清；R074：打到一半的存檔也清——遊戲在頁面離開時（pagehide、切到背景）會自己再存一次，所以清完順手讓這一頁之後寫不進那個鍵
       const q = menu || /(^|&)noR069=/.test(query) ? query : `${query ? query + '&' : ''}noR069=1`;
       const full = realism || /(^|&)noR076=/.test(q) ? q : `${q ? q + '&' : ''}noR076=1`;
-      await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/${entry}?${full}` });
+      // R087：預設在網址加 noR087=1，既有守衛照舊測沒有「更多房屋」的局（房子的位置、數量、三角形預算寫的時候就是這樣）；
+      // 要測 R087 的守衛在網址寫 noR087=0（網址自己寫了 noR087 就照它的）。
+      const url = /(^|&)noR087=/.test(full) ? full : `${full ? full + '&' : ''}noR087=1`;
+      await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/${entry}?${url}` });
       for (let i = 0, t0 = Date.now(); Date.now() - t0 < readyMs; i++) { await sleep(150); if (await page.evaluate(ready).catch(() => false)) break; }
       await sleep(opt.settle ?? 900);   // 讓第一幀以上畫完（陰影貼圖、後製）
     };

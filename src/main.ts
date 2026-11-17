@@ -30,14 +30,14 @@ import { initMobileChrome, touchBoxArmed } from './ui/mobileChrome.ts';
 import { initCommandMenu, bombardCommand, bombardTarget, type CommandMenu } from './ui/commandMenu.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
-import { applyMap, MAP_RYE, MAP_HILLS } from './sim/maps.ts';
+import { applyMap, MAP_RYE, MAP_HILLS, applyMoreHouses } from './sim/maps.ts';
 import { MAP_LARGE } from './sim/largeMap.ts';
 import { MAP_TOWN } from './sim/expandedMap.ts';
 import { initMapPick, initTownPick, type MapPick } from './ui/mapPick.ts';
 import { startZombies } from './sim/zombies.ts';
 import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
 import { BuildPlanner, BUILD_TIP, type PlanCmd } from './ui/buildPlanner.ts';
-import { setDamageDetails, setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls, setHouseArt } from './render/buildings.ts';
+import { setDamageDetails, setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls, setHouseArt, setMoreArt } from './render/buildings.ts';
 import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
@@ -80,7 +80,7 @@ let lastCounterbatteryWorld: World | undefined;
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
 setMaterials(V.r105); // R105 材質視覺提示；只關畫面，模擬不變
-setBuildingDetails(V.r134 && V.r131); setHouseArt(V.r086);   // R086 房屋細化（只在 R134 開著時有作用）
+setBuildingDetails(V.r134 && V.r131); setHouseArt(V.r086); setMoreArt(V.r087);   // R086 房屋細化（只在 R134 開著時有作用）；R087 三種新房型的模型（關掉時照看起來像的舊種類畫）
 setDamageDetails(V.r138);
 setFacades(V.r028);
 setStreets(V.r027);
@@ -142,7 +142,7 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
   const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : skirmish?.village ? 0 : skirmish?.hills ? MAP_HILLS : MAP_RYE) : 0;   // R046：村莊＝地圖 0（createWorld 的亂數村莊）
-  if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
+  if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined); if (map && !sandbox && V.r087) applyMoreHouses(w);   // R087 更多房屋：跟第 0 步的 map 指令（帶 more＝1）同一套，預覽就看得到
   const rules = !sandbox && (map || vegetation) ? skirmish?.start(w) : undefined;   // R046：一般開局才套（布陣時就看得到）；腳本、重播、沙盒不套
   const zombies = !sandbox && (map || vegetation) && V.r045 && q.get('mode') === 'zombies';
   if (zombies) startZombies(w);
@@ -154,7 +154,7 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   planner.clear(); phase = build ? 'build' : 'battle';
   battleHint = undefined; sandboxHint = ''; lastTap = { id: 0, t: -1e9 };
   if (sandbox) paused = true;
-  if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}), ...(V.r084 ? { sym: 1 } : {}) });   // R084 左右對稱：新開的局
+  if (map || vegetation) issue({ t: 'map', id: mapId, ...(vegetation ? { vegetation: 1 } : {}), ...(V.r084 ? { sym: 1 } : {}), ...(map && !sandbox && V.r087 ? { more: 1 } : {}) });   // R084 左右對稱：新開的局
   if (rules) issue(rules);
   if (zombies) issue({ t: 'zombies' });
   if (build) { paused = true; planner.refreshPreview(); }
