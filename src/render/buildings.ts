@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant, moreMarkFace } from './moreArt.ts';
 import { Geo } from './geo.ts';
+import { wearTier, wearable, tierFits, wearGeo, wearTop } from './wearArt.ts';
 import { hash2 } from '../sim/rng.ts';
 import { houseLook, civilian, ROOF_HIP, roof as artRoof, ridgeCap, stack, stackAt, plinth, plinthColor, eaveBand, hood, windows as artWindows, shopFront, barnDoor, loft, thatchBand, churchDetails, type Look, type Frame } from './houseArt.ts';
 import {
@@ -53,6 +54,14 @@ export function setHouseArt(on: boolean): void { houseArtOn = on; }
 let moreArtOn = false;   // R087 三種新房型的模型（moreArt.ts）；關著時照看起來像的舊種類畫（MORE_LIKE）
 export function setMoreArt(on: boolean): void { moreArtOn = on; }
 const moreShown = (b: Building) => moreArtOn && isMoreKind(b.kind);
+let wearOn = false;   // R088 建築破壞的過程（wearArt.ts）：照耐久多分幾段樣子；關著＝今天的三段
+export function setWearArt(on: boolean): void { wearOn = on; }
+export const wearArtOn = (): boolean => wearOn;
+let townSeen: ((w: World) => void) | null = null;   // R088：wear88.ts 掛上來，第一次畫一個世界時就記下每一棟的段（不用等第一步）
+export function onTownBuilt(f: (w: World) => void): void { townSeen = f; }
+export const wearMarkTop = (b: Building, x: number, z: number): number => { const t = wearOn && wearable(b) ? wearTier(b) : 0; return t === 3 || t === 5 ? wearTop(b, t, x, z, wallHeight(b), roofRise(b.kind)) : Infinity; };   // R014：已經塌了的牆，新打上的彈痕不高過它
+let wearCacheOn = true;   // R088 整鎮每棟一份快取（守衛拿來比「快取＝不快取」）
+export function setWearCache(on: boolean): void { wearCacheOn = on; }
 // R014 彈痕：八角的烘爐、風車塔身那一面（見 moreArt.ts 的 moreMarkFace）；不是新房型或模組關著回 null
 export const markFace = (b: Building, axis: number, n: number, px: number, pz: number, y: number, hh: number) => (moreShown(b) ? moreMarkFace(b, axis, n, px, pz, y, hh) : null);
 const trimOn = () => houseArtOn && buildingDetailsOn; // R086 trim：看不見的兩面（−x、−z；鏡頭固定從 +x、+z 看）不畫細節
@@ -497,10 +506,18 @@ function rubble(g: Geo, b: Building, allowDamage = true) {
 }
 
 // 一棟建築在指定損壞階段的模型（R004 倒塌殘影要畫「倒之前」那一段）
-export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
+// tier（R088）：殘影指定要畫哪一段（不給＝照耐久）
+export function buildingGeo(g: Geo, b: Building, stage: number, tier?: number): Geo {
   const allowDamage = !isWallKind(b.kind); // noR120 fallback houses remain boundary walls, outside R138.
   if (!wallsOn && isWallKind(b.kind)) b = { ...b, kind: BK_HOUSE };
   if (!moreArtOn && isMoreKind(b.kind)) b = { ...b, kind: MORE_LIKE[b.kind] };   // R087 閥關著：照看起來像的舊種類畫
+  const wt = wearOn && allowDamage && wearable(b) ? tier ?? wearTier(b) : 0;   // R088：段與階段配得上才畫損壞（T1–T3 完好、T5 空殼）
+  if (wt && tierFits(stage, wt)) {
+    const base = new Geo(), p = paletteOf(b);
+    if (stage === STAGE_INTACT) intact(base, b); else roofless(base, b, allowDamage);
+    wearGeo(g, base, b, stage, wt, wallHeight(b), roofRise(b.kind), facadeStyle(b) === FAC_TIMBER ? plasterOf(b) : p.wall, p.roof);
+    return g;
+  }
   if (stage === STAGE_INTACT) intact(g, b); else if (stage === STAGE_ROOFLESS) roofless(g, b, allowDamage); else rubble(g, b, allowDamage);
   return g;
 }
@@ -533,11 +550,45 @@ function distantBuilding(g: Geo, b: Building, lod: number): void {
 }
 
 export function buildTown(w: World, skip?: (b: Building) => boolean, lod = 0): Geo {
+  if (wearOn && wearCacheOn) return wearTown(w, skip, lod);   // R088：每棟一份快取，換段時只重算那一棟
   const g = new Geo();
   for (const b of w.blds) if (!skip || !skip(b)) {
     if (lod) distantBuilding(g, b, lod); else buildingGeo(g, b, stageOf(b));
   }
   for (const b of w.wires?.segments ?? []) wireGeo(g, b);
+  return g;
+}
+
+// R088 整鎮每棟一份快取：鍵是會改變那一棟幾何的每一樣東西（種類、位置、大小、層數、耐久上限、誰蓋的、階段、段、遠近層級、所有畫面模組的開關）；
+// 建築物件本身是 WeakMap 的鍵（換了世界、讀了檔就是新的物件，拿不到舊的）。接起來的位元組跟一棟一棟畫進同一個 Geo 一樣。
+interface TownPart { sig: string; pos: Float32Array; nor: Float32Array; col: Float32Array }
+const townCache = new WeakMap<Building, TownPart[]>();
+const moduleSig = () => [wallsOn, wireDetail, materialsOn, buildingDetailsOn, damageDetailsOn, facadesOn, houseArtOn, moreArtOn, wearOn].map(Number).join('');
+function wearTown(w: World, skip: ((b: Building) => boolean) | undefined, lod: number): Geo {
+  const flags = moduleSig(), parts: TownPart[] = [];
+  let n = 0;
+  for (const b of w.blds) {
+    if (skip && skip(b)) continue;
+    const stage = stageOf(b), sig = `${flags}|${b.id},${b.kind},${b.x},${b.z},${b.w},${b.d},${b.floors},${b.maxHp},${b.builtBy ?? ''},${stage},${wearable(b) ? wearTier(b) : 0},${lod}`;
+    let list = townCache.get(b);
+    if (!list) townCache.set(b, list = []);
+    let part = list[lod];
+    if (!part || part.sig !== sig) {
+      const g = new Geo();
+      if (lod > 0) distantBuilding(g, b, lod); else buildingGeo(g, b, stage);   // （不寫成 if (lod) …：R130 的守衛錨著那一句要唯一）
+      townSeen?.(w);
+      part = list[lod] = { sig, pos: new Float32Array(g.pos), nor: new Float32Array(g.nor), col: new Float32Array(g.col) };
+    }
+    parts.push(part); n += part.pos.length;
+  }
+  const wires = new Geo();
+  for (const s of w.wires?.segments ?? []) wireGeo(wires, s);
+  const pos = new Float32Array(n + wires.pos.length), nor = new Float32Array(pos.length), col = new Float32Array(pos.length);
+  let at = 0;
+  for (const p of parts) { pos.set(p.pos, at); nor.set(p.nor, at); col.set(p.col, at); at += p.pos.length; }
+  pos.set(wires.pos, at); nor.set(wires.nor, at); col.set(wires.col, at);
+  const g = new Geo();
+  Object.assign(g, { pos, nor, col });   // Float32Array 當陣列用：geometry()、triangles、守衛的讀取都一樣
   return g;
 }
 

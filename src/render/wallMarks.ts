@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { SUB, UK_HOWITZER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_INTACT, UNIT_KINDS, type Building, type SimEvent, type World } from '../sim/world.ts';
 import { hash2 } from '../sim/rng.ts';
-import { bldColorsOf, wallHeight, wallShown, wallBounds, markFace } from './buildings.ts';
+import { bldColorsOf, wallHeight, wallShown, wallBounds, markFace, wearMarkTop } from './buildings.ts';
 import type { MakeInst, Sight } from './painter.ts';
 
 export const HOLE_CAP = 160;                 // R014 牆上痕跡最多幾個（滿了丟最舊的）
@@ -69,6 +69,13 @@ export class WallMarks {
     if (this.holesDirty) this.rebuild14();
   }
 
+  // R088：牆塌下去（屋頂一角、空殼塌一半）之後，高過那裡新牆頂的彈痕拿掉（不留在半空中）
+  dropAbove(id: number, topAt: (x: number, z: number) => number): void {
+    const H = this.holes;
+    for (let i = 0; i < HOLE_CAP; i++) if (H.live[i] && H.bld[i] === id && H.y[i] + H.h[i] * (H.kind[i] === 0 ? 1.55 : 1) / 2 > topAt(H.x[i], H.z[i])) { H.live[i] = 0; this.holesDirty = true; }
+    if (this.holesDirty && this.mesh) this.rebuild14();   // 還沒有網格（Node、還沒開戰）就等下一次事件再重寫
+  }
+
   // 從 (sx,sz) 往 (ex,ez) 的直線打進建築的牆（模型的牆內縮 0.1 格；教堂只算中殿），落在進入的那一面
   private mark14(b: Building, kind: number, sx: number, sz: number, ex: number, ez: number) {
     const { x0, x1, z0, z1 } = wallBounds(b);
@@ -112,6 +119,12 @@ export class WallMarks {
       const half = H.w[i] * scale / 2 + 0.006;
       if (axis === 0) { H.x[i] = oct.at; H.z[i] = Math.max(oct.lo + half, Math.min(oct.hi - half, H.z[i])); } else { H.z[i] = oct.at; H.x[i] = Math.max(oct.lo + half, Math.min(oct.hi - half, H.x[i])); }
     }
+    { const top88 = wearMarkTop(b, H.x[i], H.z[i]), scale = kind === 0 ? 1.55 : 1;   // R088：牆已經塌了（T3、T5），彈痕往下放到新牆頂以下；放不下就縮小，太矮就不留
+      if (H.y[i] + H.h[i] * scale / 2 > top88) {
+        if (top88 < 0.06) { H.live[i] = 0; return; }
+        H.h[i] = Math.min(H.h[i], (top88 - 0.012) / scale); H.w[i] = Math.min(H.w[i], H.h[i] * 1.6);
+        const half = H.h[i] * scale / 2; H.y[i] = Math.max(half + 0.006, Math.min(H.y[i], top88 - half - 0.006));
+      } }
     const wall = bldColorsOf(b).wall;
     H.r[i] = wall.r + (1 - wall.r) * 0.35; H.g[i] = wall.g + (1 - wall.g) * 0.35; H.b[i] = wall.b + (1 - wall.b) * 0.35;   // 碎掉的灰泥：牆色偏亮
     this.holesDirty = true;
