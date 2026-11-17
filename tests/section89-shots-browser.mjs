@@ -26,7 +26,7 @@ await runOrSkip('section89-shots', async () => {
           await open(`${q}seed=1944&noR100=1&noR089=${on ? 0 : 1}`); await E('__rts.startBattle(); __rts.pause(true); 0');
           const at = await E('__r089.states()'); await frames();
           for (const state of ['move', 'halt', 'prone', 'roof']) {
-            await E(`__r089.cam(${at[state][0]}, ${at[state][1]}, ${zoom})`);
+            await E(`__r089.cam(${at[state][0]}, ${at[state][1]}, ${zoom}); __r089.clean()`);
             const m = await measure(E, frames);
             await shot(page, path.join(shots, `r089-${state}-${map}-${device}-${on ? 'on' : 'off'}.png`));
             assert(m.calls <= 22 && m.triangles <= 80000, `close-up: ${state} on ${map} (${device}, R089 ${on}) within 22 calls and 80,000 triangles (${m.calls}/${m.triangles})`);

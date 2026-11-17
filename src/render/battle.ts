@@ -584,7 +584,7 @@ export class BattleView {
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
-    if (w.units.length >= this.prevX.length) console.error(`單位 id ${w.units.length} 超過已配置渲染容量 ${this.prevX.length - 1}（src/render/battle.ts）`);
+    if (w.units.length >= this.prevX.length) this.zombieUnitSlots();   // R089：沒走過 onEvents 就畫的畫面（讀回存檔、重建）id 超過陣列也先長（以前只報錯、那個單位畫在 NaN）
     let nh = 0, ng = 0, no = 0, nd = 0, nr = 0, nm = 0, na = 0;
     for (const u of w.units) {
       if (!this.visibleUnit(u)) continue;

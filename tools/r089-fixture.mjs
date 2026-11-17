@@ -17,6 +17,7 @@ window.__r089 = (() => {
   const spawned = ids => view.onEvents(ids.map(id => ({ e: 'spawn', unit: id })), view.lastT ?? 0);
   return {
     cam: (x, z, zoom) => { paused = true; view.target.set(x, 0, z); view.zoomBy(zoom / view.zoom); },
+    clean: () => document.querySelectorAll('#start-order,#start-banner').forEach(e => e.remove()),
     // 每邊 per 個班擺在 (cx, cz) 附近的空格（我方在南、敵方在北、各 20 格寬）；fight＝會開火（不然 cooldown 擋著只量畫面）；sides＝1 只放我方；霧關掉＝最壞的情況
     crowd: (per, cx, cz, fight, sides = 2) => {
       paused = true; view.fogOn = false;
@@ -29,14 +30,21 @@ window.__r089 = (() => {
     },
     hurt: dhp => { for (const u of w.units) if (u.kind === 3 && u.alive) u.hp = Math.max(1, u.hp - dhp); },
     count: () => w.units.filter(u => u.kind === 3 && u.alive).length,
+    // 處理器時間：在頁面裡直接叫 view.update n 次（同一個模擬時間），回平均毫秒
+    bench: n => { const t0 = performance.now(); for (let i = 0; i < n; i++) view.update(1, view.lastT, selected); return (performance.now() - t0) / n; },
     // 近拍：一棟住宅的屋頂上一班、旁邊停下的一班、行進的一班、趴下的一班（士氣第二版、釘住；只為了拍照）
     states: () => {
       paused = true; view.fogOn = false;
       w.rules = { ...(w.rules ?? {}), morale: 2 };
       const c = w.n / 2, b = w.blds.filter(b => b.hp > 0 && b.kind === 0 && b.w === 1 && b.d === 1).sort((a, e) => Math.hypot(a.x - c, a.z - c) - Math.hypot(e.x - c, e.z - c) || a.id - e.id)[0];
-      const t = taken(), near = (x0, z0) => { for (let r = 0; r < 12; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === r && free(t, x0 + dx, z0 + dz)) return [x0 + dx, z0 + dz]; return [x0, z0]; };
+      // 拍得到：那一格沒有樹，鏡頭那一側（x、z 大的那邊）兩格內沒有房子擋著
+      const occ = (x, z) => x >= 0 && z >= 0 && x < w.n && z < w.n && (!!w.occ[z * w.n + x] || !!w.vegetation?.cells[z * w.n + x]);
+      const clear = (x, z) => !w.vegetation?.cells[z * w.n + x] && ![[1, 0], [0, 1], [1, 1], [2, 1], [1, 2], [2, 2], [2, 0], [0, 2]].some(([dx, dz]) => occ(x + dx, z + dz));
+      const t = taken(), near = (x0, z0) => { for (let r = 0; r < 14; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === r && free(t, x0 + dx, z0 + dz) && clear(x0 + dx, z0 + dz)) return [x0 + dx, z0 + dz]; return [x0, z0]; };
       const out = {}, ids = [];
-      ids.push(put(t, 0, b.x, b.z, {})); out.roof = [b.x + 0.5, b.z + 0.5];
+      ids.push(put(t, 0, b.x, b.z, {}));
+      const k = view.unitHeight(w.units[w.units.length - 1]) * 1.2247;   // 屋頂上的點在畫面上＝往遠處退 高 × cot30°／√2 的地面點：鏡頭對準那裡
+      out.roof = [b.x + 0.5 - k, b.z + 0.5 - k];
       let p = near(b.x + 3, b.z); ids.push(put(t, 0, p[0], p[1], {})); out.halt = [p[0] + 0.5, p[1] + 0.5];
       p = near(b.x + 3, b.z + 3); ids.push(put(t, 0, p[0], p[1], { path: [p[1] * w.n + Math.min(w.n - 1, p[0] + 6)], pathIdx: 0 })); out.move = [p[0] + 0.5, p[1] + 0.5];
       p = near(b.x, b.z + 3); ids.push(put(t, 0, p[0], p[1], { sup: 70 })); out.prone = [p[0] + 0.5, p[1] + 0.5];

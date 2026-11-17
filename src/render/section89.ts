@@ -15,8 +15,7 @@ export const MEN_TRIS89 = 32_000;       // 小兵網格的預算（照 info() �
 export const BLEND89 = 0.4;             // 換隊形幾秒（模擬時間）
 export const TURN89 = 4;                // 隊形最快轉多少（弧度／秒）
 export const MARGIN89 = 1.5;            // 畫面外還畫幾格
-export const BACK89 = 1;                // 回到比較好的段要等幾秒（模擬時間）
-export const ENGAGE89 = 3;              // 最後一次開火之後幾秒內算「在打」（停下的隊形轉向瞄準的方向）
+export const BACK89 = 60;               // 回到比較好的段要連續幾幀（約 1 秒；用幀不用模擬時間：暫停時也回得來）
 // 跟 battle.ts 一樣的數（tests/section89.mjs 對照）：鏡頭上下各看幾格、仰角；趴下的姿勢
 export const HALF_H89 = 9, ELEV89 = Math.PI / 6, PRONE_TILT89 = -1.45, PRONE_LIFT89 = 0.03;
 const SIN_E = Math.sin(ELEV89), COS_E = Math.cos(ELEV89);
@@ -29,7 +28,8 @@ const line = (rank: number, file: number, stag: number): Lay => MOVE.map(([x, z]
 const HALT = line(0.07, 0.13, 0.0325), PRONE = line(0.15, 0.12, 0.03);
 const scaled = (l: Lay, s: number): Lay => l.map(([x, z]): [number, number] => [x * s, z * s]);
 export const L_MOVE = 0, L_HALT = 1, L_PRONE = 2, L_ROOF = 3, L_ROOF_PRONE = 4;
-export const LAYOUTS89: readonly Lay[] = [MOVE, HALT, PRONE, scaled(HALT, 0.75), scaled(PRONE, 0.75)];
+// 屋頂上：站著的整個縮 0.75；趴著的只縮橫向（躺著的人長 0.30，前後兩列不能再近）
+export const LAYOUTS89: readonly Lay[] = [MOVE, HALT, PRONE, scaled(HALT, 0.75), PRONE.map(([x, z]): [number, number] => [x, z * 0.75])];
 // 哪一種單位畫成大班（R091 加新的步兵種類只加這張表）
 export const CROWD89: Record<number, { men: number; lay: readonly Lay[] }> = { [UK_INFANTRY]: { men: SECTION_MEN, lay: LAYOUTS89 } };
 
@@ -37,7 +37,7 @@ export const CROWD89: Record<number, { men: number; lay: readonly Lay[] }> = { [
 export interface Host89 {
   w: World; men: THREE.InstancedMesh; menNormal: THREE.BufferGeometry; menDense: THREE.BufferGeometry | null;
   bodies: { n: number; next: number; x: Float32Array; z: Float32Array; y: Float32Array; yaw: Float32Array; side: Uint8Array };
-  zombieBodies: Uint8Array; bodyBorn: Float32Array; lastT: number; yaw: Float64Array; fire44: Float64Array;
+  zombieBodies: Uint8Array; bodyBorn: Float32Array; lastT: number; yaw: Float64Array;
   menDbg: { alive: number; prone: number; crew: number };
   target: THREE.Vector3; zoom: number; cam: THREE.OrthographicCamera;
   unitHeight(u: Unit): number; visibleAt(x: number, z: number): boolean;
@@ -52,15 +52,15 @@ export function put89(a: Float32Array | number[], n: number, x: number, y: numbe
   a[o + 12] = x; a[o + 13] = y; a[o + 14] = z; a[o + 15] = 1;
 }
 
-const UNSET = 255;
+const UNSET = 255, SNAP = 254;   // SNAP：換隊形時還在混，起點是那一刻混到一半的位置（存在 snap）
 const ease = (k: number) => k >= 1 || k < 0 ? 1 : k * k * (3 - 2 * k);   // 時間倒退（換世界）當作已經換好
 
 export class Section89 {
   // 每個單位 id 一格，用到才長（每張圖都不會越界）
   private last = new Int8Array(0); private lay = new Uint8Array(0); private from = new Uint8Array(0);
-  private t0 = new Float32Array(0); private ori = new Float32Array(0); private oriT = new Float32Array(0);
-  private show = new Uint8Array(0);
-  private tier = -1; private since = -1; private tris0 = 0; private tris2 = 0;
+  private t0 = new Float64Array(0); private ori = new Float32Array(0); private oriT = new Float64Array(0);   // 時間用 Float64：Float32 存的時間常比真的大一點點，換隊形的第一幀會先跳到終點
+  private snap = new Float32Array(0); private show = new Uint8Array(0);
+  private tier = -1; private okFrames = 0; private tris0 = 0; private tris2 = 0;
   private live = 0; private culled = 0; private drawn = 0;
   private px = 0; private pz = 0;
   dbg = { live: 0, bodies: 0, culled: 0, F: 0, tier: 0, tris: 0 };
@@ -72,15 +72,16 @@ export class Section89 {
   private grow(id: number) {
     if (id < this.last.length) return;
     const size = Math.max(64, id + 1, this.last.length * 2);
-    const g = <T extends Int8Array | Uint8Array | Float32Array>(a: T, fill: number): T => { const b = new (a.constructor as { new(n: number): T })(size); b.fill(fill); b.set(a); return b; };
+    const g = <T extends Int8Array | Uint8Array | Float32Array | Float64Array>(a: T, fill: number, k = 1): T => { const b = new (a.constructor as { new(n: number): T })(size * k); b.fill(fill); b.set(a); return b; };
     this.last = g(this.last, -1); this.lay = g(this.lay, UNSET); this.from = g(this.from, UNSET);
-    this.t0 = g(this.t0, 0); this.ori = g(this.ori, 0); this.oriT = g(this.oriT, 0);
+    this.t0 = g(this.t0, 0); this.ori = g(this.ori, 0); this.oriT = g(this.oriT, 0); this.snap = g(this.snap, 0, 2 * SECTION_MEN);
   }
 
   // 第 i 個人在班的本地座標（兩個隊形之間照 s 混）→ 世界座標（格），落在別棟房子或牆的格子裡就往中心拉（最多 3 步、每步 0.1）
   private place(lay: readonly Lay[], id: number, i: number, s: number, x: number, z: number, c: number, sn: number, own: number, ground: boolean) {
-    const A = lay[this.from[id]][i], B = lay[this.lay[id]][i];
-    const lx = A[0] + (B[0] - A[0]) * s, lz = A[1] + (B[1] - A[1]) * s;
+    const B = lay[this.lay[id]][i], f = this.from[id], o = (id * SECTION_MEN + i) * 2;
+    const ax = f === SNAP ? this.snap[o] : lay[f][i][0], az = f === SNAP ? this.snap[o + 1] : lay[f][i][1];
+    const lx = ax + (B[0] - ax) * s, lz = az + (B[1] - az) * s;
     let fx = x + lx * c + lz * sn, fz = z - lx * sn + lz * c;
     const w = this.host.w;
     for (let k = 0; ground && k < 3; k++) {
@@ -95,9 +96,11 @@ export class Section89 {
     this.px = fx; this.pz = fz;
   }
 
-  // 畫面範圍（鏡頭自己的軸：右＝(1,0,−1)/√2、上＝(−sinE, √2·cosE, −sinE)/√2），外面再加 MARGIN89 格
+  // 畫面範圍（鏡頭自己的軸：右＝(1,0,−1)/√2、上＝(−sinE, √2·cosE, −sinE)/√2），外面再加 MARGIN89 格。
+  // 寬高比照視窗（main.ts 的 render 也是用視窗的寬高排鏡頭）；鏡頭要到 render() 才排，剛建好的畫面、剛換大小的視窗不能用鏡頭上一次的寬高。沒有視窗（Node）才用鏡頭的
   onScreen(x: number, y: number, z: number): boolean {
-    const H = this.host, hh = HALF_H89 / H.zoom, aspect = H.cam.top > 0 ? H.cam.right / H.cam.top : 1;
+    const H = this.host, hh = HALF_H89 / H.zoom, g = globalThis as { innerWidth?: number; innerHeight?: number };
+    const aspect = g.innerWidth && g.innerHeight ? g.innerWidth / g.innerHeight : H.cam.top > 0 ? H.cam.right / H.cam.top : 1;
     const rx = x - H.target.x, ry = y - H.target.y, rz = z - H.target.z;
     const sx = (rx - rz) * Math.SQRT1_2, sy = (Math.SQRT2 * COS_E * ry - SIN_E * (rx + rz)) * Math.SQRT1_2;
     return Math.abs(sx) <= hh * aspect + MARGIN89 && Math.abs(sy) <= hh + MARGIN89;
@@ -108,16 +111,24 @@ export class Section89 {
     const H = this.host, w = H.w, crowd = CROWD89[u.kind], k = UNIT_KINDS[u.kind], id = u.id;
     this.grow(id);
     const men = u.alive ? Math.min(crowd.men, Math.ceil((u.hp * crowd.men) / k.hp)) : 0;
-    const y = H.unitHeight(u), moving = u.pathIdx < u.path.length, aim = Math.atan2(-u.aimZ, u.aimX), heading = H.yaw[id];
+    const y = H.unitHeight(u), moving = u.pathIdx < u.path.length, aim = Math.atan2(-u.aimZ, u.aimX), heading = Number.isFinite(H.yaw[id]) ? H.yaw[id] : aim;
     const prone = !u.rout && w.rules?.morale === 2 && moraleState(u) >= MORALE_PINNED;   // 跟 R075 同一條規則
     const want = y > 0 ? (prone ? L_ROOF_PRONE : L_ROOF) : prone ? L_PRONE : moving ? L_MOVE : L_HALT;
-    if (this.lay[id] === UNSET) { this.lay[id] = this.from[id] = want; this.t0[id] = t - BLEND89; this.ori[id] = heading; this.oriT[id] = t; }
-    else if (this.lay[id] !== want) { this.from[id] = this.lay[id]; this.lay[id] = want; this.t0[id] = t; }
-    // 隊形的方向：走的時候跟著路；停下來在打（有攻擊目標、或 ENGAGE89 秒內開過火）就轉向瞄準的方向；停下來沒在打就不轉。最快 TURN89 弧度／秒
-    const engaged = u.target > 0 || (t - H.fire44[id] >= 0 && t - H.fire44[id] < ENGAGE89);
-    const goal = moving ? heading : engaged ? aim : this.ori[id], dt = Math.max(0, t - this.oriT[id]);
+    // 隊形的方向：走的時候（沒趴下）跟著路；停下、趴下時轉向瞄準的方向（人也朝那裡）。最快 TURN89 弧度／秒
+    const goal = moving && !prone ? heading : aim;
+    if (this.lay[id] === UNSET) {   // 第一次看到：直接就位；走著的照下一格的方向（讀回存檔時 yaw 還是瞄準的方向）
+      const next = moving ? u.path[u.pathIdx] : -1, nx = next >= 0 ? (next % w.n) + 0.5 : x, nz = next >= 0 ? Math.floor(next / w.n) + 0.5 : z;
+      this.lay[id] = this.from[id] = want; this.t0[id] = t - BLEND89; this.oriT[id] = t;
+      this.ori[id] = moving && !prone && (nx !== x || nz !== z) ? Math.atan2(-(nz - z), nx - x) : goal;
+    } else if (this.lay[id] !== want) {   // 換隊形：還在混的話從混到一半的位置開始（不瞬移）
+      const s0 = ease((t - this.t0[id]) / BLEND89);
+      if (s0 < 1) { for (let i = 0; i < crowd.men; i++) { this.place(crowd.lay, id, i, s0, 0, 0, 1, 0, 0, false); const o = (id * SECTION_MEN + i) * 2; this.snap[o] = this.px; this.snap[o + 1] = this.pz; } this.from[id] = SNAP; }
+      else this.from[id] = this.lay[id];
+      this.lay[id] = want; this.t0[id] = t;
+    } else if (t < this.t0[id]) this.t0[id] = t - BLEND89;   // 時間倒退（重播、換世界）：當作已經換好，不要等時間追上來再混一次
+    const dt = Math.max(0, t - this.oriT[id]);
     let d = goal - this.ori[id]; d = Math.atan2(Math.sin(d), Math.cos(d));
-    this.ori[id] += Math.abs(d) <= TURN89 * dt ? d : Math.sign(d) * TURN89 * dt; this.oriT[id] = t;
+    const o = this.ori[id] + (Math.abs(d) <= TURN89 * dt ? d : Math.sign(d) * TURN89 * dt); this.ori[id] = Math.atan2(Math.sin(o), Math.cos(o)); this.oriT[id] = t;
     const s = ease((t - this.t0[id]) / BLEND89), c = Math.cos(this.ori[id]), sn = Math.sin(this.ori[id]);
     const own = inGrid(w, Math.floor(x), Math.floor(z)) ? w.occ[cellIdx(w, Math.floor(x), Math.floor(z))] : 0;
     // 少了的人：留一個躺著的在他當時的位置（畫面外也記，鏡頭轉回去看得到）
@@ -132,10 +143,10 @@ export class Section89 {
     this.last[id] = men;
     if (!men) return n;
     if (!this.onScreen(x, y, z)) { this.culled += men; return n; }
-    const a = H.men.instanceMatrix.array as Float32Array, max = H.men.instanceMatrix.count, face = moving ? heading : aim, n0 = n;
+    const a = H.men.instanceMatrix.array as Float32Array, max = H.men.instanceMatrix.count, face = moving || prone ? this.ori[id] : aim, n0 = n;   // 走著、趴著的人朝隊形的方向（躺著的長 0.30，跟隊形不同向會疊在一起）
     for (let i = 0; i < men && n < max; i++) {
       this.place(crowd.lay, id, i, s, x, z, c, sn, own, y <= 0);
-      if (prone) put89(a, n, this.px, y + PRONE_LIFT89, this.pz, aim, PRONE_TILT89, 1, 1, 1);
+      if (prone) put89(a, n, this.px, y + PRONE_LIFT89, this.pz, face, PRONE_TILT89, 1, 1, 1);
       else {
         const bob = moving ? 0.012 * Math.abs(Math.sin(t * 11 + i * 1.7)) : 0, big = i === 0 ? 1.05 : 1, kneel = i === 1 && !moving ? 0.8 : 1;   // 班長大一點點；停下的布倫機槍手跪著
         put89(a, n, this.px, y + bob, this.pz, face, 0, big, big * kneel, big);
@@ -155,15 +166,14 @@ export class Section89 {
   }
   limit(tier: number): number { return Math.floor(MEN_TRIS89 / this.trisPer(tier)); }
 
-  // 人一多馬上降；回到比較好的段，人數要在那一段上限的九成以下待滿 BACK89 秒。喪屍模式不用 T0
+  // 人一多馬上降；回到比較好的段，人數要在那一段上限的九成以下連續 BACK89 幀。喪屍模式不用 T0
   private decide(F: number) {
-    const t = this.host.lastT, floor = this.host.w.zombies ? 1 : 0;
+    const floor = this.host.w.zombies ? 1 : 0;
     const need = Math.max(floor, F <= this.limit(0) ? 0 : F <= this.limit(1) ? 1 : 2);
-    if (this.tier < 0 || need > this.tier) { this.tier = need; this.since = -1; return; }
+    if (this.tier < 0 || need > this.tier) { this.tier = need; this.okFrames = 0; return; }
     if (need < this.tier && F <= 0.9 * this.limit(this.tier - 1)) {
-      if (this.since < 0 || t < this.since) this.since = t;
-      if (t - this.since >= BACK89) { this.tier--; this.since = -1; }
-    } else this.since = -1;
+      if (++this.okFrames >= BACK89) { this.tier--; this.okFrames = 0; }
+    } else this.okFrames = 0;
   }
 
   // 躺著的人（取代 bodies21）：喪屍與 96 圖的淡出照舊、敵方的在霧裡不畫、畫面外不畫；最後決定這一幀的段，T2 時躺著的人最多 min(64, 上限 − 活著的)，留最新的

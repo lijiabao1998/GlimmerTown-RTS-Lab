@@ -140,9 +140,9 @@ export const groups = {
     for (let a = 0; a < L.length; a++) for (let b = 0; b < L.length; b++) if (a !== b) for (let s = 0; s <= 100; s++) blend = Math.min(blend, minD(L[a].map((p, i) => [p[0] + (L[b][i][0] - p[0]) * s / 100, p[1] + (L[b][i][1] - p[1]) * s / 100])));
     assert(blend >= 0.06, `layout: while changing formation figures stay at least 0.06 apart (${blend.toFixed(4)})`);
     const ext = T => [Math.max(...T.map(p => p[0])) - Math.min(...T.map(p => p[0])), Math.max(...T.map(p => p[1])) - Math.min(...T.map(p => p[1]))];
-    const [md, mw] = ext(L[S89.L_MOVE]), [hd, hw] = ext(L[S89.L_HALT]), ranks = [...new Set(L[S89.L_PRONE].map(p => p[0]))].sort((a, b) => a - b);
+    const [md, mw] = ext(L[S89.L_MOVE]), [hd, hw] = ext(L[S89.L_HALT]), ranks = [...new Set(L[S89.L_PRONE].map(p => p[0]))].sort((a, b) => a - b), roofRanks = [...new Set(L[S89.L_ROOF_PRONE].map(p => p[0]))].sort((a, b) => a - b);
     assert(md >= 2 * mw && hw >= 2 * hd, `layout: moving is a column (depth ${md} ≥ 2 × width ${mw}) and halted is a line (width ${hw} ≥ 2 × depth ${hd})`);
-    assert(ranks.length === 2 && ranks[1] - ranks[0] >= 0.3 - 1e-9, `layout: prone ranks are at least 0.30 apart (${ranks})`);
+    assert(ranks.length === 2 && ranks[1] - ranks[0] >= 0.3 - 1e-9 && roofRanks.length === 2 && roofRanks[1] - roofRanks[0] >= 0.3 - 1e-9, `layout: prone ranks are at least 0.30 apart, on a roof too (${ranks}; roof ${roofRanks})`);
     // 畫出來的：走的時候＝行進的表；停下來 0.2 秒時在兩個表之間、0.45 秒後＝停下的表
     setSection89(true);
     const w = blank(), u = add(w, 0, UK_INFANTRY, 10, 10), v = new BattleView(w, OPTS), f = framer(v), cx = u.x / SUB, cz = u.z / SUB;
@@ -164,19 +164,6 @@ export const groups = {
     const roofR = Math.max(...roof.map(p => Math.hypot(p.x - (b.x + 0.5), p.z - (b.z + 0.5))));
     assert(roofR <= 0.32 * 0.75 + 1e-6, `layout: roof figures stand closer together (the ground layout × 0.75; farthest ${roofR.toFixed(3)})`);
     v2.dispose();
-    // 方向：停下來在打（剛開過火）的班把隊形轉向瞄準的方向，最快 4 弧度／秒；沒在打的不轉
-    const w4 = blank(), u4 = add(w4, 0, UK_INFANTRY, 10, 10), v4 = new BattleView(w4, OPTS), f4 = framer(v4), c4 = [u4.x / SUB, u4.z / SUB];
-    const turned = th => L[S89.L_HALT].map(([lx, lz]) => [c4[0] + lx * Math.cos(th) + lz * Math.sin(th), c4[1] - lx * Math.sin(th) + lz * Math.cos(th)]);
-    const at4 = th => { const got = instances(v4).map(p => [p.x, p.z]); return got.length === 10 && turned(th).every((q, i) => near(got[i], q, 1e-4)); };
-    seeAll(v4); f4();
-    const still = at4(0);
-    u4.aimX = 0; u4.aimZ = -SUB; v4.fire44[u4.id] = f4.at(); f4(0.2); f4(0.2);
-    const part = at4(1.0); f4();
-    const full = at4(Math.PI / 2);
-    assert(still && part && full, `layout: a halted section that is firing turns its line toward the target at 4 rad/s (start ${still}, 0.25 s ${part}, done ${full})`);
-    v4.fire44[u4.id] = -99; u4.aimX = SUB; u4.aimZ = 0; f4(); f4(0.5); f4();
-    assert(at4(Math.PI / 2), 'layout: a halted section that is not firing keeps its line where it is');
-    v4.dispose();
     // 趴下：士氣第二版釘住時趴、第一版不趴
     for (const morale of [2, 1]) {
       const w3 = blank(), u3 = add(w3, 0, UK_INFANTRY, 10, 10); w3.rules = { morale }; u3.sup = 70;
@@ -185,6 +172,48 @@ export const groups = {
       assert(morale === 2 ? lying === 10 && v3.menDbg.prone === 10 : lying === 0 && v3.menDbg.prone === 0, `layout: a pinned section lies prone under morale 2 and not under morale 1 (morale ${morale}: ${lying} lying)`);
       v3.dispose();
     }
+    // 方向：停下的班把隊形轉向瞄準的方向（人也朝那裡），最快 4 弧度／秒
+    const w4 = blank(), u4 = add(w4, 0, UK_INFANTRY, 10, 10), v4 = new BattleView(w4, OPTS), f4 = framer(v4), c4 = [u4.x / SUB, u4.z / SUB];
+    const turned = (th, k = S89.L_HALT) => L[k].map(([lx, lz]) => [c4[0] + lx * Math.cos(th) + lz * Math.sin(th), c4[1] - lx * Math.sin(th) + lz * Math.cos(th)]);
+    const at4 = (th, k) => { const got = instances(v4).map(p => [p.x, p.z]); return got.length === 10 && turned(th, k).every((q, i) => near(got[i], q, 1e-4)); };
+    seeAll(v4); f4();
+    const still = at4(0);
+    u4.aimX = 0; u4.aimZ = -SUB; f4(0.2); f4(0.2);
+    const part = at4(1.0); f4();
+    const full = at4(Math.PI / 2);
+    assert(still && part && full, `layout: a halted section turns its line toward where it aims at 4 rad/s (start ${still}, 0.25 s ${part}, done ${full})`);
+    // 走著被壓住趴下：隊形與躺著的人都朝瞄準的方向（不是走的方向；不然躺著的人疊在一起）
+    w4.rules = { morale: 2 }; u4.sup = 70; u4.path = [W.cellIdx(w4, 10, 2)]; u4.aimX = SUB; u4.aimZ = 0; v4.yaw[u4.id] = Math.PI / 2;
+    for (let i = 0; i < 12; i++) f4();
+    const lying = instances(v4), faceOk = lying.every(p => Math.abs(Math.atan2(-p.m[2], p.m[0])) < 1e-4);
+    assert(at4(0, S89.L_PRONE) && faceOk, `layout: a pinned section that still has a path lies in ranks facing where it aims, and so do the men (${faceOk})`);
+    v4.dispose();
+    // 換隊形途中又換：從混到一半的位置接著混（下一幀每個人最多動 0.1 格；正常混的一幀最多約 0.075，從表重來會跳 0.27）
+    const w6 = blank(), u6 = add(w6, 0, UK_INFANTRY, 10, 10), v6 = new BattleView(w6, OPTS), f6 = framer(v6); seeAll(v6);
+    u6.path = [W.cellIdx(w6, 20, 10)]; f6(); u6.path = []; f6(); f6(); f6(); f6();
+    const before6 = instances(v6).map(p => [p.x, p.z]); u6.path = [W.cellIdx(w6, 20, 10)]; f6(0);
+    const jump6 = Math.max(...instances(v6).map((p, i) => Math.hypot(p.x - before6[i][0], p.z - before6[i][1])));
+    assert(jump6 <= 0.1, `layout: a formation change in the middle of a blend continues from where the men are (largest step ${jump6.toFixed(3)}; a normal blend frame moves up to about 0.075)`);
+    v6.dispose();
+    // 換隊形的那一幀還在起點（時間存成 Float32 會比真的大一點點，先跳到終點再跳回來）
+    const w7 = blank(), u7 = add(w7, 0, UK_INFANTRY, 10, 10), v7 = new BattleView(w7, OPTS), sel7 = new Set(); seeAll(v7);
+    let bad7 = 0;
+    for (let k = 0; k < 40; k++) {
+      const t = 5 + k * 0.0173 + 0.0012 * k * k;
+      u7.path = k % 2 ? [] : [W.cellIdx(w7, 20, 10)];
+      v7.snapshot(); v7.update(1, t - 1, sel7); v7.update(1, t - 0.5, sel7);   // 先在舊的隊形站穩
+      u7.path = k % 2 ? [W.cellIdx(w7, 20, 10)] : []; v7.snapshot(); v7.update(1, t, sel7);
+      const from = k % 2 ? S89.L_HALT : S89.L_MOVE, cx = u7.x / SUB, cz = u7.z / SUB, got = instances(v7);
+      if (!L[from].every(([lx, lz], i) => near([got[i].x, got[i].z], [cx + lx, cz + lz], 1e-4))) bad7++;
+    }
+    assert.equal(bad7, 0, `layout: on the frame a formation changes the men are still at the start (${bad7} of 40 frames jumped)`);
+    v7.dispose();
+    // 第一次看到一個走著的班（像讀回存檔）：縱隊照下一格的方向，不是照瞄準的方向
+    const w8 = blank(), u8 = add(w8, 0, UK_INFANTRY, 10, 10); u8.path = [W.cellIdx(w8, 10, 3)]; u8.aimX = SUB; u8.aimZ = 0;
+    const v8 = new BattleView(w8, OPTS), f8 = framer(v8); seeAll(v8); v8.yaw[u8.id] = 0; f8();
+    const c8 = [u8.x / SUB, u8.z / SUB], th8 = Math.atan2(7, 0), got8 = instances(v8);
+    assert(L[S89.L_MOVE].every(([lx, lz], i) => near([got8[i].x, got8[i].z], [c8[0] + lx * Math.cos(th8) + lz * Math.sin(th8), c8[1] - lx * Math.sin(th8) + lz * Math.cos(th8)], 1e-4)), 'layout: a moving section seen for the first time lines up along its path');
+    v8.dispose();
     console.log(`  layout: radius ≤ 0.32, spacing ≥ 0.12 (roof 0.09), blends ≥ ${blend.toFixed(3)}, column ${md}×${mw}, line ${hw}×${hd}, prone ranks ${ranks}`);
   },
   // 純：畫面不改世界；同一串更新兩次逐位一樣；新檔不用亂數與時鐘
@@ -224,13 +253,23 @@ export const groups = {
       }
     }
     v2.dispose();
-    // 64 圖 id 700 的步兵班：畫得出來、位置是有限的數、沒有 console.error
+    // 剛建好的畫面（鏡頭還沒排，預設 1:1）：照視窗的寬高（桌機 1440×900），兩側的班不會少一幀
+    const w5 = blank(), diag = [];
+    for (let k = -12; k <= 12; k += 2) { add(w5, 0, UK_INFANTRY, 16 + k, 16 - k); diag.push([16.5 + k, 16.5 - k]); }
+    const v5 = new BattleView(w5, OPTS); v5.target.set(16.5, 0, 16.5); v5.zoom = 1;
+    globalThis.innerWidth = 1440; globalThis.innerHeight = 900;
+    try { v5.snapshot(); v5.update(1, 1, new Set()); } finally { delete globalThis.innerWidth; delete globalThis.innerHeight; }
+    const first5 = instances(v5); v5.layout(1440, 900);
+    const wide = diag.filter(([x, z]) => { const p = new THREE.Vector3(x, 0, z).project(v5.cam); return Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1; });
+    assert(wide.length >= 11 && wide.every(([x, z]) => first5.some(d => Math.hypot(d.x - x, d.z - z) < 0.35)), `cull: a view whose camera is not laid out yet culls with the window's shape (${wide.length} on screen, ${first5.length / 10} drawn)`);
+    v5.dispose();
+    // 64 圖 id 700 的步兵班（沒走過 onEvents 就畫，像讀回存檔重建的畫面）：畫得出來、位置是有限的數、沒有 console.error
     const w3 = W.createWorld(1944); step(w3, [{ t: 'map', id: 2, vegetation: 1 }]);
     while (w3.units.length < 699) { const d = add(w3, 0, UK_INFANTRY, 2, 2, 0); d.alive = false; }
     const big = add(w3, 0, UK_INFANTRY, 32, 32);
     const v3 = new BattleView(w3, OPTS), errs = [], ce = console.error;
     console.error = (...a) => errs.push(a.join(' '));
-    try { v3.onEvents([], 1); v3.target.set(32.5, 0, 32.5); v3.zoom = 1; v3.layout(412, 860); v3.snapshot(); v3.update(1, 1, new Set()); } finally { console.error = ce; }
+    try { v3.target.set(32.5, 0, 32.5); v3.zoom = 1; v3.layout(412, 860); v3.snapshot(); v3.update(1, 1, new Set()); } finally { console.error = ce; }
     const ps = instances(v3);
     assert(big.id === 700 && errs.length === 0 && ps.length >= 10 && ps.every(p => p.m.every(Number.isFinite)) && v3.sec89.dbg.live === 10, `cull: on the 64 map an infantry unit with id 700 draws finite figures with no console error (${errs[0] ?? ''}; ${v3.sec89.dbg.live} figures)`);
     v3.dispose();
@@ -247,13 +286,15 @@ export const groups = {
       assert(d.F === F && d.tier === tier && v.men.castShadow === (tier === 0) && dense === (tier === 2) && d.tris === F * per && d.tris <= S89.MEN_TRIS89, `tiers: ${F} figures → T${tier} (${tier === 2 ? 'dense' : 'full'}, ${tier === 0 ? 'shadow' : 'no shadow'}, ${F * per} triangles ≤ 32,000) — got ${JSON.stringify(d)}, shadow ${v.men.castShadow}, dense ${dense}`);
       v.dispose();
     }
-    // 回升：229 → T1；只剩 220（≤ 228 但 > 九成）一直是 T1；剩 200（≤ 九成）要等滿 1 秒才回 T0；再到 229 馬上 T1
+    // 回升：229 → T1；只剩 220（≤ 228 但 > 九成）一直是 T1；剩 200（≤ 九成）要連續 60 幀才回 T0——模擬時間停著（暫停）也一樣；再到 229 馬上 T1
     // 人數用「搬到畫面外」來減（減血會多出躺著的人，F 不會變少）
     const w = make(229), v = new BattleView(w, OPTS), f = framer(v), away = u => { u.x = W.center(600); u.z = W.center(600); }, home = w.units.map(u => [u.x, u.z]);
     seeAll(v); f(); const t229 = v.sec89.dbg.tier;
-    away(w.units[w.units.length - 1]); f(); f(1.5); f(); const stay = [v.sec89.dbg.F, v.sec89.dbg.tier];
-    away(w.units[0]); away(w.units[1]); f(0.5); const f0 = v.sec89.dbg.F, t0 = v.sec89.dbg.tier; f(0.45); const t1 = v.sec89.dbg.tier; f(0.15); f(); const t2 = v.sec89.dbg.tier;
-    assert(t229 === 1 && stay[0] === 220 && stay[1] === 1 && f0 === 200 && t0 === 1 && t1 === 1 && t2 === 0, `tiers: stepping back to a richer tier waits 1 s at ≤ 90 % of its limit (229: T${t229}; ${stay[0]} after 1.5 s: T${stay[1]}; ${f0}: T${t0} → T${t1} → T${t2})`);
+    away(w.units[w.units.length - 1]); for (let i = 0; i < 90; i++) f(0); const stay = [v.sec89.dbg.F, v.sec89.dbg.tier];
+    away(w.units[0]); away(w.units[1]); f(0); const f0 = v.sec89.dbg.F;
+    for (let i = 1; i < 59; i++) f(0);
+    const t59 = v.sec89.dbg.tier; f(0); const t60 = v.sec89.dbg.tier;
+    assert(t229 === 1 && stay[0] === 220 && stay[1] === 1 && f0 === 200 && t59 === 1 && t60 === 0, `tiers: stepping back to a richer tier waits 60 frames at ≤ 90 % of its limit, even while paused (229: T${t229}; ${stay[0]} for 90 frames: T${stay[1]}; ${f0}: frame 59 T${t59}, frame 60 T${t60})`);
     w.units.forEach((u, i) => { [u.x, u.z] = home[i]; }); f();
     assert(v.sec89.dbg.F === 229 && v.sec89.dbg.tier === 1, 'tiers: a crowd steps down at once');
     v.dispose();
@@ -271,7 +312,7 @@ export const groups = {
     const vz = new BattleView(wz, OPTS), fz = framer(vz); seeAll(vz); fz();
     assert(vz.sec89.dbg.tier >= 1 && !vz.men.castShadow, `tiers: zombie mode never uses T0 (T${vz.sec89.dbg.tier}, ${vz.sec89.dbg.F} figures)`);
     vz.dispose();
-    console.log(`  tiers: 228→T0, 229→T1, 457→T1, 458→T2, 800→T2 (32,000 triangles); back to T0 after 1 s; T2 bodies ${k1.bodies}/${k2.bodies}/${k3.bodies}`);
+    console.log(`  tiers: 228→T0, 229→T1, 457→T1, 458→T2, 800→T2 (32,000 triangles); back to T0 after 60 frames (paused); T2 bodies ${k1.bodies}/${k2.bodies}/${k3.bodies}`);
   },
   // 直接寫的矩陣＝Object3D 的；跟 battle.ts 共用的數一樣
   matrix() {
@@ -298,7 +339,7 @@ export const groups = {
     const b = src('src/render/battle.ts');
     assert(b.includes('if (this.sec89.has(u.kind)) nm = this.sec89.draw(u, x, z, simT, col, nm); else if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(') &&
       b.includes('nm = section89On() ? this.sec89.bodies(nm) : this.bodies21(nm);') && b.includes('this.men.geometry = section89On() ? this.sec89.finish(nm) :') &&
-      b.includes('    this.zombieUnitSlots();   // R089'), 'wiring: battle.ts sends infantry, bodies and the tier to section89 only when the switch is on, and grows unit arrays on every map');
+      b.includes('    this.zombieUnitSlots();   // R089') && b.includes('    if (w.units.length >= this.prevX.length) this.zombieUnitSlots();   // R089'), 'wiring: battle.ts sends infantry, bodies and the tier to section89 only when the switch is on, and grows unit arrays on every map');
     const c = src('tools/cdp.mjs');
     assert(c.includes('const url89 = /(^|&)noR089=/.test(url) ? url : `${url}&noR089=1`;') && c.includes('/${entry}?${url89}`'), 'wiring: tools/cdp.mjs adds noR089=1 unless a guard asks for R089');
     setSection89(false); const s = new S89.Section89({});
