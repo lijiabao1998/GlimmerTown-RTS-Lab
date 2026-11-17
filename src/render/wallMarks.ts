@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { SUB, UK_HOWITZER, SHELL_HE, SHELL_AP, stageOf, STAGE_RUBBLE, STAGE_INTACT, UNIT_KINDS, type Building, type SimEvent, type World } from '../sim/world.ts';
 import { hash2 } from '../sim/rng.ts';
-import { bldColorsOf, wallHeight, wallShown, wallBounds, markFace } from './buildings.ts';
+import { bldColorsOf, wallHeight, wallShown, wallBounds, markFace, wearMarkTop } from './buildings.ts';
 import type { MakeInst, Sight } from './painter.ts';
 
 export const HOLE_CAP = 160;                 // R014 牆上痕跡最多幾個（滿了丟最舊的）
@@ -119,6 +119,12 @@ export class WallMarks {
       const half = H.w[i] * scale / 2 + 0.006;
       if (axis === 0) { H.x[i] = oct.at; H.z[i] = Math.max(oct.lo + half, Math.min(oct.hi - half, H.z[i])); } else { H.z[i] = oct.at; H.x[i] = Math.max(oct.lo + half, Math.min(oct.hi - half, H.x[i])); }
     }
+    { const top88 = wearMarkTop(b, H.x[i], H.z[i]), scale = kind === 0 ? 1.55 : 1;   // R088：牆已經塌了（T3、T5），彈痕往下放到新牆頂以下；放不下就縮小，太矮就不留
+      if (H.y[i] + H.h[i] * scale / 2 > top88) {
+        if (top88 < 0.06) { H.live[i] = 0; return; }
+        H.h[i] = Math.min(H.h[i], (top88 - 0.012) / scale); H.w[i] = Math.min(H.w[i], H.h[i] * 1.6);
+        const half = H.h[i] * scale / 2; H.y[i] = Math.max(half + 0.006, Math.min(H.y[i], top88 - half - 0.006));
+      } }
     const wall = bldColorsOf(b).wall;
     H.r[i] = wall.r + (1 - wall.r) * 0.35; H.g[i] = wall.g + (1 - wall.g) * 0.35; H.b[i] = wall.b + (1 - wall.b) * 0.35;   // 碎掉的灰泥：牆色偏亮
     this.holesDirty = true;

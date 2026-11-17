@@ -4,13 +4,16 @@
 import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
 import { STAGE_INTACT, type World, type Building } from '../sim/world.ts';
-import { buildingGeo, wallHeight, roofRise, bldColorsOf, wearArtOn } from './buildings.ts';
+import { buildingGeo, wallHeight, roofRise, bldColorsOf, wearArtOn, onTownBuilt } from './buildings.ts';
 import { wearTier, wearable, wearTop, roofSlice, splitHalves, WEAR_RUBBLE } from './wearArt.ts';
 import type { Ghosts, Pool } from './fx.ts';
 import type { WallMarks } from './wallMarks.ts';
 
 const shown = new WeakMap<World, Int8Array>();
-const tierOf = (b: Building) => (wearable(b.kind) ? wearTier(b) : 0);
+const tierOf = (b: Building) => (wearable(b) ? wearTier(b) : 0);
+const seed = (w: World) => { const n = new Int8Array(w.blds.length); for (let i = 0; i < n.length; i++) n[i] = tierOf(w.blds[i]); return n; };
+// 第一次畫一個世界（開局、讀檔、換世界）就記下每一棟現在的段：之後第一步的屋頂殘影、倒塌也照「畫面上的」段（審查 R088-seed）
+onTownBuilt(w => { if (!shown.has(w)) shown.set(w, seed(w)); });
 // 畫面上一次畫的那一段（還沒同步過就照現在的耐久）
 export function wearShown(w: World, b: Building): number { const s = shown.get(w); return s && b.id <= s.length ? s[b.id - 1] : tierOf(b); }
 
@@ -44,8 +47,8 @@ export function wearSync(w: World, marks: WallMarks, puff: Pool | null, debris: 
 
 // 完好 → 空殼：上一次畫的那一段的屋頂（簷以上）變成殘影，1.1 秒內直直往下沉（屋頂高 + 0.35）。閥關著回 false
 export function wearRoofFall(w: World, ghosts: Ghosts, b: Building, t: number): boolean {
-  if (!wearArtOn() || !wearable(b.kind)) return false;
-  const h = wallHeight(b), roof = roofSlice(buildingGeo(new Geo(), b, STAGE_INTACT, wearShown(w, b)), h);
+  if (!wearArtOn() || !wearable(b)) return false;
+  const tier = wearShown(w, b), h = wallHeight(b), geo = buildingGeo(new Geo(), b, STAGE_INTACT, tier), roof = roofSlice(geo, h, tier === 3 ? buildingGeo(new Geo(), b, STAGE_INTACT, 2) : geo);
   if (!roof.pos.length) return false;
   ghosts.add(roof, t, roofRise(b.kind) + 0.2, b.x + b.w / 2, b.z + b.d / 2, hash2(b.id, 4, 88), false, 0, 0);
   return true;
@@ -55,7 +58,7 @@ export function wearRoofFall(w: World, ghosts: Ghosts, b: Building, t: number): 
 // 另外 6 團煙、6 塊碎片（R004 的照舊）。閥關著回 false（照 R004 一整棟一個殘影）
 export const COLLAPSE_GAP = 0.22;
 export function wearCollapse(w: World, ghosts: Ghosts, puff: Pool, debris: Pool, b: Building, from: number, t: number, h: number): boolean {
-  if (!wearArtOn() || !wearable(b.kind)) return false;
+  if (!wearArtOn() || !wearable(b)) return false;
   const tier = wearShown(w, b), geo = buildingGeo(new Geo(), b, from, tier), wh = wallHeight(b), { first, second } = splitHalves(geo, b, tier, wh);
   const cx = b.x + b.w / 2, cz = b.z + b.d / 2;
   const add = (g: Geo, t0: number, k: number) => {

@@ -31,7 +31,7 @@ await runOrSkip('wear-art-fire', async () => {
       const w = runLog(createWorld(seed), log0, t0);
       const tanks = w.units.filter(u => u.alive && u.side === 0 && UNIT_KINDS[u.kind].armored && UNIT_KINDS[u.kind].range > 0);
       const tx = tanks.reduce((s, u) => s + cellOf(u.x), 0) / tanks.length, tz = tanks.reduce((s, u) => s + cellOf(u.z), 0) / tanks.length;
-      const target = w.blds.filter(b => wearable(b.kind) && b.hp === b.maxHp && !b.builtBy).sort((a, b) => Math.hypot(a.x + a.w / 2 - tx, a.z + a.d / 2 - tz) - Math.hypot(b.x + b.w / 2 - tx, b.z + b.d / 2 - tz))[0];
+      const target = w.blds.filter(b => wearable(b) && b.hp === b.maxHp && !b.builtBy).sort((a, b) => Math.hypot(a.x + a.w / 2 - tx, a.z + a.d / 2 - tz) - Math.hypot(b.x + b.w / 2 - tx, b.z + b.d / 2 - tz))[0];
       const cmd = { t: 'fireAt', side: 0, ids: tanks.map(u => u.id), x: target.x, z: target.z }, log = [...log0, { tick: t0, cmd }];
       const sim = runLog(createWorld(seed), log0, t0); let t3 = -1, t5 = -1;
       step(sim, [cmd]);

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant, moreMarkFace } from './moreArt.ts';
 import { Geo } from './geo.ts';
-import { wearTier, wearable, tierFits, wearGeo } from './wearArt.ts';
+import { wearTier, wearable, tierFits, wearGeo, wearTop } from './wearArt.ts';
 import { hash2 } from '../sim/rng.ts';
 import { houseLook, civilian, ROOF_HIP, roof as artRoof, ridgeCap, stack, stackAt, plinth, plinthColor, eaveBand, hood, windows as artWindows, shopFront, barnDoor, loft, thatchBand, churchDetails, type Look, type Frame } from './houseArt.ts';
 import {
@@ -57,6 +57,9 @@ const moreShown = (b: Building) => moreArtOn && isMoreKind(b.kind);
 let wearOn = false;   // R088 建築破壞的過程（wearArt.ts）：照耐久多分幾段樣子；關著＝今天的三段
 export function setWearArt(on: boolean): void { wearOn = on; }
 export const wearArtOn = (): boolean => wearOn;
+let townSeen: ((w: World) => void) | null = null;   // R088：wear88.ts 掛上來，第一次畫一個世界時就記下每一棟的段（不用等第一步）
+export function onTownBuilt(f: (w: World) => void): void { townSeen = f; }
+export const wearMarkTop = (b: Building, x: number, z: number): number => { const t = wearOn && wearable(b) ? wearTier(b) : 0; return t === 3 || t === 5 ? wearTop(b, t, x, z, wallHeight(b), roofRise(b.kind)) : Infinity; };   // R014：已經塌了的牆，新打上的彈痕不高過它
 let wearCacheOn = true;   // R088 整鎮每棟一份快取（守衛拿來比「快取＝不快取」）
 export function setWearCache(on: boolean): void { wearCacheOn = on; }
 // R014 彈痕：八角的烘爐、風車塔身那一面（見 moreArt.ts 的 moreMarkFace）；不是新房型或模組關著回 null
@@ -508,7 +511,7 @@ export function buildingGeo(g: Geo, b: Building, stage: number, tier?: number): 
   const allowDamage = !isWallKind(b.kind); // noR120 fallback houses remain boundary walls, outside R138.
   if (!wallsOn && isWallKind(b.kind)) b = { ...b, kind: BK_HOUSE };
   if (!moreArtOn && isMoreKind(b.kind)) b = { ...b, kind: MORE_LIKE[b.kind] };   // R087 閥關著：照看起來像的舊種類畫
-  const wt = wearOn && wearable(b.kind) ? tier ?? wearTier(b) : 0;   // R088：段與階段配得上才畫損壞（T1–T3 完好、T5 空殼）
+  const wt = wearOn && allowDamage && wearable(b) ? tier ?? wearTier(b) : 0;   // R088：段與階段配得上才畫損壞（T1–T3 完好、T5 空殼）
   if (wt && tierFits(stage, wt)) {
     const base = new Geo(), p = paletteOf(b);
     if (stage === STAGE_INTACT) intact(base, b); else roofless(base, b, allowDamage);
@@ -566,13 +569,14 @@ function wearTown(w: World, skip: ((b: Building) => boolean) | undefined, lod: n
   let n = 0;
   for (const b of w.blds) {
     if (skip && skip(b)) continue;
-    const stage = stageOf(b), sig = `${flags}|${b.id},${b.kind},${b.x},${b.z},${b.w},${b.d},${b.floors},${b.maxHp},${b.builtBy ?? ''},${stage},${wearable(b.kind) ? wearTier(b) : 0},${lod}`;
+    const stage = stageOf(b), sig = `${flags}|${b.id},${b.kind},${b.x},${b.z},${b.w},${b.d},${b.floors},${b.maxHp},${b.builtBy ?? ''},${stage},${wearable(b) ? wearTier(b) : 0},${lod}`;
     let list = townCache.get(b);
     if (!list) townCache.set(b, list = []);
     let part = list[lod];
     if (!part || part.sig !== sig) {
       const g = new Geo();
-      if (lod) distantBuilding(g, b, lod); else buildingGeo(g, b, stage);
+      if (lod > 0) distantBuilding(g, b, lod); else buildingGeo(g, b, stage);   // （不寫成 if (lod) …：R130 的守衛錨著那一句要唯一）
+      townSeen?.(w);
       part = list[lod] = { sig, pos: new Float32Array(g.pos), nor: new Float32Array(g.nor), col: new Float32Array(g.col) };
     }
     parts.push(part); n += part.pos.length;
