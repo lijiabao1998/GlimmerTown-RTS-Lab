@@ -144,12 +144,14 @@ export function wearOverlays(g: Geo, base: Geo, b: Building, tier: number, h: nu
 
 // T3：屋頂靠一頭的地方塌下去。只把頂點往下移（不加三角形）：屋脊那一頭下沉 0.55 倍屋頂高、簷最多 0.12、牆頂附近 0.15 以內平順地接上
 export function sagEnd(b: Building): { alongX: boolean; end: number; len: number } {
+  if (b.kind === BK_CHURCH) return { alongX: false, end: b.z + b.d - 0.1, len: b.d - 1.1 };   // 教堂：中殿的屋脊沿 z，塌離塔遠的那一頭
   const alongX = b.w >= b.d, a0 = alongX ? b.x + 0.1 : b.z + 0.1, a1 = alongX ? b.x + b.w - 0.1 : b.z + b.d - 0.1;
   return { alongX, end: h88(b, 30) < 0.5 ? a0 : a1, len: a1 - a0 };
 }
 export function sagDrop(b: Building, x: number, y: number, z: number, h: number, rise: number): number {
   const s = sagEnd(b), a = s.alongX ? x : z, w = Math.max(0, Math.min(1, 1 - Math.abs(a - s.end) / (0.65 * s.len)));
   if (w <= 0 || y <= h - 0.15) return 0;
+  if (b.kind === BK_CHURCH && x < b.x + 1.05 && z < b.z + 1.05) return 0;   // 鐘樓不跟著塌
   if (y < h) return w * 0.12 * (y - (h - 0.15)) / 0.15;
   return w * (0.12 + (0.55 * rise - 0.12) * Math.min(1, (y - h) / Math.max(rise, 1e-6)));
 }
