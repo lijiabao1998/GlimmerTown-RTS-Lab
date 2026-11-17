@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
+import { houseLook, civilian, roof as artRoof, ridgeCap, stack, stackAt, plinth, plinthColor, eaveBand, hood, windows as artWindows, shopFront, barnDoor, loft, thatchBand, churchDetails, type Look, type Frame } from './houseArt.ts';
 import {
   stageOf, STAGE_INTACT, STAGE_ROOFLESS, STAGE_RUBBLE, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX,
   BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind,
@@ -45,6 +46,11 @@ export function setBuildingDetails(on: boolean): void { buildingDetailsOn = on; 
 // R138: local civilian damage meshes only; legacy geometry is an exact independent rollback.
 let damageDetailsOn = false;
 export function setDamageDetails(on: boolean): void { damageDetailsOn = on; }
+// R086 房屋細化（src/render/houseArt.ts）：模組層級預設關，main.ts 照 ?noR086=1 打開；只在 R134 開著時有作用（R134 關＝跟關 R086 一樣）
+let houseArtOn = false;
+export function setHouseArt(on: boolean): void { houseArtOn = on; }
+const trimOn = () => houseArtOn && buildingDetailsOn; // R086 trim：看不見的兩面（−x、−z；鏡頭固定從 +x、+z 看）不畫細節
+const artOn = () => houseArtOn && buildingDetailsOn; // R086 art：每棟自己的樣子與新零件
 const civilianDamage = (b: Building) => damageDetailsOn && [BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP].includes(b.kind);
 
 export const FLOOR_H = 0.36;   // 一層樓高（格）；3D-lab blockArt.ts 的換算
@@ -82,6 +88,12 @@ export function setWalls(on: boolean): void { wallsOn = on; }
 export const wallShown = (b: Building): boolean => wallsOn && isWallKind(b.kind);
 const visibleKind = (kind: number) => !wallsOn && isWallKind(kind) ? BK_HOUSE : kind;
 const palette = (kind: number) => { kind = visibleKind(kind); return materialsOn ? MATERIAL_PAL[kind] ?? PAL[kind] ?? PAL[BK_HOUSE] : PAL[kind] ?? PAL[BK_HOUSE]; };
+// R086：一棟的配色（關著＝那一種的配色）。碎片、彈痕、損壞階段、遠景都照它，跟完好時同一棟同一個顏色（R004）
+const lookOf = (b: Building): Look => houseLook(b, palette(b.kind), facadeStyle(b) === FAC_TIMBER, PLASTER);
+const paletteOf = (b: Building) => (artOn() && civilian(b.kind) ? lookOf(b) : palette(b.kind));
+const plasterOf = (b: Building) => (artOn() && civilian(b.kind) ? lookOf(b).plaster : PLASTER);
+export function bldColorsOf(b: Building): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return paletteOf(b); }
+export function houseLookOf(b: Building): Look | null { return artOn() && civilian(b.kind) ? lookOf(b) : null; }   // 守衛數樣式用
 const rubbleColors = (kind: number) => {
   kind = visibleKind(kind);
   return (materialsOn || isWallKind(kind)) && kind !== BK_HQ && kind !== BK_PILLBOX ? MATERIAL_RUBBLE[bldMaterial(kind) as 0 | 1 | 2 | 3] : RUBBLE;
@@ -155,6 +167,7 @@ function detailedWindows(g: Geo, b: Building, x0: number, z0: number, x1: number
   const trim = palette(b.kind).trim;
   const faces = [[0, x0, x1, z0, -1], [0, x0, x1, z1, 1], [1, z0, z1, x0, -1], [1, z0, z1, x1, 1]];
   for (const [axis, start, end, at, dir] of faces) {
+    if (trimOn() && dir < 0) continue;   // R086 trim windows
     const pane = (a: number, c: number, lo: number, hi: number, color: THREE.Color, offset = 0.015) => {
       const p = at + dir * offset;
       if (axis === 0) g.quad([a,lo,p],[c,lo,p],[c,hi,p],[a,hi,p],[0,0,dir],color);
@@ -195,7 +208,7 @@ function buildingDetails(g: Geo, b: Building, x0: number, z0: number, x1: number
   // Broad corner dressings, no subpixel brick-line multiplication.
   for (const x of [x0,x1-0.04]) {
     g.quad([x,0,z1+0.01],[x+0.04,0,z1+0.01],[x+0.04,h,z1+0.01],[x,h,z1+0.01],[0,0,1],p.trim);
-    g.quad([x,0,z0-0.01],[x+0.04,0,z0-0.01],[x+0.04,h,z0-0.01],[x,h,z0-0.01],[0,0,-1],p.trim);
+    if (!trimOn()) g.quad([x,0,z0-0.01],[x+0.04,0,z0-0.01],[x+0.04,h,z0-0.01],[x,h,z0-0.01],[0,0,-1],p.trim);   // R086 trim corner
   }
   if (b.kind === BK_HOUSE || b.kind === BK_SHOP) {
     const x = alongX ? x1-0.18 : cx, z = alongX ? cz : z1-0.18;
@@ -241,6 +254,7 @@ function facade(g: Geo, b: Building, style: number, x0: number, z0: number, x1: 
     }
   };
   for (const [axis, a0, a1, at, dir] of faces) {
+    if (trimOn() && dir < 0) continue;   // R086 trim facade
     if (style === FAC_TIMBER) {                                   // 角柱、每層的橫梁、間柱
       strip(axis, a0, a0 + 0.035, at, dir, 0, h, OAK); strip(axis, a1 - 0.035, a1, at, dir, 0, h, OAK);
       for (let f = 0; f <= b.floors; f++) { const y = Math.min(h - 0.03, f * FLOOR_H + (f ? 0.04 : 0)); strip(axis, a0, a1, at, dir, y, y + 0.03, OAK); }
@@ -249,13 +263,14 @@ function facade(g: Geo, b: Building, style: number, x0: number, z0: number, x1: 
     } else if (style === FAC_TILE) {                              // 一樓紅磚，二樓以上掛瓦：底色加一道道瓦縫
       const y0 = FLOOR_H + 0.04;
       strip(axis, a0, a1, at, dir, y0, h, TILE);
-      for (let y = y0 + 0.045; y < h - 0.01; y += 0.045) strip(axis, a0, a1, at, dir, y, y + 0.008, TILE_D, t + 0.002);
+      if (artOn()) for (let y = y0 + 0.09; y < h - 0.01; y += 0.09) strip(axis, a0, a1, at, dir, y, y + 0.016, TILE_D, t + 0.002);   // R086：掛瓦縫放寬（跟 R134 放寬木板縫一樣）
+      else for (let y = y0 + 0.045; y < h - 0.01; y += 0.045) strip(axis, a0, a1, at, dir, y, y + 0.008, TILE_D, t + 0.002);
       strip(axis, a0, a1, at, dir, y0 - 0.02, y0, OAK, t + 0.003);    // 掛瓦下緣的收邊板
     } else if (style === FAC_BOARD) {                             // 白色護牆板：一條條橫線
       // R134 owner review: coarse, subdued board joints instead of subpixel bright dot rows.
       const calmBoards = buildingDetailsOn;
       const spacing = calmBoards ? 0.12 : 0.05, thickness = calmBoards ? 0.012 : 0.006;
-      const jointColor = calmBoards ? palette(b.kind).wall.clone().lerp(BOARD_D, 0.22) : BOARD_D;
+      const jointColor = calmBoards ? paletteOf(b).wall.clone().lerp(BOARD_D, 0.22) : BOARD_D;
       for (let y = spacing; y < h - 0.02; y += spacing) strip(axis, a0, a1, at, dir, y, y + thickness, jointColor);
     }
   }
@@ -300,6 +315,7 @@ function intact(g: Geo, b: Building) {
   if (wallShown(b)) { boundaryWall(g, b, false); return; }
   if (b.kind === BK_HQ) { hq(g, b); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, false); return; }
+  if (artOn() && (civilian(b.kind) || (b.kind === BK_CHURCH && b.w >= 2 && b.d >= 2))) { artIntact(g, b); return; }   // R086 房屋細化
   const p = palette(b.kind), m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   if (b.kind === BK_CHURCH) {
     const tw = 0.9, h = wallHeight(b);
@@ -325,10 +341,62 @@ function intact(g: Geo, b: Building) {
   buildingDetails(g, b, x0, z0, x1, z1, h, rise, alongX);
 }
 
+// R086 房屋細化：完好的民房與教堂（長寬 ≥ 2）照這一棟的樣子組起來；新零件在 houseArt.ts。
+// 跟舊的一樣的部分：牆身、R028 外牆（只畫看得到的兩面）、R134 的簷板、屋脊壓條、門、門階、正面角飾。
+function artIntact(g: Geo, b: Building) {
+  const m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m, h = wallHeight(b);
+  if (b.kind === BK_CHURCH) {
+    const p = palette(b.kind), tw = 0.9, nave: Frame = { x0, z0: z0 + tw, x1, z1, h, rise: 0.55, alongX: false };
+    g.box(x0, 0, z0 + tw, x1, h, z1, p.wall, null);                         // 中殿
+    g.gable(x0, z0 + tw, x1, z1, h, 0.55, false, p.roof, p.wall);
+    g.box(x0, 0, z0, x0 + tw, h + 0.95, z0 + tw, p.wall);                   // 方塔
+    g.box(x0 - 0.03, h + 0.95, z0 - 0.03, x0 + tw + 0.03, h + 1.02, z0 + tw + 0.03, p.trim);
+    g.pyramid(x0, z0, x0 + tw, z0 + tw, h + 1.02, 0.7, p.roof);
+    churchDetails(g, nave, { x0, z0, x1: x0 + tw, z1: z0 + tw, h }, p.wall, p.trim, GLASS);
+    plinth(g, nave, plinthColor(p.wall, b.kind, false));
+    return;
+  }
+  const look = lookOf(b), style = facadeStyle(b), timber = style === FAC_TIMBER, wall = timber ? look.plaster : look.wall;
+  const rise = b.kind === BK_BARN ? 0.42 : b.kind === BK_SHOP ? 0.22 : 0.32, f: Frame = { x0, z0, x1, z1, h, rise, alongX: b.w >= b.d };
+  const cx = (x0 + x1) / 2;
+  g.box(x0, 0, z0, x1, h, z1, wall, null);
+  artRoof(g, f, look.form, look.roof, wall);
+  if (style) facade(g, b, style, x0, z0, x1, z1, h);
+  plinth(g, f, plinthColor(wall, b.kind, timber));
+  if (b.kind === BK_SHOP) shopFront(g, f, look, GLASS);
+  if (b.kind !== BK_BARN) artWindows(g, b, f, look.trim, GLASS, b.kind !== BK_COTTAGE, b.kind === BK_SHOP);
+  if (f.alongX) {   // R134 簷板（兩邊屋簷）
+    g.box(x0 - 0.04, h - 0.035, z0 - 0.04, x1 + 0.04, h + 0.008, z0 + 0.015, look.trim);
+    g.box(x0 - 0.04, h - 0.035, z1 - 0.015, x1 + 0.04, h + 0.008, z1 + 0.04, look.trim);
+  } else {
+    g.box(x0 - 0.04, h - 0.035, z0 - 0.04, x0 + 0.015, h + 0.008, z1 + 0.04, look.trim);
+    g.box(x1 - 0.015, h - 0.035, z0 - 0.04, x1 + 0.04, h + 0.008, z1 + 0.04, look.trim);
+  }
+  ridgeCap(g, f, look.form, look.roof);
+  eaveBand(g, f, wall);
+  if (b.kind === BK_BARN) { barnDoor(g, f, look); loft(g, f); }
+  else {
+    const half = b.kind === BK_SHOP ? 0.17 : 0.10;
+    g.quad([cx - half - 0.025, 0, z1 + 0.015], [cx + half + 0.025, 0, z1 + 0.015], [cx + half + 0.025, 0.29, z1 + 0.015], [cx - half - 0.025, 0.29, z1 + 0.015], [0, 0, 1], look.trim);
+    g.quad([cx - half, 0.015, z1 + 0.018], [cx + half, 0.015, z1 + 0.018], [cx + half, 0.26, z1 + 0.018], [cx - half, 0.26, z1 + 0.018], [0, 0, 1], look.door);
+    g.box(cx - half - 0.025, 0, z1 + 0.02, cx + half + 0.025, 0.035, z1 + 0.065, look.trim);
+    if (look.hood) hood(g, cx, z1, look.trim);
+  }
+  for (const x of [x0, x1 - 0.04]) g.quad([x, 0, z1 + 0.01], [x + 0.04, 0, z1 + 0.01], [x + 0.04, h, z1 + 0.01], [x, h, z1 + 0.01], [0, 0, 1], look.trim);   // 正面角飾
+  if (b.kind === BK_HOUSE || b.kind === BK_SHOP) {   // 煙囪：原本的那一支（照屋頂形式放在屋脊上）、六成的住宅另一頭多一支
+    stack(g, f, stackAt(f, look.form, 1, 0.18), look.wall, look.trim);
+    if (look.stack2) stack(g, f, stackAt(f, look.form, 0, 0.18), look.wall, look.trim);
+  }
+  if (b.kind === BK_COTTAGE) {
+    stack(g, f, stackAt(f, look.form, hash2(b.id, 12, 86) < 0.5 ? 0 : 1, 0.16), look.wall, look.trim);
+    if (look.roof.getHex() !== 0x8a4e3a) thatchBand(g, f, look.form, look.roof);   // 茅草才有屋脊帶（陶瓦沒有）
+  }
+}
+
 // R138: a continuous broken profile, not extra loose detail on top of the old shell.
 // The top cut uses existing exposed-material colour; all faces stay inside the footprint.
 function damagedShell(g: Geo, b: Building) {
-  const p = palette(b.kind), colors = rubbleColors(b.kind), t = 0.09;
+  const p = paletteOf(b), colors = rubbleColors(b.kind), t = 0.09;
   const x0 = b.x + 0.1, x1 = b.x + b.w - 0.1, z0 = b.z + 0.1, z1 = b.z + b.d - 0.1;
   const h = wallHeight(b) * 0.72;
   g.box(x0 + t, 0, z0 + t, x1 - t, 0.03, z1 - t, CHAR);
@@ -360,7 +428,7 @@ function damagedShell(g: Geo, b: Building) {
 }
 
 function damagedRubble(g: Geo, b: Building) {
-  const colors = rubbleColors(b.kind), p = palette(b.kind), n = 6 + b.w * b.d * 3;
+  const colors = rubbleColors(b.kind), p = paletteOf(b), n = 6 + b.w * b.d * 3;
   const x0 = b.x + 0.1, x1 = b.x + b.w - 0.1, z0 = b.z + 0.1, z1 = b.z + b.d - 0.1;
   // Low surviving wall corners outline the former room without recreating the roofless shell.
   g.box(x0, 0, z0, x0 + (x1 - x0) * 0.45, 0.11, z0 + 0.09, p.wall, colors[2]);
@@ -386,7 +454,7 @@ function roofless(g: Geo, b: Building, allowDamage = true) {
   if (allowDamage && civilianDamage(b)) { damagedShell(g, b); return; }
   if (wallShown(b)) { boundaryWall(g, b, true); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, true); return; }
-  const p = palette(b.kind), m = 0.1, t = 0.07, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
+  const p = paletteOf(b), m = 0.1, t = 0.07, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
   const h = wallHeight(b) * 0.72;
   const jag = (k: number) => h * (0.7 + 0.3 * hash2(b.id, k, 7));
   const segs = 3;
@@ -414,7 +482,7 @@ function rubble(g: Geo, b: Building, allowDamage = true) {
     const x = b.x + 0.12 + hx * (b.w - 0.24), z = b.z + 0.12 + hz * (b.d - 0.24), s = 0.08 + hh * 0.12;
     g.box(x - s, 0, z - s * 0.8, x + s, 0.05 + hh * 0.12, z + s * 0.8, colors[Math.floor(hc * colors.length)]);
   }
-  if (b.kind === BK_CHURCH) g.box(b.x + 0.1, 0, b.z + 0.1, b.x + 0.9, 0.55, b.z + 0.9, palette(b.kind).wall);   // 塔基還站著
+  if (b.kind === BK_CHURCH) g.box(b.x + 0.1, 0, b.z + 0.1, b.x + 0.9, 0.55, b.z + 0.9, paletteOf(b).wall);   // 塔基還站著
 }
 
 // 一棟建築在指定損壞階段的模型（R004 倒塌殘影要畫「倒之前」那一段）
@@ -429,12 +497,13 @@ export function buildingGeo(g: Geo, b: Building, stage: number): Geo {
 // R130：只供新大圖的遠景層級；建築佔格與完整點選模型仍是原資料。
 function distantBuilding(g: Geo, b: Building, lod: number): void {
   if (isWallKind(b.kind) || b.kind === BK_HQ || b.kind === BK_PILLBOX) { buildingGeo(g, b, stageOf(b)); return; }
-  const p = palette(b.kind), x0 = b.x + 0.1, z0 = b.z + 0.1, x1 = b.x + b.w - 0.1, z1 = b.z + b.d - 0.1;
-  const stage = stageOf(b), h = wallHeight(b), wall = facadeStyle(b) === FAC_TIMBER ? PLASTER : p.wall;
+  const p = paletteOf(b), x0 = b.x + 0.1, z0 = b.z + 0.1, x1 = b.x + b.w - 0.1, z1 = b.z + b.d - 0.1;
+  const stage = stageOf(b), h = wallHeight(b), wall = facadeStyle(b) === FAC_TIMBER ? plasterOf(b) : p.wall;
   if (stage === STAGE_RUBBLE) { g.box(x0, 0, z0, x1, 0.09, z1, rubbleColors(b.kind)[0]); return; }
   g.box(x0, 0, z0, x1, stage === STAGE_ROOFLESS ? h * 0.65 : h, z1, wall, stage === STAGE_ROOFLESS ? CHAR : null);
   if (stage === STAGE_ROOFLESS) return;
-  g.gable(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, roofRise(b.kind), b.w >= b.d, p.roof, wall);
+  if (artOn() && civilian(b.kind) && lookOf(b).form) g.hip(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, roofRise(b.kind), b.w >= b.d, p.roof);   // R086：四坡、半四坡在遠景都畫四坡（三角形一樣多，外形不跳）
+  else g.gable(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, roofRise(b.kind), b.w >= b.d, p.roof, wall);
   if (b.kind === BK_CHURCH) {
     g.box(x0, 0, z0, x0 + 0.8, h + 0.8, z0 + 0.8, p.wall);
     g.pyramid(x0, z0, x0 + 0.8, z0 + 0.8, h + 0.8, 0.6, p.roof);

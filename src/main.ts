@@ -37,7 +37,7 @@ import { initMapPick, initTownPick, type MapPick } from './ui/mapPick.ts';
 import { startZombies } from './sim/zombies.ts';
 import { initZombiesPick, type ZombiesPick } from './ui/zombiesMode.ts';
 import { BuildPlanner, BUILD_TIP, type PlanCmd } from './ui/buildPlanner.ts';
-import { setDamageDetails, setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls } from './render/buildings.ts';
+import { setDamageDetails, setBuildingDetails, setFacades, setMaterials, setWireDetail, setWalls, setHouseArt } from './render/buildings.ts';
 import { setVegetation } from './render/vegetation.ts';
 import { initProduction, type ProdBar } from './ui/production.ts';
 import { initHelp } from './ui/help.ts';
@@ -80,7 +80,7 @@ let lastCounterbatteryWorld: World | undefined;
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
 setMaterials(V.r105); // R105 材質視覺提示；只關畫面，模擬不變
-setBuildingDetails(V.r134 && V.r131);
+setBuildingDetails(V.r134 && V.r131); setHouseArt(V.r086);   // R086 房屋細化（只在 R134 開著時有作用）
 setDamageDetails(V.r138);
 setFacades(V.r028);
 setStreets(V.r027);
