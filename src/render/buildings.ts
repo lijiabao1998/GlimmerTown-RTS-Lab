@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Geo } from './geo.ts';
 import { hash2 } from '../sim/rng.ts';
-import { houseLook, civilian, roof as artRoof, ridgeCap, stack, stackAt, plinth, plinthColor, eaveBand, hood, windows as artWindows, shopFront, barnDoor, loft, thatchBand, churchDetails, type Look, type Frame } from './houseArt.ts';
+import { houseLook, civilian, ROOF_HIP, roof as artRoof, ridgeCap, stack, stackAt, plinth, plinthColor, eaveBand, hood, windows as artWindows, shopFront, barnDoor, loft, thatchBand, churchDetails, type Look, type Frame } from './houseArt.ts';
 import {
   stageOf, STAGE_INTACT, STAGE_ROOFLESS, STAGE_RUBBLE, BK_HOUSE, BK_COTTAGE, BK_BARN, BK_CHURCH, BK_SHOP, BK_HQ, BK_PILLBOX,
   BK_WALL_BRICK, BK_WALL_STONE, BK_WALL_CONCRETE, isWallKind,
@@ -89,11 +89,13 @@ export const wallShown = (b: Building): boolean => wallsOn && isWallKind(b.kind)
 const visibleKind = (kind: number) => !wallsOn && isWallKind(kind) ? BK_HOUSE : kind;
 const palette = (kind: number) => { kind = visibleKind(kind); return materialsOn ? MATERIAL_PAL[kind] ?? PAL[kind] ?? PAL[BK_HOUSE] : PAL[kind] ?? PAL[BK_HOUSE]; };
 // R086：一棟的配色（關著＝那一種的配色）。碎片、彈痕、損壞階段、遠景都照它，跟完好時同一棟同一個顏色（R004）
-const lookOf = (b: Building): Look => houseLook(b, palette(b.kind), facadeStyle(b) === FAC_TIMBER, PLASTER);
+const lookOf = (b: Building): Look => houseLook(b, palette(b.kind), facadeStyle(b) === FAC_TIMBER, PLASTER, facadeStyle(b) === FAC_TILE);
 const paletteOf = (b: Building) => (artOn() && civilian(b.kind) ? lookOf(b) : palette(b.kind));
 const plasterOf = (b: Building) => (artOn() && civilian(b.kind) ? lookOf(b).plaster : PLASTER);
-export function bldColorsOf(b: Building): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return paletteOf(b); }
-export function houseLookOf(b: Building): Look | null { return artOn() && civilian(b.kind) ? lookOf(b) : null; }   // 守衛數樣式用
+// ?noR120=1：紀錄裡的牆畫成房子——碎片、彈痕也照畫出來的那一棟（審查 compat-1）
+const shownAs = (b: Building): Building => (!wallsOn && isWallKind(b.kind) ? { ...b, kind: BK_HOUSE } : b);
+export function bldColorsOf(b: Building): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return paletteOf(shownAs(b)); }
+export function houseLookOf(b: Building): Look | null { b = shownAs(b); return artOn() && civilian(b.kind) ? lookOf(b) : null; }   // 守衛數樣式用
 const rubbleColors = (kind: number) => {
   kind = visibleKind(kind);
   return (materialsOn || isWallKind(kind)) && kind !== BK_HQ && kind !== BK_PILLBOX ? MATERIAL_RUBBLE[bldMaterial(kind) as 0 | 1 | 2 | 3] : RUBBLE;
@@ -263,7 +265,7 @@ function facade(g: Geo, b: Building, style: number, x0: number, z0: number, x1: 
     } else if (style === FAC_TILE) {                              // 一樓紅磚，二樓以上掛瓦：底色加一道道瓦縫
       const y0 = FLOOR_H + 0.04;
       strip(axis, a0, a1, at, dir, y0, h, TILE);
-      if (artOn()) for (let y = y0 + 0.09; y < h - 0.01; y += 0.09) strip(axis, a0, a1, at, dir, y, y + 0.016, TILE_D, t + 0.002);   // R086：掛瓦縫放寬（跟 R134 放寬木板縫一樣）
+      if (artOn()) for (let y = y0 + 0.09; y < h - 0.04; y += 0.09) strip(axis, a0, a1, at, dir, y, y + 0.03, TILE_D, t + 0.002);   // R086：掛瓦縫放寬（間距 0.09、厚 0.03：細過 0.03 在畫面上不到一個像素、會閃）
       else for (let y = y0 + 0.045; y < h - 0.01; y += 0.045) strip(axis, a0, a1, at, dir, y, y + 0.008, TILE_D, t + 0.002);
       strip(axis, a0, a1, at, dir, y0 - 0.02, y0, OAK, t + 0.003);    // 掛瓦下緣的收邊板
     } else if (style === FAC_BOARD) {                             // 白色護牆板：一條條橫線
@@ -373,7 +375,7 @@ function artIntact(g: Geo, b: Building) {
     g.box(x1 - 0.015, h - 0.035, z0 - 0.04, x1 + 0.04, h + 0.008, z1 + 0.04, look.trim);
   }
   ridgeCap(g, f, look.form, look.roof);
-  eaveBand(g, f, wall);
+  if (!timber && !(b.kind === BK_SHOP && b.floors === 1 && f.alongX)) eaveBand(g, f, wall);   // 木構有自己的頂梁；一樓的店那一條在遮陽棚後面（審查 G9）
   if (b.kind === BK_BARN) { barnDoor(g, f, look); loft(g, f); }
   else {
     const half = b.kind === BK_SHOP ? 0.17 : 0.10;
@@ -502,7 +504,7 @@ function distantBuilding(g: Geo, b: Building, lod: number): void {
   if (stage === STAGE_RUBBLE) { g.box(x0, 0, z0, x1, 0.09, z1, rubbleColors(b.kind)[0]); return; }
   g.box(x0, 0, z0, x1, stage === STAGE_ROOFLESS ? h * 0.65 : h, z1, wall, stage === STAGE_ROOFLESS ? CHAR : null);
   if (stage === STAGE_ROOFLESS) return;
-  if (artOn() && civilian(b.kind) && lookOf(b).form) g.hip(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, roofRise(b.kind), b.w >= b.d, p.roof);   // R086：四坡、半四坡在遠景都畫四坡（三角形一樣多，外形不跳）
+  if (artOn() && civilian(b.kind) && lookOf(b).form === ROOF_HIP) g.hip(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, roofRise(b.kind), b.w >= b.d, p.roof);   // R086：四坡在遠景畫四坡；半四坡畫雙坡（比較像，三角形一樣多；審查 G2）
   else g.gable(x0 - 0.04, z0 - 0.04, x1 + 0.04, z1 + 0.04, h, roofRise(b.kind), b.w >= b.d, p.roof, wall);
   if (b.kind === BK_CHURCH) {
     g.box(x0, 0, z0, x0 + 0.8, h + 0.8, z0 + 0.8, p.wall);

@@ -29,13 +29,14 @@ const PLASTERS = [0xe8dec4, 0xd6c4a0].map(rgbOf);
 const ROOFS: Record<number, RGB[]> = {
   [BK_HOUSE]: [0x4f5660, 0x3b4049, 0x8a4e3a, 0x767c84].map(rgbOf),   // 石板、深石板、陶瓦、淺石板
   [BK_COTTAGE]: [0xa8874e, 0x8b7b5e, 0x6f6a52, 0x8a4e3a].map(rgbOf), // 茅草、舊茅草、更舊的、陶瓦
-  [BK_SHOP]: [0x9c4a33, 0x4f5660, 0x767c84].map(rgbOf),              // 陶瓦、石板、淺石板
+  [BK_SHOP]: [0x9c4a33, 0x4f5660, 0x767c84, 0x3b4049].map(rgbOf),    // 陶瓦、石板、淺石板、深石板（二樓掛瓦的店要跟磚牆、掛瓦都差夠）
   [BK_BARN]: [0x7b7d78, 0x7e4a30, 0xa3a29a].map(rgbOf),              // 鍍鋅鐵皮、鏽、纖維水泥
 };
 const DOORS = [0x5a3e2a, 0x2f4a3b, 0x6e2b25, 0x2a2826, 0x2e3a50].map(rgbOf);
 const LIVERIES = [0x3f5a4a, 0x6a2622, 0x2e3a50, 0x4a3328].map(rgbOf);
-const AWNINGS: [RGB, RGB][] = [[rgbOf(0xa2493e), rgbOf(0xd9cfb8)], [rgbOf(0x4e6b4e), rgbOf(0xd9cfb8)], [rgbOf(0x9a7a48), rgbOf(0xd9cfb8)], [rgbOf(0xb5a47e), rgbOf(0xb5a47e)]];
-const DARK = rgbOf(0x2c2b29), POT = rgbOf(0x8a4a35), SOOT = rgbOf(0x2e2824), VOID = rgbOf(0x1e1c1a), OAK = rgbOf(0x7a7265), BARN_PLINTH = rgbOf(0x8e4b37), PLASTER_PLINTH = rgbOf(0x77736b);
+const AWNINGS: [RGB, RGB][] = [[rgbOf(0xa2493e), rgbOf(0xd9cfb8)], [rgbOf(0x4e6b4e), rgbOf(0xd9cfb8)], [rgbOf(0x9a7a48), rgbOf(0xd9cfb8)], [rgbOf(0xb5a47e), rgbOf(0x5e5240)]];
+const TILE_HUNG = rgbOf(0xa3533a);   // R028 掛瓦（buildings.ts 的 TILE）
+const DARK = rgbOf(0x2c2b29), POT = rgbOf(0x8a4a35), SOOT = rgbOf(0x2e2824), VOID = rgbOf(0x1e1c1a), OAK = rgbOf(0x7a7265), OAK_DARK = rgbOf(0x5a5448), BARN_PLINTH = rgbOf(0x8e4b37), PLASTER_PLINTH = rgbOf(0x77736b);
 export const ART_FIXED = { DARK, POT, SOOT, VOID, OAK };   // 守衛拿來檢查顏色規則（玻璃、門洞、煙灰不受 30–235 的限制）
 
 export interface Look {
@@ -66,14 +67,15 @@ function roofForm(b: Building): number {
 }
 
 // 一棟的樣子。base＝那一種原本的配色（R105 材質之後）；timber＝外牆是 R028 木構（看得到的牆是灰泥）
-export function houseLook(b: Building, base: { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color }, timber: boolean, plaster: THREE.Color): Look {
+// hung＝二樓以上是 R028 掛瓦（屋簷下看得到的是掛瓦）：屋頂也要跟掛瓦差夠（審查 G4）
+export function houseLook(b: Building, base: { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color }, timber: boolean, plaster: THREE.Color, hung = false): Look {
   const w0 = srgb(base.wall), h0 = h86(b, 0);
   const wall: RGB = b.kind === BK_BARN ? mul(w0, BARN_VARIANTS[h0 < 0.5 ? 0 : h0 < 0.75 ? 1 : 2]) : civilian(b.kind) ? mul(w0, BRICK_VARIANTS[h0 < 0.5 ? 0 : h0 < 0.75 ? 1 : 2]) : w0;
   const pl: RGB = timber ? PLASTERS[h86(b, 11) < 0.6 ? 0 : 1] : srgb(plaster);
   const seen = timber ? pl : wall;
-  const roofs = ROOFS[b.kind], roof = roofs ? stepTo(roofs, pick(roofs, h86(b, 1)), r => Math.abs(luma(r) - luma(seen)) >= 18) : srgb(base.roof);
-  const door = stepTo(DOORS, pick(DOORS, h86(b, 4)), d => rgbDist(d, seen) >= 45);
+  const roofs = ROOFS[b.kind], roof = roofs ? stepTo(roofs, pick(roofs, h86(b, 1)), r => Math.abs(luma(r) - luma(seen)) >= 18 && (!hung || (Math.abs(luma(r) - luma(TILE_HUNG)) >= 18 && rgbDist(r, TILE_HUNG) >= 45))) : srgb(base.roof);
   const li = pick(LIVERIES, h86(b, 7)), aw = AWNINGS[pick(AWNINGS, h86(b, 10))];
+  const door = stepTo(DOORS, pick(DOORS, h86(b, 4)), d => rgbDist(d, seen) >= 45 && (b.kind !== BK_SHOP || rgbDist(d, LIVERIES[li]) >= 45));   // 店：門也要跟招牌、門框（店的配色）差夠（審查 G7）
   const form = roofForm(b);
   return {
     wall: color(wall), roof: color(roof), trim: b.kind === BK_SHOP ? color(LIVERIES[li]) : base.trim, plaster: color(pl),
@@ -103,9 +105,10 @@ export function roof(g: Geo, f: Frame, form: number, roofC: THREE.Color, wallC: 
 }
 // 屋脊壓條（R134 的那一條，照真的屋脊長度）
 export function ridgeCap(g: Geo, f: Frame, form: number, c: THREE.Color): void {
-  const [a, b] = ridgeEnds(f, form), y = f.h + f.rise, cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2;
-  if (f.alongX) g.box(a - 0.025, y - 0.015, cz - 0.025, b + 0.025, y + 0.025, cz + 0.025, c);
-  else g.box(cx - 0.025, y - 0.015, a - 0.025, cx + 0.025, y + 0.025, b + 0.025, c);
+  const [r0, r1] = ridgeEnds(f, form), y = f.h + f.rise, cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2;
+  const a = Math.max(r0, f.alongX ? f.x0 : f.z0) - 0.025, b = Math.min(r1, f.alongX ? f.x1 : f.z1) + 0.025;   // 雙坡：跟 R134 一樣停在牆外 0.025（不凸出山牆尖；審查 G3）
+  if (f.alongX) g.box(a, y - 0.015, cz - 0.025, b, y + 0.025, cz + 0.025, c);
+  else g.box(cx - 0.025, y - 0.015, a, cx + 0.025, y + 0.025, b, c);
 }
 // 煙囪：0.10 見方，從簷高到屋脊上 0.12；壓頂 0.13 見方；兩支陶土煙囪管（頂面是煙灰）
 export function stack(g: Geo, f: Frame, at: number, body: THREE.Color, cap: THREE.Color): void {
@@ -155,21 +158,22 @@ export function windows(g: Geo, b: Building, f: Frame, trim: THREE.Color, glass:
     };
     for (let fl = 0; fl < b.floors; fl++) for (let k = Math.floor(start); k < end; k++) {
       const c = k + 0.5, y = 0.12 + fl * 0.36;
-      if (c - 0.085 < start || c + 0.085 > end) continue;
+      if (c - 0.1 < start || c + 0.1 > end) continue;
       if (!axis && fl === 0 && (skipFront0 || Math.abs(c - cx) < 0.18)) continue;   // 正面一樓中間是門
       if (sash) {
-        if (y + 0.19 > f.h - 0.09) continue;
-        pane(c - 0.08, c + 0.08, y - 0.02, y + 0.19, trim, 0.015);
+        // 每一條框、橫框、窗台都至少 0.03 格（細過這個在畫面上不到一個像素、會閃；審查 G6）
+        if (y + 0.2 > f.h - 0.09) continue;
+        pane(c - 0.09, c + 0.09, y - 0.03, y + 0.2, trim, 0.015);
         pane(c - 0.06, c + 0.06, y, y + 0.17, glass, 0.017);
-        pane(c - 0.06, c + 0.06, y + 0.08, y + 0.095, trim, 0.019);   // 上下兩扇中間的橫框
-        pane(c - 0.09, c + 0.09, y - 0.04, y - 0.02, trim, 0.022);    // 窗台
-      } else {
-        if (y + 0.155 > f.h - 0.025) continue;
-        pane(c - 0.085, c + 0.085, y - 0.025, y + 0.155, trim, 0.015);
+        pane(c - 0.06, c + 0.06, y + 0.07, y + 0.1, trim, 0.019);     // 上下兩扇中間的橫框
+        pane(c - 0.1, c + 0.1, y - 0.06, y - 0.03, trim, 0.022);      // 窗台
+      } else {   // 小屋的方窗：十字框
+        if (y + 0.16 > f.h - 0.025) continue;
+        pane(c - 0.09, c + 0.09, y - 0.03, y + 0.16, trim, 0.015);
         pane(c - 0.06, c + 0.06, y, y + 0.13, glass, 0.017);
-        pane(c - 0.009, c + 0.009, y, y + 0.13, trim, 0.019);
-        pane(c - 0.06, c + 0.06, y + 0.06, y + 0.075, trim, 0.019);
-        pane(c - 0.095, c + 0.095, y - 0.035, y - 0.015, trim, 0.022);
+        pane(c - 0.015, c + 0.015, y, y + 0.13, trim, 0.019);
+        pane(c - 0.06, c + 0.06, y + 0.05, y + 0.08, trim, 0.019);
+        pane(c - 0.1, c + 0.1, y - 0.06, y - 0.03, trim, 0.022);
       }
     }
   }
@@ -179,8 +183,8 @@ export function shopFront(g: Geo, f: Frame, look: Look, glass: THREE.Color): voi
   const cx = (f.x0 + f.x1) / 2, z = f.z1, half = 0.17;
   for (const [a, b] of [[f.x0 + 0.06, cx - half - 0.04], [cx + half + 0.04, f.x1 - 0.06]]) {
     if (b - a < 0.06) continue;
-    g.quad([a - 0.02, 0.04, z + 0.015], [b + 0.02, 0.04, z + 0.015], [b + 0.02, 0.2, z + 0.015], [a - 0.02, 0.2, z + 0.015], [0, 0, 1], look.livery);
-    g.quad([a, 0.06, z + 0.018], [b, 0.06, z + 0.018], [b, 0.19, z + 0.018], [a, 0.19, z + 0.018], [0, 0, 1], glass);
+    g.quad([a - 0.03, 0.03, z + 0.015], [b + 0.03, 0.03, z + 0.015], [b + 0.03, 0.2, z + 0.015], [a - 0.03, 0.2, z + 0.015], [0, 0, 1], look.livery);
+    g.quad([a, 0.06, z + 0.018], [b, 0.06, z + 0.018], [b, 0.17, z + 0.018], [a, 0.17, z + 0.018], [0, 0, 1], glass);
   }
   g.box(f.x0, 0.2, z, f.x1, 0.28, z + 0.03, look.livery, look.livery);   // 招牌（原本的位置、沒有字）
   const n = Math.max(3, Math.round((f.x1 - f.x0) / 0.28)), zb = z + 0.03, zf = z + 0.095;
@@ -196,38 +200,39 @@ export function shopFront(g: Geo, f: Frame, look: Look, glass: THREE.Color): voi
 export function barnDoor(g: Geo, f: Frame, look: Look): void {
   const cx = (f.x0 + f.x1) / 2, z = f.z1, a = cx - 0.2, b = cx + 0.2, wall = srgb(look.wall);
   const frame = rgbDist(srgb(look.trim), wall) >= 40 ? look.trim : color(OAK);
-  g.quad([a - 0.025, 0, z + 0.012], [b + 0.025, 0, z + 0.012], [b + 0.025, 0.345, z + 0.012], [a - 0.025, 0.345, z + 0.012], [0, 0, 1], frame);
+  g.quad([a - 0.03, 0, z + 0.012], [b + 0.03, 0, z + 0.012], [b + 0.03, 0.35, z + 0.012], [a - 0.03, 0.35, z + 0.012], [0, 0, 1], frame);
   if (look.open) {
     g.quad([a, 0, z + 0.015], [b, 0, z + 0.015], [b, 0.32, z + 0.015], [a, 0.32, z + 0.015], [0, 0, 1], color(VOID));
     for (const [p, q] of [[a - 0.2, a - 0.03], [b + 0.03, b + 0.2]]) if (p >= f.x0 && q <= f.x1) g.quad([p, 0, z + 0.012], [q, 0, z + 0.012], [q, 0.32, z + 0.012], [p, 0.32, z + 0.012], [0, 0, 1], color(OAK));
   } else {
-    g.quad([a, 0, z + 0.015], [b, 0, z + 0.015], [b, 0.32, z + 0.015], [a, 0.32, z + 0.015], [0, 0, 1], color(OAK));
-    g.quad([cx - 0.015, 0, z + 0.018], [cx + 0.015, 0, z + 0.018], [cx + 0.015, 0.32, z + 0.018], [cx - 0.015, 0.32, z + 0.018], [0, 0, 1], frame);
+    const leaf = frame === look.trim ? color(OAK) : color(OAK_DARK);   // 門框退回橡木色時（焦油黑的穀倉）門板用深一點的木色，看得出框與門（審查 G5）
+    g.quad([a, 0, z + 0.015], [b, 0, z + 0.015], [b, 0.32, z + 0.015], [a, 0.32, z + 0.015], [0, 0, 1], leaf);
+    g.quad([cx - 0.015, 0, z + 0.018], [cx + 0.015, 0, z + 0.018], [cx + 0.015, 0.32, z + 0.018], [cx - 0.015, 0.32, z + 0.018], [0, 0, 1], color(VOID));   // 中縫
   }
 }
 export function loft(g: Geo, f: Frame): void {
   const y0 = f.h + 0.03, y1 = f.h + 0.19, s = 0.08;
-  if (f.alongX) { const zc = (f.z0 + f.z1) / 2, x = f.x1 + 0.006; g.quad([x, y0, zc - s], [x, y0, zc + s], [x, y1, zc + s], [x, y1, zc - s], [1, 0, 0], color(VOID)); }
-  else { const xc = (f.x0 + f.x1) / 2, z = f.z1 + 0.006; g.quad([xc - s, y0, z], [xc + s, y0, z], [xc + s, y1, z], [xc - s, y1, z], [0, 0, 1], color(VOID)); }
+  // 山牆三角形（或半四坡的梯形山牆）畫在屋簷外伸那一層：乾草口要在它前面（審查 G1）
+  if (f.alongX) { const zc = (f.z0 + f.z1) / 2, x = f.x1 + OVER + 0.006; g.quad([x, y0, zc - s], [x, y0, zc + s], [x, y1, zc + s], [x, y1, zc - s], [1, 0, 0], color(VOID)); }
+  else { const xc = (f.x0 + f.x1) / 2, z = f.z1 + OVER + 0.006; g.quad([xc - s, y0, z], [xc + s, y0, z], [xc + s, y1, z], [xc - s, y1, z], [0, 0, 1], color(VOID)); }
 }
-// 茅草屋脊帶：沿屋脊、兩邊坡面各往下 0.1，顏色是屋頂的七成；浮在坡面上 0.004（在 R134 屋脊壓條下面）
+// 茅草屋脊帶：沿屋脊、看得到的那一坡往下 0.1，顏色是屋頂的七成；浮在坡面上 0.004（在 R134 屋脊壓條下面）
 export function thatchBand(g: Geo, f: Frame, form: number, roofC: THREE.Color): void {
   const [a, b] = ridgeEnds(f, form), c = color(srgb(roofC).map(v => Math.max(30, Math.round(v * 0.7))) as RGB);
   const half = ((f.alongX ? f.z1 - f.z0 : f.x1 - f.x0) + 2 * OVER) / 2, len = Math.hypot(half, f.rise), du = 0.1 * half / len, dy = 0.1 * f.rise / len, top = f.h + f.rise + 0.004;
   if (b - a < 0.05) return;
   const m = f.alongX ? (f.z0 + f.z1) / 2 : (f.x0 + f.x1) / 2;
-  for (const s of [-1, 1]) {
-    if (f.alongX) g.face4([a, top, m], [b, top, m], [b, top - dy, m + s * du], [a, top - dy, m + s * du], [0, 1, s], c);
-    else g.face4([m, top, a], [m, top, b], [m + s * du, top - dy, b], [m + s * du, top - dy, a], [s, 1, 0], c);
-  }
+  const s = 1;   // 只畫鏡頭看得到的那一坡（+z 或 +x；背面那一坡被屋脊擋住，審查 G9）
+  if (f.alongX) g.face4([a, top, m], [b, top, m], [b, top - dy, m + s * du], [a, top - dy, m + s * du], [0, 1, s], c);
+  else g.face4([m, top, a], [m, top, b], [m + s * du, top - dy, b], [m + s * du, top - dy, a], [s, 1, 0], c);
 }
 // ---- 教堂（長寬都 ≥ 2 格）：中殿 +x 那面的尖拱窗與扶壁、+z 山牆的拱門與圓窗、塔上兩面鐘樓開口、石牆腳 ----
 export function churchDetails(g: Geo, nave: Frame, tower: { x0: number; z0: number; x1: number; z1: number; h: number }, stone: THREE.Color, trim: THREE.Color, glass: THREE.Color): void {
   const x = nave.x1, void_ = color(VOID), len = nave.z1 - nave.z0, bays = Math.max(2, Math.round(len / 0.6));
   for (let i = 0; i < bays; i++) {   // 尖拱窗：玻璃 0.07 × 0.30、尖頂、石框
     const zc = nave.z0 + len * (i + 0.5) / bays, y0 = 0.1, y1 = Math.min(0.4, nave.h - 0.12);
-    g.quad([x + 0.012, y0 - 0.02, zc - 0.055], [x + 0.012, y0 - 0.02, zc + 0.055], [x + 0.012, y1, zc + 0.055], [x + 0.012, y1, zc - 0.055], [1, 0, 0], trim);
-    g.face3([x + 0.012, y1, zc - 0.055], [x + 0.012, y1, zc + 0.055], [x + 0.012, y1 + 0.07, zc], [1, 0, 0], trim);
+    g.quad([x + 0.012, y0 - 0.03, zc - 0.065], [x + 0.012, y0 - 0.03, zc + 0.065], [x + 0.012, y1, zc + 0.065], [x + 0.012, y1, zc - 0.065], [1, 0, 0], trim);
+    g.face3([x + 0.012, y1, zc - 0.065], [x + 0.012, y1, zc + 0.065], [x + 0.012, y1 + 0.085, zc], [1, 0, 0], trim);
     g.quad([x + 0.015, y0, zc - 0.035], [x + 0.015, y0, zc + 0.035], [x + 0.015, y1, zc + 0.035], [x + 0.015, y1, zc - 0.035], [1, 0, 0], glass);
     g.face3([x + 0.015, y1, zc - 0.035], [x + 0.015, y1, zc + 0.035], [x + 0.015, y1 + 0.045, zc], [1, 0, 0], glass);
   }
@@ -245,7 +250,7 @@ export function churchDetails(g: Geo, nave: Frame, tower: { x0: number; z0: numb
   const ry = nave.h + 0.16;
   for (let k = 0; k < 8; k++) {
     const a = k * Math.PI / 4, b = (k + 1) * Math.PI / 4;
-    g.face3([cx, ry, z + 0.012], [cx + Math.cos(a) * 0.11, ry + Math.sin(a) * 0.11, z + 0.012], [cx + Math.cos(b) * 0.11, ry + Math.sin(b) * 0.11, z + 0.012], [0, 0, 1], trim);
+    g.face3([cx, ry, z + 0.012], [cx + Math.cos(a) * 0.12, ry + Math.sin(a) * 0.12, z + 0.012], [cx + Math.cos(b) * 0.12, ry + Math.sin(b) * 0.12, z + 0.012], [0, 0, 1], trim);
     g.face3([cx, ry, z + 0.015], [cx + Math.cos(a) * 0.09, ry + Math.sin(a) * 0.09, z + 0.015], [cx + Math.cos(b) * 0.09, ry + Math.sin(b) * 0.09, z + 0.015], [0, 0, 1], glass);
   }
   const t = tower, y0 = t.h + 0.59, y1 = t.h + 0.82;   // 鐘樓開口：+x、+z 兩面
