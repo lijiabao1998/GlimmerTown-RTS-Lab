@@ -12,6 +12,7 @@ import { BK_HOUSE, BK_COTTAGE, BK_BARN, BK_OAST, BK_MILL, BK_WAREHOUSE, STAGE_RO
 type V3 = [number, number, number];
 const C = (hex: number) => new THREE.Color(hex);
 const h87 = (b: Building, k: number): number => hash2(b.id, k, 87);
+const lumaOf = (hex: number): number => 0.2126 * ((hex >> 16) & 255) + 0.7152 * ((hex >> 8) & 255) + 0.0722 * (hex & 255);
 
 export const isMoreKind = (kind: number): boolean => kind === BK_OAST || kind === BK_MILL || kind === BK_WAREHOUSE;
 // 閥關掉時照哪一種舊房子畫
@@ -46,7 +47,8 @@ export function moreLook(b: Building): MoreLook {
   const k0 = h87(b, 0), k1 = h87(b, 1), k2 = h87(b, 2);
   if (b.kind === BK_OAST) {
     const brick = C(KILN[Math.floor(k0 * 3)]), upper = k1 < 0.55 ? C(BOARD[k1 < 0.3 ? 0 : 1]) : brick;   // 儲藏間的二樓：白色木板或照樣是磚
-    return { wall: brick, roof: C(k2 < 0.6 ? TILE : SLATE), trim: OAKD, brick, upper, cone: C(CONE[k2 < 0.5 ? 0 : 1]), door: OAKD };
+    const roofs = k2 < 0.6 ? [TILE, SLATE] : [SLATE, TILE], roof = roofs.find(r => Math.abs(lumaOf(r) - lumaOf(brick.getHex())) >= 18) ?? SLATE;   // 跟 R086 一樣：屋頂跟牆的亮度要差 ≥ 18
+    return { wall: brick, roof: C(roof), trim: OAKD, brick, upper, cone: C(CONE[k2 < 0.5 ? 0 : 1]), door: OAKD };
   }
   if (b.kind === BK_MILL) {
     const body = C(BOARD[k1 < 0.6 ? 1 : 0]), brick = C(KILN[1 + Math.floor(k0 * 2)]);

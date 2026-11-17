@@ -6,6 +6,7 @@ import { SCRIPT_SEED } from '../sim/script.ts';
 import type { World } from '../sim/world.ts';
 import { valves } from '../valves.ts';
 import { MAP_HILLS } from '../sim/hillMap.ts';
+import { applyMoreHouses } from '../sim/moreHouses.ts';
 import { browserStore, type Store } from './replayStore.ts';
 
 export const FORCE_TEXT = ['', '精簡', '標準', '加倍'];
@@ -146,6 +147,7 @@ export function initSkirmish(q: URLSearchParams, canVillage: boolean): Skirmish 
       persist();
     },
     start: w => {
+      if (!w.sandbox && w.tick === 0 && valves(q).r087) applyMoreHouses(w);   // R087 更多房屋：新開的局套完地圖就多放房子（規則之前，跟第 0 步的順序一樣；main.ts 的 issue() 看到世界有 more 就在 map 指令帶 more＝1）
       const cmd = rulesCommand(s.force, s.supply, s.ap, s.morale, valves(q).r075 ? 2 : 1);
       if (cmd) applyRules(w, cmd);
       if (w.sandbox) return cmd;   // 沙盒不記（main.ts 本來就不會拿沙盒世界來，這裡再擋一次）

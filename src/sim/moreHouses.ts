@@ -91,7 +91,7 @@ const mark = (w: World, g: Uint8Array, x0: number, z0: number, x1: number, z1: n
   for (let z = Math.max(0, z0 - r); z <= Math.min(n - 1, z1 + r); z++) for (let x = Math.max(0, x0 - r); x <= Math.min(n - 1, x1 + r); x++) g[z * n + x] = 1;
 };
 export function moreGrids(w: World, ground?: Pick<MoreGrids, 'road' | 'mud'>): MoreGrids {
-  const N = w.n * w.n, farm = new Uint8Array(N), home = new Uint8Array(N), tall = new Uint8Array(N);
+  const cells = w.n * w.n, farm = new Uint8Array(cells), home = new Uint8Array(cells), tall = new Uint8Array(cells);
   for (const b of w.blds) {
     const x1 = b.x + b.w - 1, z1 = b.z + b.d - 1;
     if (b.kind === BK_BARN || b.kind === BK_COTTAGE) mark(w, farm, b.x, b.z, x1, z1, MORE_OAST_NEAR);
@@ -100,7 +100,7 @@ export function moreGrids(w: World, ground?: Pick<MoreGrids, 'road' | 'mud'>): M
   }
   let road = ground?.road, mud = ground?.mud;
   if (!road || !mud) {
-    road = new Uint8Array(N); mud = new Uint8Array(N);
+    road = new Uint8Array(cells); mud = new Uint8Array(cells);
     for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) {
       const t = w.ter[cellIdx(w, x, z)];
       if (t === TER_ROAD) mark(w, road, x, z, x, z, MORE_ROAD_NEAR); else if (t === TER_MUD) mark(w, mud, x, z, x, z, MORE_RIVER_NEAR);
