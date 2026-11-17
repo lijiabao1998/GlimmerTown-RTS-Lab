@@ -28,6 +28,9 @@ export const BK_WALL_BRICK = 7; // R120：普通可破壞建築；沿用駐守�
 export const BK_WALL_STONE = 8;
 export const BK_WALL_CONCRETE = 9;
 export const BK_WIRE = 10; // R121：build指令種類，獨立障礙，不進建築／AI駐守清單
+export const BK_OAST = 11;      // R087 啤酒花烘房（磚；八角烘爐＋圓錐頂＋白色風帽；只有 map 指令帶 more＝1 的新開的局才有）
+export const BK_MILL = 12;      // R087 塔式風車（木；磚基座、白色木板塔身、四片風帆）
+export const BK_WAREHOUSE = 13; // R087 河岸倉庫（木；一樓磚、上面塗焦油的木板、頂樓吊貨小屋）
 export const isWallKind = (kind: number): boolean => kind === BK_WALL_BRICK || kind === BK_WALL_STONE || kind === BK_WALL_CONCRETE;
 
 // R105 材質由種類推導，不往世界或指令加欄位；舊存檔保留已存的 hp／maxHp。
@@ -38,6 +41,7 @@ export const BM_CONCRETE = 3;
 export const BLD_MATERIAL_NAMES = ['木造', '磚造', '石造', '混凝土'] as const;
 export function bldMaterial(kind: number): number {
   if (kind === BK_BARN) return BM_WOOD;
+  if (kind === BK_MILL || kind === BK_WAREHOUSE) return BM_WOOD;   // R087（烘房照預設是磚）
   if (kind === BK_CHURCH || kind === BK_WALL_STONE) return BM_STONE;
   if (kind === BK_PILLBOX || kind === BK_WALL_CONCRETE) return BM_CONCRETE;
   return BM_BRICK;
@@ -261,6 +265,7 @@ export interface World extends RngState {
   wires?: { version: 1; segments: Building[] }; // R121：沿用耐久資料，不佔blds/occ、不冒充房屋
   trenches?: { version: 1; segments: TrenchSegment[] }; // R118：只有成功布陣才保存
   sym?: 1;               // R084 左右對稱：新開的局的 map 指令帶 sym＝1 才有（編隊、指揮部、出生格、集結點、尋路平手時左上那一方照鏡像做）
+  more?: 1;              // R087 更多房屋：新開的局的 map 指令帶 more＝1 才有（第 0 步套完地圖之後多放幾棟房子，見 moreHouses.ts）
   height?: Uint8Array;    // R055 每格的高度（0–3 階）；只有帶高度的地圖（丘陵）才有，規則在 terrain.ts
   map?: number;           // R026：套過哪一張手排地圖（map 指令；沒有＝亂數村莊）
   rules?: { force?: number; income?: number; ap?: number; morale?: number };   // R046 遭遇戰設定（rules 指令；只存不是標準值的欄位，全是標準就沒有這一欄）
@@ -459,6 +464,7 @@ export function hashWorld(w: World): string {
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
   if (w.sym) f.int(0x5359).int(w.sym);   // R084 只在有時折
+  if (w.more) f.int(0x4d48).int(w.more);   // R087 只在有時折
   if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); if (w.rules.morale) f.int(0x524d).int(w.rules.morale); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
   if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); if (a.v) f.int(0x4156).int(a.v); if (a.gather !== undefined) f.int(0x4147).int(a.gather); if (a.go !== undefined) f.int(0x4157).int(a.go); if (a.size !== undefined) f.int(0x415a).int(a.size); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）

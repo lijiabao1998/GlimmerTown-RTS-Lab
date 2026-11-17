@@ -59,6 +59,7 @@ export function decodeWorld(x: unknown): World | null {
   const ter = unpack(r.ter, new Uint8Array(cells), 0, 255), occ = unpack(r.occ, new Int32Array(cells), -0x80000000, 0x7fffffff), crater = unpack(r.crater, new Uint8Array(cells), 0, 255);
   if (!ter || !occ || !crater || !Array.isArray(r.blds) || !Array.isArray(r.units) || !Array.isArray(r.shells)) return null;
   if (!ints(r, WORLD_INTS) || !r.units.every(unitOk) || !r.blds.every((b, i) => ints(b, BLD_INTS) && b.id === i + 1) || !r.shells.every(s => ints(s, SHELL_INTS))) return null;
+  if (r.more !== undefined && r.more !== 1) return null;   // R087：更多房屋的旗標只有 1
   let vegetation: World['vegetation'];
   if (r.vegetation !== undefined) {
     const v = r.vegetation;
