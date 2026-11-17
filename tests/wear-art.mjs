@@ -178,9 +178,15 @@ const groups = {
           const box = q => [Math.min(...q.p.map(p => p[u])), Math.max(...q.p.map(p => p[u])), Math.min(...q.p.map(p => p[1])), Math.max(...q.p.map(p => p[1]))];
           const touching = glass.filter(q => q.n[ax] > 0.99 && Math.abs(q.p[0][ax] + 0.003 - t.p[0][ax]) < 1e-4).map(box).filter(([a, b2, c, d]) => Math.min(...us) < b2 && Math.max(...us) > a && Math.min(...ys) < d && Math.max(...ys) > c);
           if (touching.length && us.every(v => v >= Math.min(...touching.map(q => q[0])) - 1e-4 && v <= Math.max(...touching.map(q => q[1])) + 1e-4) && ys.every(v => v >= Math.min(...touching.map(q => q[2])) - 1e-4 && v <= Math.max(...touching.map(q => q[3])) + 1e-4)) continue;
-          assert(Math.abs(t.p[0][ax] - face - 0.02) < 1e-6 && Math.min(...us) >= (ax === 0 ? b.z : b.x) + 0.1 - 0.02 && Math.max(...us) <= (ax === 0 ? b.z + b.d : b.x + b.w) - 0.1 + 0.02 && Math.max(...ys) < h, `geometry: a hole sits on its wall, inside the face and below the wall top (map ${map}, building ${b.id}, T${tier})`);
-          for (const q of g0t) if (q.n[ax] > 0.99 && q.p.every(p => p[ax] - face > 1e-4 && p[ax] - face <= 0.06)) { const qu = q.p.map(p => p[u]), qy = q.p.map(p => p[1]); assert(Math.max(...us) <= Math.min(...qu) || Math.min(...us) >= Math.max(...qu) || Math.max(...ys) <= Math.min(...qy) || Math.min(...ys) >= Math.max(...qy), `geometry: a hole never covers a door, window or anything on the wall (map ${map}, building ${b.id}, T${tier})`); }   // 審查 R088-guard-doors
-          for (const q of glass) if (Math.abs(q.p[0][ax] - face) < 0.06) { const qu = q.p.map(p => p[u]), qy = q.p.map(p => p[1]); assert(Math.max(...us) <= Math.min(...qu) || Math.min(...us) >= Math.max(...qu) || Math.max(...ys) <= Math.min(...qy) || Math.min(...ys) >= Math.max(...qy), `geometry: a hole never covers a window (map ${map}, building ${b.id}, T${tier})`); }
+          assert(Math.abs(t.p[0][ax] - face - 0.035) < 1e-6 && Math.min(...us) >= (ax === 0 ? b.z : b.x) + 0.1 - 0.02 && Math.max(...us) <= (ax === 0 ? b.z + b.d : b.x + b.w) - 0.1 + 0.02 && Math.max(...ys) < h, `geometry: a hole sits on its wall, inside the face and below the wall top (map ${map}, building ${b.id}, T${tier})`);
+          // R094：洞不壓門（貼牆、從地面起、高過 0.2、寬 0.1–0.6、不在牆的兩端；簷帶、勒腳、掛瓦、木板、木構可以壓）
+          const ends = [Math.min(...g0t.filter(q => q.n[ax] > 0.99 && q.p.every(p => Math.abs(p[ax] - face) < 1e-4)).flatMap(q => q.p.map(p => p[u]))), Math.max(...g0t.filter(q => q.n[ax] > 0.99 && q.p.every(p => Math.abs(p[ax] - face) < 1e-4)).flatMap(q => q.p.map(p => p[u])))];
+          for (const q of g0t) if (q.n[ax] > 0.99 && q.p.every(p => p[ax] - face > 1e-4 && p[ax] - face <= 0.06)) {
+            const qu = q.p.map(p => p[u]), qy = q.p.map(p => p[1]), wd = Math.max(...qu) - Math.min(...qu);
+            if (!(Math.min(...qy) <= 0.03 && Math.max(...qy) >= 0.2 && wd >= 0.1 && wd < 0.6 && Math.min(...qu) > ends[0] + 0.06 && Math.max(...qu) < ends[1] - 0.06)) continue;
+            assert(Math.max(...us) <= Math.min(...qu) || Math.min(...us) >= Math.max(...qu) || Math.max(...ys) <= Math.min(...qy) || Math.min(...ys) >= Math.max(...qy), `geometry: a hole never covers a door (map ${map}, building ${b.id}, T${tier})`);
+          }
+          for (const q of glass) if (Math.abs(q.p[0][ax] - face) < 0.06) { const qu = q.p.map(p => p[u]), qy = q.p.map(p => p[1]); assert(Math.max(...us) <= Math.min(...qu) - 0.0 || Math.min(...us) >= Math.max(...qu) || Math.max(...ys) <= Math.min(...qy) || Math.min(...ys) >= Math.max(...qy), `geometry: a hole never covers a window (map ${map}, building ${b.id}, T${tier})`); }
         }
         const base = tier <= 3 ? g0 : r0;
         assert(g.triangles - base.triangles <= 64 && g.triangles >= base.triangles, `geometry: a tier adds at most 64 triangles (map ${map}, building ${b.id}, T${tier}: +${g.triangles - base.triangles})`);
@@ -192,6 +198,18 @@ const groups = {
         assert(drop5 > 0.1, `geometry: the T5 shell visibly comes down (map ${map}, building ${b0.id}: ${drop5.toFixed(3)})`); }
       if (b0.kind !== W.BK_CHURCH) { const s = sagEnd(b0), drop = Math.max(...[...Array(byTier[3].pos.length / 3).keys()].map(k => byTier[2].pos[3 * k + 1] - byTier[3].pos[3 * k + 1])); assert(drop > 0.05, `geometry: the T3 roof visibly sags (map ${map}, building ${b0.id}: ${drop.toFixed(3)}, end ${s.end})`); }
     }
+  },
+  // R094 放得下：T2 時每一種民房（住宅、小屋、商店、穀倉、2×2 以上的教堂）至少八成牆上有洞（離牆 0.035 的洞口）
+  coverage() {
+    prod();
+    const byKind = {};
+    for (const map of MAPS) for (const b of world(map).blds.filter(b => b.kind <= 4 && wearable(b))) {
+      const g = B.buildingGeo(new Geo(), at(b, 0.82), STAGE_INTACT), fx = b.x + b.w - 0.1, fz = b.z + b.d - 0.1;
+      const holes = tris(g).filter(t => t.c === CAVITY && ((t.n[0] > 0.99 && Math.abs(t.p[0][0] - fx - 0.035) < 1e-6) || (t.n[2] > 0.99 && Math.abs(t.p[0][2] - fz - 0.035) < 1e-6))).length;
+      const k = byKind[b.kind] ??= { n: 0, holed: 0 }; k.n++; if (holes >= 2) k.holed++;
+    }
+    console.log(`  T2 buildings with a wall hole: ${Object.entries(byKind).map(([k, v]) => `kind ${k} ${v.holed}/${v.n}`).join(', ')}`);
+    for (const [k, v] of Object.entries(byKind)) assert(v.holed >= 0.8 * v.n, `coverage: at T2 at least 80 % of every civilian kind shows a hole in its wall (kind ${k}: ${v.holed}/${v.n})`);
   },
   // 殘影：兩半合起來＝那一段的幾何；第二半晚 0.22 秒、都往外倒；屋頂殘影＝簷以上；真的畫面裡換階段那一幀有殘影
   ghosts() {
@@ -316,7 +334,7 @@ const groups = {
   },
 };
 
-export const ALL = ['tiers', 't0', 'valve', 'cache', 'pure', 'geometry', 'ghosts', 'marks', 'effects', 'bench', 'wiring'];
+export const ALL = ['tiers', 't0', 'valve', 'cache', 'pure', 'geometry', 'coverage', 'ghosts', 'marks', 'effects', 'bench', 'wiring'];
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const only = process.argv[2];
   if (only) { assert(groups[only], `unknown group ${only}`); groups[only](); console.log(`wear-art/${only}: OK`); process.exit(0); }
