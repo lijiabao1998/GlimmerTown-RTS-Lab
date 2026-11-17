@@ -1,4 +1,5 @@
-import { SIDE_PLAYER, TICK_HZ, UNIT_KINDS, type World } from '../sim/world.ts';
+import { TICK_HZ, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { hqAlive } from '../sim/eco.ts';
 
 const labels = ['坦克', '榴彈砲', '觀測員', '步兵', '反戰車砲', '迫擊砲', '輕坦克', '重坦克', '裝甲車', '驅逐戰車', '突擊砲'];

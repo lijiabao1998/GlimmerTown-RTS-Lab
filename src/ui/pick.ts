@@ -2,7 +2,8 @@
 // 只讀世界與鏡頭，不改任何東西；桌機滑鼠與手機點按都走這支。
 // main.ts 留一個同名薄接線 pickUnit，因為 R124／R123 的瀏覽器守衛會把 `pickUnit(x,y)` 注入總機。
 import type { World } from '../sim/world.ts';
-import { SUB, SIDE_PLAYER } from '../sim/world.ts';
+import { SUB } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { BattleView } from '../render/battle.ts';
 
 // stack（R081，只有點選才給；下指令、長按不給）：點到的最近那一個是我方的、而且那一點疊著好幾個我方單位

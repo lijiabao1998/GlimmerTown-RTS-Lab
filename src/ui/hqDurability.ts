@@ -1,5 +1,6 @@
 // R127: only the player's registered HQ; stored durability, no simulation writes.
-import { BK_HQ, SIDE_PLAYER, stageOf, type World } from '../sim/world.ts';
+import { BK_HQ, stageOf, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 export function hqDurability(w: World, enabled = true): string {
   if (!enabled || !w.eco || w.winner >= 0) return '';

@@ -10,7 +10,7 @@ import { unitSpec } from './ui/unitSpec.ts';
 import * as THREE from 'three';
 import { internationalItems } from './ui/internationalCatalog.ts';
 import { sovietItems } from './ui/sovietCatalog.ts';
-import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, SIDE_PLAYER, SIDE_ENEMY, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UNIT_KINDS, cellOf, type World } from './sim/world.ts';
+import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UNIT_KINDS, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, enemyPlan } from './sim/build.ts';
 import { step, runLog, commandTick, type Command, type LoggedCommand } from './sim/step.ts';
 import { createSandboxWorld, sandboxPlaceError, type SandboxCommand, type SandboxError } from './sim/sandbox.ts';
@@ -22,7 +22,7 @@ import { STYLE_A, msaaSetting, type Style } from './render/post.ts';
 import { initFireDiscipline, toggleFireDiscipline } from './ui/fireDiscipline.ts';
 import { initDesktopControls, isDesktopPointer } from './ui/desktopControls.ts';
 import { pickUnitAt } from './ui/pick.ts';
-import { initNet, netFeed, netReady, netLive } from './net/client.ts';   // R083 連線合作
+import { initNet, netFeed, netReady, netLive, netVersus, netVersusNext } from './net/client.ts'; import { SIDE_PLAYER, SIDE_ENEMY, setViewSide } from './side.ts';   // R083 連線合作；R085「我方」可以換（連線對戰）
 import { initHud, type Hud } from './ui/hud.ts';
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
 import { Gestures, inSelectionRect, type SelectionRect } from './ui/gestures.ts';
@@ -86,7 +86,7 @@ setFacades(V.r028);
 setStreets(V.r027);
 function startOrder() {
   // 開戰這一刻 eco／ai 指令還在佇列裡沒套用：看同一組開關（V.r019 指揮部、V.r018 電腦），不看世界
-  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, V.r019, V.r018 ? AI_NAME[aiLevel] : undefined, !!w.zombies));
+  showStartOrder(document.getElementById('hud') ?? document.body, startOrderText(w.map ?? 0, V.r019, V.r018 && !netVersusNext() ? AI_NAME[aiLevel] : undefined, !!w.zombies));   // R085 審查：對戰的局沒有電腦
 }
 function startBanner() {
   const el = document.createElement('div');
@@ -138,7 +138,7 @@ const AI_NAME = ['', '簡單', '普通', '困難'];
 function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026 || large || expanded, vegetation = true, sandbox = false) {
   if (V.r109) clearGestureInput();
   battleAudio?.reset();
-  w = sandbox ? createSandboxWorld(s) : createWorld(s);
+  w = sandbox ? createSandboxWorld(s) : createWorld(s); setViewSide();   // R085：每開一局「我方」先回到第 0 方（連線對戰的加入的人開戰時才換）
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
   const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : skirmish?.village ? 0 : skirmish?.hills ? MAP_HILLS : MAP_RYE) : 0;   // R046：村莊＝地圖 0（createWorld 的亂數村莊）
@@ -425,7 +425,7 @@ hud = initHud({
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
     const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);
     return {
-      tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: V.r010,
+      tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner === SIDE_ENEMY ? 1 : w.winner === SIDE_PLAYER ? 0 : w.winner, report: V.r010,
       build: phase === 'build', hint: phase === 'build' ? planner.buildHint || BUILD_TIP : battleHint,
       mine: mine.length, theirs: theirs.length, ai: V.r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
@@ -491,7 +491,7 @@ if (battleAudio) {
 
 if (V.r128) sandboxBar = initSandbox({
   state: () => ({ active: !!w.sandbox, running: !!w.sandbox?.running, count: w.units.length, tool: sandboxTool, side: sandboxSide, hint: sandboxHint, summary: sandboxCapacity(w, V.r136) }),
-  enter: () => { sandboxTool = UK_TANK; sandboxSide = SIDE_PLAYER; speed = 1; reset(seed, false, false, false, false, false, true); },
+  enter: () => { sandboxTool = UK_TANK; speed = 1; reset(seed, false, false, false, false, false, true); sandboxSide = SIDE_PLAYER; },
   exit: () => { sandboxTool = null; sandboxSide = SIDE_PLAYER; speed = 1; paused = false; reset(); },
   run: () => setPaused(!paused), reset: () => sandboxAction({ t: 'sandboxReset' }),
   pick: kind => { clearGestureInput(); sandboxTool = kind; sandboxHint = ''; selected.clear(); fireMode = false; ammo = 'he'; ui(); },
@@ -513,8 +513,8 @@ if (V.r045) zombiesPick = initZombiesPick({
 const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
 // R069 開始選單（src/ui/startMenu.ts）：地圖、模式、重來、說明、教學都按原本那幾顆鍵；這裡只接難度、暫停與音效
 const replay = V.r047 ? initReplay({ world: () => w, log: () => log, hash: () => hashWorld(w), begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w, V.r081); ui(); }, focus: (x, z) => view.target.set(x, 0, z), leave: () => reset() }) : undefined;   // R047 重播（src/ui/replay.ts）
-if (V.r083) initNet({ world: () => w, log: () => log, hash: () => hashWorld(w), phase: () => phase, begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w, V.r081); ui(); }, focus: () => { if (w.map === MAP_LARGE) view.target.set(55, 0, 55); if (w.map === MAP_TOWN) view.target.set(87, 0, 87); } });   // R083：加入的人照重播那一條路建世界
-const saves = V.r074 && V.r069 ? initSaves({ world: () => w, log: () => log, battle: () => phase === 'battle', replaying: () => !!replay?.playing(), cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }), stats: () => stats, adopt: (world, lg, cam, st) => { reset(world.seed, false, false, false, false, false); w = world; log = lg; pending = lg.filter(c => c.tick === w.tick).map(c => c.cmd); seed = world.seed; aiLevel = world.ai?.find(a => a.side === SIDE_ENEMY)?.level ?? aiLevel; large = V.r043 && world.map === MAP_LARGE; expanded = V.r130 && world.map === MAP_TOWN; if (world.zombies) q.set('mode', 'zombies'); else q.delete('mode'); skirmish?.adopt(world); view.dispose(); view = view.recreate(w); if (cam) { view.target.set(cam.x, 0, cam.z); view.zoom = cam.zoom; } stats = st ?? newStats(w); paused = true; ui(); syncBattleAudio(); } }) : undefined;   // R074 繼續上一局（src/ui/saveGame.ts）：adopt＝把遊戲換成存檔裡的那一局，停在暫停（紀錄裡步數等於現在這一步的指令還沒進世界，重新排進去）。沒有開始選單（noR069）就沒有地方按「繼續上一局」，所以也不存
+if (V.r083) initNet({ world: () => w, log: () => log, hash: () => hashWorld(w), phase: () => phase, begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w, V.r081); ui(); }, focus: () => { if (w.map === MAP_LARGE) view.target.set(55, 0, 55); if (w.map === MAP_TOWN) view.target.set(87, 0, 87); if (SIDE_PLAYER) view.target.set(w.n - view.target.x, 0, w.n - view.target.z); }, versus: V.r085 });   // R083：加入的人照重播那一條路建世界
+const saves = V.r074 && V.r069 ? initSaves({ world: () => w, log: () => log, battle: () => phase === 'battle', replaying: () => !!replay?.playing() || netVersus(), cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }), stats: () => stats, adopt: (world, lg, cam, st) => { reset(world.seed, false, false, false, false, false); w = world; log = lg; pending = lg.filter(c => c.tick === w.tick).map(c => c.cmd); seed = world.seed; aiLevel = world.ai?.find(a => a.side === SIDE_ENEMY)?.level ?? aiLevel; large = V.r043 && world.map === MAP_LARGE; expanded = V.r130 && world.map === MAP_TOWN; if (world.zombies) q.set('mode', 'zombies'); else q.delete('mode'); skirmish?.adopt(world); view.dispose(); view = view.recreate(w); if (cam) { view.target.set(cam.x, 0, cam.z); view.zoom = cam.zoom; } stats = st ?? newStats(w); paused = true; ui(); syncBattleAudio(); } }) : undefined;   // R074 繼續上一局（src/ui/saveGame.ts）：adopt＝把遊戲換成存檔裡的那一局，停在暫停（紀錄裡步數等於現在這一步的指令還沒進世界，重新排進去）。沒有開始選單（noR069）就沒有地方按「繼續上一局」，所以也不存
 if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: n => (aiLevel = n ?? aiLevel), paused: v => { if (v !== undefined) { paused = v; syncBattleAudio(); hud?.update(); } return paused; },
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
   audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined, skirmish, seed: n => (seed = n ?? seed), reset: () => reset(), replays: replay?.open, saved: saves?.offer, resume: saves?.resume, saveNow: saves?.saveNow });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次
@@ -622,7 +622,7 @@ const rts = {
   eco: () => (w.eco ? { supply: [...w.eco.supply], queue: w.eco.queue.map(q => [...q]), hq: [...w.eco.hq], guns: w.eco.guns ?? 0, tanks: w.eco.tanks ?? 0, armor2: w.eco.armor2 ?? 0 } : null),
   men: () => ({ alive: view.menDbg.alive, bodies: view.bodies.n, prone: view.menDbg.prone, crew: view.menDbg.crew }),
   map: () => w.map ?? 0,
-  mapSize: () => w.n,   // R043：地圖邊長（萊伊 32、鄉間大地圖 64）
+  mapSize: () => w.n, seen: () => w.units.filter(u => u.alive && view.visibleUnit(u)).map(u => u.id),   // R043：地圖邊長（萊伊 32、鄉間大地圖 64）
   vegetation: () => ({ version: w.vegetation?.version ?? 0, cells: w.vegetation ? [...w.vegetation.cells] : [],
     shown: !!view.vegetation116.mesh, count: view.vegetation116.cells, triangles: view.vegetation116.triangles, builds: view.vegetation116.builds }),
   units: () => w.units.map(u => ({ id: u.id, side: u.side, kind: u.kind, x: u.x, z: u.z, alive: u.alive, hp: u.hp, sup: u.sup ?? 0, rout: u.rout ?? 0 })),   // hp、sup：R052 的守衛拿來對血條與壓制標記的數量；rout：R075 的守衛拿來算該趴下幾個人

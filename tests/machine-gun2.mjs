@@ -412,6 +412,7 @@ try {
     cpSync(join(root, 'src/sim'), join(dir, 'src/sim'), { recursive: true });
     cpSync(join(root, 'src/ui'), join(dir, 'src/ui'), { recursive: true });
     cpSync(join(root, 'src/main.ts'), join(dir, 'src/main.ts'));
+    cpSync(join(root, 'src/side.ts'), join(dir, 'src/side.ts'));   // R085：介面的「我方」
     cpSync(join(root, 'tools/duel.mjs'), join(dir, 'tools/duel.mjs'));
     cpSync(join(root, 'tests/machine-gun2.mjs'), join(dir, 'tests/machine-gun2.mjs'));
     writeFileSync(join(dir, 'package.json'), '{"type":"module"}');

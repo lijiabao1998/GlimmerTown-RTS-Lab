@@ -155,7 +155,7 @@ function section(source, start, end) { const a = source.indexOf(start), b = sour
 function mainFixture(query = '') {
   const f = fixture(); add(f); add(f, UK_MORTAR); const { hud: domHud, document } = dom(); let render, hudUpdates = 0, hudFrames = 0; const issued = [];
   const q = new URLSearchParams(query);
-  const c = vm.createContext({ ...world, ...f, q, V: fixtureValves(q, { r015: false, r115: false, r010: false }), initCommandMenu, bombardCommand, commandMenu: undefined, netLive: () => false, netFeed: () => null, netReady: () => true,   /* R083：沒有連線的局 */
+  const c = vm.createContext({ setViewSide: () => {},   /* R085：reset() 先把「我方」換回第 0 方（沙盒裡不用） */ ...world, ...f, q, V: fixtureValves(q, { r015: false, r115: false, r010: false }), initCommandMenu, bombardCommand, commandMenu: undefined, netLive: () => false, netFeed: () => null, netReady: () => true,   /* R083：沒有連線的局 */
     document, addEventListener() {}, phase: 'battle', battleHint: undefined, help: { visible: () => false }, reportView: undefined,
     issue: cmd => issued.push(structuredClone(cmd)), simT: () => 0, clearGestureInput() {}, canvas: {}, pointers: new Map(),
     view: { setMarker() {}, update() {}, render() {}, rangeInfo: 'unchanged', vegetationInfo: '' },

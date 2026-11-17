@@ -7,6 +7,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { pipeline } from 'node:stream';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +40,7 @@ function wsAccept(req, socket, onMessage, onClose) {
   };
   const fail = () => { ws.close(1002); };
   socket.on('data', chunk => {
+    if (closed) return;   // R083 第二輪審查：自己關掉的連線不再讀、不再轉（不然對方不關就一直收、記憶體一直漲；閒置一分鐘被收掉）
     ws.seen = Date.now();
     buf = Buffer.concat([buf, chunk]);
     for (;;) {
@@ -94,7 +96,7 @@ const server = http.createServer((req, res) => {
     return res.end(missing ? '轉發伺服器開著，但還沒有遊戲頁：先在倉庫根目錄跑 npm run build，再開這一頁。\n' : 'not found\n');
   }
   res.writeHead(200, { 'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
-  fs.createReadStream(file).pipe(res);
+  pipeline(fs.createReadStream(file), res, () => {});   // R083 第二輪審查：下載到一半被中斷時檔案照樣關；讀檔出錯不會讓伺服器當掉
 });
 server.on('upgrade', (req, socket) => {
   socket.on('error', () => socket.destroy());   // R083 審查：被拒絕的連線也要有錯誤處理（不然對方一重設，整個行程就掛了）

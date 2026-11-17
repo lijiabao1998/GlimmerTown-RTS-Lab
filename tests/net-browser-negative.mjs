@@ -9,7 +9,7 @@ const mutations = {
   nolog: ['src/main.ts', '  if (!netLive()) log.push(', "  if (!netLive() || location.search.includes('__r083mutant=nolog')) log.push(", 1],
   nogate: ['src/main.ts', '{ if (!netReady(w.tick)) break; acc -=', "{ if (!netReady(w.tick) && !location.search.includes('__r083mutant=nogate')) break; acc -=", 1],
   nomenu: ['src/ui/startMenu.ts', "if (v.kind === 'start' && v.net) extra.push(", "if (v.kind === 'start' && v.net && !location.search.includes('__r083mutant=nomenu')) extra.push(", 1],
-  menustays: ['src/net/client.ts', "    if (m.t === 'start') { closePanel(); (document.querySelector(", "    if (m.t === 'start' && !location.search.includes('__r083mutant=menustays')) { closePanel(); (document.querySelector(", 1],
+  menustays: ['src/net/client.ts', "    if (m.t === 'start') { mark(); closePanel(); (document.querySelector(", "    if (m.t === 'start' && !location.search.includes('__r083mutant=menustays')) { mark(); closePanel(); (document.querySelector(", 1],   // R085：同一行多了 mark()
   nodrop: ['src/net/client.ts', 'function dropIfStale(): void { if (session?.stale()) {', "function dropIfStale(): void { if (session?.stale() && !location.search.includes('__r083mutant=nodrop')) {", 1],
 };
 const applied = new Set();

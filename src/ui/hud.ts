@@ -4,7 +4,7 @@ import type { AmmoMode } from './smoke.ts';
 export interface HudState {
   audio?: { enabled: boolean; state: 'off' | 'on' | 'paused' | 'pending' | 'unavailable' }; // R117：只呈現實際音訊狀態
   ammo?: AmmoMode; howitzers?: number; // R107：只供榴彈砲的煙幕彈
-  tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;
+  tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;   // winner：照「我方」——0＝我方贏、1＝敵方贏（R085：總機換算好）
   mine: number; theirs: number; tanks: number; guns: number; observers: number; infantry?: number; mg?: number;
   ai?: string;   // R018 電腦難度
   mode?: string; // R045：波次與擊倒數，僅顯示模擬結果

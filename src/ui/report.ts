@@ -1,15 +1,16 @@
 // R010 戰報：從世界與模擬事件算出一局的戰果。純函式、不碰 DOM、不改世界（Node 守衛直接測）。
-import { INTERNATIONAL_KINDS, INTERNATIONAL_GUNS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, SIDE_PLAYER, SIDE_ENEMY, STAGE_ROOFLESS, stageOf, type World, type SimEvent } from '../sim/world.ts';
+import { INTERNATIONAL_KINDS, INTERNATIONAL_GUNS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, STAGE_ROOFLESS, stageOf, type World, type SimEvent } from '../sim/world.ts';
+import { SIDE_PLAYER, SIDE_ENEMY } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 const KINDS = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY];   // R021 加步兵
 export interface BattleStats { start: number[][]; fires: number[]; lastKill: { x: number; z: number; tick: number } | null; endTick: number; bounces?: number[]; dead?: number[] }   // bounces（R051）：雙方各有幾發穿甲彈被彈開；有發生才有這一欄。dead（R081）：雙方各陣亡幾個（數 kill 事件；有補給的新局才有）
 export interface Report {
   zombies?: { wave: number; killed: number; lost: number };
-  winner: number; endTick: number; seconds: number;
-  start: number[][]; left: number[][];          // [陣營][坦克、榴彈砲、觀測員]
+  winner: number; endTick: number; seconds: number;   // winner（R085）：照「我方」——0＝我方贏、1＝敵方贏、2＝同歸於盡、−1＝還沒分出來
+  start: number[][]; left: number[][];          // [我方、敵方][坦克、榴彈砲、觀測員]（R085：照「我方」排，連線對戰的加入的人是第 1 方）
   kills: number; lost: number;                   // 擊毀敵方、我方損失（台）
   rubble: number; roofless: number;              // 轟塌（瓦礫）、打成空殼的建築
-  fires: number[];                               // 雙方開火（發）
+  fires: number[];                               // 雙方開火（發）：[我方、敵方]
   bounces?: number[];                            // R051：雙方被彈開的穿甲彈（發）；規則開著而且有發生才有
   built: number; builtStanding: number;          // 我方布陣蓋的、還站著的
   lastKill: { x: number; z: number; tick: number } | null;
@@ -47,11 +48,11 @@ export function makeReport(w: World, st: BattleStats): Report {
   const endTick = st.endTick >= 0 ? st.endTick : w.tick;
   return {
     ...(w.zombies ? { zombies: { wave: w.zombies.wave, killed: w.zombies.killed, lost: w.zombies.lost } } : {}),
-    winner: w.winner, endTick, seconds: Math.floor(endTick / 20),
+    winner: w.winner === SIDE_ENEMY ? 1 : w.winner === SIDE_PLAYER ? 0 : w.winner, endTick, seconds: Math.floor(endTick / 20),
     start: st.start.map(a => a.slice()), left,
-    kills: st.dead ? st.dead[SIDE_ENEMY] : sum(st.start[SIDE_ENEMY]) - sum(left[SIDE_ENEMY]), lost: st.dead ? st.dead[SIDE_PLAYER] : sum(st.start[SIDE_PLAYER]) - sum(left[SIDE_PLAYER]),
+    kills: st.dead ? st.dead[SIDE_ENEMY] : sum(st.start[1]) - sum(left[1]), lost: st.dead ? st.dead[SIDE_PLAYER] : sum(st.start[0]) - sum(left[0]),   // R085：開局、剩下照「我方」排（[0]＝我方）；陣亡照陣營記
     rubble: w.blds.filter(b => b.hp <= 0).length, roofless: w.blds.filter(b => stageOf(b) === STAGE_ROOFLESS).length,
-    fires: st.fires.slice(), ...(st.bounces ? { bounces: st.bounces.slice() } : {}),
+    fires: [st.fires[SIDE_PLAYER], st.fires[SIDE_ENEMY]], ...(st.bounces ? { bounces: [st.bounces[SIDE_PLAYER], st.bounces[SIDE_ENEMY]] } : {}),   // R085：統計照陣營記，戰報照「我方」排
     built: w.blds.filter(b => b.builtBy === SIDE_PLAYER).length, builtStanding: w.blds.filter(b => b.builtBy === SIDE_PLAYER && b.hp > 0).length,
     lastKill: st.lastKill ? { ...st.lastKill } : null,
   };

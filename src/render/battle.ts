@@ -5,8 +5,9 @@ import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'
 import { hash2 } from '../sim/rng.ts';
 import {
   SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_ZOMBIE, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
-  SIDE_PLAYER, UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, moraleState, MORALE_PINNED, type Unit, type World, type SimEvent, type Building,
+  UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, moraleState, MORALE_PINNED, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { spotted } from '../sim/step.ts';
 import { territory } from '../sim/build.ts';
 import { buildTown, smokeSources, buildingGeo, bldColors, wallHeight, wallShown, wallBounds, RUBBLE_COLORS, roofRise } from './buildings.ts';
@@ -629,7 +630,7 @@ export class BattleView {
       }
       if (u.alive) {
         m.position.set(x, this.unitHeight(u) + 0.012, z); m.rotation.set(0, 0, 0); m.scale.setScalar(1); m.updateMatrix();
-        this.discs.setMatrixAt(nd, m.matrix); this.discs.setColorAt(nd, TEAM_COL[u.side]); nd++;
+        this.discs.setMatrixAt(nd, m.matrix); this.discs.setColorAt(nd, TEAM_COL[u.side === SIDE_PLAYER ? 0 : 1]); nd++;   // R085：圈照「我方」（藍），軍服照陣營
         if (selected.has(u.id) && nr < MAX_RINGS) {
           m.position.y = this.unitHeight(u) + 0.02; m.updateMatrix();
           this.rings.setMatrixAt(nr, m.matrix); this.rings.setColorAt(nr, C_SEL); nr++;

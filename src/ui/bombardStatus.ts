@@ -7,7 +7,7 @@ export function bombardStatus(w: World, selected: ReadonlySet<number>, enabled =
   if (!enabled) return '';
   let eligible = 0, finite = 0, rounds = 0, buildings = 0, ending = 0, held = 0, moving = 0;
   for (const u of w.units) {
-    if (!selected.has(u.id) || !fireDisciplineEligible(u)) continue;
+    if (!selected.has(u.id) || !fireDisciplineEligible(u, w)) continue;   // R085 審查：帶世界（sym 的局第 1 方也算）
     eligible++;
     if (u.order !== ORD_FIRE_AT) continue;
     if (u.target > 0) { finite++; rounds += u.target; }

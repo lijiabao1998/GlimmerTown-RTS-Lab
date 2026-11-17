@@ -1,7 +1,8 @@
 // R075 看得懂：選中單位的規格與狀態（只讀，不改模擬）。開著穿甲規則寫厚度與穿深，開著士氣規則寫壓制狀態。
 // 數字直接讀模擬用的表與函式（ballistics.ts、world.ts 的 moraleState），不另外抄一份。
 import { ARMOR_MM, PEN_MM, penetration } from '../sim/ballistics.ts';
-import { SUB, UNIT_KINDS, UK_ZOMBIE, SIDE_PLAYER, cellOf, moraleState, type World, type Unit } from '../sim/world.ts';
+import { SUB, UNIT_KINDS, UK_ZOMBIE, cellOf, moraleState, type World, type Unit } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { heightAt } from '../sim/terrain.ts';
 
 export const MORALE_NAME = ['穩定', '受壓', '釘住', '潰退'];

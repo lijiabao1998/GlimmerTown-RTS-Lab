@@ -3,6 +3,7 @@
 //   正在重播 → 回傳紀錄裡這一步的指令（玩家這時下的指令不會進世界）；不是重播 → 回傳 undefined（照舊用玩家的指令），並在分出勝負時存檔。
 import type { World } from '../sim/world.ts';
 import type { Command, LoggedCommand } from '../sim/step.ts';
+import { SIDE_PLAYER, setViewSide } from '../side.ts';   // R085：重播記下是誰的角度，播放時照它看
 import { addReplay, loadReplays, makeRecord, encodeReplay, decodeReplay, replayTitle, browserStore, sameReplay, REPLAY_MAX_TEXT, type Decoded, type ReplayRecord, type Store } from './replayStore.ts';
 
 export interface ReplayHost {
@@ -101,7 +102,7 @@ export function initReplay(host: ReplayHost, store: Store | null = browserStore(
     }
     if (w.winner >= 0 && saved !== w && !w.sandbox) {   // 分出勝負的那一刻存一筆（一個世界只存一次；沙盒沒有勝負）
       saved = w;
-      const meta = { map: w.map ?? 0, n: w.n, winner: w.winner, seconds: Math.floor(w.tick / 20), ...(w.zombies ? { wave: w.zombies.wave } : {}) };
+      const meta = { map: w.map ?? 0, n: w.n, winner: w.winner, seconds: Math.floor(w.tick / 20), ...(w.zombies ? { wave: w.zombies.wave } : {}), ...(SIDE_PLAYER === 1 ? { side: 1 as const } : {}) };
       list = addReplay(store, makeRecord(w.seed, w.tick, host.hash(), host.log(), meta, new Date().toISOString()));
     }
     return undefined;
@@ -110,6 +111,7 @@ export function initReplay(host: ReplayHost, store: Store | null = browserStore(
   function start(rec: ReplayRecord) {
     close();
     host.begin(rec.seed);
+    setViewSide(rec.meta.side);   // R085：左上那一方的重播照左上看（begin 走 reset，已經先換回第 0 方）
     const w = host.world();
     clearInterval(watch);
     play = { rec, world: w, i: 0, checked: false }; saved = w;   // 重播的這一局不再存一次
@@ -117,7 +119,9 @@ export function initReplay(host: ReplayHost, store: Store | null = browserStore(
     shown = ''; text.textContent = ''; bar.hidden = false;
     host.tick();     // 第 0 步：地圖、規則、布陣、指揮部都在這一步落地
     host.remake();   // 畫面與戰報統計照落地後的世界重建
-    if (w.n > 32) host.focus(w.n - 9, w.n - 9);   // 大地圖：鏡頭對準我方角落（跟一般開局一樣）
+    const left = rec.meta.side === 1;
+    if (w.n > 32) host.focus(left ? 9 : w.n - 9, left ? 9 : w.n - 9);   // 大地圖：鏡頭對準我方角落（跟一般開局一樣）
+    else if (left) host.focus(w.n * 0.38, w.n * 0.38);   // R085：左上那一方（預設鏡頭在 0.62 處的鏡像）
     place();
   }
 
