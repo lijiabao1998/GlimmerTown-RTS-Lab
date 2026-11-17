@@ -564,7 +564,8 @@ const moduleSig = () => [wallsOn, wireDetail, materialsOn, buildingDetailsOn, da
 function wearTown(w: World, skip: ((b: Building) => boolean) | undefined, lod: number): Geo {
   const flags = moduleSig(), parts: TownPart[] = [];
   let n = 0;
-  for (const b of w.blds) if (!skip || !skip(b)) {
+  for (const b of w.blds) {
+    if (skip && skip(b)) continue;
     const stage = stageOf(b), sig = `${flags}|${b.id},${b.kind},${b.x},${b.z},${b.w},${b.d},${b.floors},${b.maxHp},${b.builtBy ?? ''},${stage},${wearable(b.kind) ? wearTier(b) : 0},${lod}`;
     let list = townCache.get(b);
     if (!list) townCache.set(b, list = []);
