@@ -12,7 +12,7 @@ const mutants = [
   ['float_tier', 'tiers', A, '  return lost * 100 < b.maxHp * 5 ? 0 :', '  return lost * 100 < b.maxHp * 5 ? lost / b.maxHp :', 'tiers: the tier table is 5 / 14 / 22 %'],
   ['random_tier', 'tiers', A, '  if (b.hp <= 0) return WEAR_RUBBLE;', '  if (b.hp <= 0) return WEAR_RUBBLE + 0 * Math.random();', 'tiers: wearArt.ts uses no randomness'],
   ['overlays_at_t0', 't0', Bd, '  const wt = wearOn && allowDamage && wearable(b) ? tier ?? wearTier(b) : 0;', '  const wt = wearOn && allowDamage && wearable(b) ? tier ?? Math.max(1, wearTier(b)) : 0;', 't0: a town at full health draws byte for byte the same'],
-  ['hole_off_wall', 'geometry', A, '  patch(g, f, uc - hw, uc + hw, yc - hh, yc + hh, 0.02, CAVITY);', '  patch(g, f, uc - hw, uc + hw, yc - hh, yc + hh, 0.05, CAVITY);', 'geometry: a hole sits on its wall'],
+  ['hole_off_wall', 'geometry', A, '  patch(g, f, uc - hw, uc + hw, yc - hh, yc + hh, HOLE_OFF, CAVITY);', '  patch(g, f, uc - hw, uc + hw, yc - hh, yc + hh, HOLE_OFF + 0.03, CAVITY);', 'geometry: a hole sits on its wall'],
   ['hidden_face', 'geometry', A, "  g.quad(p(u0, y0), p(u1, y0), p(u1, y1), p(u0, y1), f.axis === 0 ? [1, 0, 0] : [0, 0, 1], c);", "  g.quad(p(u0, y0), p(u1, y0), p(u1, y1), p(u0, y1), f.axis === 0 ? [-1, 0, 0] : [0, 0, -1], c);", 'geometry: no hole on a face the camera never sees'],
   ['stale_key', 'cache', Bd, '${wearable(b) ? wearTier(b) : 0},${lod}`;', '${lod}`;', 'cache: the cached town equals the uncached one'],
   ['flags_ignored', 'cache', Bd, '  const flags = moduleSig(), parts', "  const flags = '', parts", 'cache: the cached town equals the uncached one (house art switched off'],
@@ -30,6 +30,10 @@ const mutants = [
   ['marks_unclamped', 'marks', 'src/render/wallMarks.ts', '      if (H.y[i] + H.h[i] * scale / 2 > top88) {', '      if (false) {', 'marks: no shell mark stays above the lowered wall top'],
   ['roof_fall_flat_cut', 'ghosts', 'src/render/wearArt.ts', '  for (let i = 0; i < ref.pos.length; i += 9) if (Math.max(ref.pos[i + 1], ref.pos[i + 4], ref.pos[i + 7]) > h + 1e-4)', '  for (let i = 0; i < ref.pos.length; i += 9) if (Math.min(geo.pos[i + 1], geo.pos[i + 4], geo.pos[i + 7]) >= h - 1e-4)', 'ghosts: the falling roof is the roof of the shown tier'],
   ['effects_in_fog', 'effects', 'src/render/wear88.ts', '    if (!seen(cx, cz)) continue;\n', '', 'effects: a tier change the player cannot see spawns nothing'],
+  ['door_not_blocking', 'geometry', A, ' || (m[2] <= 0.03 && m[3] >= 0.2 && m[1] - m[0] >= 0.1 && m[1] - m[0] < 0.6 && m[0] > lo + 0.06 && m[1] < hi - 0.06))', ')', 'geometry: a hole never covers a door'],
+  ['window_not_blocking', 'geometry', A, '  const blocked = mounted.filter(m => glass.some(g => inside(m, g)) ||', '  const blocked = mounted.filter(m => false ||', 'geometry: a hole never covers a window'],
+  ['hole_back_on_wall', 'geometry', A, 'export const HOLE_OFF = 0.035;', 'export const HOLE_OFF = 0.02;', 'geometry: a hole sits on its wall'],
+  ['everything_blocks', 'coverage', A, '  const blocked = mounted.filter(m => glass.some(g => inside(m, g)) ||', '  const blocked = mounted.filter(m => true ||', 'coverage: at T2 at least 80 %'],
   ['sag_up', 'geometry', A, '      move(base, (x, y, z) => y - sagDrop(b, x, y, z, h, rise),', '      move(base, (x, y, z) => y + sagDrop(b, x, y, z, h, rise),', 'geometry: the T3 sag never moves a vertex up'],
 ];
 try {

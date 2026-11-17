@@ -31,20 +31,26 @@ const CAVITY = new THREE.Color(0x1f1a17),   // 洞口（跟 R086 門洞、乾草
   CHAR = new THREE.Color(0x2b2724), BEAM = new THREE.Color(0x4a3626), CRACK = new THREE.Color(0x35302b), GLASS = new THREE.Color(0x2a3038);
 const same = (geo: Geo, i: number, c: THREE.Color) => Math.abs(geo.col[i] - c.r) < 1e-6 && Math.abs(geo.col[i + 1] - c.g) < 1e-6 && Math.abs(geo.col[i + 2] - c.b) < 1e-6;
 
-// 看得到的牆面（+x 或 +z）：那一面的平面、沿牆的範圍、貼在牆上的東西（門、窗、框、招牌、木構……）的範圍
+// 看得到的牆面（+x 或 +z）：那一面的平面、沿牆的範圍、門窗的範圍（R094：只有門窗擋洞——簷帶、勒腳、轉角石、掛瓦、木板、木構可以壓）
+// 窗＝貼牆的東西裡碰到玻璃（向外 0.03）的那些（玻璃、框、窗台）；門＝貼牆、從地面起（≤ 0.03）、高過 0.2、寬不到 0.6 的東西
 interface Face { axis: 0 | 2; at: number; lo: number; hi: number; top: number; blocked: [number, number, number, number][] }
-function faceOf(geo: Geo, b: Building, axis: 0 | 2, h: number): Face | null {
+export function faceOf(geo: Geo, b: Building, axis: 0 | 2, h: number): Face | null {
   const at = axis === 0 ? b.x + b.w - 0.1 : b.z + b.d - 0.1, u = axis === 0 ? 2 : 0;
   let lo = Infinity, hi = -Infinity;
-  const blocked: [number, number, number, number][] = [];
+  const mounted: [number, number, number, number][] = [], glass: [number, number, number, number][] = [];
   for (let i = 0; i < geo.pos.length; i += 9) {
     if (geo.nor[i + axis] < 0.99) continue;
     let flat = true, near = true;
     for (let k = 0; k < 3; k++) { const d = geo.pos[i + 3 * k + axis] - at; if (Math.abs(d) > 1e-4) flat = false; if (d < -1e-4 || d > 0.06) near = false; }
     const us = [0, 1, 2].map(k => geo.pos[i + 3 * k + u]), ys = [0, 1, 2].map(k => geo.pos[i + 3 * k + 1]);
-    if (flat && Math.max(...ys) > 0.2) { lo = Math.min(lo, ...us); hi = Math.max(hi, ...us); }
-    else if (near) blocked.push([Math.min(...us) - 0.02, Math.max(...us) + 0.02, Math.min(...ys) - 0.02, Math.max(...ys) + 0.02]);
+    const box: [number, number, number, number] = [Math.min(...us), Math.max(...us), Math.min(...ys), Math.max(...ys)];
+    if (flat && box[3] > 0.2) { lo = Math.min(lo, box[0]); hi = Math.max(hi, box[1]); }
+    else if (near) { mounted.push(box); if (same(geo, i, GLASS)) glass.push(box); }
   }
+  // 窗的零件：落在那一片玻璃的範圍（左右 0.06、上下 0.08）裡、又碰得到它的（橫過整面牆的板條不算）；門：從地面起、高過 0.2、寬 0.1 到 0.6、不在牆的兩端（轉角石、木構的柱子不算）
+  const inside = (m: number[], g: number[]) => m[0] >= g[0] - 0.06 && m[1] <= g[1] + 0.06 && m[2] >= g[2] - 0.08 && m[3] <= g[3] + 0.08;
+  const blocked = mounted.filter(m => glass.some(g => inside(m, g)) || (m[2] <= 0.03 && m[3] >= 0.2 && m[1] - m[0] >= 0.1 && m[1] - m[0] < 0.6 && m[0] > lo + 0.06 && m[1] < hi - 0.06))
+    .map(([a, b, c, d]): [number, number, number, number] => [a - 0.01, b + 0.01, c - 0.01, d + 0.01]);
   return lo < hi ? { axis, at, lo, hi, top: h, blocked } : null;
 }
 const free = (f: Face, u0: number, u1: number, y0: number, y1: number) => u0 >= f.lo + 0.04 && u1 <= f.hi - 0.04 && y0 >= 0.05 && y1 <= f.top - 0.08
@@ -54,20 +60,21 @@ function patch(g: Geo, f: Face, u0: number, u1: number, y0: number, y1: number, 
   const p = (u: number, y: number): V3 => (f.axis === 0 ? [f.at + off, y, u] : [u, y, f.at + off]);
   g.quad(p(u0, y0), p(u1, y0), p(u1, y1), p(u0, y1), f.axis === 0 ? [1, 0, 0] : [0, 0, 1], c);
 }
-// 一個洞：暗的洞口＋四塊崩掉的邊（牆色淺一點）
+// 一個洞：暗的洞口＋四塊崩掉的邊（牆色淺一點）。R094：離牆 0.035（在大部分貼牆的細節前面）
+export const HOLE_OFF = 0.035;
 function hole(g: Geo, f: Face, uc: number, yc: number, hw: number, hh: number, rim: THREE.Color): void {
-  patch(g, f, uc - hw, uc + hw, yc - hh, yc + hh, 0.02, CAVITY);
+  patch(g, f, uc - hw, uc + hw, yc - hh, yc + hh, HOLE_OFF, CAVITY);
   const t = 0.028;
-  patch(g, f, uc - hw - t, uc + hw * 0.4, yc + hh, yc + hh + t, 0.022, rim);
-  patch(g, f, uc - hw * 0.2, uc + hw + t, yc - hh - t, yc - hh, 0.022, rim);
-  patch(g, f, uc - hw - t, uc - hw, yc - hh * 0.6, yc + hh * 0.5, 0.022, rim);
-  patch(g, f, uc + hw, uc + hw + t, yc - hh * 0.3, yc + hh * 0.8, 0.022, rim);
+  patch(g, f, uc - hw - t, uc + hw * 0.4, yc + hh, yc + hh + t, HOLE_OFF + 0.002, rim);
+  patch(g, f, uc - hw * 0.2, uc + hw + t, yc - hh - t, yc - hh, HOLE_OFF + 0.002, rim);
+  patch(g, f, uc - hw - t, uc - hw, yc - hh * 0.6, yc + hh * 0.5, HOLE_OFF + 0.002, rim);
+  patch(g, f, uc + hw, uc + hw + t, yc - hh * 0.3, yc + hh * 0.8, HOLE_OFF + 0.002, rim);
 }
 // 在一面牆上找一塊空的地方（照雜湊試，最多 24 次）
 function spot(f: Face, b: Building, k0: number, hw: number, hh: number): [number, number] | null {
   for (let k = 0; k < 24; k++) {
     const uc = f.lo + hw + 0.08 + h88(b, k0 + 2 * k) * (f.hi - f.lo - 2 * hw - 0.16), yc = 0.1 + hh + h88(b, k0 + 2 * k + 1) * (f.top - 0.3 - 2 * hh);
-    if (free(f, uc - hw - 0.03, uc + hw + 0.03, yc - hh - 0.03, yc + hh + 0.03)) return [uc, yc];
+    if (free(f, uc - hw - 0.015, uc + hw + 0.015, yc - hh - 0.015, yc + hh + 0.015)) return [uc, yc];
   }
   return null;
 }
@@ -124,7 +131,7 @@ function crack(g: Geo, f: Face, b: Building): void {
   const s = spot(f, b, 60, 0.06, 0.11);
   if (!s) return;
   const [uc, yc] = s, dir = h88(b, 70) < 0.5 ? 1 : -1;
-  for (let k = 0; k < 3; k++) { const y = yc + 0.08 - k * 0.075, u = uc + dir * (k % 2 ? 0.03 : -0.02); patch(g, f, u - 0.007, u + 0.007, y - 0.075, y, 0.021, CRACK); }
+  for (let k = 0; k < 3; k++) { const y = yc + 0.08 - k * 0.075, u = uc + dir * (k % 2 ? 0.03 : -0.02); patch(g, f, u - 0.007, u + 0.007, y - 0.075, y, HOLE_OFF + 0.001, CRACK); }
 }
 
 // T1、T2 的東西（洞、屋頂缺口、打破的窗、裂縫）；sites：之後打穿的洞那張卡指定要開在哪裡（沒給就照雜湊）
@@ -138,10 +145,11 @@ export function wearOverlays(g: Geo, base: Geo, b: Building, tier: number, h: nu
     const want = sites?.[k], f = want ? faces[want.axis === 0 ? 0 : 1] : faces[h88(b, 10 + k) < 0.3 ? 0 : 1] ?? faces[0] ?? faces[1];   // 七成在亮的那一面（+z）
     if (!f) continue;
     const big = k === 1 && f.hi - f.lo >= 1.6, hw = big ? 0.16 : 0.09, hh = big ? 0.13 : 0.075;
-    const at = want ? (free(f, want.u - hw - 0.03, want.u + hw + 0.03, want.y - hh - 0.03, want.y + hh + 0.03) ? [want.u, want.y] as [number, number] : null) : spot(f, b, 20 + 50 * k, hw, hh);
+    let w2 = hw, h2 = hh, at = want ? (free(f, want.u - hw - 0.015, want.u + hw + 0.015, want.y - hh - 0.015, want.y + hh + 0.015) ? [want.u, want.y] as [number, number] : null) : spot(f, b, 20 + 50 * k, hw, hh);
+    if (!at && !want) { w2 = 0.06; h2 = 0.055; at = spot(f, b, 120 + 50 * k, w2, h2); }   // R094：小的牆面放一個小一點的洞
     if (!at) continue;
-    hole(g, f, at[0], at[1], hw, hh, rim);
-    f.blocked.push([at[0] - hw - 0.05, at[0] + hw + 0.05, at[1] - hh - 0.05, at[1] + hh + 0.05]);
+    hole(g, f, at[0], at[1], w2, h2, rim);
+    f.blocked.push([at[0] - w2 - 0.05, at[0] + w2 + 0.05, at[1] - h2 - 0.05, at[1] + h2 + 0.05]);
   }
   const gap = roofGap(g, base, b, roof, tier >= 2);
   brokenWindow(g, base, b);
