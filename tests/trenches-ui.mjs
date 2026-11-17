@@ -62,7 +62,7 @@ function controller(visual = true) {
   globalThis.document = { createElement: () => new Element(), getElementById: id => id === 'hint' ? { getBoundingClientRect: () => ({ top: 800 }) } : null, body: { appendChild: el => { root = el; } } };
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
   const q = new URLSearchParams(visual ? '' : 'noR118=1');
-  const c = vm.createContext({
+  const c = vm.createContext({ setViewSide: () => {},   /* R085：reset() 先把「我方」換回第 0 方（沙盒裡不用） */
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, replay: undefined,   // R047: tick() asks replay first; absent here = ordinary play
     netLive: () => false, netFeed: () => null, netReady: () => true,   // R083：沒有連線的局（main.ts 的 issue／tick／迴圈會問）
     // Existing construction fixture; large-map behavior has its own guards.

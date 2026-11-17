@@ -1,11 +1,10 @@
 // HUD：DOM 疊在畫面上（中文字不在 3D 裡畫）。只讀狀態、只呼叫傳進來的動作，不直接改世界。
 import type { AmmoMode } from './smoke.ts';
-import { SIDE_PLAYER, SIDE_ENEMY } from '../side.ts';   // R085 勝負照「我方」（連線對戰的加入的人是第 1 方）
 
 export interface HudState {
   audio?: { enabled: boolean; state: 'off' | 'on' | 'paused' | 'pending' | 'unavailable' }; // R117：只呈現實際音訊狀態
   ammo?: AmmoMode; howitzers?: number; // R107：只供榴彈砲的煙幕彈
-  tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;
+  tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;   // winner：照「我方」——0＝我方贏、1＝敵方贏（R085：總機換算好）
   mine: number; theirs: number; tanks: number; guns: number; observers: number; infantry?: number; mg?: number;
   ai?: string;   // R018 電腦難度
   mode?: string; // R045：波次與擊倒數，僅顯示模擬結果
@@ -113,7 +112,7 @@ export function initHud(a: HudActions): Hud {
     vehicleFrame(s.vehicleInfo ?? '');
     const ban = $('banner');
     ban.hidden = s.winner < 0 || !!s.report;
-    ban.textContent = s.winner === SIDE_PLAYER ? '勝利' : s.winner === SIDE_ENEMY ? '戰敗' : s.winner === 2 ? '同歸於盡' : '';
+    ban.textContent = s.winner === 0 ? '勝利' : s.winner === 1 ? '戰敗' : s.winner === 2 ? '同歸於盡' : '';
   }
   function frame() {
     const s = a.state(), sec = Math.floor(s.tick / 20);

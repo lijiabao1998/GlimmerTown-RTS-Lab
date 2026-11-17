@@ -149,17 +149,16 @@ const groups = {
     assert.deepEqual([r.start[0][0], r.start[1][0]], [4, 3], 'report: for the versus guest 我方 is side 1 (tanks at the start: 4 and 3)');
     assert.deepEqual(r.fires, [1, 2], 'report: fires are listed 我方 first');
     assert.deepEqual([r.kills, r.lost], [1, 0], 'report: kills and losses are from side 1');
-    // 戰報畫面與勝負：最小的假 DOM（第一個建出來的元素就是戰報那一層）
+    // 勝負：makeReport 照「我方」換算（0＝我方贏），戰報畫面照它顯示（最小的假 DOM；第一個建出來的元素就是戰報那一層）
+    const won = viewer => { w.winner = 1; side.setViewSide(viewer); try { return makeReport(w, newStats(w)).winner; } finally { side.setViewSide(); w.winner = -1; } };
+    assert.deepEqual([won(1), won(0)], [0, 1], 'report: side 1 winning is a win (0) for the versus guest and a loss (1) for the host');
     class El { constructor() { this.hidden = false; this.className = ''; this.innerHTML = ''; this.textContent = ''; this.style = {}; } append() {} appendChild() {} addEventListener() {} setAttribute() {} querySelector() { return new El(); } }
     let panel = null;
     globalThis.document = { createElement: () => { const e = new El(); panel ??= e; return e; }, getElementById: () => null, body: new El() };
     try {
       const { initReportView } = await import('../src/ui/reportView.ts'), view = initReportView({ again() {} });
       const show = winner => { view.show({ ...r, winner }); return [/<h2>([^<]*)<\/h2>/.exec(panel.innerHTML)?.[1], panel.className]; };
-      side.setViewSide(1);
-      try { assert.deepEqual([show(1), show(0)], [['勝利', 'win'], ['戰敗', 'lose']], 'report: the report title — side 1 winning is 勝利 for the versus guest'); }
-      finally { side.setViewSide(); }
-      assert.deepEqual([show(0), show(1)], [['勝利', 'win'], ['戰敗', 'lose']], 'report: and unchanged for side 0');
+      assert.deepEqual([show(won(1)), show(won(0))], [['勝利', 'win'], ['戰敗', 'lose']], 'report: the report title — 勝利 for the guest, 戰敗 for the host');
     } finally { delete globalThis.document; }
   },
   // client.ts：https 的本機位址、每條連線自己的 ping 計時器（假的 WebSocket、計時器、DOM）
@@ -240,7 +239,7 @@ const groups = {
     const view = { kind: 'start', map: 'rye', mode: 'battle', ai: 2, maps: ['rye'], modes: ['battle'], aiOn: true, rye: true, tutorial: false, audio: null, resume: false, net: true };
     const ids = v => menuLayout(v).extra.map(x => x.id);
     assert.deepEqual([ids({ ...view, vs: true }).includes('sm-vs'), ids(view).includes('sm-vs'), ids({ ...view, net: false, vs: true }).includes('sm-vs')], [true, false, false], 'wiring: the start menu offers 連線對戰 only when versus is on');
-    assert.match(src('src/ui/hud.ts'), /ban\.textContent = s\.winner === SIDE_PLAYER \? '勝利' : s\.winner === SIDE_ENEMY \? '戰敗'/, 'wiring: the win banner follows 我方');
+    assert.match(main, /winner: w\.winner === SIDE_ENEMY \? 1 : w\.winner === SIDE_PLAYER \? 0 : w\.winner, report: V\.r010,/, 'wiring: the win banner gets the winner from 我方 point of view');
     assert.match(src('src/render/battle.ts'), /this\.discs\.setColorAt\(nd, TEAM_COL\[u\.side === SIDE_PLAYER \? 0 : 1\]\)/, 'wiring: the ring under each unit is blue for 我方');
   },
 };
@@ -265,7 +264,8 @@ const mutants = [
   ['fire_nosym', 'fire', 'src/sim/fireDiscipline.ts', '(!!w?.sym && u.side === SIDE_ENEMY)', '(u.side === SIDE_ENEMY)', 'fire: without sym side 1 still cannot'],
   ['fire_button', 'fire', 'src/ui/fireDiscipline.ts', "issue({ t: 'fireDiscipline', side: SIDE_PLAYER,", "issue({ t: 'fireDiscipline', side: 0,", 'fire: and sends it for side 1'],
   ['report_fires', 'report', 'src/ui/report.ts', 'fires: [st.fires[SIDE_PLAYER], st.fires[SIDE_ENEMY]],', 'fires: st.fires.slice(),', 'report: fires are listed'],
-  ['report_title', 'report', 'src/ui/reportView.ts', "r.winner === SIDE_PLAYER ? '勝利' : r.winner === SIDE_ENEMY ? '戰敗'", "r.winner === 0 ? '勝利' : r.winner === 1 ? '戰敗'", 'report: the report title'],
+  ['report_winner', 'report', 'src/ui/report.ts', 'winner: w.winner === SIDE_ENEMY ? 1 : w.winner === SIDE_PLAYER ? 0 : w.winner,', 'winner: w.winner,', 'report: side 1 winning is a win'],
+  ['hud_winner', 'wiring', 'src/main.ts', 'winner: w.winner === SIDE_ENEMY ? 1 : w.winner === SIDE_PLAYER ? 0 : w.winner, report: V.r010,', 'winner: w.winner, report: V.r010,', 'wiring: the win banner'],
   ['https_narrow', 'client', 'src/net/client.ts', '(127(\\.\\d{1,3}){3}|localhost|\\[::1\\]|[a-z0-9.-]+\\.localhost)([:/?#]|$)', '(127\\.0\\.0\\.1|localhost)[:/]', 'client: https pages may reach ws://localhost'],
   ['ping_shared', 'client', 'src/net/client.ts', [['  let ping = 0;', '  '], ['const versusWorlds =', 'let ping = 0;\nconst versusWorlds =']], null, "client: an old connection closing late"],
   ['relay_reads_closed', 'relay', 'server/relay.mjs', '    if (closed) return;', '', 'relay: after the relay closes a connection'],

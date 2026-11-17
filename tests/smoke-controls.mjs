@@ -60,7 +60,7 @@ function controller(visual = true) {
   const views = [], issued = [], placements = [];
   const mockView = () => ({ dispose() {}, setWorld() {}, visibleUnit: () => true, buildingAt: () => null, groundAt: () => ({ x: 16.2, z: 15.8 }), setMarker(...p) { this.marker = p; } });
   const q = new URLSearchParams(visual ? '' : 'noR107=1');
-  const c = vm.createContext({
+  const c = vm.createContext({ setViewSide: () => {},   /* R085：reset() 先把「我方」換回第 0 方（沙盒裡不用） */
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // Keep this legacy controller on its original small map.
     createWorld, hashWorld, runLog, routeBattleOrder: route,
     seed: 1944, V: fixtureValves(q, { r006: false, r018: false, r019: false, r026: false, r109: false, r015: true, r115: true, r118: true, r004: true, r008: true, r009: false, r010: false, r011: true, r012: false, r014: true, r016: true, r104: true }), reloadStatus, counterbatteryHint: () => '', battleHint: undefined,

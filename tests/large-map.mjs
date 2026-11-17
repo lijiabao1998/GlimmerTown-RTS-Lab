@@ -206,7 +206,7 @@ group('main', () => {
     reset = reset.replace('map = V.r026 || large', 'map = V.r026');
   }
   for (const rye of [true, false]) {
-    const c = vm.createContext({
+    const c = vm.createContext({ setViewSide: () => {},   /* R085：reset() 先把「我方」換回第 0 方（沙盒裡不用） */
       createWorld, createSandboxWorld, applyMap, MAP_RYE, MAP_LARGE, MAP_TOWN, seed: 1944,
       V: { r006: false, r018: false, r019: false, r026: rye, r109: false }, large: true, expanded: false, townPick: undefined, skirmish: undefined,   // R046: reset() reads skirmish; absent here = standard rules
       q: new URLSearchParams(), fxOn: true, selected: new Set(), view: undefined, battleAudio: undefined, reportView: undefined,

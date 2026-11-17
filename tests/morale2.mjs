@@ -210,7 +210,7 @@ try {
     const dir = join(temp, name);
     mkdirSync(join(dir, 'tests'), { recursive: true }); mkdirSync(join(dir, 'src/ui'), { recursive: true });
     cpSync(join(root, 'src/sim'), join(dir, 'src/sim'), { recursive: true });
-    cpSync(join(root, 'src/ui/unitSpec.ts'), join(dir, 'src/ui/unitSpec.ts'));
+    cpSync(join(root, 'src/ui/unitSpec.ts'), join(dir, 'src/ui/unitSpec.ts')); cpSync(join(root, 'src/side.ts'), join(dir, 'src/side.ts'));   // R085：介面的「我方」
     cpSync(join(root, 'tests/morale2.mjs'), join(dir, 'tests/morale2.mjs'));
     writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
     const path = join(dir, file), source = readFileSync(path, 'utf8');

@@ -61,7 +61,7 @@ function mainFixture(enabled = true) {
     screenOf: (x, y, z) => [x * 10, z * 10 - y * 10], groundAt: (x, y) => ({ x: x / 10, z: y / 10 }), buildingAt: () => null,
     pan: (x, y) => { pans.push([x, y]); view.target.x += x / 10; view.target.z += y / 10; }, zoomAt: (...a) => zooms.push(a), zoomBy: (...a) => zooms.push(a), setMarker() {}, dispose() {}, setWorld() {},
   };
-  const c = vm.createContext({
+  const c = vm.createContext({ setViewSide: () => {},   /* R085：reset() 先把「我方」換回第 0 方（沙盒裡不用） */
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, // This fixture exercises the existing small-map controller.
     V: { r109: enabled, r012: true }, pickUnitAt, Gestures: class extends Gestures { constructor(a) { super(a, clock); } }, inSelectionRect,
     commandMenu: undefined, battleHint: undefined, document: { createElement: () => ({ id: '', hidden: false, style: {} }), body: { appendChild: el => elements.push(el) }, addEventListener: (t, f) => docEvents.set(t, f) },
@@ -108,7 +108,7 @@ const groups = {
       { id: 5, side: SIDE_PLAYER, alive: true, x: 0, z: 0, roof: 0 },
     ] };
     const before = JSON.stringify(w), selected = new Set([5]), heights = [];
-    const c = vm.createContext({ w, selected, SUB, SIDE_PLAYER, inSelectionRect, innerWidth: 412, innerHeight: 860, hud: { update() {} }, battleHint: 'x', view: { unitHeight: u => u.roof, screenOf: (x, y, z) => { heights.push(y); return [x * 10, z * 10 - y * 10]; } } });
+    const c = vm.createContext({ setViewSide: () => {},   /* R085：reset() 先把「我方」換回第 0 方（沙盒裡不用） */ w, selected, SUB, SIDE_PLAYER, inSelectionRect, innerWidth: 412, innerHeight: 860, hud: { update() {} }, battleHint: 'x', view: { unitHeight: u => u.roof, screenOf: (x, y, z) => { heights.push(y); return [x * 10, z * 10 - y * 10]; } } });
     vm.runInContext(extract('selectInBox'), c);
     c.selectInBox({ left: 20, right: 20, top: 18.5, bottom: 18.5 });
     assert.deepEqual([...selected], [5, 1], 'alive friendly roof projection on inclusive edge; additive');

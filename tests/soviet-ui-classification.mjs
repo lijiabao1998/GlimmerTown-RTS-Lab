@@ -48,7 +48,7 @@ assert.equal(hashWorld(runScript()),'eea1d59b');
 async function mutant(file,from,to) {
   const url=new URL(`../src/ui/${file}.ts`,import.meta.url), source=fs.readFileSync(url,'utf8');
   assert.equal(source.split(from).length-1,1,'unique negative-control anchor');
-  const changed=source.replace(from,to).replace('../sim/world.ts',new URL('../src/sim/world.ts',import.meta.url).href);
+  const changed=source.replace(from,to).replace('../sim/world.ts',new URL('../src/sim/world.ts',import.meta.url).href).replace('../side.ts',new URL('../src/side.ts',import.meta.url).href);   // R085：report.ts 的「我方」從 side.ts 來
   return import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(changed)).toString('base64'));
 }
 const badReport=await mutant('report','kind >= 21 && kind <= 22','kind <= 22');

@@ -425,7 +425,7 @@ hud = initHud({
     const sel = [...selected].map(id => w.units[id - 1]).filter(u => u.alive);
     const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);
     return {
-      tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner, report: V.r010,
+      tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner === SIDE_ENEMY ? 1 : w.winner === SIDE_PLAYER ? 0 : w.winner, report: V.r010,
       build: phase === 'build', hint: phase === 'build' ? planner.buildHint || BUILD_TIP : battleHint,
       mine: mine.length, theirs: theirs.length, ai: V.r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
