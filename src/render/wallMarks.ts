@@ -69,6 +69,13 @@ export class WallMarks {
     if (this.holesDirty) this.rebuild14();
   }
 
+  // R088：牆塌下去（屋頂一角、空殼塌一半）之後，高過那裡新牆頂的彈痕拿掉（不留在半空中）
+  dropAbove(id: number, topAt: (x: number, z: number) => number): void {
+    const H = this.holes;
+    for (let i = 0; i < HOLE_CAP; i++) if (H.live[i] && H.bld[i] === id && H.y[i] + H.h[i] * (H.kind[i] === 0 ? 1.55 : 1) / 2 > topAt(H.x[i], H.z[i])) { H.live[i] = 0; this.holesDirty = true; }
+    if (this.holesDirty && this.mesh) this.rebuild14();   // 還沒有網格（Node、還沒開戰）就等下一次事件再重寫
+  }
+
   // 從 (sx,sz) 往 (ex,ez) 的直線打進建築的牆（模型的牆內縮 0.1 格；教堂只算中殿），落在進入的那一面
   private mark14(b: Building, kind: number, sx: number, sz: number, ex: number, ez: number) {
     const { x0, x1, z0, z1 } = wallBounds(b);

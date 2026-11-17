@@ -173,9 +173,10 @@ export class Ghosts {
     scene.add(this.mesh);
   }
 
-  add(geo: { pos: number[]; nor: number[]; col: number[] }, t0: number, h: number, cx: number, cz: number, seed: number, rise = false) {
+  // lx、lz（R088）：指定往哪邊倒（不給＝照 seed，跟以前一樣）
+  add(geo: { pos: number[]; nor: number[]; col: number[] }, t0: number, h: number, cx: number, cz: number, seed: number, rise = false, lx?: number, lz?: number) {
     const a = seed * 6.2832;
-    this.list.push({ pos: geo.pos, nor: geo.nor, col: geo.col, t0, h, cx, cz, lx: Math.cos(a) * 0.35, lz: Math.sin(a) * 0.35, seed, rise });
+    this.list.push({ pos: geo.pos, nor: geo.nor, col: geo.col, t0, h, cx, cz, lx: lx ?? Math.cos(a) * 0.35, lz: lz ?? Math.sin(a) * 0.35, seed, rise });
   }
 
   get count() { return this.list.length; }

@@ -23,6 +23,7 @@ import { TrenchRaster } from './trenches.ts';
 import { HealthBars } from './healthBars.ts';
 import { OrderLines } from './orderLines.ts';
 import { WallMarks } from './wallMarks.ts';
+import { wearSync, wearRoofFall, wearCollapse } from './wear88.ts';   // R088 建築破壞的過程
 
 // R027 人行道與黑白路緣（只有手排地圖；畫面開關）
 let streets27 = true;
@@ -529,6 +530,7 @@ export class BattleView {
         if (this.fxOn && !this.r4) this.burst(u.x / SUB, 0.2, u.z / SUB, 0.45, simT, 4, false);
       }
     }
+    if (wearSync(this.w, this.marks14, this.r4 && this.fxOn ? this.puff : null, this.r4 && this.fxOn ? this.debris : null, simT, (x, z) => this.visibleAt(x * SUB, z * SUB))) townDirty = true;   // R088：換了段（洞、塌一角、塌一半）也要重建整鎮
     if (townDirty && this.n >= 96) this.clearRegionTown();
     if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); }
     if (townDirty && this.n >= 96) this.prepareRegionTown();
@@ -871,7 +873,7 @@ export class BattleView {
       for (let k = 0; k < 6; k++) this.puff!.spawn({ x: cx + (H(k, 10) - 0.5) * fw, y: wallH, z: cz + (H(k, 11) - 0.5) * fd, vy: 0.45, t0: t + 0.04 * k, life: 2.2 + H(k, 12), s0: 0.14, s1: 0.5, c0: 0x9a8b74, c1: 0x9c9384 });
       this.shake(0.035, cx, cz, t);
     }
-    if (to === STAGE_ROOFLESS) {
+    if (to === STAGE_ROOFLESS) { if (from === STAGE_INTACT) wearRoofFall(this.w, this.ghosts!, b, t);   // R088：屋頂塌進去
       const inset = bounds ? 0.02 : 0.15;
       this.addEmitter(E_FIRE, b.id, fx + inset, fz + inset, fw - 2 * inset, fd - 2 * inset, wallH * 0.72, t, t + 20, false);
       this.addEmitter(E_SMOKE, b.id, fx, fz, fw, fd, wallH * 0.72, t + 0.4, Infinity, false);
@@ -881,7 +883,7 @@ export class BattleView {
     for (const em of this.emitters) if (em.id === b.id && (em.kind === E_FIRE || em.kind === E_SMOKE)) em.until = Math.min(em.until, t);
     const h = (from === STAGE_INTACT ? wallH + rise : wallH * 0.72) + 0.05;
     const g = buildingGeo(new Geo(), b, from);
-    this.ghosts!.add(g, t, h, cx, cz, hash2(b.id, 3, 77));
+    if (!wearCollapse(this.w, this.ghosts!, this.puff!, this.debris!, b, from, t, h)) this.ghosts!.add(g, t, h, cx, cz, hash2(b.id, 3, 77));   // R088：分兩段倒下
     const R = Math.max(b.w, b.d) * 0.5;
     for (let k = 0; k < 16; k++) {
       const a = (k / 16) * Math.PI * 2 + H(k, 13) * 0.4, v = 1.2 + 0.9 * H(k, 14);
