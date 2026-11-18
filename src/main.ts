@@ -461,7 +461,7 @@ prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
     return { hq: phase === 'battle' ? hqDurability(w, V.r127) : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: progMax95(q0), queueMax: 5, countdown: phase === 'battle' ? countdown95(w, V.r125) : '' };
   },
-  produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }),
+  produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }), after: () => platoon95.frame(),   // R095：全排鍵與「步兵排」那一顆（沙盒裡的守衛不跑生產列）
   hq: V.r127,
   countdown: V.r125,
   blockReason: V.r126 ? kind => reason95(w, kind, phase === 'battle') : undefined,
@@ -573,7 +573,7 @@ renderer.setAnimationLoop(() => {
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   hud?.frame();
   tutorial.frame(t);
-  fireDisciplineFrame?.(); platoon95.frame();
+  fireDisciplineFrame?.();
   commandMenu?.frame(); // R137：只更新選單，不補跑其他 HUD 的刷新路徑。
   prodBar?.update();
   minimap?.frame(t);

@@ -3,7 +3,7 @@ export interface ProdItem { kind: number; label: string; cost: number; group?: s
 export interface ProdState { visible: boolean; supply: number; queue: number[]; prog: number; progMax: number; queueMax: number; countdown?: string; hq?: string; context?: object }
 export interface ProdBar { update: () => void }
 
-export function initProduction(items: ProdItem[], a: { state: () => ProdState; produce: (kind: number) => void; countdown?: boolean; hq?: boolean; blockReason?: (kind: number) => string }): ProdBar {
+export function initProduction(items: ProdItem[], a: { state: () => ProdState; produce: (kind: number) => void; countdown?: boolean; hq?: boolean; blockReason?: (kind: number) => string; after?: () => void }): ProdBar {
   const root = document.createElement('div');
   root.id = 'prodbar'; root.className = 'bar';
   root.classList.toggle('production-countdown', !!a.countdown);
@@ -28,6 +28,7 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
   let layoutValid = false, lastHint: HTMLElement | null = null, lastHintText: string | null = null;
   let lastWidth = -1, lastHeight = -1;
   function update() {
+    a.after?.();   // R095：每次更新生產列也叫一次（全排鍵、「步兵排」那一顆跟著世界的旗標）
     const s = a.state();
     if (a.hq) {
       const hqText = s.visible ? (s.hq ?? '') : '';
