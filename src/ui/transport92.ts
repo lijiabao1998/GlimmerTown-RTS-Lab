@@ -1,6 +1,7 @@
 // R092 運輸：生產列 R142 分組選單裡的「運輸」一組、「搭車」浮動鍵、每一幀把車上的人從選取拿掉。
 // 那一組有沒有看這一頁的閥（main.ts），能不能按看世界的 tp（productionBlockReason）。「搭車」只改選取、不送指令（鎖步連線不受影響）。
-import { UK_TRUCK, UK_HALFTRACK, UNIT_KINDS, SIDE_PLAYER, type World } from '../sim/world.ts';
+import { UK_TRUCK, UK_HALFTRACK, UNIT_KINDS, type World } from '../sim/world.ts';
+import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { rides92, tows92, REACH92 } from '../sim/transport92.ts';
 import { dist } from '../sim/math.ts';
 

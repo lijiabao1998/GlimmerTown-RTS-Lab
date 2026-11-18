@@ -19,7 +19,7 @@ window.__r089 = (() => {
     cam: (x, z, zoom) => { paused = true; view.target.set(x, 0, z); view.zoomBy(zoom / view.zoom); },
     clean: () => document.querySelectorAll('#start-order,#start-banner').forEach(e => e.remove()),
     // 每邊 per 個班擺在 (cx, cz) 附近的空格（我方在南、敵方在北、各 20 格寬）；fight＝會開火（不然 cooldown 擋著只量畫面）；sides＝1 只放我方；霧關掉＝最壞的情況
-    crowd: (per, cx, cz, fight, sides = 2, tanks = 0, teams91 = 0) => {   // tanks（R095）：每邊有幾個是坦克（放在最後）；teams91（R091）：每邊再多幾組狙擊手、反戰車小組（預設 0＝跟以前一樣）
+    crowd: (per, cx, cz, fight, sides = 2, tanks = 0, teams91 = 0, cars92 = 0) => {   // tanks（R095）：每邊有幾個是坦克（放在最後）；teams91（R091）：每邊再多幾組狙擊手、反戰車小組；cars92（R092）：每邊再多幾台車（前 3 台卡車各載一班，其餘半履帶車）（預設 0＝跟以前一樣）
       paused = true; view.fogOn = false;
       const t = taken(), ids = [];
       for (const side of sides === 2 ? [0, 1] : [0]) for (let r = 0, n = 0; n < per && r < 8000; r++) {
@@ -30,8 +30,20 @@ window.__r089 = (() => {
         const row = Math.floor(r / 20), x = cx - 10 + (r % 20), z = side ? cz - 2 - row : cz + 2 + row, kind = n % 2 ? 43 : 42;
         if (free(t, x, z)) { ids.push(put(t, side, x, z, { kind, hp: kind === 42 ? 20 : 30, ...(fight ? { cooldown: 0 } : {}) })); n++; }
       }
+      for (const side of sides === 2 ? [0, 1] : [0]) {   // R092
+        const mine = w.units.filter(u => u.alive && u.side === side && u.kind === 3 && !u.ride);
+        for (let r = 0, n = 0; n < cars92 && r < 8000; r++) {
+          const row = Math.floor(r / 20), x = cx - 10 + (r % 20), z = side ? cz - 12 - row : cz + 12 + row, kind = n < 3 ? 44 : 45;
+          if (!free(t, x, z)) continue;
+          const id = put(t, side, x, z, { kind, hp: kind === 44 ? 40 : 70, ...(kind === 45 ? { hullX: side ? 256 : -256, hullZ: side ? 256 : -256 } : {}) }); ids.push(id); n++;
+          const rider = kind === 44 ? mine.shift() : null; if (rider) { rider.ride = id; rider.x = x * 256 + 128; rider.z = z * 256 + 128; }
+        }
+      }
       spawned(ids); return ids.length;
     },
+    // R092：在 (cx, cz) 附近第一個空格放一個 kind，回傳 id；ride(id)＝坐在哪一台車上（0＝沒有）
+    place: (side, kind, cx, cz) => { const t = taken(); for (let r = 0; r < 12; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === r && free(t, cx + dx, cz + dz)) { const id = put(t, side, cx + dx, cz + dz, { kind, hp: UNIT_KINDS[kind].hp, cooldown: 0 }); spawned([id]); return id; } return 0; },
+    ride: id => w.units[id - 1]?.ride ?? 0,
     hp: (id, hp) => { w.units[id - 1].hp = hp; },   // R091：把一個單位的血設成 hp（量少一個人的畫法）
     hurt: dhp => { for (const u of w.units) if (u.kind === 3 && u.alive) u.hp = Math.max(1, u.hp - dhp); },
     count: () => w.units.filter(u => u.kind === 3 && u.alive).length,
