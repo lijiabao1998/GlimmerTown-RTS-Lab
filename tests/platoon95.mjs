@@ -97,10 +97,10 @@ export const groups = {
     assert.equal(reason95(off, P.PLATOON_ITEM), '這一局沒有步兵排', 'readers: without the flag the platoon button says why');
     console.log(`  readers: ${text}`);
   },
-  // 人口上限：有旗標 24／56／64，沒有 16／40／40
+  // 人口上限：有旗標 24／48／64，沒有 16／40／40（64 圖原本 56：手機預算的退路）
   caps() {
     const got = [1, 2, 3].map(m => [open(m, true).eco.pop, open(m, false).eco.pop ?? ECO_POP]);
-    assert.deepEqual(got, [[24, 16], [56, 40], [64, 40]], `caps: 24/56/64 with the flag, 16/40/40 without (${JSON.stringify(got)})`);
+    assert.deepEqual(got, [[24, 16], [48, 40], [64, 40]], `caps: 24/48/64 with the flag, 16/40/40 without (${JSON.stringify(got)})`);
     console.log('  caps: OK');
   },
   // 隊形：有旗標 25 格互不相同、前 9 格跟沒有旗標一樣、對稱時另一方取負

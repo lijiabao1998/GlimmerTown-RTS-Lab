@@ -44,7 +44,8 @@ export async function netHarness({ plugins = [], ports = [8671, 8673] } = {}, fn
           };
           let room = 0;
           // guestExtra（R087）：加入的人網址另外帶的設定（預設跟房主一樣）；例如房主開 R087、加入的人 noR087=1
-          const play = async (extra = '', guestMenu = false, guestExtra = extra, ticks = TICKS) => {
+          // during（R095）：開戰、雙方都在跑之後叫一次 during({ A, B, E, until })（例如讓某一方下排的生產指令），再走到 ticks
+          const play = async (extra = '', guestMenu = false, guestExtra = extra, ticks = TICKS, during = null) => {
             const code = `NB${++room}`;
             await A.open(`room=${code}&net=host&relay=${encodeURIComponent(url)}${extra}`);
             await until('fixture: the host opens the room', async () => (await net(A)).state === 'ready');
@@ -60,10 +61,11 @@ export async function netHarness({ plugins = [], ports = [8671, 8673] } = {}, fn
             const own = (await E(A, '__rts.units()')).filter(u => u.alive && u.side === SIDE_PLAYER);
             await E(A, `__rts.issue(${JSON.stringify({ t: 'move', side: SIDE_PLAYER, ids: [own[0].id], x: 12, z: 12 })})`);
             await E(B, `__rts.issue(${JSON.stringify({ t: 'move', side: SIDE_PLAYER, ids: [own[1].id], x: 14, z: 10 })})`);
+            if (during) await during({ A, B, E, until });
             await until(`sync: both sides get past step ${ticks}`, async () => (await E(A, '__rts.tick()')) > ticks && (await E(B, '__rts.tick()')) > ticks, 60000);
           };
-          const together = async (extra = '', guestExtra = extra, ticks = TICKS) => {
-            await play(extra, false, guestExtra, ticks);
+          const together = async (extra = '', guestExtra = extra, ticks = TICKS, during = null) => {
+            await play(extra, false, guestExtra, ticks, during);
             await E(A, '__rts.pause(true)'); await sleep(1000);   // 房主停下來；對方最多再走 delay 步就停在等房主
             // R086 順手修：房主停下來之後對方一定會碰到「還沒到的包」——沒有等的那一道（nogate）在這裡一定出錯，不再靠時序（R085 合併後 main 偶發沒紅）
             if (errors().length) throw new assert.AssertionError({ message: `sync: no page errors on either side (${errors().join(' | ').slice(0, 300)})` });
@@ -98,7 +100,7 @@ export async function netHarness({ plugins = [], ports = [8671, 8673] } = {}, fn
             assert(!(await E(A, "!!document.getElementById('sm-net')")), 'menu: ?noR083=1 has no 連線合作 button');
           };
           // R085 對戰：房主（右下、第 0 方）開對戰的房，對方用連結加入（開始選單開著）；等的時候鍵盤留在那一層；開戰後兩邊各自的「我方」
-          const versus = async (extra = '', guestExtra = extra, ticks = TICKS) => {
+          const versus = async (extra = '', guestExtra = extra, ticks = TICKS, during = null) => {
             const code = `VS${++room}`;
             await A.open(`room=${code}&net=host&vs=1&relay=${encodeURIComponent(url)}${extra}`);
             await until('fixture: the host opens the versus room', async () => (await net(A)).state === 'ready');
@@ -128,6 +130,7 @@ export async function netHarness({ plugins = [], ports = [8671, 8673] } = {}, fn
             const [u0, u1] = [ids(0)[0], ids(1)[0]], mv = (s, id, x, z) => `__rts.issue(${JSON.stringify({ t: 'move', side: s, ids: [id], x, z })})`;
             await E(B, mv(1, u1, 9, 9)); await E(B, mv(0, u0, 3, 3));     // 對方：自己的一個、偷下房主那一方的一個
             await E(A, mv(0, u0, 20, 21)); await E(A, mv(1, u1, 4, 3));   // 房主：一樣
+            if (during) await during({ A, B, E, until });
             await until(`sync: both sides get past step ${ticks}`, async () => (await E(A, '__rts.tick()')) > ticks && (await E(B, '__rts.tick()')) > ticks, 60000);
             await E(A, '__rts.pause(true)'); await sleep(1000);
             const s = { la: await E(A, '__rts.log()'), lb: await E(B, '__rts.log()'), ta: await E(A, '__rts.tick()'), tb: await E(B, '__rts.tick()'), ha: await E(A, '__rts.hash()'), hb: await E(B, '__rts.hash()'), seed: await E(A, '__rts.seed()') };

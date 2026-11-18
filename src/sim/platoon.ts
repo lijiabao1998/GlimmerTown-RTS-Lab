@@ -8,8 +8,8 @@ export const PLATOON_ITEM = 256;       // 生產佇列裡「步兵排」的記�
 export const PLATOON_COST = 66;        // 三個單班 75
 export const PLATOON_TICKS = 300;      // 三個單班 360
 export const PLATOON_SECTIONS = 3;
-// 人口上限（有旗標時）：32 格的圖 24、64 圖 56、96 圖 64（沒有旗標：16／40／40）
-export const popCap95 = (w: World): number => (w.map === MAP_TOWN ? 64 : w.map === MAP_LARGE ? 56 : 24);
+// 人口上限（有旗標時）：32 格的圖 24、64 圖 48、96 圖 64（沒有旗標：16／40／40）。64 圖原本要 56：手機上一半坦克時超過 80,000 個三角形，照卡面的退路減 8
+export const popCap95 = (w: World): number => (w.map === MAP_TOWN ? 64 : w.map === MAP_LARGE ? 48 : 24);
 // 讀佇列的地方都經過這幾個：記號換成單位種類（步兵）、要做幾步、要多少補給、佔幾格人口
 export const queueKind = (k: number): number => (k === PLATOON_ITEM ? UK_INFANTRY : k);
 export const ticksOf = (k: number): number => (k === PLATOON_ITEM ? PLATOON_TICKS : UNIT_KINDS[k].buildTicks);
