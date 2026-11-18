@@ -24,7 +24,7 @@ import { HealthBars } from './healthBars.ts';
 import { OrderLines } from './orderLines.ts';
 import { WallMarks } from './wallMarks.ts';
 import { wearSync, wearRoofFall, wearCollapse } from './wear88.ts';   // R088 建築破壞的過程
-import { Section89, section89On } from './section89.ts'; export { setSection89 } from './section89.ts';   // R089 更大規模的步兵（畫面）
+import { Section89, section89On } from './section89.ts'; export { setSection89, setCrowd96 } from './section89.ts';   // R089 更大規模的步兵（畫面）
 
 // R027 人行道與黑白路緣（只有手排地圖；畫面開關）
 let streets27 = true;

@@ -2,13 +2,17 @@
 // 看不到的不畫；人多時整個小兵網格自動降級（完整＋陰影 → 完整 → 密集），守住手機預算。
 // 只讀世界、不改世界、不用亂數；狀態只跟著畫面的更新走（同一串更新得到同一份實例）。開關照 R086–R088：模組的 setter，預設關。
 import * as THREE from 'three';
-import { SUB, cellIdx, inGrid, UNIT_KINDS, UK_INFANTRY, moraleState, MORALE_PINNED, type Unit, type World } from '../sim/world.ts';
+import { SUB, cellIdx, inGrid, UNIT_KINDS, UK_INFANTRY, UK_MG, UK_MORTAR, UK_ZOMBIE, moraleState, MORALE_PINNED, type Unit, type World } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';
 import { soldier } from './unitArt.ts';
 
 let on89 = false;
 export function setSection89(on: boolean): void { on89 = on; }
 export const section89On = (): boolean => on89;
+// R096 T3：畫面上想畫的人超過 LIVE96 時每班少畫幾個（最少 MIN96 個），班的人寫到「LIVE96 − 喪屍與砲手」就停；?noR096=1 關掉（回到 R089）
+let on96 = false;
+export function setCrowd96(on: boolean): void { on96 = on; }
+export const LIVE96 = 800, MIN96 = 3;
 
 export const SECTION_MEN = 10;          // 1940 年英軍的步兵班、德軍的 Gruppe 都是十人上下
 export const MEN_TRIS89 = 32_000;       // 小兵網格的預算（照 info() 數：本體＋陰影那一趟）
@@ -40,7 +44,7 @@ export interface Host89 {
   zombieBodies: Uint8Array; bodyBorn: Float32Array; lastT: number; yaw: Float64Array;
   menDbg: { alive: number; prone: number; crew: number };
   target: THREE.Vector3; zoom: number; cam: THREE.OrthographicCamera;
-  unitHeight(u: Unit): number; visibleAt(x: number, z: number): boolean;
+  unitHeight(u: Unit): number; visibleAt(x: number, z: number): boolean; visibleUnit(u: Unit): boolean;
 }
 
 // Ry(yaw)·Rz(tilt)·縮放，跟 Object3D 的 rotation.set(0, yaw, tilt)（XYZ）、scale.set(sx, sy, sz) 一樣，直接寫進實例矩陣
@@ -62,8 +66,12 @@ export class Section89 {
   private snap = new Float32Array(0); private show = new Uint8Array(0);
   private tier = -1; private okFrames = 0; private tris0 = 0; private tris2 = 0;
   private live = 0; private culled = 0; private drawn = 0;
+  // R096 T3：每一幀第一個班要畫之前先數一遍這一幀的（不是上一幀的：鏡頭一跳、拉遠也不會有一幀少掉整班）——
+  // 畫面上的班各想畫幾個人（照人數分堆）、喪屍與砲手總共幾個；每班最多畫 cap96 個（降馬上降、升要連續 BACK89 幀），班的人最多寫 secBudget 個
+  private pre = false; private hist = new Int32Array(SECTION_MEN + 1); private want = 0; private others = 0;
+  private cap96 = SECTION_MEN; private ok96 = 0; private secBudget = Infinity; private secDrawn = 0;
   private px = 0; private pz = 0;
-  dbg = { live: 0, bodies: 0, culled: 0, F: 0, tier: 0, tris: 0 };
+  dbg = { live: 0, bodies: 0, culled: 0, F: 0, tier: 0, tris: 0, want: 0, others: 0, cap: SECTION_MEN };
   private readonly host: Host89;
   constructor(host: Host89) { this.host = host; }
 
@@ -143,8 +151,10 @@ export class Section89 {
     this.last[id] = men;
     if (!men) return n;
     if (!this.onScreen(x, y, z)) { this.culled += men; return n; }
+    if (on96 && !this.pre) this.prepass();
+    const shown = on96 ? Math.min(men, this.cap96) : men;   // R096 T3：人太多時每班少畫幾個（少的從號碼大的先少：班長、布倫機槍組留著）
     const a = H.men.instanceMatrix.array as Float32Array, max = H.men.instanceMatrix.count, face = moving || prone ? this.ori[id] : aim, n0 = n;   // 走著、趴著的人朝隊形的方向（躺著的長 0.30，跟隊形不同向會疊在一起）
-    for (let i = 0; i < men && n < max; i++) {
+    for (let i = 0; i < shown && n < max && this.secDrawn < this.secBudget; i++, this.secDrawn++) {
       this.place(crowd.lay, id, i, s, x, z, c, sn, own, y <= 0);
       if (prone) put89(a, n, this.px, y + PRONE_LIFT89, this.pz, face, PRONE_TILT89, 1, 1, 1);
       else {
@@ -155,6 +165,31 @@ export class Section89 {
     }
     this.live += n - n0; H.menDbg.alive += n - n0; if (prone) H.menDbg.prone += n - n0;
     return n;
+  }
+
+  // R096 T3 的那一遍：跟 battle.ts 的畫法同一套條件（看得到的、活著的；班照位置看在不在畫面上，喪屍與砲手不管在不在畫面上都畫）
+  private prepass() {
+    const H = this.host; let want = 0, others = 0;
+    this.pre = true; this.hist.fill(0);
+    for (const u of H.w.units) {
+      if (!u.alive || !H.visibleUnit(u)) continue;
+      const k = UNIT_KINDS[u.kind], crowd = CROWD89[u.kind];
+      if (crowd) {
+        const men = Math.min(crowd.men, Math.ceil((u.hp * crowd.men) / k.hp));
+        if (men > 0 && this.onScreen(u.x / SUB, H.unitHeight(u), u.z / SUB)) { this.hist[Math.min(men, SECTION_MEN)]++; want += men; }
+      } else if (u.kind === UK_MORTAR || u.kind === UK_MG) others += k.men ? Math.ceil((u.hp * k.men) / k.hp) : u.hp * 2 > k.hp ? 2 : 1;   // 跟 battle.ts 的 crew22 一樣
+      else if (u.kind === UK_ZOMBIE) others += Math.min(k.men, Math.ceil((u.hp * k.men) / k.hp));   // 跟 squad21 一樣
+    }
+    const budget = Math.max(0, LIVE96 - others);
+    let cap = SECTION_MEN;
+    if (want > budget) {   // 最大的 c（MIN96..10），每班畫 min(人數, c) 加起來放得進；本來就不到 c 個人的班不會少（所以不能照比例算）
+      cap = MIN96;
+      for (let c = SECTION_MEN - 1; c >= MIN96; c--) { let sum = 0; for (let m = 1; m <= SECTION_MEN; m++) sum += this.hist[m] * Math.min(m, c); if (sum <= budget) { cap = c; break; } }
+    }
+    if (cap < this.cap96) { this.cap96 = cap; this.ok96 = 0; }   // 要少畫：馬上
+    else if (cap > this.cap96) { if (++this.ok96 >= BACK89) { this.cap96 = cap; this.ok96 = 0; } }   // 可以多畫：連續 BACK89 幀才放（一班進出畫面邊緣不會讓全部的班一閃一閃）
+    else this.ok96 = 0;
+    this.want = want; this.others = others; this.secBudget = budget; this.secDrawn = 0;
   }
 
   private trisOf(g: THREE.BufferGeometry) { return (g.index ? g.index.count : g.attributes.position.count) / 3; }
@@ -208,8 +243,8 @@ export class Section89 {
     const H = this.host;
     if (this.tier < 0) this.decide(n);
     H.men.castShadow = this.tier === 0;
-    this.dbg = { live: this.live, bodies: this.drawn, culled: this.culled, F: n, tier: this.tier, tris: n * this.trisPer(this.tier) };
-    this.live = this.culled = this.drawn = 0;
+    this.dbg = { live: this.live, bodies: this.drawn, culled: this.culled, F: n, tier: this.tier, tris: n * this.trisPer(this.tier), want: this.want, others: this.others, cap: this.cap96 };
+    this.live = this.culled = this.drawn = this.want = this.others = 0; this.pre = false; this.secBudget = Infinity; this.secDrawn = 0;
     return this.tier >= 2 ? this.dense() : H.menNormal;
   }
 }
