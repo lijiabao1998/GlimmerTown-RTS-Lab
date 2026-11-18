@@ -1,6 +1,7 @@
 // R097 守衛：findPath 的暫存跟著模組走（陣列與堆重用、取餘換除法、每格的啟發值與速度只算一次）——結果要跟改之前逐位一樣，暖過之後不再配陣列。
 // 參考答案：main 74fa704 的 src/sim/path.ts 原文（型別剝掉、原樣貼在下面），跟現在的 findPath 對同一批問題逐一比。
-// 分群：identity（≥ 3,000 對）、alloc（數 typed array 的建構子）、duel（兩場凍結的對打）、wiring（守衛釘住的行還在、行數）。node tests/path-scratch.mjs <群> 只跑一群。
+// 分群：identity（≥ 3,000 題）、odd（負的速度、不是整數的座標）、throw（搜到一半拋錯之後）、alloc（數 typed array 的建構子）、duel（兩場凍結的對打）、wiring（守衛釘住的行還在、行數）。
+// node tests/path-scratch.mjs <群> 只跑一群。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createWorld, hashWorld, cellIdx, inGrid, blocks, wireBlocks, UK_TANK, UK_INFANTRY, UK_MG, BK_WIRE, UNIT_KINDS, speedPct } from '../src/sim/world.ts';
@@ -145,46 +146,90 @@ function query(w, q) {
   return [sx, sz, gx, gz, en, ex, kind];
 }
 
+const tag = w => `map ${w.map ?? 0}${w.n === 128 ? ' tiled 128' : ''}${w.sym ? ' sym' : ''}`;
+// 會用到模組裡的暫存（不在開頭就回傳）的問題
+const searches = (w, a) => inGrid(w, a[0], a[1]) && inGrid(w, a[2], a[3]) && cellIdx(w, a[0], a[1]) !== cellIdx(w, a[2], a[3]);
+// 改一下世界：倒房子或修好、彈坑、剪斷或修好鐵絲網
+function poke(w) {
+  const b = w.blds[rnd(w.blds.length)], s = w.wires.segments[rnd(w.wires.segments.length || 1)];
+  if (b) b.hp = b.hp > 0 ? 0 : b.maxHp;
+  for (let k = 0; k < 4; k++) w.crater[rnd(w.n * w.n)] = rnd(4);
+  if (s) s.hp = s.hp > 0 ? 0 : 60;
+}
+
 run('identity', () => {
-  // 地圖大小輪流換（96 → 32 → 128 → 64 → 96 …）、每一個問題換一個世界；每 40 題改一下世界（倒房子或修好、彈坑、剪斷或修好鐵絲網）——暫存不能留著上一題的東西
+  // 十個世界（96、32、128、64、96、32、64、32、32、32），每個世界連問 4 題再換下一個；每 7 題改一下當下那個世界——
+  // 同一個世界上前一題的暫存（擋不擋、速度、走到哪）不能留到下一題，換了世界、換了大小也一樣
   const m3 = make(3, 2, 1);
   const worlds = [m3, make(0, 3, 0), tile(m3, 128), make(2, 4, 1), make(3, 5, 0), make(1, 6, 1), make(2, 7, 0), make(4, 8, 0), make(0, 9, 1), make(4, 10, 1)];
-  const tag = w => `map ${w.map ?? 0}${w.n === 128 ? ' tiled 128' : ''}${w.sym ? ' sym' : ''}`;
-  let total = 0, flood = 0, empty = 0;
-  const kinds = new Set(), sizes = new Set();
+  let total = 0, flood = 0, empty = 0, lastK = -1;
+  const kinds = new Set(), sizes = new Set(), reuse = {}, poked = new Set();
   for (let q = 0; q < 3200; q++) {
-    const w = worlds[q % worlds.length];
-    if (q % 40 === 39) {
-      const b = w.blds[rnd(w.blds.length)], s = w.wires.segments[rnd(w.wires.segments.length || 1)];
-      if (b) b.hp = b.hp > 0 ? 0 : b.maxHp;
-      w.crater[rnd(w.n * w.n)] = rnd(4);
-      if (s) s.hp = s.hp > 0 ? 0 : 60;
-    }
+    const wi = Math.floor(q / 4) % worlds.length, w = worlds[wi];
+    if (q % 7 === 6) { poke(w); poked.add(wi); }
     const a = query(w, q), want = refFindPath(w, ...a), got = findPath(w, ...a);
     assert.deepEqual(got, want, `path: query ${q} (${tag(w)}: ${a.join(',')}) identical to the 74fa704 A*`);
     total++; kinds.add(a[6]); sizes.add(w.n); if (!want.length) empty++;
     if (inGrid(w, a[2], a[3]) && blocks(w, a[2], a[3]) && w.occ[cellIdx(w, a[2], a[3])] !== a[4]) flood++;
+    if (searches(w, a)) { if (w.n * w.n === lastK) reuse[w.n] = (reuse[w.n] ?? 0) + 1; lastK = w.n * w.n; }
   }
-  assert(total >= 3000 && flood >= 200 && kinds.size === KINDS.length && sizes.size === 4 && empty >= 50, `identity: coverage (${total} queries, ${flood} blocked goals, ${kinds.size} kinds, sizes ${[...sizes]}, ${empty} empty)`);
-  console.log(`  ${total} queries identical (${flood} blocked goals, ${kinds.size} unit kinds, sizes ${[...sizes].join('/')}, ${empty} empty answers)`);
+  const r = n => reuse[n] ?? 0;
+  assert(total >= 3000 && flood >= 200 && kinds.size === KINDS.length && sizes.size === 4 && empty >= 50 && poked.size === worlds.length && r(32) >= 300 && r(64) >= 150 && r(96) >= 150 && r(128) >= 50,
+    `identity: coverage (${total} queries, ${flood} blocked goals, ${kinds.size} kinds, sizes ${[...sizes]}, ${empty} empty, ${poked.size} worlds changed, reuse ${JSON.stringify(reuse)})`);
+  console.log(`  ${total} queries identical (${flood} blocked goals, ${kinds.size} unit kinds, sizes ${[...sizes].join('/')}, ${empty} empty answers; scratch reused on the same size ${JSON.stringify(reuse)})`);
+});
+
+run('odd', () => {
+  // 遊戲裡碰不到、但存檔讀得進來或呼叫的人可能給的：彈坑 8 以上（速度變負數、堆的鍵變負數）、不是整數的座標、NaN（審查之後）
+  const deep = (w, every) => { for (let i = 0; i < w.n * w.n; i++) if (rnd(every) === 0) w.crater[i] = 8 + rnd(40); return w; };
+  const worlds = [deep(make(0, 21, 0), 6), deep(make(1, 22, 1), 6), deep(make(2, 23, 0), 10), deep(make(3, 24, 1), 12)];
+  let negative = 0, fractional = 0;
+  for (let q = 0; q < 1200; q++) {
+    const w = worlds[Math.floor(q / 3) % worlds.length], a = query(w, q), r = q % 12;
+    if (r === 0) { a[0] += 0.5; fractional++; } else if (r === 1) { a[3] += 0.25; fractional++; } else if (r === 2 && q % 48 === 2) a[2] = NaN;
+    const want = refFindPath(w, ...a), got = findPath(w, ...a);
+    assert.deepEqual(got, want, `odd: query ${q} (${tag(w)}: ${a.join(',')}) identical to the 74fa704 A*`);
+    if (want.some(i => Number.isInteger(i) && i >= 0 && speedPct(w, i % w.n, (i - (i % w.n)) / w.n) < 0)) negative++;
+  }
+  assert(negative >= 50 && fractional >= 150, `odd: coverage (${negative} answers cross a negative-speed cell, ${fractional} fractional queries)`);
+  console.log(`  1200 odd queries identical (${negative} cross a crater deep enough for a negative speed, ${fractional} fractional coordinates)`);
+});
+
+run('throw', () => {
+  // 搜到一半拋錯（這裡讓 w.wires 第 N 次被讀的時候拋），下一題要從乾淨的暫存開始——在同一個世界、別的世界都一樣（審查之後）
+  const m3 = make(3, 31, 1), worlds = [m3, make(1, 32, 0), tile(m3, 128), make(2, 33, 1)];
+  let thrown = 0;
+  for (let q = 0; q < 400; q++) {
+    const w = worlds[q % worlds.length], bad = { ...w }, limit = 1 + rnd(600);
+    let reads = 0;
+    Object.defineProperty(bad, 'wires', { get() { if (++reads > limit) throw new Error('boom'); return w.wires; } });
+    const a = query(w, q); a[6] = UK_INFANTRY;   // 徒步的才查鐵絲網
+    try { findPath(bad, ...a); } catch (e) { if (e.message !== 'boom') throw e; thrown++; }
+    const next = worlds[(q + (q & 1)) % worlds.length], b = query(next, q + 7);
+    assert.deepEqual(findPath(next, ...b), refFindPath(next, ...b), `throw: after a search that threw, query ${q} (${tag(next)}: ${b.join(',')}) is identical to the 74fa704 A*`);
+  }
+  assert(thrown >= 200, `throw: coverage (${thrown} of 400 searches threw halfway)`);
+  console.log(`  ${thrown} of 400 searches threw halfway; every next search identical`);
 });
 
 run('alloc', () => {
-  // 數 typed array 的建構子：暖過一次之後，同一張圖上再問同一批問題一個也不新開；換了格數才重開一次（五個陣列），之後又不開
+  // 數 typed array 的建構子：暖過一次之後，同一張圖上再問同一批問題一個也不新開；換了格數（變小、變大）才重開一次（五個陣列），之後又不開
   const names = ['Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array', 'Float32Array', 'Float64Array', 'Uint8ClampedArray'], saved = {};
   let made = 0;
   for (const nm of names) { const C = globalThis[nm]; saved[nm] = C; globalThis[nm] = class extends C { constructor(...a) { super(...a); made++; } }; }
   try {
     const big = make(3, 11, 1), small = make(1, 12, 0), qs = w => Array.from({ length: 150 }, (_, q) => query(w, q));
-    const A = qs(big), B = qs(small);
+    const A = qs(big), B = qs(small), one = (w, Q) => Q.find(a => searches(w, a));
     for (const a of A) findPath(big, ...a);   // 暖身（堆在這裡長到夠大）
     made = 0; for (const a of A) findPath(big, ...a);
     assert.equal(made, 0, 'alloc: after warm-up 150 searches on the same map create no typed arrays');
-    made = 0; findPath(small, ...B.find(a => inGrid(small, a[0], a[1]) && inGrid(small, a[2], a[3]) && (a[0] !== a[2] || a[1] !== a[3])));
+    made = 0; findPath(small, ...one(small, B));
     assert.equal(made, 5, 'alloc: a different map size reallocates the five scratch arrays once');
     made = 0; for (const a of B) findPath(small, ...a);
     assert.equal(made, 0, 'alloc: and then none again on that size');
-    console.log('  150 + 150 searches after warm-up: 0 typed arrays; a new size: 5');
+    made = 0; findPath(big, ...one(big, A));   // 變大沒重開的話這一題會讀到陣列外、停不下來（負面守衛斷言它逾時）
+    assert.equal(made, 5, 'alloc: a bigger map size reallocates the five scratch arrays once');
+    console.log('  150 + 150 searches after warm-up: 0 typed arrays; each size change: 5');
   } finally { for (const nm of names) globalThis[nm] = saved[nm]; }
 });
 
@@ -203,5 +248,11 @@ run('wiring', () => {
   assert(src.split('\n').length <= 106, 'wiring: path.ts stays within 105 lines');
   assert(!/Math\.random|Date|performance/.test(src), 'wiring: no randomness or clocks');
   assert.equal((src.match(/new (Uint8|Int32|Float64)Array/g) ?? []).length, 12, 'wiring: typed arrays only at module level (5), on a size change (5) and for the heap (2)');
+  // spd 存在 Int32Array 裡：speedPct 一定要是 Int32 範圍內的整數（每一種地形、有沒有房子、彈坑 0–255），存進去才跟算出來的一樣
+  const w = createWorld(1);
+  for (const ter of [0, 1, 2, 3]) for (const occ of [0, 1]) for (let c = 0; c < 256; c++) {
+    w.ter[0] = ter; w.occ[0] = occ; w.crater[0] = c; const p = speedPct(w, 0, 0);
+    assert(Number.isInteger(p) && (p | 0) === p, `wiring: speedPct is an Int32 integer (terrain ${ter}, building ${occ}, crater ${c}: ${p})`);
+  }
 });
 console.log('path-scratch: all OK');

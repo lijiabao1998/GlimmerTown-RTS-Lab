@@ -69,8 +69,10 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
   open.push(key(heur(sx, sz, gx, gz), heur(sx, sz, gx, gz), start));
   let best = start, bestH = heur(sx, sz, gx, gz);
   while (open.size) {
-    // R097：鍵超過 2^31 時 v % M 走浮點取餘（慢）；改成除法取商，再把可能差一的餘數修回 [0, M)——鍵都是 < 2^53 的整數，結果跟 % 一樣
-    const v = open.pop(), q = Math.floor(v / M); let e = v - q * M; if (e < 0) e += M; else if (e >= M) e -= M;
+    // R097：鍵超過 2^31 時 v % M 走浮點取餘（慢）。鍵是 (0, 2^53) 的數時改成除法取商、再把可能差一的餘數修回 [0, M)——跟 % 一樣（都是精確的）；
+    // 其他的鍵（負的：彈坑深到速度變負數；0、NaN；2^53 以上）照舊用 %，審查之後
+    const v = open.pop(); let e = 0;
+    if (v > 0 && v < 9007199254740992) { e = v - Math.floor(v / M) * M; if (e < 0) e += M; else if (e >= M) e -= M; } else e = v % M;
     const cur = dec(e);
     if (done[cur]) continue;
     done[cur] = 1;
@@ -80,7 +82,7 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
     if (cur === goal) break;
     for (let k = 0; k < 8; k++) {
       const nx = cx + DX[k], nz = cz + DZ[k];
-      if (nx < 0 || nz < 0 || nx >= n || nz >= n || blocked(nx, nz)) continue;
+      if (!(nx >= 0 && nz >= 0 && nx < n && nz < n) || blocked(nx, nz)) continue;   // 跟 inGrid 一樣（NaN 也擋：座標不是整數時跟以前一樣搜完就停）
       const diag = k >= 4;
       if (diag && (blocked(cx + DX[k], cz) || blocked(cx, cz + DZ[k]))) continue;   // 不切角
       const ni = nz * n + nx, ng = g[cur] + stepCost(spd[ni] || (spd[ni] = speedPct(w, nx, nz)), diag);
