@@ -50,6 +50,22 @@ const SCEN = {
   hills: [{ t: 'map', id: 4, vegetation: 1 }, { t: 'eco', inf: 1, mg: 2, guns: 1, tanks: 1 }, AI(0), AI(1)],
   zombie: [{ t: 'map', id: 1, vegetation: 1 }, { t: 'zombies' }, { t: 'eco', inf: 1, guns: 1, tanks: 1, armor2: 1 }, AI(0)],
 };
+// 擠滿的萊伊（第 1 步之後每邊 16 個班面對面、一半往前走、兩個走進房子）與 96 圖的大戰（每邊 40 個班交戰）：跟 tests/section89.mjs 同一組
+function crowdSim(w) {
+  const add = (side, cx, cz) => { const id = w.units.length + 1, d = side ? SUB : -SUB; w.units.push({ id, side, kind: UK_INFANTRY, x: W.center(cx), z: W.center(cz), hp: UNIT_KINDS[UK_INFANTRY].hp, alive: true, order: W.ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: d, aimZ: d }); return id; };
+  const free = (x, z) => W.inGrid(w, x, z) && !w.occ[W.cellIdx(w, x, z)] && !w.units.some(u => W.cellOf(u.x) === x && W.cellOf(u.z) === z);
+  const ids = [[], []];
+  for (const side of [0, 1]) for (let r = 0, n = 0; n < 16 && r < 400; r++) { const x = 6 + (r % 20), z = side ? 9 + Math.floor(r / 20) : 21 - Math.floor(r / 20); if (free(x, z)) { ids[side].push(add(side, x, z)); n++; } }
+  const house = w.blds.find(b => b.kind === W.BK_HOUSE && b.hp > 0 && Math.abs(b.x - 14) + Math.abs(b.z - 18) < 12);
+  return [{ t: 'move', side: 0, ids: ids[0].slice(0, 6), x: 16, z: 14 }, { t: 'move', side: 1, ids: ids[1].slice(0, 6), x: 14, z: 17 }, ...(house ? [{ t: 'move', side: 0, ids: ids[0].slice(14, 16), x: house.x, z: house.z }] : [])];
+}
+function massSim(w) {
+  const add = (side, cx, cz) => { const id = w.units.length + 1, d = side ? SUB : -SUB; w.units.push({ id, side, kind: UK_INFANTRY, x: W.center(cx), z: W.center(cz), hp: UNIT_KINDS[UK_INFANTRY].hp, alive: true, order: W.ORD_IDLE, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: d, aimZ: d }); return id; };
+  const free = (x, z) => W.inGrid(w, x, z) && !w.occ[W.cellIdx(w, x, z)] && !w.units.some(u => u.alive && W.cellOf(u.x) === x && W.cellOf(u.z) === z);
+  for (const side of [0, 1]) for (let r = 0, n = 0; n < 40 && r < 4000; r++) { const x = 34 + (r % 28), z = side ? 46 - Math.floor(r / 28) : 50 + Math.floor(r / 28); if (free(x, z)) { add(side, x, z); n++; } }
+  return [];
+}
+const SPECIAL = { crowd: [[{ t: 'map', id: 1, vegetation: 1 }, { t: 'rules', morale: 2 }], crowdSim, 900], mass: [[{ t: 'map', id: 3, vegetation: 1 }], massSim, 900] };
 // 壓力局：64 圖、每邊 pop 個單位（七成步兵、三成坦克）兩群貼在一起、擬真規則（跟卡面的收據同一個）
 function stressWorld(pop, seed = 3) {
   const w = W.createWorld(seed);
@@ -87,15 +103,20 @@ const fnv = (h, x) => Math.imul(h ^ x, 0x01000193) >>> 0;
 const digest = v => { const m = v.men, a = new Uint32Array(m.instanceMatrix.array.buffer, 0, m.count * 16); let h = fnv(0x811c9dc5, m.count); for (const x of a) h = fnv(h, x); return h; };
 
 export const groups = {
-  // 找目標：五局（萊伊、64、96、丘陵、喪屍）每一步、壓力局每一步，新舊挑到同一個；八場對打與三個壓力局的雜湊＝動手之前
+  // 找目標：七局（萊伊、64、96、丘陵、喪屍、擠滿的萊伊、96 圖大戰）與兩個壓力局的每一步、每一個自己找目標的單位，新舊挑到同一個；八場對打與三個壓力局的雜湊＝動手之前
   aim() {
     let n = 0, picked = 0;
+    // 每一局的每一步（電腦對打 2,400 步、擠滿的萊伊與 96 圖大戰 900 步、壓力局 300 步）
     for (const [name, cmds] of Object.entries(SCEN)) {
       const w = W.createWorld(1944);
-      while (w.tick < 2400 && w.winner < 0) { step(w, w.tick === 0 ? cmds : []); if (w.tick < 600 || w.tick % 4 === 0) { const [a, b] = sameAim(w, `${name} tick ${w.tick}`); n += a; picked += b; } }
+      while (w.tick < 2400 && w.winner < 0) { step(w, w.tick === 0 ? cmds : []); const [a, b] = sameAim(w, `${name} tick ${w.tick}`); n += a; picked += b; }
     }
-    for (const pop of [40, 64]) { const w = stressWorld(pop); for (let i = 0; i < 300; i++) { step(w, []); if (i % 2 === 0) { const [a, b] = sameAim(w, `stress ${pop} step ${i}`); n += a; picked += b; } } }
-    assert(picked > 5000, `aim: the comparison saw plenty of real targets (${picked} of ${n})`);
+    for (const [name, [cmds, add, until]] of Object.entries(SPECIAL)) {
+      const w = W.createWorld(1944); let later = [];
+      while (w.tick < until && w.winner < 0) { step(w, w.tick === 0 ? cmds : w.tick === 1 ? later : []); if (w.tick === 1) later = add(w); const [a, b] = sameAim(w, `${name} tick ${w.tick}`); n += a; picked += b; }
+    }
+    for (const pop of [40, 64]) { const w = stressWorld(pop); for (let i = 0; i < 300; i++) { step(w, []); const [a, b] = sameAim(w, `stress ${pop} step ${i}`); n += a; picked += b; } }
+    assert(picked > 20000, `aim: the comparison saw plenty of real targets (${picked} of ${n})`);
     for (const row of DUELS) {
       const [key, hash, ticks] = row.split(' '), [map, seed, rules] = key.split('/');
       const r = duel({ map: +map, seed: +seed, ticks: 12000, rules: rules === 'real' ? { ap: 1, morale: 2 } : null, a: { level: 3, v: 3 }, b: { level: 3, v: 3 }, end: true, mg: 2 });
