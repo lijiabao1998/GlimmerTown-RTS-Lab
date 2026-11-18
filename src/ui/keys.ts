@@ -4,7 +4,7 @@
 
 export type KeyAction =
   | 'zoom-in' | 'zoom-out' | 'home' | 'fire-mode' | 'hold-fire'
-  | 'select-all' | 'help' | 'next-unit' | 'group-set' | 'group-recall';
+  | 'select-all' | 'help' | 'next-unit' | 'group-set' | 'group-recall' | 'select-platoon';   // R095 P＝全排
 
 export type PanToken = 'w' | 'a' | 's' | 'd' | 'up' | 'down' | 'left' | 'right';
 
@@ -66,6 +66,7 @@ export function actionFor(key: string, mods: Mods = {}): KeyAction | null {
   if (k === 'h') return 'home';
   if (k === 'f') return 'fire-mode';
   if (k === 'g') return 'hold-fire';
+  if (k === 'p') return 'select-platoon';
   if (k === 'f1' || k === '?') return 'help';
   if (/^[1-9]$/.test(k)) return 'group-recall';
   return null;

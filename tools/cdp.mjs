@@ -139,7 +139,9 @@ export async function withBrowser(opt, fn) {
       const full = realism || /(^|&)noR076=/.test(q) ? q : `${q ? q + '&' : ''}noR076=1`;
       // R087：預設在網址加 noR087=1，既有守衛照舊測沒有「更多房屋」的局（房子的位置、數量、三角形預算寫的時候就是這樣）；
       // 要測 R087 的守衛在網址寫 noR087=0（網址自己寫了 noR087 就照它的）。
-      const url = /(^|&)noR087=/.test(full) ? full : `${full ? full + '&' : ''}noR087=1`;
+      const url87 = /(^|&)noR087=/.test(full) ? full : `${full ? full + '&' : ''}noR087=1`;
+      // R095：預設在網址加 noR095=1，既有守衛照舊測沒有步兵排的局（人口上限、生產列、隊形寫的時候就是這樣）；要測 R095 的守衛寫 noR095=0。
+      const url = /(^|&)noR095=/.test(url87) ? url87 : `${url87}&noR095=1`;
       // R089：預設在網址加 noR089=1，既有守衛照舊測一班 6 個人的畫面（readable-browser 照 UNIT_KINDS.men 數趴下的人、smoke 的預算寫的時候就是這樣）；
       // 要測 R089 的守衛在網址寫 noR089=0（網址自己寫了 noR089 就照它的）。
       const url89 = /(^|&)noR089=/.test(url) ? url : `${url}&noR089=1`;

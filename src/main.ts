@@ -1,7 +1,5 @@
 import { vehicleDurability } from './ui/vehicleDurability.ts';
 import { hqDurability } from './ui/hqDurability.ts';
-import { productionBlockReason } from './ui/productionBlockReason.ts';
-import { productionCountdown } from './ui/productionCountdown.ts';
 import { coverDurability } from './ui/coverDurability.ts';
 import { bombardStatus } from './ui/bombardStatus.ts';
 import { reloadStatus } from './ui/reloadStatus.ts';
@@ -24,6 +22,7 @@ import { initDesktopControls, isDesktopPointer } from './ui/desktopControls.ts';
 import { pickUnitAt } from './ui/pick.ts';
 import { initNet, netFeed, netReady, netLive, netVersus, netVersusNext } from './net/client.ts'; import { SIDE_PLAYER, SIDE_ENEMY, setViewSide } from './side.ts';   // R083 連線合作；R085「我方」可以換（連線對戰）
 import { initHud, type Hud } from './ui/hud.ts';
+import { PLATOON_UI_ITEM, countdown95, reason95, progMax95, initPlatoon95 } from './ui/platoon95.ts';   // R095 步兵排
 import { routeBattleOrder, type AmmoMode } from './ui/smoke.ts';
 import { Gestures, inSelectionRect, type SelectionRect } from './ui/gestures.ts';
 import { initMobileChrome, touchBoxArmed } from './ui/mobileChrome.ts';
@@ -129,7 +128,7 @@ const planner = new BuildPlanner({
   world: () => w, view: () => view, building: () => phase === 'build', simT: () => simT(), ui: () => ui(), hud: () => hud?.update(), size: () => [innerWidth, innerHeight],
 }, { trenches: V.r118, walls: V.r120, wire: V.r121, materials: V.r105, kinds: BUILD_KINDS_NOW });
 document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
-const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) });
+const ecoCmd = (): Command => ({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r095 ? { pla: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) });
 let prodBar: ProdBar | undefined;
 // R018 電腦難度：?ai=1|2|3
 let aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));   // R069：開始選單可以改
@@ -452,20 +451,20 @@ hud = initHud({
   help: () => help.open(),
 });
 reportView = initReportView({ again: () => reset() });
-const fireDisciplineFrame = V.r143 ? initFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue, { show: !(V.r070 && isDesktopPointer()) }) : undefined;
+const platoon95 = initPlatoon95(() => ({ world: w, selected, active: phase === 'battle' && w.winner < 0 }), ids => { selected.clear(); for (const id of ids) selected.add(id); hud?.update(); }, { show: !(V.r070 && isDesktopPointer()) }); const fireDisciplineFrame = V.r143 ? initFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue, { show: !(V.r070 && isDesktopPointer()) }) : undefined;
 if (V.r901) initMobileChrome(canvas);
-prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }] : []), ...(V.r080 ? [{ kind: UK_MG, label: '機槍組', cost: UNIT_KINDS[UK_MG].cost }] : []),
+prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }, ...(V.r095 ? [PLATOON_UI_ITEM] : [])] : []), ...(V.r080 ? [{ kind: UK_MG, label: '機槍組', cost: UNIT_KINDS[UK_MG].cost }] : []),
   ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
   ...(V.r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : []),
   ...(V.r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : []), ...(V.r140 ? sovietItems() : []), ...(V.r142 ? internationalItems() : [])], {
   state: () => {
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
-    return { hq: phase === 'battle' ? hqDurability(w, V.r127) : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: q0.length ? UNIT_KINDS[q0[0]].buildTicks : 0, queueMax: 5, countdown: phase === 'battle' ? productionCountdown(w, V.r125) : '' };
+    return { hq: phase === 'battle' ? hqDurability(w, V.r127) : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: progMax95(q0), queueMax: 5, countdown: phase === 'battle' ? countdown95(w, V.r125) : '' };
   },
-  produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }),
+  produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }), after: () => platoon95.frame(),   // R095：全排鍵與「步兵排」那一顆（沙盒裡的守衛不跑生產列）
   hq: V.r127,
   countdown: V.r125,
-  blockReason: V.r126 ? kind => productionBlockReason(w, kind, phase === 'battle') : undefined,
+  blockReason: V.r126 ? kind => reason95(w, kind, phase === 'battle') : undefined,
 });
 // R013 說明面板：開著的時候暫停，關掉回到原來的暫停狀態
 let pausedBeforeHelp = false;
@@ -519,7 +518,7 @@ if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: 
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),
   audio: battleAudio ? () => { syncBattleAudio(); battleAudio?.toggleFromGesture(); hud?.update(); } : undefined, skirmish, seed: n => (seed = n ?? seed), reset: () => reset(), replays: replay?.open, saved: saves?.offer, resume: saves?.resume, saveNow: saves?.saveNow });   // 跟音效鍵同一動作；寫成 ?. 是因為 R117 守衛要求原句在 main.ts 只出現一次
 
-if (V.r070 && isDesktopPointer()) initDesktopControls({ world: () => w, selected, view: () => view, fling, glide, hud: () => hud, blocked: () => help.visible() || !!reportView?.visible(), toggleFireMode: () => { fireMode = !fireMode; }, selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); }, toggleHoldFire: () => { if (toggleFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue)) fireDisciplineFrame?.(); }, help: () => help.open() });
+if (V.r070 && isDesktopPointer()) initDesktopControls({ world: () => w, selected, view: () => view, fling, glide, hud: () => hud, blocked: () => help.visible() || !!reportView?.visible(), toggleFireMode: () => { fireMode = !fireMode; }, selectAll: () => { selected.clear(); for (const u of w.units) if (u.side === SIDE_PLAYER && u.alive) selected.add(u.id); }, selectPlatoon: () => { platoon95.selectPlatoon(); }, toggleHoldFire: () => { if (toggleFireDiscipline(() => ({ world: w, selected, pending, active: phase === 'battle' && w.winner < 0 }), issue)) fireDisciplineFrame?.(); }, help: () => help.open() });
 
 // ---- 迴圈 ----
 renderer.setAnimationLoop(() => {

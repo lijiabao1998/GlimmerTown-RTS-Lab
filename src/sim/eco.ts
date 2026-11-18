@@ -6,6 +6,7 @@ import { stillConnected, keepsFootPaths } from './build.ts';
 import { MAP_LARGE, LARGE_POP } from './largeMap.ts';
 import { MAP_TOWN } from './expandedMap.ts';
 import { incomeTicks } from './rules.ts';
+import { PLATOON_ITEM, PLATOON_COST, PLATOON_SECTIONS, FORMATION_PLA, startPlatoons, ticksOf, popOf } from './platoon.ts';
 import {
   INTERNATIONAL_KINDS, SOVIET_KINDS, SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, BK_HQ, TER_ROAD,
   ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, type World, type Building,
@@ -43,7 +44,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
 }
 
 // eco 指令：只在第 0 步有效；雙方各放一座指揮部、開始累積補給
-export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0, mg = 0): void {
+export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0, mg = 0, pla = 0): void {
   if (w.eco || w.tick !== 0) return;
   const hq = [0, 0];
   for (const side of (w.zombies ? [SIDE_PLAYER] : [SIDE_PLAYER, SIDE_ENEMY])) {
@@ -59,6 +60,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, sov
   }
   w.eco = { supply: [ECO_START, w.zombies ? 0 : ECO_START], hq, queue: [[], []], prog: [0, 0], ...(inf ? { inf: 1 } : {}), ...(guns ? { guns: 1 } : {}), ...(tanks ? { tanks: 1 } : {}), ...(armor2 ? { armor2: 1 } : {}), ...(soviet ? { soviet: 1 } : {}), ...(international ? { international: 1 } : {}), ...((w.map === MAP_LARGE || w.map === MAP_TOWN) ? { pop: LARGE_POP } : {}), ...(end ? { end: 1 } : {}), ...(mg ? { mg: mg >= 2 ? 2 : 1 } : {}) };   // R081：mg 存版本（1 或 2）   // R077 end：勝負判定第二版（step.ts checkWinner）
   if (inf) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_INFANTRY, b); }   // R021：雙方各一班步兵
+  if (pla) startPlatoons(w);   // R095：步兵排的旗標、人口上限 24／56／64
   if (mg) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_MG, b); }   // R080：雙方各一組機槍組（mg 旗標；也是可以生產它的開關）
 }
 
@@ -70,6 +72,7 @@ export const hqAlive = (w: World, side: number): Building | null => {
 // produce 指令：補給夠、佇列沒滿、指揮部還在才接
 export function produce(w: World, side: number, kind: number): void {
   const e = w.eco;
+  if (kind === PLATOON_ITEM) { if (e?.pla && e.inf && (side === 0 || side === 1) && hqAlive(w, side) && e.supply[side] >= PLATOON_COST && e.queue[side].length < ECO_QUEUE) { e.supply[side] -= PLATOON_COST; e.queue[side].push(kind); } return; }   // R095 步兵排：佔一格
   if (!e || (side !== 0 && side !== 1) || !PRODUCIBLE.includes(kind) || (INTERNATIONAL_KINDS.includes(kind) && !e.international) || (SOVIET_KINDS.includes(kind) && !e.soviet) || !hqAlive(w, side) || (kind === UK_INFANTRY && !e.inf) || ((kind === UK_ATGUN || kind === UK_MORTAR) && !e.guns) || ((kind === UK_LIGHT || kind === UK_HEAVY) && !e.tanks) || (ARMOR2.includes(kind) && !e.armor2) || (kind === UK_MG && !e.mg)) return;
   const cost = UNIT_KINDS[kind].cost;
   if (e.supply[side] < cost || e.queue[side].length >= ECO_QUEUE) return;
@@ -86,18 +89,17 @@ export function ecoStep(w: World): void {
     if (w.tick % (incomeTicks(w) || ECO_INCOME_TICKS) === 0) e.supply[side]++;   // R046：補給速度可由 rules 指令改（慢 40、快 10）
     const q = e.queue[side];
     if (!q.length) continue;
-    const k = UNIT_KINDS[q[0]];
-    if (e.prog[side] < k.buildTicks) { e.prog[side]++; continue; }
-    if (w.units.filter(u => u.alive && u.side === side).length >= (e.pop ?? ECO_POP)) continue;   // 人數滿了：做好的先等著
+    if (e.prog[side] < ticksOf(q[0])) { e.prog[side]++; continue; }   // R095：排的記號不是單位種類，經過 ticksOf
+    if (w.units.filter(u => u.alive && u.side === side).length + popOf(q[0]) > (e.pop ?? ECO_POP)) continue;   // 人數滿了：做好的先等著（排要空出 3 格）
     if (!spawnCell(w, hq)) continue;
     const kind = q.shift()!;
     e.prog[side] = 0;
-    spawnUnit(w, side, kind, hq);
+    if (kind === PLATOON_ITEM) spawnPlatoon(w, side, hq); else spawnUnit(w, side, kind, hq);
   }
 }
 
 // 在指揮部旁出生、走向集結點（往地圖中央 4 格）
-function spawnUnit(w: World, side: number, kind: number, hq: Building): void {
+function spawnUnit(w: World, side: number, kind: number, hq: Building, j = 0): void {
   const spot = spawnCell(w, hq);
   if (!spot) return;
   const id = w.units.length + 1;
@@ -105,8 +107,16 @@ function spawnUnit(w: World, side: number, kind: number, hq: Building): void {
   const mir = !!w.sym && hq.builtBy === SIDE_ENEMY;   // R084：左上那一方的「指揮部朝中央那一欄」是 hq.x（右下那一方是 hq.x＋1），中央用兩倍座標比
   const u = w.units[id - 1], hx = mir ? hq.x : hq.x + 1, hz = mir ? hq.z : hq.z + 1, mid = w.n >> 1;
   const rx = Math.max(0, Math.min(w.n - 1, hx + (w.sym ? Math.sign(w.n - 1 - 2 * hx) : Math.sign(mid - hx)) * 4)), rz = Math.max(0, Math.min(w.n - 1, hz + (w.sym ? Math.sign(w.n - 1 - 2 * hz) : Math.sign(mid - hz)) * 4));
-  const p = findPath(w, spot[0], spot[1], rx, rz, 0, 0, kind);
-  if (p.length) { u.order = ORD_MOVE; u.tx = rx; u.tz = rz; u.path = p; u.pathIdx = 0; }
+  const [ox, oz] = j ? FORMATION_PLA[j] : [0, 0], fm = w.sym && side === SIDE_ENEMY ? -1 : 1;   // R095：排的第 j 班集結在集結點＋隊形的第 j 格（對稱時鏡像），不疊在同一格
+  const tx = Math.max(0, Math.min(w.n - 1, rx + fm * ox)), tz = Math.max(0, Math.min(w.n - 1, rz + fm * oz));
+  const p = findPath(w, spot[0], spot[1], tx, tz, 0, 0, kind);
+  if (p.length) { u.order = ORD_MOVE; u.tx = tx; u.tz = tz; u.path = p; u.pathIdx = 0; }
+}
+
+// R095：一個排＝同一步出三個步兵班，排號是第一班的 id
+function spawnPlatoon(w: World, side: number, hq: Building): void {
+  const first = w.units.length + 1;
+  for (let j = 0; j < PLATOON_SECTIONS; j++) { const before = w.units.length; spawnUnit(w, side, UK_INFANTRY, hq, j); if (w.units.length > before) w.units[w.units.length - 1].pl = first; }
 }
 
 // 指揮部旁一圈的空格，挑沒有車停著、離地圖中央最近的（決定性）
