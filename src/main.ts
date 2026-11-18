@@ -29,7 +29,7 @@ import { initMobileChrome, touchBoxArmed } from './ui/mobileChrome.ts';
 import { initCommandMenu, bombardCommand, bombardTarget, type CommandMenu } from './ui/commandMenu.ts';
 import { initBuildBar, type BuildBar } from './ui/build.ts';
 import { Fling, Glide } from './ui/camera.ts';
-import { applyMap, MAP_RYE, MAP_HILLS } from './sim/maps.ts';
+import { applyMap, MAP_RYE, MAP_HILLS, MAP_HYTHE } from './sim/maps.ts';
 import { MAP_LARGE } from './sim/largeMap.ts';
 import { MAP_TOWN } from './sim/expandedMap.ts';
 import { initMapPick, initTownPick, type MapPick } from './ui/mapPick.ts';
@@ -140,14 +140,13 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   w = sandbox ? createSandboxWorld(s) : createWorld(s); setViewSide();   // R085：每開一局「我方」先回到第 0 方（連線對戰的加入的人開戰時才換）
   // 預覽與紀錄共用設定；五項舊功能全部關閉的腳本仍明確傳 vegetation=false。
   // R043：一般開局（map＝true）才看地圖鍵選的大地圖；腳本、重播傳 map＝false，不受影響
-  const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : skirmish?.village ? 0 : skirmish?.hills ? MAP_HILLS : MAP_RYE) : 0;   // R046：村莊＝地圖 0（createWorld 的亂數村莊）
+  const mapId = map ? (expanded ? MAP_TOWN : large ? MAP_LARGE : skirmish?.village ? 0 : skirmish?.hythe ? MAP_HYTHE : skirmish?.hills ? MAP_HILLS : MAP_RYE) : 0;   // R046：村莊＝地圖 0（createWorld 的亂數村莊）
   if (map || vegetation) applyMap(w, mapId, vegetation ? 1 : undefined);
   const rules = !sandbox && (map || vegetation) ? skirmish?.start(w) : undefined;   // R046：一般開局才套（布陣時就看得到）；腳本、重播、沙盒不套
   const zombies = !sandbox && (map || vegetation) && V.r045 && q.get('mode') === 'zombies';
   if (zombies) startZombies(w);
   makeView();
-  if (w.map === MAP_LARGE) view.target.set(55, 0, 55);   // R043：大地圖開局鏡頭對準我方裝甲連（右下角落）
-  if (w.map === MAP_TOWN) view.target.set(87, 0, 87);
+  if (w.n > 32) view.target.set(w.n - 9, 0, w.n - 9);   // R043／R130／R090：大地圖開局鏡頭對準我方裝甲連（右下角落；64→55、96→87、128→119，跟 replay.ts 一樣 n−9）
   log = []; pending = []; acc = 0; selected.clear(); fireMode = false; ammo = 'he';
   stats = newStats(w); endT0 = -1; endFrom = null; reportShown = false; reportView?.hide();
   planner.clear(); phase = build ? 'build' : 'battle';
@@ -497,7 +496,7 @@ if (V.r128) sandboxBar = initSandbox({
   side: side => { sandboxSide = side; sandboxHint = ''; },
 });
 if (V.r043) mapPick = initMapPick({
-  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: V.r026, expanded, hills: !!skirmish?.hills }),
+  state: () => ({ show: phase === 'build' && !w.sandbox, large, rye: V.r026, expanded, hills: !!skirmish?.hills, hythe: !!skirmish?.hythe }),
   toggle: () => { if (expanded) { expanded = false; large = false; } else large = !large; reset(); },
 });
 if (V.r130) townPick = initTownPick({
@@ -505,14 +504,14 @@ if (V.r130) townPick = initTownPick({
   toggle: () => { expanded = !expanded; large = false; reset(); },
 });
 if (V.r045) zombiesPick = initZombiesPick({
-  state: () => ({ show: phase === 'build' && !w.sandbox, active: !!w.zombies }),
+  state: () => ({ show: phase === 'build' && !w.sandbox && w.map !== MAP_HYTHE, active: !!w.zombies }),   // R090：海斯沒有喪屍模式
   toggle: () => { if (w.zombies) q.delete('mode'); else q.set('mode', 'zombies'); reset(); },
 });
 
 const tutorial = initTutorial(document.getElementById('hud') ?? document.body, V.r902);
 // R069 開始選單（src/ui/startMenu.ts）：地圖、模式、重來、說明、教學都按原本那幾顆鍵；這裡只接難度、暫停與音效
 const replay = V.r047 ? initReplay({ world: () => w, log: () => log, hash: () => hashWorld(w), begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w, V.r081); ui(); }, focus: (x, z) => view.target.set(x, 0, z), leave: () => reset() }) : undefined;   // R047 重播（src/ui/replay.ts）
-if (V.r083) initNet({ world: () => w, log: () => log, hash: () => hashWorld(w), phase: () => phase, begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w, V.r081); ui(); }, focus: () => { if (w.map === MAP_LARGE) view.target.set(55, 0, 55); if (w.map === MAP_TOWN) view.target.set(87, 0, 87); if (SIDE_PLAYER) view.target.set(w.n - view.target.x, 0, w.n - view.target.z); }, versus: V.r085 });   // R083：加入的人照重播那一條路建世界
+if (V.r083) initNet({ world: () => w, log: () => log, hash: () => hashWorld(w), phase: () => phase, begin: s => { reset(s, false, false, false, false, false); paused = false; }, tick: () => tick(), remake: () => { view.dispose(); view = view.recreate(w); stats = newStats(w, V.r081); ui(); }, focus: () => { if (w.n > 32) view.target.set(w.n - 9, 0, w.n - 9); if (SIDE_PLAYER) view.target.set(w.n - view.target.x, 0, w.n - view.target.z); }, versus: V.r085 });   // R083：加入的人照重播那一條路建世界
 const saves = V.r074 && V.r069 ? initSaves({ world: () => w, log: () => log, battle: () => phase === 'battle', replaying: () => !!replay?.playing() || netVersus(), cam: () => ({ x: view.target.x, z: view.target.z, zoom: view.zoom }), stats: () => stats, adopt: (world, lg, cam, st) => { reset(world.seed, false, false, false, false, false); w = world; log = lg; pending = lg.filter(c => c.tick === w.tick).map(c => c.cmd); seed = world.seed; aiLevel = world.ai?.find(a => a.side === SIDE_ENEMY)?.level ?? aiLevel; large = V.r043 && world.map === MAP_LARGE; expanded = V.r130 && world.map === MAP_TOWN; if (world.zombies) q.set('mode', 'zombies'); else q.delete('mode'); skirmish?.adopt(world); view.dispose(); view = view.recreate(w); if (cam) { view.target.set(cam.x, 0, cam.z); view.zoom = cam.zoom; } stats = st ?? newStats(w); paused = true; ui(); syncBattleAudio(); } }) : undefined;   // R074 繼續上一局（src/ui/saveGame.ts）：adopt＝把遊戲換成存檔裡的那一局，停在暫停（紀錄裡步數等於現在這一步的指令還沒進世界，重新排進去）。沒有開始選單（noR069）就沒有地方按「繼續上一局」，所以也不存
 if (V.r069) initStartMenu({ battle: () => phase === 'battle', aiOn: V.r018, ai: n => (aiLevel = n ?? aiLevel), paused: v => { if (v !== undefined) { paused = v; syncBattleAudio(); hud?.update(); } return paused; },
   state: () => ({ map: expanded ? 'town' : large ? 'large' : 'rye', mode: w.sandbox ? 'sandbox' : w.zombies ? 'zombies' : 'battle', rye: V.r026 }),

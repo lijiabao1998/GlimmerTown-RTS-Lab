@@ -1,5 +1,5 @@
-# 每次推送與 PR：Node 端守衛分四份並行（第 1 份另跑型別檢查）＋同時建置單檔、跑無頭 Chrome 煙霧測試（WebGL 走 SwiftShader）→ 樣張當附件。
-# smoke 是總閘（R039）：四份 unit 與 chrome 都綠它才綠；分支保護、gpt-merge、AGENTS.md 說的「smoke 與 gpt-lane 都要綠」照舊看它。
+# 每次推送與 PR：Node 端守衛分五份並行（第 1 份另跑型別檢查）＋同時建置單檔、跑無頭 Chrome 煙霧測試（WebGL 走 SwiftShader）→ 樣張當附件。
+# smoke 是總閘（R039）：五份 unit 與 chrome 都綠它才綠；分支保護、gpt-merge、AGENTS.md 說的「smoke 與 gpt-lane 都要綠」照舊看它。
 # gpt/* 分支另跑 GPT 車道守衛（用 main 上的那一份）。main 綠燈之後把 dist/index.html 發到 GitHub Pages。
 name: ci
 
@@ -40,14 +40,15 @@ jobs:
           if [ -n "$files" ] && ! echo "$files" | grep -Ev '^(docs/.*\.md|LOG\.md)$' > /dev/null; then echo "docs_only=true" >> "$GITHUB_OUTPUT"; else echo "docs_only=false" >> "$GITHUB_OUTPUT"; fi
 
   # R039：90 支守衛一支接一支跑已經 15 分鐘（上限 20），分四份並行；分法寫在 tools/unit.mjs（固定、跟機器無關）
+  # R090：240 支，第 3 份的守衛加起來 15 分鐘、再加準備的時間會碰到 20 分鐘上限 → 分五份（照 main 上一次每支的秒數算，最慢的一份約 11–12 分鐘）
   unit:
-    name: unit (${{ matrix.shard }}/4)
+    name: unit (${{ matrix.shard }}/5)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,7 +66,7 @@ jobs:
         run: npm run unit 2>&1 | tee unit-run.txt; exit ${PIPESTATUS[0]}
         shell: bash
         env:
-          UNIT_SHARD: ${{ matrix.shard }}/4
+          UNIT_SHARD: ${{ matrix.shard }}/5
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -110,14 +111,14 @@ jobs:
         with:
           path: dist
 
-  # 總閘：名字沿用 smoke（分支保護與合併條件看它）。四份 unit 與 chrome 都是 success 才綠；有一個紅、被跳過或取消就紅
+  # 總閘：名字沿用 smoke（分支保護與合併條件看它）。五份 unit 與 chrome 都是 success 才綠；有一個紅、被跳過或取消就紅
   smoke:
     if: ${{ !cancelled() }}
     needs: [changes, unit, chrome]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: unit 四份與 chrome 都要綠
+      - name: unit 五份與 chrome 都要綠
         env:
           UNIT: ${{ needs.unit.result }}
           CHROME: ${{ needs.chrome.result }}

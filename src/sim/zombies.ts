@@ -1,5 +1,6 @@
 // R045 可選波次防守。只有 World 有狀態，亂數只抽 World.rng；舊世界不走這裡。
 import { SUB, HALF, SIDE_PLAYER, SIDE_ENEMY, UK_ZOMBIE, UNIT_KINDS, BK_WIRE, ORD_IDLE, ORD_MOVE, cellOf, cellIdx, center, blocks, bldAt, wireBlocks, type World, type Unit, type Building } from './world.ts';
+import { MAP_HYTHE } from './hytheMap.ts';
 import { findPath } from './path.ts';
 import { randInt } from './rng.ts';
 import { dist } from './math.ts';
@@ -10,6 +11,7 @@ export interface ZombieAim { x: number; z: number; unit: Unit | null; bld: Build
 
 export function startZombies(w: World): void {
   if (w.tick !== 0 || w.zombies || w.sandbox || w.eco) return;
+  if (w.map === MAP_HYTHE) return;   // R090 海斯（地圖 5）沒有喪屍模式（跟丘陵一樣只在頁面上藏，這裡連指令也不收）
   // id 是 units[id-1] 的穩定位址（萊伊的兩方 id 交錯），不能壓縮或重用。
   // 敵方起手從對局移除，留下不渲染、不當目標的空槽，玩家 id 與後續生產都維持正確。
   for (const u of w.units) if (u.side === SIDE_ENEMY) { u.alive = false; u.hp = 0; u.path = []; u.pathIdx = 0; u.order = ORD_IDLE; }

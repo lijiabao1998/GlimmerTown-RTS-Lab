@@ -1,6 +1,6 @@
 // R097 守衛：findPath 的暫存跟著模組走（陣列與堆重用、取餘換除法、每格的啟發值與速度只算一次）——結果要跟改之前逐位一樣，暖過之後不再配陣列。
 // 參考答案：main 74fa704 的 src/sim/path.ts 原文（型別剝掉、原樣貼在下面），跟現在的 findPath 對同一批問題逐一比。
-// 分群：identity（≥ 3,000 題）、odd（負的速度、不是整數的座標）、throw（搜到一半拋錯之後）、alloc（數 typed array 的建構子）、duel（兩場凍結的對打）、wiring（守衛釘住的行還在、行數）。
+// 分群：identity（≥ 3,000 題）、odd（負的速度、不是整數的座標）、throw（搜到一半拋錯之後）、hythe（R090：地圖 5 的搜尋夾在中間）、alloc（數 typed array 的建構子）、duel（兩場凍結的對打）、wiring（守衛釘住的行還在、行數）。
 // node tests/path-scratch.mjs <群> 只跑一群。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -210,6 +210,37 @@ run('throw', () => {
   }
   assert(thrown >= 200, `throw: coverage (${thrown} of 400 searches threw halfway)`);
   console.log(`  ${thrown} of 400 searches threw halfway; every next search identical`);
+});
+
+run('hythe', () => {
+  // R090：地圖 5 的規則（多估的啟發、換終點）是每次呼叫從 w.map 算的；它的搜尋夾在地圖 0–4 中間時，0–4 的結果照樣＝74fa704，
+  // 地圖 5 同一題緊接在 0–4 之後、緊接在地圖 5 之後各問一次要一樣；地圖 5 搜到一半拋錯，下一題（0–4）也要一樣
+  const m3 = make(3, 2, 1), h5 = (() => { const w = createWorld(5); step(w, [{ t: 'map', id: 5, vegetation: 1, sym: 1 }, { ...ECO, end: 1, mg: 2, pla: 1 }]); step(w, []); dress(w); return w; })();
+  assert.equal(h5.map, 5, 'hythe: the map-5 world is map 5');
+  const worlds = [m3, make(0, 3, 0), tile(m3, 128), make(2, 4, 1), make(3, 5, 0), make(1, 6, 1), make(2, 7, 0), make(4, 8, 0), make(0, 9, 1), make(4, 10, 1)];
+  let total = 0, m5 = 0, thrown = 0;
+  for (let q = 0; q < 3200; q++) {
+    const wi = Math.floor(q / 4) % (worlds.length + 1), w = wi === worlds.length ? h5 : worlds[wi];
+    if (q % 7 === 6) poke(w);
+    const a = query(w, q);
+    if (w === h5) {
+      const first = findPath(w, ...a), o = worlds[q % worlds.length], b = query(o, q + 1);
+      assert.deepEqual(findPath(o, ...b), refFindPath(o, ...b), `path: query ${q} (${tag(o)}: ${b.join(',')}) identical to the 74fa704 A* right after a map-5 search`);
+      assert.deepEqual(findPath(w, ...a), first, `hythe: map-5 query ${q} (${a.join(',')}) gives the same path again right after a map 0–4 search`);
+      m5++;
+    } else assert.deepEqual(findPath(w, ...a), refFindPath(w, ...a), `path: query ${q} (${tag(w)}: ${a.join(',')}) identical to the 74fa704 A* with map-5 searches in between`);
+    total++;
+    if (q % 4 === 3) {   // 800 次；讀到第 1–300 次鐵絲網就拋，約八成搜到一半拋錯（卡面驗收 2：≥ 200）
+      const bad = { ...h5 }, limit = 1 + rnd(300); let reads = 0;
+      Object.defineProperty(bad, 'wires', { get() { if (++reads > limit) throw new Error('boom'); return h5.wires; } });
+      const a5 = query(h5, q); a5[6] = UK_INFANTRY;
+      try { findPath(bad, ...a5); } catch (e) { if (e.message !== 'boom') throw e; thrown++; }
+      const o = worlds[(q * 3) % worlds.length], b = query(o, q + 3);
+      assert.deepEqual(findPath(o, ...b), refFindPath(o, ...b), `hythe: after a map-5 search threw, query ${q} (${tag(o)}: ${b.join(',')}) is identical to the 74fa704 A*`);
+    }
+  }
+  assert(total >= 3000 && m5 >= 250 && thrown >= 200, `hythe: coverage (${total} queries, ${m5} on map 5, ${thrown} map-5 searches threw halfway)`);
+  console.log(`  ${total} queries (${m5} on map 5, ${thrown} map-5 searches threw); maps 0–4 identical to 74fa704 throughout`);
 });
 
 run('alloc', () => {

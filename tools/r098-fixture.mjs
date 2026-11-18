@@ -1,4 +1,4 @@
-// R098 瀏覽器守衛與量測共用的夾具（只在測試的建置裡）：tests/ground98-browser.mjs、tools/r098-time.mjs。
+// R098 瀏覽器守衛與量測共用的夾具（只在測試的建置裡）：tests/ground98-browser.mjs、tools/r098-time.mjs、tools/r090-time.mjs（R090 加 rebuild、mini）。
 // 夾具接在 main.ts 後面（拿得到 w、view、renderer、style、planner），露出：
 //   check()：把顯示卡上的地面貼圖讀回來，跟同一份 groundPx 另外整張上傳的一張貼圖（用同一條路讀回）逐位比，順便收 gl.getError()；
 //   town128()／deploy128()：開戰後／布陣時把世界換成鋪滿 128 格的河鎮（tools/tile128.mjs 的同一套規則）；
@@ -45,6 +45,9 @@ window.__r098 = (() => {
     },
     town128: () => { paused = true; w = tile128(w); view.setWorld(w, -1); return { n: w.n, blds: w.blds.length }; },
     deploy128: () => { paused = true; w = tile128(w); planner.refreshPreview(); return { n: w.n, blds: w.blds.length }; },
+    // R090（tools/r090-time.mjs）：建好畫面（makeView 加開局第一次 refreshPreview）、小地圖重畫（dirty 再 frame），各回毫秒
+    rebuild: () => { const t0 = performance.now(); makeView(); planner.refreshPreview(); const ms = performance.now() - t0; frame(); return ms; },
+    mini: () => { if (!minimap) return -1; minimap.dirty(); const t0 = performance.now(); minimap.frame(performance.now() + 1e6); return performance.now() - t0; },
     // 量測（tools/r098-time.mjs）：閥在同一頁裡輪流開關（setView98），一次量一幀，交錯取中位數，機器負載飄動時兩邊受的影響一樣
     valve: on => { setView98(on); return on; },
     once: kind => {

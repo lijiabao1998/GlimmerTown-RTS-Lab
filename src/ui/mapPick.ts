@@ -3,8 +3,9 @@ import { MAP_RYE } from '../sim/maps.ts';
 import { MAP_LARGE } from '../sim/largeMap.ts';
 import { MAP_TOWN } from '../sim/expandedMap.ts';
 import { MAP_HILLS } from '../sim/hillMap.ts';
+import { MAP_HYTHE } from '../sim/hytheMap.ts';
 // R043 地圖鍵：布陣時在左上（「沙盒模式」旁邊）切換萊伊 32×32 與鄉間 64×64。只顯示狀態、只呼叫傳進來的動作，不碰世界。
-interface MapPickState { show: boolean; large: boolean; rye: boolean; expanded?: boolean; hills?: boolean }   // hills（R055）：32×32 那一格現在是丘陵
+interface MapPickState { show: boolean; large: boolean; rye: boolean; expanded?: boolean; hills?: boolean; hythe?: boolean }   // hills（R055）：32×32 那一格現在是丘陵
 export interface MapPick { update: () => void }
 
 const label = (id: number): string => MAP_ENTRIES.find(m => m.id === id)!.label;
@@ -16,7 +17,7 @@ export function initMapPick(a: { state: () => MapPickState; toggle: () => void }
   btn.addEventListener('click', e => { e.stopPropagation(); a.toggle(); update(); });
   document.body.appendChild(btn);
   function update() {
-    const s = a.state(), text = s.expanded ? label(MAP_TOWN) : s.large ? MAP_LABEL.large : s.hills ? label(MAP_HILLS) : s.rye ? MAP_LABEL.rye : MAP_LABEL.village;
+    const s = a.state(), text = s.expanded ? label(MAP_TOWN) : s.large ? MAP_LABEL.large : s.hythe ? label(MAP_HYTHE) : s.hills ? label(MAP_HILLS) : s.rye ? MAP_LABEL.rye : MAP_LABEL.village;
     btn.title = `在${s.rye ? '萊伊' : '村莊'}（32×32）與英格蘭東南鄉間大地圖（64×64）之間切換；換了回到布陣第 0 步`;
     if (btn.hidden !== !s.show) btn.hidden = !s.show;
     if (btn.textContent !== text) btn.textContent = text;

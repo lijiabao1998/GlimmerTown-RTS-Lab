@@ -86,6 +86,8 @@ export async function withBrowser(opt, fn) {
       // GT_REAL_GPU=1（R079，只給本機用；CI 沒有顯示卡）：用這台機器的真顯示卡跑守衛，驗軟體繪圖走不到的那一半（例如多重取樣真的開了沒有）
       ...(opt.gl === false ? ['--disable-gpu'] : process.env.GT_REAL_GPU === '1' ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']),
       '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--mute-audio',
+      // R090：Windows 本機不開真的音效裝置——這台筆電的 Intel SoundWire 驅動在一次開好幾個測試瀏覽器時會藍屏（2026-11-17 兩次、11-18 跑兩個 Chrome 的連線守衛時一次）；CI 是 Linux，不變
+      ...(process.platform === 'win32' ? ['--disable-audio-output'] : []),
       ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
       'about:blank',
     ], { stdio: ['ignore', 'ignore', 'pipe'] });

@@ -13,7 +13,7 @@ import { applyTrench, trenchCover, type TrenchCmd } from './trenches.ts';
 import { applyBuild, type BuildCmd } from './build.ts';
 import { aiThink, setAi, AI_THINK } from './ai.ts';
 import { aiThink2, memoSpotted } from './ai2.ts';
-import { applyMap, MAP_HILLS, applyMoreHouses } from './maps.ts';
+import { applyMap, MAP_HILLS, MAP_HYTHE, applyMoreHouses } from './maps.ts';
 import { applyRules, type RulesCmd } from './rules.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
@@ -507,6 +507,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
     if (!w.sandbox.running) return; // 不碰移動／裝填／砲彈／煙幕／聲測或戰鬥 tick。
   } else {
   { const m = cmds.find(c => c.t === 'map'); if (m?.t === 'map' && m.id === MAP_HILLS) applyMap(w, MAP_HILLS, m.vegetation); }   // R055 丘陵：植被旗標照收；同一步只看第一個 map 指令（跟舊地圖一樣先到先套）。下一行的舊條件原樣不動（有守衛錨著它）；丘陵套好之後下一行再套一次不會動它
+  for (const c of cmds) if (c.t === 'map') { if (c.id === MAP_HYTHE) applyMap(w, MAP_HYTHE, c.vegetation); break; }   // R090 海斯：同一步只看第一個 map 指令、植被旗標照收（下一行有守衛錨著，不動）
   for (const c of cmds) if (c.t === 'map') applyMap(w, c.id | 0, c.id === 0 || c.id === 1 || c.id === 2 || c.id === 3 ? c.vegetation : undefined);   // 地圖最先套；R130 id 3 也保留明確的植被旗標。
   for (const c of cmds) if (c.t === 'map') { if (c.more === 1 && w.tick === 0) applyMoreHouses(w); break; }   // R087 更多房屋：只在第 0 步、只看第一個 map 指令；套完地圖之後、sym 之前（頁面開局也是套地圖、多放房子，第 0 步才折 sym：世界的欄位順序一樣）
   for (const c of cmds) if (c.t === 'map') { if (c.sym === 1 && w.tick === 0) w.sym = 1; break; }   // R084 左右對稱：只在第 0 步、只看第一個 map 指令；要在 eco 之前（指揮部、出生格照它）、地圖之後（世界的欄位順序跟頁面上一樣：頁面開局先套地圖，第 0 步才折 sym）

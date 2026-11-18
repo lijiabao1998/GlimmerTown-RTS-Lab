@@ -38,7 +38,7 @@ const script = arg('run', null) ? fs.readFileSync(arg('run'), 'utf8') : 'return 
 const chromePath = CANDIDATES.find(p => fs.existsSync(p));
 if (!chromePath) { console.error('找不到 Chrome，可設 CHROME_PATH'); process.exit(1); }
 const devPort = 9800 + (process.pid % 150), profile = fs.mkdtempSync(path.join(os.tmpdir(), 'gtrts-live-'));
-const chrome = spawn(chromePath, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--mute-audio', `--window-size=${W},${H}`,
+const chrome = spawn(chromePath, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--mute-audio', ...(process.platform === 'win32' ? ['--disable-audio-output'] : []), `--window-size=${W},${H}`,
   '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', `--user-data-dir=${profile}`, `--remote-debugging-port=${devPort}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
 chrome.stderr.on('data', () => {});
 let page = null;

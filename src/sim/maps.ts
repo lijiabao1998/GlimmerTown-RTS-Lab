@@ -13,6 +13,8 @@ import { applyLarge, MAP_LARGE } from './largeMap.ts';
 import { applyExpandedTown, MAP_TOWN } from './expandedMap.ts';
 import { MAP_HILLS, applyHills } from './hillMap.ts';
 export { MAP_HILLS } from './hillMap.ts';
+import { MAP_HYTHE, applyHythe } from './hytheMap.ts';
+export { MAP_HYTHE } from './hytheMap.ts';
 export { applyMoreHouses } from './moreHouses.ts';   // R087 更多房屋（main.ts 開局也從這裡拿）
 
 export const MAP_RYE = 1;
@@ -23,6 +25,7 @@ const RYE_N = 32;   // Rye 資料表的邊長
 // R043：id 2＝64×64 鄉間大地圖（largeMap.ts），整個世界換成新的大小、建築與兵力；只能從新開的世界套一次。
 export function applyMap(w: World, id: number, vegetation?: number): void {
   if (id === MAP_HILLS) { applyHills(w, vegetation); return; }   // R055 丘陵（有高度的地圖）
+  if (id === MAP_HYTHE) { applyHythe(w, vegetation); return; }   // R090 海斯與皇家軍事運河（128×128）
   if (id === MAP_TOWN) { applyExpandedTown(w, vegetation); return; }
   if (id === MAP_LARGE) { applyLarge(w, vegetation); return; }
   if (w.tick !== 0 || (id !== 0 && id !== MAP_RYE) || (id === MAP_RYE && w.n !== RYE_N)) return;
