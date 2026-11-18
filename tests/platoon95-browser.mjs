@@ -45,6 +45,9 @@ await runOrSkip('platoon95', async () => {
       const pl = (await E('__rts.units()')).filter(u => u.alive && u.side === 0 && u.kind === 3 && u.id > before);
       assert.equal(pl.length, 3, `touch: the platoon arrives as three sections (${pl.length})`);
       await E(`__rts.select([${pl[0].id}])`); await frames();
+      const clash = await E("(() => { const me = document.getElementById('b-platoon').getBoundingClientRect(); return [...document.querySelectorAll('button, select, #minimap')].filter(e => e.id !== 'b-platoon' && !e.closest('#platoon95') && e.offsetParent && !e.hidden).map(e => [e.id || e.textContent.slice(0, 6), e.getBoundingClientRect()]).filter(([, r]) => r.width && me.left < r.right - 0.5 && r.left < me.right - 0.5 && me.top < r.bottom - 0.5 && r.top < me.bottom - 0.5).map(([n]) => n); })()");
+      const sz = await E("(() => { const r = document.getElementById('b-platoon').getBoundingClientRect(); return [r.width, r.height]; })()");
+      assert(clash.length === 0 && sz[0] >= 44 && sz[1] >= 44, `touch: the 全排 button is at least 44 px and covers no other control (${JSON.stringify(sz)}; ${clash})`);
       await tap('b-platoon');
       assert.deepEqual((await E('__rts.selected()')).sort((a, b) => a - b), pl.map(u => u.id).sort((a, b) => a - b), 'touch: 全排 selects the three sections of the platoon');
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
