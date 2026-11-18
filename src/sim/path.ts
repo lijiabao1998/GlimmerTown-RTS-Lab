@@ -1,5 +1,6 @@
 // 格子 A*：八方向、不准切過擋路格的角；成本全是整數，平手時照格索引排，結果決定性。
 import { cellIdx, inGrid, blocks, wireBlocks, UK_TANK, speedPct, type World } from './world.ts';
+import { rule90, snap90, hb90, HA90, HD90 } from './pathRule90.ts';   // R090：地圖 5 的規則（多估的啟發、換終點）
 
 const DX = [1, -1, 0, 0, 1, 1, -1, -1];
 const DZ = [0, 0, 1, -1, 1, -1, 1, -1];
@@ -8,9 +9,9 @@ const DZ = [0, 0, 1, -1, 1, -1, 1, -1];
 function stepCost(p: number, diag: boolean): number {
   return Math.floor(((diag ? 14 : 10) * 100) / p);
 }
-function heur(x: number, z: number, gx: number, gz: number): number {
+function heur(x: number, z: number, gx: number, gz: number, a: number, d: number): number {   // 地圖 0–4：a＝10、d＝−6（直走 10、斜走 14）
   const dx = Math.abs(x - gx), dz = Math.abs(z - gz);
-  return 10 * (dx + dz) - 6 * Math.min(dx, dz);
+  return a * (dx + dz) + d * Math.min(dx, dz);
 }
 
 // 最小堆：鍵＝f*M+次序（見 findPath），同 f 時次序小的先出。R097：存在 Float64Array 裡、不夠大才加倍（跟著模組重用）；比較與搬動一步不差
@@ -48,7 +49,7 @@ const open = new Heap();
 // 回傳從起點下一格到終點的格索引；終點走不到時，走到離終點最近（啟發值最小）的可達格。
 export function findPath(w: World, sx: number, sz: number, gx: number, gz: number, enterBuilding = 0, exitBuilding = 0, unitKind = UK_TANK): number[] {
   if (!inGrid(w, sx, sz) || !inGrid(w, gx, gz)) return [];
-  const start = cellIdx(w, sx, sz), goal = cellIdx(w, gx, gz);
+  const start = cellIdx(w, sx, sz); let goal = cellIdx(w, gx, gz);
   if (start === goal) return [];
   const n = w.n, K = n * n;
   if (K !== K0) { K0 = K; memo = new Uint8Array(K); spd = new Int32Array(K); g = new Int32Array(K); came = new Int32Array(K); done = new Uint8Array(K); }
@@ -60,14 +61,15 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
     if (!memo[i]) memo[i] = wireBlocks(w, x, z, unitKind) || (blocks(w, x, z) && w.occ[i] !== enterBuilding && w.occ[i] !== exitBuilding) ? 2 : 1;
     return memo[i] === 2;
   };
+  const m5 = rule90(w), ha = m5 ? HA90 : 10, hd = m5 ? HD90 : -6; if (m5 && blocked(gx, gz)) { const s = snap90(w, blocked, sx, sz, gx, gz); if (s >= 0) { goal = s; gx = s % n; gz = (s - gx) / n; if (goal === start) return []; } }
   // R084 左右對稱：堆的鍵＝f×M＋次序。原本次序＝格索引（平手時偏向小編號那一邊）；有 sym 時次序看「這一格與它的點鏡像那一格」這一對（小的那個索引×2），
   // 同一對裡的先後看終點在哪一半（fl）——終點跟它的鏡像一定在不同的兩半，所以鏡像的問題每一個鍵都跟原本那一格的一樣、每一個平手做的是鏡像的選擇。
   // f 平手時先比離終點的估計（h 小的先）：對稱不靠它（審查之後），留著是因為同樣 f 時先展開離終點近的格、搜得少
-  const HB = 14 * n + 1, key = (f: number, h: number, i: number) => (w.sym ? (f * HB + h) * M + enc(i) : f * M + enc(i)), fl = goal > K - 1 - goal ? 1 : 0;
+  const HB = m5 ? hb90(n) : 14 * n + 1, key = (f: number, h: number, i: number) => (w.sym ? (f * HB + h) * M + enc(i) : f * M + enc(i)), fl = goal > K - 1 - goal ? 1 : 0;
   const M = w.sym ? 2 * K : K, enc = (i: number) => (w.sym ? 2 * Math.min(i, K - 1 - i) + ((i > K - 1 - i ? 1 : 0) ^ fl) : i), dec = (e: number) => (w.sym ? ((e & 1) ^ fl ? K - 1 - (e >> 1) : e >> 1) : e);
   g[start] = 0;
-  open.push(key(heur(sx, sz, gx, gz), heur(sx, sz, gx, gz), start));
-  let best = start, bestH = heur(sx, sz, gx, gz);
+  open.push(key(heur(sx, sz, gx, gz, ha, hd), heur(sx, sz, gx, gz, ha, hd), start));
+  let best = start, bestH = heur(sx, sz, gx, gz, ha, hd);
   while (open.size) {
     // R097：鍵超過 2^31 時 v % M 走浮點取餘（慢）。鍵是 (0, 2^53) 的數時改成除法取商、再把可能差一的餘數修回 [0, M)——跟 % 一樣（都是精確的）；
     // 其他的鍵（負的：彈坑深到速度變負數；0、NaN；2^53 以上）照舊用 %，審查之後
@@ -77,7 +79,7 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
     if (done[cur]) continue;
     done[cur] = 1;
     const cx = cur % n, cz = (cur - cx) / n;
-    const h = heur(cx, cz, gx, gz);
+    const h = heur(cx, cz, gx, gz, ha, hd);
     if (h < bestH || (h === bestH && g[cur] < g[best])) { best = cur; bestH = h; }
     if (cur === goal) break;
     for (let k = 0; k < 8; k++) {
@@ -88,7 +90,7 @@ export function findPath(w: World, sx: number, sz: number, gx: number, gz: numbe
       const ni = nz * n + nx, ng = g[cur] + stepCost(spd[ni] || (spd[ni] = speedPct(w, nx, nz)), diag);
       if (done[ni] || (g[ni] >= 0 && g[ni] <= ng)) continue;
       g[ni] = ng; came[ni] = cur;
-      const hn = heur(nx, nz, gx, gz);
+      const hn = heur(nx, nz, gx, gz, ha, hd);
       open.push(key(ng + hn, hn, ni));
     }
   }

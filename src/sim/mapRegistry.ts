@@ -7,6 +7,7 @@ import { MAP_RYE } from './maps.ts';
 import { MAP_LARGE, LARGE_N } from './largeMap.ts';
 import { MAP_TOWN, TOWN_N } from './expandedMap.ts';
 import { MAP_HILLS, HILLS_N } from './hillMap.ts';
+import { MAP_HYTHE, HYTHE_N } from './hytheMap.ts';
 
 export interface MapEntry {
   id: number;
@@ -19,6 +20,7 @@ export const MAP_ENTRIES: readonly MapEntry[] = [
   { id: MAP_LARGE, n: LARGE_N, label: '地圖：鄉間大圖' },
   { id: MAP_TOWN, n: TOWN_N, label: '地圖：大河鎮' },
   { id: MAP_HILLS, n: HILLS_N, label: '地圖：丘陵' },
+  { id: MAP_HYTHE, n: HYTHE_N, label: '地圖：海斯' },   // R090（128×128）
 ];
 
 export const mapEntry = (id: number): MapEntry | undefined => MAP_ENTRIES.find(m => m.id === id);

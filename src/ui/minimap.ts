@@ -4,6 +4,7 @@ import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連�
 import { drawCounterbattery } from './counterbattery.ts';
 import { VEG_HEDGE, VEG_WOOD, vegetationAt } from '../sim/vegetation.ts';
 import { TrenchRaster, TRENCH_E, TRENCH_S, TRENCH_W, TRENCH_N, TRENCH_MINI_COLORS } from '../render/trenches.ts';
+import { MiniRaster, useRaster } from './minimapRaster.ts';   // R090：n ≥ 128 一次畫成菱形
 
 // 菱形，方向跟主畫面一樣：主畫面的「右」＝世界 (+x,−z)、「上」＝世界 (−x,−z)。
 // 小地圖 px = w/2 + (x − z)·s、py = (x + z)·s/2，s = w/(2n)，n＝世界的地圖邊長 w.n；整張高 = w/2。
@@ -36,22 +37,32 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
   let baseDirty = true, last = -1, g = miniGeo(160), dpr = 1, gridN = 0;
   let baseWorld: World | undefined;
   let baseVegetation: World['vegetation'];
-  const trenchRaster = new TrenchRaster(a.trenches !== false);
+  const trenchRaster = new TrenchRaster(a.trenches !== false), raster = new MiniRaster();
   const counterbatteryPoint: [number, number] = [0, 0];
   const counterbatteryProject = (x: number, z: number) => toMini(g, x, z, counterbatteryPoint);
   const cell = (ctx: CanvasRenderingContext2D, x: number, z: number) => {   // 一格＝一個小菱形
     const [p0x, p0y] = toMini(g, x, z), [p1x, p1y] = toMini(g, x + 1, z), [p2x, p2y] = toMini(g, x + 1, z + 1), [p3x, p3y] = toMini(g, x, z + 1);
     ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.lineTo(p3x, p3y); ctx.closePath(); ctx.fill();
   };
+  const foliage128 = (ctx: CanvasRenderingContext2D, w: World, x: number, z: number) => {   // R090：點陣畫完地格之後再疊植被（同一套樣子）
+    const foliage = a.vegetation !== false ? vegetationAt(w, x, z) : 0;
+    if (w.occ[cellIdx(w, x, z)] || !foliage) return;
+    const [px, py] = toMini(g, x + 0.5, z + 0.5);
+    ctx.fillStyle = foliage === VEG_HEDGE ? '#c4cf80' : '#314b30';
+    if (foliage === VEG_HEDGE) ctx.fillRect(px - g.s * 0.42, py - 0.45, g.s * 0.84, 0.9);
+    else if (foliage === VEG_WOOD) { ctx.beginPath(); ctx.moveTo(px, py - 1.2); ctx.lineTo(px + 1.2, py); ctx.lineTo(px, py + 1.2); ctx.lineTo(px - 1.2, py); ctx.closePath(); ctx.fill(); }
+  };
   function paintBase(w: World) {
     trenchRaster.sync(w, true);
     const ctx = base.getContext('2d')!;
     base.width = Math.round(g.w * dpr); base.height = Math.round(g.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, g.w, g.h);
+    const big = useRaster(w.n); if (big) raster.begin(w.n);
     for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) {
       const i = cellIdx(w, x, z), t = w.ter[i], id = w.occ[i], b = id ? w.blds[id - 1] : null;
       ctx.fillStyle = b ? (stageOf(b) === STAGE_RUBBLE ? '#6f6559' : b.builtBy === SIDE_PLAYER ? '#a9c4e6' : '#cfc3a8')
         : w.crater[i] ? '#4a3f33' : t === TER_ROAD ? '#8f7f62' : t === TER_FIELD ? '#9a9450' : t === TER_MUD ? '#4d6470' : '#5b7a42';
+      if (big) { raster.put(i, ctx.fillStyle as string); continue; }
       cell(ctx, x, z);
       const foliage = a.vegetation !== false ? vegetationAt(w, x, z) : 0;
       if (!b && foliage) {
@@ -62,6 +73,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
         else if (foliage === VEG_WOOD) { ctx.beginPath(); ctx.moveTo(px, py - 1.2); ctx.lineTo(px + 1.2, py); ctx.lineTo(px, py + 1.2); ctx.lineTo(px - 1.2, py); ctx.closePath(); ctx.fill(); }
       }
     }
+    if (big) { raster.draw(ctx, g, dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) foliage128(ctx, w, x, z); }
     // 先畫完地格，再疊接線；跨格的線不會被下一格底色蓋住。
     for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) {
       const i = cellIdx(w, x, z), kind = trenchRaster.kinds[i] - 1;

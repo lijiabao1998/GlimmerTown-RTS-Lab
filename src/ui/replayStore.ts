@@ -77,7 +77,7 @@ export function addReplay(store: Store | null, rec: ReplayRecord): ReplayRecord[
 
 export const browserStore = (): Store | null => { try { return localStorage; } catch { return null; } };
 
-const MAP_NAME: Record<number, string> = { 0: '村莊', 1: '萊伊', 2: '鄉間', 3: '河鎮', 4: '丘陵' };   // 4：R055
+const MAP_NAME: Record<number, string> = { 0: '村莊', 1: '萊伊', 2: '鄉間', 3: '河鎮', 4: '丘陵', 5: '海斯' };   // 4：R055；5：R090
 const clock = (seconds: number): string => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 // 存檔時間存的是世界協調時間（ISO 字串）；列表上換成這台機器的當地時間。讀不懂就不顯示
 function when(at: string): string {

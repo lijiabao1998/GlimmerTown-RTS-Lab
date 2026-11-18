@@ -185,8 +185,8 @@ group('old-maps', () => {
     for (let i = 0; i < 599; i++) step(w, []);
     assert.equal(hashWorld(w), h600, `舊地圖 ${key}：第 600 步雜湊不變`);
   }
-  const w = createWorld(1944); step(w, [{ t: 'map', id: 5 }]);   // R055 之後 4 是丘陵，不認得的換成 5
-  assert.equal(hashWorld(w), '7c7c811f', '不認得的 id 5：世界照舊');
+  const w = createWorld(1944); step(w, [{ t: 'map', id: 6 }]);   // R055 之後 4 是丘陵、R090 之後 5 是海斯，不認得的換成 6
+  assert.equal(hashWorld(w), '7c7c811f', '不認得的 id 6：世界照舊');
 });
 
 group('text', () => {
