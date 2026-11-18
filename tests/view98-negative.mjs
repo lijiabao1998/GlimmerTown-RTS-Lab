@@ -24,6 +24,8 @@ const cases = [
   ['first_partial', GU, [['    this.lo = new Int32Array(n); this.hi = new Int32Array(n).fill(-1); this.rows = [];\n    this.stage = new THREE.DataTexture(groundPx, n * px, n * px);\n    this.fullPending = true;', '    this.lo = new Int32Array(n); this.hi = new Int32Array(n).fill(-1); this.rows = [];\n    this.stage = new THREE.DataTexture(groundPx, n * px, n * px);\n    this.fullPending = false;']], 'ground98', 'rules', /^rules: a new texture starts with a full upload$/],
   // 建構時忘了整張（新的 DataTexture 的 version 是 0：three 一次都不傳，地面是空的；審查之後影子貼圖照 three 的規則）
   ['no_initial_full', BV, [['    this.up98.full(this.groundTex);\n    this.scene.add(ground);', '\n    this.scene.add(ground);']], 'ground98', 'shadow', /^shadow: after map 0 opening the texture on the GPU equals groundPx$/],
+  // 鍵用現在的耐久、不用網格建的時候的（模擬扣了耐久、網格還沒重建的空檔裡記下的舊高度就留著；CI 的 section89 抓到的）
+  ['roof_live_hp', V8, [['`${id}.${snap.hp[id - 1]}', '`${id}.${w.blds[id - 1].hp}']], 'roof98', 'same', /^same: map \d+ seed \d+ modules \w+ event \d+ .+ equals a fresh ray on the whole town/],
   // 屋頂的鍵只看腳下那一棟（鄰居、鐵絲網伸過來的幾何就留著舊的；審查之後）
   ['roof_own_only', V8, [['  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {\n    const cx = x + dx', '  for (let dz = 0; dz <= 0; dz++) for (let dx = 0; dx <= 0; dx++) {\n    const cx = x + dx']], 'roof98', 'neighbour', /^neighbour: after the church next door changes stage/],
   ['no_mark', BV, [['dep = w.crater[i]; this.up98.mark(x, z);', 'dep = w.crater[i];']], 'ground98', 'shadow', /^shadow: after .+ the texture on the GPU equals groundPx$/],

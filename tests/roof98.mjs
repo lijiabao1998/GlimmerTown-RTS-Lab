@@ -62,7 +62,13 @@ function events(w, v, garr, n, check) {
     const kind = rnd(10), live = w.blds.filter(b => b.hp > 0 && b.kind !== W.BK_HQ);
     let ev = [];
     if (kind < 5) { const b = live[rnd(live.length)]; b.hp = Math.max(1, Math.floor(b.hp * (0.3 + rnd(60) / 100))); ev = [{ e: 'stage', bld: b.id }]; }
-    else if (kind < 7) { const occupied = garr.map(u => home(w, u)).filter(b => b && b.hp > 0); const b = occupied.length ? occupied[rnd(occupied.length)] : live[0]; b.hp = Math.max(1, b.hp - Math.ceil(b.maxHp / 9)); ev = [{ e: 'stage', bld: b.id }]; }
+    else if (kind < 7) {
+      // 有人的那一棟：模擬先扣耐久、網格要等之後的換段事件才重建（CI 的 section89 抓到的空檔）——中間先讓快取記一次，再送事件
+      const occupied = garr.map(u => home(w, u)).filter(b => b && b.hp > 0); const b = occupied.length ? occupied[rnd(occupied.length)] : live[0];
+      b.hp = Math.max(1, b.hp - Math.ceil(b.maxHp / 9));
+      if (r % 2) { v.update(0, simT, new Set()); for (const u of garr) v.unitHeight(u); }
+      ev = [{ e: 'stage', bld: b.id }];
+    }
     else if (kind === 7) { const b = live[rnd(live.length)]; b.hp = 0; ev = [{ e: 'stage', bld: b.id }]; }
     else if (kind === 9 && r % 2) {   // 鄰居：某個進駐單位四周 3×3 格裡別的房子換段（或塌），或附近的鐵絲網被剪斷／修好
       const u = garr[rnd(garr.length)], cx = Math.floor(u.x / W.SUB), cz = Math.floor(u.z / W.SUB), mine = home(w, u), near = [];
