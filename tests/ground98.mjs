@@ -21,24 +21,30 @@ function world(map, seed) {
 }
 // 影子貼圖：照 three 的規則「畫」一幀
 function gpu(v) {
+  // three r186 的規則（WebGLTextures.js 的 setTexture2D）：version > 0 而且跟上次傳的不同才整張傳；新的 DataTexture 的 version 是 0，
+  // 沒有人設 needsUpdate 就一次都不傳（貼圖是空的）——審查 R098 時指出：模型不能替程式假設「新貼圖一定會整張傳」
   const s = { px: null, ver: -1, tex: null, rects: 0, fulls: 0, max: 0 };
-  const full = tex => { s.px = Uint8Array.from(v.groundPx); s.ver = tex.version; s.tex = tex; s.fulls++; };
-  const stale = tex => tex !== s.tex || tex.version !== s.ver;   // 新的貼圖物件第一次用一定整張；同一張 version 變了也整張
+  const full = tex => { s.px = Uint8Array.from(v.groundPx); s.ver = tex.version; s.fulls++; };
+  const prep = tex => {
+    if (tex !== s.tex) { s.tex = tex; s.ver = -1; s.px = new Uint8Array(v.groundPx.length); }   // 新的貼圖：顯示卡上還是空的
+    if (tex.version > 0 && tex.version !== s.ver) full(tex);
+  };
   const fake = { copyTextureToTexture(src, dst, box, at) {
     // 用 assert(a === b)：assert.equal 比大陣列失敗時 Node 會去算兩邊的差異，算不完（審查 R098 時卡過）
     assert(dst === v.groundTex, 'shadow: the upload goes to the ground texture in use');
     assert(src.image.data === v.groundPx, 'shadow: the staging texture reads the current groundPx (after a size change too)');
     const Wd = v.groundTex.image.width, x0 = box.min.x, y0 = box.min.y, x1 = box.max.x, y1 = box.max.y;
     assert(x0 >= 0 && y0 >= 0 && x1 <= Wd && y1 <= Wd && x0 < x1 && at.x === x0 && at.y === y0, `shadow: rectangle ${x0},${y0}-${x1},${y1} lies inside the ${Wd}-pixel texture at its own position`);
-    assert.equal(y1 - y0, PX, `shadow: each rectangle is exactly one cell row (${PX} pixels) high`);
-    assert.equal(y0 % PX, 0, 'shadow: each rectangle starts on a cell row');
-    if (stale(dst)) full(dst);   // setTexture2D(dst) 先整張
+    assert((y1 - y0) % PX === 0 && y0 % PX === 0 && x0 % PX === 0 && x1 % PX === 0, `shadow: rectangle ${x0},${y0}-${x1},${y1} covers whole cells`);
+    s.max = Math.max(s.max, (y1 - y0) / PX);
+    prep(dst);   // setTexture2D(dst)：version 變了先整張
+    assert(dst.version > 0, 'shadow: rows are only copied into a texture that was uploaded once (a never-uploaded texture has no storage)');
     for (let y = y0; y < y1; y++) s.px.set(src.image.data.subarray((y * Wd + x0) * 4, (y * Wd + x1) * 4), (y * Wd + x0) * 4);
     s.rects++;
   } };
   s.frame = (why) => {
     v['up98'].flush(fake, v.groundTex);
-    if (stale(v.groundTex)) full(v.groundTex);   // 畫的時候整張
+    prep(v.groundTex);   // 畫的時候：version 變了整張
     const a = s.px, b = v.groundPx;
     assert(a.length === b.length && Buffer.compare(Buffer.from(a.buffer, a.byteOffset, a.length), Buffer.from(b.buffer, b.byteOffset, b.length)) === 0, `shadow: after ${why} the texture on the GPU equals groundPx`);
   };
@@ -55,6 +61,7 @@ function play(w, v, s, ticks, tag) {
 run('shadow', () => {
   setView98(true);
   let rects = 0, fulls = 0, frames = 0;
+  let tallest = 0;
   for (const map of [0, 1, 2, 3, 4, 128]) {
     const w = world(map, 1944 + map), v = new BattleView(w, { fog: false, fx: true, r016: true }), s = gpu(v);
     s.frame(`map ${map} opening`);
@@ -73,11 +80,12 @@ run('shadow', () => {
     play(other, v, s, 60, `map ${map} → other`);
     for (let k = 0; k < 4; k++) { const b = other.blds[(k * 5) % other.blds.length]; b.hp = Math.max(0, b.hp - Math.ceil(b.maxHp / 3)); v.onEvents([{ e: 'stage', bld: b.id }], 60 + k); v.update(0, 60 + k, new Set()); s.frame(`map ${map} → other, shell ${k}`); }
     v.setWorld(w, -1); s.frame(`back to map ${map}`);
-    rects += s.rects; fulls += s.fulls; frames += 1;
+    rects += s.rects; fulls += s.fulls; frames += 1; tallest = Math.max(tallest, s.max);
     v.dispose?.();
   }
-  assert(rects >= 2000 && fulls >= 6 * 4, `shadow: coverage (${rects} rectangles uploaded, ${fulls} full uploads)`);
-  console.log(`  ${rects} row rectangles and ${fulls} full uploads; the shadow GPU texture equals groundPx after every frame`);
+  assert(rects >= 1000 && fulls >= 6 * 4, `shadow: coverage (${rects} rectangles uploaded, ${fulls} full uploads)`);
+  assert(tallest >= 2, `shadow: coverage (some rectangle spans ${tallest} merged rows)`);
+  console.log(`  ${rects} rectangles (up to ${tallest} merged rows) and ${fulls} full uploads; the shadow GPU texture equals groundPx after every frame`);
 });
 
 run('same', () => {
@@ -87,14 +95,14 @@ run('same', () => {
     for (const on of [true, false]) {
       setView98(on);
       const w = world(map, 77), v = new BattleView(w, { fog: false, fx: true, r016: true }), s = gpu(v), h = [];
-      for (let t = 0; t < 400; t++) { v.snapshot(); step(w, []); v.onEvents(w.events, w.tick / 20); v.update(0, w.tick / 20, new Set()); s.frame(`same map ${map} ${on}`); if (t % 40 === 39) h.push(Buffer.from(v.groundPx).toString('base64').length + ':' + W.hashWorld(w) + ':' + crc(v.groundPx)); }
+      for (let t = 0; t < 400; t++) { v.snapshot(); step(w, []); v.onEvents(w.events, w.tick / 20); v.update(0, w.tick / 20, new Set()); s.frame(`same map ${map} ${on}`); if (t % 40 === 39) h.push(W.hashWorld(w) + ':' + crc(v.groundPx)); }
       hashes.push(h); v.dispose?.();
     }
     assert.deepEqual(hashes[0], hashes[1], `same: map ${map} groundPx with and without ?noR098=1 is identical every 40 ticks`);
   }
   setView98(true);
 });
-function crc(a) { let h = 2166136261; for (let i = 0; i < a.length; i += 7) h = Math.imul(h ^ a[i], 16777619); return (h >>> 0).toString(16); }
+function crc(a) { let h = 2166136261, k = 0; for (let i = 0; i < a.length; i++) { h = Math.imul(h ^ a[i], 16777619); k = (k + a[i] * (i % 251 + 1)) >>> 0; } return (h >>> 0).toString(16) + '.' + k.toString(16); }   // 每一個位元組都算（審查之後）
 
 run('rules', () => {
   const u = new GroundUpload98(), tex = { needsUpdate: false, version: 0, set needs(v) {} };
@@ -106,6 +114,8 @@ run('rules', () => {
   u.flush(R, T); assert.equal(calls.length, 0, 'rules: the first upload of a new texture is a full one (no rows)');
   u.mark(3, 2); u.mark(5, 2); u.mark(4, 9); u.dirty(T); u.flush(R, T);
   assert.deepEqual(calls, [[3 * PX, 2 * PX, 6 * PX, 3 * PX], [4 * PX, 9 * PX, 5 * PX, 10 * PX]], 'rules: one rectangle per dirty cell row, spanning its dirtiest cells');
+  calls.length = 0; u.mark(7, 4); u.mark(2, 5); u.mark(5, 6); u.mark(9, 1); u.dirty(T); u.flush(R, T);
+  assert.deepEqual(calls, [[9 * PX, 1 * PX, 10 * PX, 2 * PX], [2 * PX, 4 * PX, 8 * PX, 7 * PX]], 'rules: neighbouring dirty rows merge into one rectangle spanning all their dirty cells');
   calls.length = 0; u.full(T); u.mark(1, 1); u.dirty(T); u.flush(R, T);
   assert.equal(calls.length, 0, 'rules: rows painted after a full request are not sent (the full upload covers them)');
   calls.length = 0; for (let z = 0; z < 5; z++) u.mark(0, z); const v0 = T.version; u.dirty(T); u.flush(R, T);

@@ -13,14 +13,19 @@ const BV = 'src/render/battle.ts', GU = 'src/render/groundUpload.ts', PD = 'src/
 const cases = [
   // 屋頂高度
   ['roof_key_ignored', BV, [[' && cached.key === key) return cached.height;', ') return cached.height;']], 'roof98', 'same', /^same: map \d+ seed \d+ modules \w+ event \d+ .+ equals a fresh ray on the whole town/],
-  ['roof_clear_all', BV, [['    if (townDirty) { if (!view98()) this.observerHeights.clear();', '    if (townDirty) { this.observerHeights.clear();']], 'roof98', 'rays', /^rays: map \d+: a stage change on an empty building re-rays nobody$/],
+  ['roof_clear_all', BV, [['    if (townDirty) { if (!view98()) this.observerHeights.clear();', '    if (townDirty) { this.observerHeights.clear();']], 'roof98', 'rays', /^rays: map \d+: a stage change on a building with nobody in or next to it re-rays nobody$/],
   ['roof_world_kept', BV, [['this.territory = territorySide; this.observerHeights.clear();', 'this.territory = territorySide;']], 'roof98', 'rays', /^rays: map \d+: a new world re-rays every garrisoned unit$/],
   // 地面上傳
-  ['rect_two_rows', GU, [['this.box.max.set((this.hi[z] + 1) * p, z * p + p);', 'this.box.max.set((this.hi[z] + 1) * p, Math.min(this.n * p, z * p + 2 * p));']], 'ground98', 'shadow', /^shadow: each rectangle is exactly one cell row \(8 pixels\) high$/],
+  // 併列時 x 只取第一列的範圍（後面幾列伸出去的格沒傳）
+  ['merge_narrow', GU, [['last[0] = Math.min(last[0], this.lo[z]); last[2] = Math.max(last[2], this.hi[z] + 1);', '']], 'ground98', 'rules', /^rules: neighbouring dirty rows merge into one rectangle spanning all their dirty cells$/],
   ['rows_after_full', GU, [['    if (this.fullPending) { this.fullPending = false; this.clear(); return; }', '    if (this.fullPending) { this.fullPending = false; }']], 'ground98', 'rules', /^rules: rows painted after a full request are not sent/],
   ['no_quarter_switch', GU, [['this.rows.length * 4 > this.n', 'false']], 'ground98', 'rules', /^rules: more than n\/4 dirty rows go up as one full upload$/],
   ['stale_staging', GU, [['    this.stage = new THREE.DataTexture(groundPx, n * px, n * px);', '    this.stage = this.stage ?? new THREE.DataTexture(groundPx, n * px, n * px);']], 'ground98', 'shadow', /^shadow: the staging texture reads the current groundPx/],
   ['first_partial', GU, [['    this.lo = new Int32Array(n); this.hi = new Int32Array(n).fill(-1); this.rows = [];\n    this.stage = new THREE.DataTexture(groundPx, n * px, n * px);\n    this.fullPending = true;', '    this.lo = new Int32Array(n); this.hi = new Int32Array(n).fill(-1); this.rows = [];\n    this.stage = new THREE.DataTexture(groundPx, n * px, n * px);\n    this.fullPending = false;']], 'ground98', 'rules', /^rules: a new texture starts with a full upload$/],
+  // 建構時忘了整張（新的 DataTexture 的 version 是 0：three 一次都不傳，地面是空的；審查之後影子貼圖照 three 的規則）
+  ['no_initial_full', BV, [['    this.up98.full(this.groundTex);\n    this.scene.add(ground);', '\n    this.scene.add(ground);']], 'ground98', 'shadow', /^shadow: after map 0 opening the texture on the GPU equals groundPx$/],
+  // 屋頂的鍵只看腳下那一棟（鄰居、鐵絲網伸過來的幾何就留著舊的；審查之後）
+  ['roof_own_only', V8, [['  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {\n    const cx = x + dx', '  for (let dz = 0; dz <= 0; dz++) for (let dx = 0; dx <= 0; dx++) {\n    const cx = x + dx']], 'roof98', 'neighbour', /^neighbour: after the church next door changes stage/],
   ['no_mark', BV, [['dep = w.crater[i]; this.up98.mark(x, z);', 'dep = w.crater[i];']], 'ground98', 'shadow', /^shadow: after .+ the texture on the GPU equals groundPx$/],
   // 布陣預覽
   ['no_ring', PD, [['for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {', 'for (let dz = 0; dz <= 0; dz++) for (let dx = 0; dx <= 0; dx++) {']], 'preview98', '', /^preview: map \d+ after .+ the preview ground equals a full repaint, byte for byte$/],

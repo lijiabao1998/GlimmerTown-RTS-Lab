@@ -19,7 +19,7 @@ import { SmokeView } from './smoke.ts';
 import { MultiRangePreview } from './multiRange.ts';
 import { RangePreview } from './rangePreview.ts';
 import { VegetationView } from './vegetation.ts';
-import { TrenchRaster } from './trenches.ts'; import { view98, roofKey98 } from './view98.ts'; import { GroundUpload98 } from './groundUpload.ts'; import { previewSnap98, previewCells98 } from './previewDiff.ts'; export { setView98 } from './view98.ts';   // R098 大地圖的畫面先撐住
+import { TrenchRaster } from './trenches.ts'; import { view98, roofSig98 } from './view98.ts'; import { GroundUpload98 } from './groundUpload.ts'; import { previewSnap98, previewCells98 } from './previewDiff.ts'; export { setView98 } from './view98.ts';   // R098 大地圖的畫面先撐住
 import { HealthBars } from './healthBars.ts';
 import { OrderLines } from './orderLines.ts';
 import { WallMarks } from './wallMarks.ts';
@@ -154,7 +154,7 @@ export class BattleView {
   private nextSmoke = 0;
   private marker: { x: number; z: number; until: number; col: THREE.Color } | null = null;
   private tmp = new THREE.Object3D();
-  private observerHeights = new Map<number, { x: number; z: number; height: number; key: number }>(); private up98 = new GroundUpload98();
+  private observerHeights = new Map<number, { x: number; z: number; height: number; key: string }>(); private up98 = new GroundUpload98();
   private territory = -1;           // R006 布陣：≥0 時地面貼圖把那一方可蓋的半場染色（不加繪製呼叫）
 
   // ---- R004 破壞的重量（?noR004=1 時全部不建，舊效果照舊）----
@@ -212,7 +212,7 @@ export class BattleView {
   // ---- R016 開戰時布陣的房子從地面升起（?noR016=1 時直接出現）----
   private r16 = false;
   private rising = new Map<number, number>();   // 建築 id → 升完的模擬時間
-  private skipRising = (b: Building) => this.rising.has(b.id);
+  private skipRising = (b: Building) => this.rising.has(b.id); private isRising98 = (id: number) => this.rising.has(id);
 
   readonly trench118: TrenchRaster;
   readonly vegetation116: VegetationView;
@@ -337,7 +337,7 @@ export class BattleView {
     const id = this.w.occ[cellIdx(this.w, Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
     const b = id ? this.w.blds[id - 1] : null;
     if (!b || b.hp <= 0) return 0;
-    const cached = this.observerHeights.get(u.id), key = roofKey98(b, this.rising.has(b.id));   // R098：腳下那一棟的樣子變了才重打（換段時不再全部清）
+    const cached = this.observerHeights.get(u.id), key = roofSig98(this.w, Math.floor(u.x / SUB), Math.floor(u.z / SUB), this.isRising98);   // R098：四周 3×3 格的房子與鐵絲網的樣子變了才重打（換段時不再全部清）
     if (cached && cached.x === u.x && cached.z === u.z && cached.key === key) return cached.height;
     // Anchor the garrison indicator to the real roof/floor surface, including damage.
     const ray = new THREE.Raycaster(new THREE.Vector3(u.x / SUB, 20, u.z / SUB), new THREE.Vector3(0, -1, 0));

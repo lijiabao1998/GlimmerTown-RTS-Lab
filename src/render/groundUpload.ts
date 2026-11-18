@@ -1,5 +1,5 @@
 // R098 地面貼圖只傳改過的格列（只改效能：顯示卡上的貼圖跟整張上傳的逐位一樣）。
-// paintCell 每畫一格就記下它那一格列的 [最小 x, 最大 x]；render() 之前每一個改過的格列用 copyTextureToTexture 傳一個 PX 像素高的矩形。
+// paintCell 每畫一格就記下它那一格列的 [最小 x, 最大 x]；render() 之前把相鄰的改過的格列併成一個矩形，用 copyTextureToTexture 傳上去。
 // 為什麼不用 Texture.addUpdateRange：three r186 一段只傳一列像素（WebGLTextures.js 寫死 height＝1），一段跨列會 GL 錯誤、整段沒傳；
 // 一格要 8 次呼叫，量到跟整張一樣貴。copyTextureToTexture 從一張「沒畫過、沒上傳過」的 DataTexture（跟 groundTex 共用 groundPx）
 // 走 CPU 那一支：一次 texSubImage2D(寬×高)、UNPACK_ROW_LENGTH＝整張的寬。暫存一旦被 renderer 認得（畫過或 initTexture），
@@ -46,16 +46,27 @@ export class GroundUpload98 {
     if (this.fullPending) { this.fullPending = false; this.clear(); return; }
     if (!this.rows.length || !this.stage) return;
     const p = this.px;
-    for (const z of this.rows) {
-      this.box.min.set(this.lo[z] * p, z * p); this.box.max.set((this.hi[z] + 1) * p, z * p + p); this.at.set(this.lo[z] * p, z * p);
+    for (const [x0, z0, x1, z1] of this.runs()) {
+      this.box.min.set(x0 * p, z0 * p); this.box.max.set(x1 * p, z1 * p); this.at.set(x0 * p, z0 * p);
       renderer.copyTextureToTexture(this.stage, tex, this.box, this.at); this.uploads++;
     }
     this.clear();
   }
+  // 相鄰的髒格列併成一個矩形（格座標 [x0, z0, x1, z1)，x 取這幾列的聯集）：每次呼叫有固定的開銷，一列一次的話四分之一張比整張還慢
+  // （這台筆電量到的，見卡面）；多傳的格子在顯示卡上本來就跟 groundPx 一樣，不影響結果
+  private runs(): [number, number, number, number][] {
+    const zs = this.rows.slice().sort((a, b) => a - b), out: [number, number, number, number][] = [];
+    for (const z of zs) {
+      const last = out[out.length - 1];
+      if (last && last[3] === z) { last[3] = z + 1; last[0] = Math.min(last[0], this.lo[z]); last[2] = Math.max(last[2], this.hi[z] + 1); }
+      else out.push([this.lo[z], z, this.hi[z] + 1, z + 1]);
+    }
+    return out;
+  }
   // 守衛用：留著還沒傳的矩形（像素座標：[x0, y0, x1, y1)）
   pending(): [number, number, number, number][] {
     const p = this.px;
-    return this.fullPending ? [] : this.rows.map(z => [this.lo[z] * p, z * p, (this.hi[z] + 1) * p, z * p + p]);
+    return this.fullPending ? [] : this.runs().map(([x0, z0, x1, z1]) => [x0 * p, z0 * p, x1 * p, z1 * p]);
   }
   get full98(): boolean { return this.fullPending; }
   private clear(): void { for (const z of this.rows) this.hi[z] = -1; this.rows.length = 0; }

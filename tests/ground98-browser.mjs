@@ -41,7 +41,8 @@ await runOrSkip('ground98', async () => {
         if (name === 'town128') { const t = await E('__r098.town128()'); assert.equal(t.n, 128, 'fixture: the tiled town is 128 cells'); await check(`${name} switch to 128`); }
         for (let k = 0; k < ticks / 30; k++) { await E('__rts.stepN(30)'); await frames(); }
         const fought = await check(`${name} ${ticks} ticks of fighting`);
-        await E("__r098.bench('he', 3); __r098.bench('quarter', 2); __r098.bench('tracks', 2); 0");
+        if (!off) assert(fought.uploads > 0, `coverage: ${name} uploaded row rectangles while fighting, before the scripted uploads (${fought.uploads})`);   // 審查之後：不靠後面 bench 的那幾次
+        await E("for (const k of ['he', 'he', 'quarter', 'tracks', 'tracks']) __r098.once(k); 0");
         const c = await check(`${name} single-shell, quarter-map and track uploads`);
         if (off) assert.equal(c.uploads, 0, `valve: with ?noR098=1 no row rectangles are uploaded (${c.uploads})`);
         else assert(c.uploads > fought.uploads || c.uploads > 0, `coverage: ${name} uploaded row rectangles (${c.uploads})`);
