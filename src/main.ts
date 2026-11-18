@@ -14,7 +14,7 @@ import { step, runLog, commandTick, type Command, type LoggedCommand } from './s
 import { createSandboxWorld, sandboxPlaceError, type SandboxCommand, type SandboxError } from './sim/sandbox.ts';
 import { initSandbox, SANDBOX_WHY, sandboxPlacementFeedback, sandboxCapacity, type SandboxBar } from './ui/sandbox.ts';
 import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from './sim/script.ts';
-import { BattleView, setStreets, setSection89, setCrowd96 } from './render/battle.ts';
+import { BattleView, setStreets, setSection89, setCrowd96, setView98 } from './render/battle.ts';
 import { BattleAudio } from './render/audio.ts';
 import { STYLE_A, msaaSetting, type Style } from './render/post.ts';
 import { initFireDiscipline, toggleFireDiscipline } from './ui/fireDiscipline.ts';
@@ -79,7 +79,7 @@ let lastCounterbatteryWorld: World | undefined;
 let commandMenu: CommandMenu | undefined;
 let battleHint: string | undefined;
 setMaterials(V.r105); // R105 材質視覺提示；只關畫面，模擬不變
-setBuildingDetails(V.r134 && V.r131); setHouseArt(V.r086); setMoreArt(V.r087); setWearArt(V.r088); setSection89(V.r089); setCrowd96(V.r096);   // R086 房屋細化（只在 R134 開著時有作用）；R087 三種新房型的模型（關掉時照看起來像的舊種類畫）
+setBuildingDetails(V.r134 && V.r131); setHouseArt(V.r086); setMoreArt(V.r087); setWearArt(V.r088); setSection89(V.r089); setCrowd96(V.r096); setView98(V.r098);   // R086 房屋細化（只在 R134 開著時有作用）；R087 三種新房型的模型（關掉時照看起來像的舊種類畫）
 setDamageDetails(V.r138);
 setFacades(V.r028);
 setStreets(V.r027);
