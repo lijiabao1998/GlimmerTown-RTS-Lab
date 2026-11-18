@@ -25,7 +25,7 @@ const run = (w, n, cmds = []) => { for (let i = 0; i < n; i++) step(w, i === 0 ?
 export const groups = {
   // 旗標：只在有的時候算進雜湊（eco 的 pla、單位的 pl）；檢查不收文字；存檔來回一樣、壞的不收；沒有旗標時買排什麼都不變
   flag() {
-    const a = open(1, false), b = open(1, false); step(b, [{ t: 'produce', side: 0, kind: P.PLATOON_ITEM }]); step(a, []);
+    const a = open(1, false), b = open(1, false); a.eco.supply = [200, 200]; b.eco.supply = [200, 200]; step(b, [{ t: 'produce', side: 0, kind: P.PLATOON_ITEM }]); step(a, []);
     assert.equal(W.hashWorld(b), W.hashWorld(a), 'flag: without the flag ordering a platoon changes nothing');
     const on = open(1, true), off = open(1, false);
     assert(on.eco.pla === 1 && off.eco.pla === undefined && W.hashWorld(on) !== W.hashWorld(off), 'flag: the flag is stored and hashed only when present');
