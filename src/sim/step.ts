@@ -268,7 +268,7 @@ function separate(w: World): void {
 }
 
 // 找目標：攻擊指令 → 那個單位；射擊指令 → 那一格；其他時候自己找最近、射得到的敵人
-function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; bld: Building | null } | null {
+export function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; bld: Building | null } | null {
   const k = UNIT_KINDS[u.kind];
   if (u.order === ORD_ATTACK) {
     const t = unitById(w, u.target);
@@ -281,18 +281,27 @@ function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit | null; 
     if (!b || b.hp <= 0) { u.order = ORD_IDLE; return null; }         // 建築已經是瓦礫，或對地面打完了：停火
     return { x: center(u.tx), z: center(u.tz), unit: null, bld: b };
   }
-  let best: Unit | null = null, bestD = 0;
+  // R096：射程內的敵人照（距離、id）由小到大排，從最近的試起，第一個全部過關的就是目標。
+  // 下面四個檢查都只讀世界，所以跟以前「全部過關的裡面挑（距離、id）最小的」是同一個；最貴的「看不看得到」放最後、只對排在前面的做
+  const cand = AIM_CAND; cand.length = 0;
   for (const t of w.units) {
     if (!t.alive || t.side === u.side) continue;
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
-    if (!spotted(w, u.side, t.x, t.z) || (!k.indirect && firstBlock(w, u.x, u.z, t.x, t.z, homeOf(w, u)) >= 0)) continue;
-    if (!k.indirect && ridge(w, u.x, u.z, t.x, t.z)) continue;   // R055：直射的不挑被稜線擋住的目標
-    if (k.sup && UNIT_KINDS[t.kind].armored && !UNIT_KINDS[t.kind].openTop) continue;   // R080：機槍組待命時不自己去打封閉車身的裝甲（打不動）
-    if (!best || d < bestD || (d === bestD && t.id < best.id)) { best = t; bestD = d; }
+    cand.push(d * AIM_ID + t.id);   // 距離是整數、id < 2^20：一個數就排得出（距離、id）
   }
-  return best ? { x: best.x, z: best.z, unit: best, bld: null } : null;
+  cand.sort((a, b) => a - b);
+  for (const c of cand) {
+    const t = w.units[(c % AIM_ID) - 1];
+    if (k.sup && UNIT_KINDS[t.kind].armored && !UNIT_KINDS[t.kind].openTop) continue;   // R080：機槍組待命時不自己去打封閉車身的裝甲（打不動）
+    if (!k.indirect && ridge(w, u.x, u.z, t.x, t.z)) continue;   // R055：直射的不挑被稜線擋住的目標
+    if (!k.indirect && firstBlock(w, u.x, u.z, t.x, t.z, homeOf(w, u)) >= 0) continue;
+    if (!spotted(w, u.side, t.x, t.z)) continue;
+    return { x: t.x, z: t.z, unit: t, bld: null };
+  }
+  return null;
 }
+const AIM_ID = 1 << 20, AIM_CAND: number[] = [];   // R096：找目標重複用的陣列（模擬是單執行緒，pickAim 不會重入）
 
 // The solution is invalidated every tick, including during reload or movement.
 function syncRanging(w: World, u: Unit, aim: { x: number; z: number; unit: Unit | null } | null): void {

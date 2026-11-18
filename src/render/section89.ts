@@ -9,6 +9,10 @@ import { soldier } from './unitArt.ts';
 let on89 = false;
 export function setSection89(on: boolean): void { on89 = on; }
 export const section89On = (): boolean => on89;
+// R096 T3：畫面上想畫的人超過 LIVE96 時每班少畫幾個（最少 MIN96 個）、活著的小兵寫到 LIVE96 個就停；?noR096=1 關掉（回到 R089）
+let on96 = false;
+export function setCrowd96(on: boolean): void { on96 = on; }
+export const LIVE96 = 800, MIN96 = 3;
 
 export const SECTION_MEN = 10;          // 1940 年英軍的步兵班、德軍的 Gruppe 都是十人上下
 export const MEN_TRIS89 = 32_000;       // 小兵網格的預算（照 info() 數：本體＋陰影那一趟）
@@ -62,8 +66,9 @@ export class Section89 {
   private snap = new Float32Array(0); private show = new Uint8Array(0);
   private tier = -1; private okFrames = 0; private tris0 = 0; private tris2 = 0;
   private live = 0; private culled = 0; private drawn = 0;
+  private want = 0; private liveAll = 0; private ratio = 1;   // R096：這一幀畫面上的班想畫幾個人、活著的總共寫了幾個；下一幀每班畫的比例（上一幀算的：用「想畫的」算，限制之後不會一放一收）
   private px = 0; private pz = 0;
-  dbg = { live: 0, bodies: 0, culled: 0, F: 0, tier: 0, tris: 0 };
+  dbg = { live: 0, bodies: 0, culled: 0, F: 0, tier: 0, tris: 0, want: 0, ratio: 1 };
   private readonly host: Host89;
   constructor(host: Host89) { this.host = host; }
 
@@ -143,8 +148,10 @@ export class Section89 {
     this.last[id] = men;
     if (!men) return n;
     if (!this.onScreen(x, y, z)) { this.culled += men; return n; }
+    this.want += men;
+    const shown = on96 && this.ratio < 1 ? Math.min(men, Math.max(MIN96, Math.floor(crowd.men * this.ratio))) : men, stop = on96 ? LIVE96 : Infinity;   // R096 T3：人太多時每班少畫幾個（少的從號碼大的先少）；活著的寫到 800 就停
     const a = H.men.instanceMatrix.array as Float32Array, max = H.men.instanceMatrix.count, face = moving || prone ? this.ori[id] : aim, n0 = n;   // 走著、趴著的人朝隊形的方向（躺著的長 0.30，跟隊形不同向會疊在一起）
-    for (let i = 0; i < men && n < max; i++) {
+    for (let i = 0; i < shown && n < max && n < stop; i++) {
       this.place(crowd.lay, id, i, s, x, z, c, sn, own, y <= 0);
       if (prone) put89(a, n, this.px, y + PRONE_LIFT89, this.pz, face, PRONE_TILT89, 1, 1, 1);
       else {
@@ -179,6 +186,7 @@ export class Section89 {
   // 躺著的人（取代 bodies21）：喪屍與 96 圖的淡出照舊、敵方的在霧裡不畫、畫面外不畫；最後決定這一幀的段，T2 時躺著的人最多 min(64, 上限 − 活著的)，留最新的
   bodies(n: number): number {
     const H = this.host, B = H.bodies, cap = B.x.length, fade = !!H.w.zombies || H.w.n >= 96, live = n;
+    this.liveAll = n;
     if (this.show.length < cap) this.show = new Uint8Array(cap);
     let on = 0;
     for (let k = 0; k < B.n; k++) {
@@ -208,8 +216,10 @@ export class Section89 {
     const H = this.host;
     if (this.tier < 0) this.decide(n);
     H.men.castShadow = this.tier === 0;
-    this.dbg = { live: this.live, bodies: this.drawn, culled: this.culled, F: n, tier: this.tier, tris: n * this.trisPer(this.tier) };
-    this.live = this.culled = this.drawn = 0;
+    this.dbg = { live: this.live, bodies: this.drawn, culled: this.culled, F: n, tier: this.tier, tris: n * this.trisPer(this.tier), want: this.want, ratio: this.ratio };
+    const others = this.liveAll - this.live;   // 喪屍、砲手：T3 不少畫他們
+    this.ratio = on96 && this.want > 0 && this.want + others > LIVE96 ? Math.max(0, LIVE96 - others) / this.want : 1;
+    this.live = this.culled = this.drawn = this.want = 0;
     return this.tier >= 2 ? this.dense() : H.menNormal;
   }
 }
