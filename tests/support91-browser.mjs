@@ -68,13 +68,18 @@ await runOrSkip('support91', async () => {
         const m = await measure(E, frames);
         assert.equal(m.calls, base.calls, `draw (${r089 ? 'R089' : 'R021'}): two more teams cost no extra draw call`);
         assert.equal(m.men.alive - base.men.alive, 4, `draw (${r089 ? 'R089' : 'R021'}): two men each, all drawn (${m.men.alive - base.men.alive})`);
-        assert(m.men.prone - base.men.prone >= 2, `draw (${r089 ? 'R089' : 'R021'}): the halted sniper lies prone (${m.men.prone - base.men.prone})`);
+        assert.equal(m.men.prone - base.men.prone, 2, `draw (${r089 ? 'R089' : 'R021'}): the halted sniper lies prone, the AT team stands (${m.men.prone - base.men.prone})`);
+        const walker = (await E('__rts.units()')).filter(u => u.kind === 42 && u.side === 0).at(-1).id;
+        await E(`__rts.issue({ t: 'move', side: 0, ids: [${walker}], x: 7, z: 26 }); __rts.stepN(2); 0`); await frames();
+        const walking = await measure(E, frames);
+        assert.equal(walking.men.prone - base.men.prone, 0, `draw (${r089 ? 'R089' : 'R021'}): a walking sniper stands up (${walking.men.prone - base.men.prone})`);
         const sid = (await E('__rts.units()')).filter(u => u.kind === 42 && u.side === 0).at(-1).id;
         await E(`__r089.hp(${sid}, 10)`); const half = await measure(E, frames);
         assert.equal(m.men.alive - half.men.alive, 1, `draw (${r089 ? 'R089' : 'R021'}): a sniper at half strength shows one man`);
       }
       // 驗收 33：海斯鎮上的混戰，每邊多 4 組
       await open('noR091=0&noR089=0&map=hythe&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); __r089.clean(); 0');
+      for (let k = 0; k < 20; k++) { await E('__rts.stepN(30)'); await frames(); }   // R090 那一幕：先打 600 步再擺混戰（審查 2026-11-18）
       const placed = await E('__r089.crowd(64, 64, 64, false, 2, 0, 4)');
       assert.equal(placed, 136, `budget: 64 sections and 4 teams a side are on the map (${placed})`);
       const hy = [];

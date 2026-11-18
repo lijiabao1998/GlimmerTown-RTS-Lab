@@ -1,7 +1,7 @@
 // R091 步兵支援兵器（一）：狙擊手（42）、反戰車小組（43）。不開瀏覽器的部分，卡面驗收 2–21。
 // 用法：node tests/support91.mjs            全部各群
 //       node tests/support91.mjs <群組名>   只跑那一群（故意弄壞的隔離副本裡用；tests/support91-negative.mjs）
-// 電腦（驗收 22–24）在 tests/support91-ai.mjs；難度的高下與量測在 tests/support91-duel-*.mjs；真 Chrome 在 tests/support91-browser.mjs。
+// 電腦造、指揮這兩種兵那一半刪掉了（刪減 1、2）：電腦一行都不多下在 quiet 群（驗收 4、27），會對付在 counter 群（驗收 24）；計時在 tools/r091-time.mjs；真 Chrome 在 tests/support91-browser.mjs。
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createWorld, hashWorld, center, cellOf, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, SIDE_PLAYER as ME, SIDE_ENEMY as FOE, SHELL_AP, SHELL_SMALL,
@@ -17,6 +17,7 @@ import { PEN_MM } from '../src/sim/ballistics.ts';
 import { VEG_HEDGE } from '../src/sim/vegetation.ts';
 import { fireDisciplineEligible } from '../src/sim/fireDiscipline.ts';
 import { productionBlockReason } from '../src/ui/productionBlockReason.ts';
+import { CROWD89 } from '../src/render/section89.ts';
 import { bombardStatus } from '../src/ui/bombardStatus.ts';
 import { newStats, statsStep, makeReport } from '../src/ui/report.ts';
 import { ECO } from '../tools/duel.mjs';
@@ -117,15 +118,15 @@ const groups = {
   // 驗收 6：存檔（第 1,500 步：一組進駐的狙擊手、一組裝填到一半在停火的反戰車小組）
   save() {
     const w = createWorld(1944);
-    step(w, [{ t: 'map', id: 1, vegetation: 1 }, eco({ sw: 1 }), { t: 'produce', side: ME, kind: UK_SNIPER }, { t: 'produce', side: ME, kind: UK_AT91 }, { t: 'ai', side: FOE, level: 2, v: 3 }]);
+    step(w, [{ t: 'map', id: 1, vegetation: 1 }, eco({ sw: 1 }), { t: 'produce', side: ME, kind: UK_SNIPER }, { t: 'produce', side: ME, kind: UK_AT91 }]);   // 不開電腦：存的時候兩組都要活著（審查 2026-11-18）
     while (w.tick < 1000) step(w, []);
     const sn = w.units.find(u => u.kind === UK_SNIPER && u.alive), at = w.units.find(u => u.kind === UK_AT91 && u.alive);
     assert(sn && at, 'save: both teams were built');
     const b = w.blds.filter(b => b.hp > 0 && b.kind === BK_HOUSE).sort((a, c) => (Math.abs(a.x - cellOf(sn.x)) + Math.abs(a.z - cellOf(sn.z))) - (Math.abs(c.x - cellOf(sn.x)) + Math.abs(c.z - cellOf(sn.z))) || a.id - c.id)[0];
     step(w, [{ t: 'move', side: ME, ids: [sn.id], x: b.x, z: b.z }, { t: 'fireDiscipline', side: ME, ids: [at.id], hold: true }]);
-    at.cooldown = 37;
-    while (w.tick < 1500) step(w, []);
-    assert(cellOf(sn.x) === b.x && cellOf(sn.z) === b.z && at.holdFire === 1, 'save: at tick 1,500 the sniper is in the house and the AT team holds fire');
+    while (w.tick < 1499) step(w, []);
+    at.cooldown = 37; step(w, []);   // 裝填到一半（停火時照樣在裝填，所以在存檔前一步才設）
+    assert(sn.alive && at.alive && cellOf(sn.x) === b.x && cellOf(sn.z) === b.z && at.holdFire === 1 && at.cooldown > 0, `save: at tick 1,500 the sniper is alive in the house and the AT team is alive, holding fire and half reloaded (${at.cooldown})`);
     const back = decodeWorld(JSON.parse(JSON.stringify(encodeWorld(w))));
     assert(back, 'save: the world with sw and both teams reads back');
     for (let i = 0; i < 600; i++) { step(w, []); step(back, []); }
@@ -312,6 +313,7 @@ const groups = {
     assert(main.includes('...(V.r091 ? { sw: 1 } : {}), ...(V.r095 ? { pla: 1 } : {})'), 'wiring: a new battle sends sw only when the R091 valve is on');
     assert(main.includes('...(V.r091 ? support91Items() : [])'), 'wiring: the 步兵支援 group is there only when the R091 valve is on');
     assert(battle.includes('if (!this.sec89.has(u.kind) && (u.kind === UK_SNIPER || u.kind === UK_AT91)) nm = this.squad21(u, x, z, simT, col, nm);'), 'wiring: with R089 off both kinds are drawn like a section, whatever the valve');
+    assert(CROWD89[UK_SNIPER]?.men === 2 && CROWD89[UK_AT91]?.men === 2 && CROWD89[UK_SNIPER].lay.length === 5, 'wiring: with R089 on both kinds are two-man crowds (in the R096 figure budget)');
     assert(/const full91 = \/\(\^\|&\)noR091=\/\.test\(full\) \? full : `\$\{full \? full \+ '&' : ''\}noR091=1`;/.test(cdp), 'wiring: tools/cdp.mjs opens pages with noR091=1 unless a guard asks for R091');
   },
 };

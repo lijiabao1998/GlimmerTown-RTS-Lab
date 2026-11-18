@@ -34,6 +34,7 @@ const cases = [
   ['counter_unflagged', 'src/sim/ai2.ts', [['(st.v === 3 && w.eco?.sw ? nearest(g, ok.filter(t => t.kind === UK_SNIPER))', '(st.v === 3 ? nearest(g, ok.filter(t => t.kind === UK_SNIPER))']], 'support91', 'counter', /^counter: without sw the third version does not single out snipers/],
   ['valve_ignored', 'src/main.ts', [['...(V.r091 ? { sw: 1 } : {}), ', '...{ sw: 1 }, ']], 'support91', 'wiring', /^wiring: a new battle sends sw only when the R091 valve is on/],
   ['invisible', 'src/render/battle.ts', [[' if (!this.sec89.has(u.kind) && (u.kind === UK_SNIPER || u.kind === UK_AT91)) nm = this.squad21(u, x, z, simT, col, nm);', '']], 'support91', 'wiring', /^wiring: with R089 off both kinds are drawn like a section/],
+  ['crowd_missing', 'src/render/section89.ts', [['CROWD89[UK_SNIPER] = { men: 2, lay: TEAM91 }; CROWD89[UK_AT91] = { men: 2, lay: TEAM91 };\n', '']], 'support91', 'wiring', /^wiring: with R089 on both kinds are two-man crowds/],
   ['cdp_default', 'tools/cdp.mjs', [["const full91 = /(^|&)noR091=/.test(full) ? full : `${full ? full + '&' : ''}noR091=1`;", 'const full91 = full;']], 'support91', 'wiring', /^wiring: tools\/cdp\.mjs opens pages with noR091=1/],
 ];
 try {
