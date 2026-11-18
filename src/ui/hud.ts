@@ -5,7 +5,7 @@ export interface HudState {
   audio?: { enabled: boolean; state: 'off' | 'on' | 'paused' | 'pending' | 'unavailable' }; // R117：只呈現實際音訊狀態
   ammo?: AmmoMode; howitzers?: number; // R107：只供榴彈砲的煙幕彈
   tick: number; paused: boolean; speed: number; fireMode: boolean; winner: number;   // winner：照「我方」——0＝我方贏、1＝敵方贏（R085：總機換算好）
-  mine: number; theirs: number; tanks: number; guns: number; observers: number; infantry?: number; mg?: number;
+  mine: number; theirs: number; tanks: number; guns: number; observers: number; infantry?: number; mg?: number; sniper?: number; at91?: number;   // R091
   ai?: string;   // R018 電腦難度
   mode?: string; // R045：波次與擊倒數，僅顯示模擬結果
   build?: boolean; hint?: string;   // R006 布陣：藏掉暫停／速度／砲擊，提示列換成布陣說明
@@ -96,11 +96,11 @@ export function initHud(a: HudActions): Hud {
     $('b-ammo').setAttribute('aria-label', smoke ? '彈種：煙幕；點按切換高爆' : '彈種：高爆；點按切換煙幕');
     ($('b-ammo') as HTMLButtonElement).disabled = !!s.build;
     $('count').textContent = `我方 ${s.mine}　可見敵 ${s.theirs}${s.mode ? `　${s.mode}` : s.ai ? `　電腦：${s.ai}` : ''}`;
-    const sel = s.tanks + s.guns + s.observers + (s.infantry ?? 0) + (s.mg ?? 0);
+    const sel = s.tanks + s.guns + s.observers + (s.infantry ?? 0) + (s.mg ?? 0) + (s.sniper ?? 0) + (s.at91 ?? 0);
     $('hint').textContent = s.hint !== undefined ? s.hint : s.fireMode && smoke
       ? `${s.howitzers ? `已選榴彈砲 ${s.howitzers}：點地面、敵人或房子布煙；混選的其他單位不動。` : '煙幕只供榴彈砲：先點我方榴彈砲選取。'}煙幕無傷害，遮住雙方視線；按「砲擊」恢復移動／攻擊。`
       : sel
-      ? `${s.info ? `${s.info}。` : ''}已選：${s.tanks ? `坦克 ${s.tanks}` : ''}${s.tanks && s.guns ? '、' : ''}${s.guns ? `砲 ${s.guns}` : ''}${s.infantry ? ` 步兵 ${s.infantry}` : ''}${s.mg ? ` 機槍組 ${s.mg}` : ''}${s.observers ? ` 觀測員 ${s.observers}` : ''}${s.observers || s.infantry ? '（點房子進駐）' : ''}。點地面＝移動，點敵人＝攻擊，點房子＝轟它${s.fireMode ? '；砲擊模式：點地面＝對那一格開火' : ''}`
+      ? `${s.info ? `${s.info}。` : ''}已選：${s.tanks ? `坦克 ${s.tanks}` : ''}${s.tanks && s.guns ? '、' : ''}${s.guns ? `砲 ${s.guns}` : ''}${s.infantry ? ` 步兵 ${s.infantry}` : ''}${s.mg ? ` 機槍組 ${s.mg}` : ''}${s.sniper ? ` 狙擊手 ${s.sniper}` : ''}${s.at91 ? ` 反戰車小組 ${s.at91}` : ''}${s.observers ? ` 觀測員 ${s.observers}` : ''}${s.observers || s.infantry || s.sniper ? '（點房子進駐）' : ''}。點地面＝移動，點敵人＝攻擊，點房子＝轟它${s.fireMode ? '；砲擊模式：點地面＝對那一格開火' : ''}`
       : '點我方單位（藍圈）選取；拖曳平移，雙指或滾輪縮放';
     if (s.hint === undefined && s.coverInfo) $('hint').textContent += `。${s.coverInfo}`;
     if (s.hint === undefined && s.reloadInfo) $('hint').textContent += `。${s.reloadInfo}`;

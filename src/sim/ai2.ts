@@ -10,7 +10,7 @@ import { counterbatteryAreas, COUNTERBATTERY_TTL } from './counterbattery.ts';
 import { freeNear, type AiCmd } from './ai.ts';
 import { produce3, machineGuns3, mgTargetFor, mgBusy } from './ai3.ts';
 import {
-  SUB, center, cellOf, inGrid, blocks, UNIT_KINDS, UK_OBSERVER, UK_INFANTRY, UK_HOWITZER, UK_MORTAR, UK_ATGUN, UK_MG, ORD_ATTACK, ORD_MOVE, ORD_FIRE_AT, SIDE_PLAYER,
+  SUB, center, cellOf, inGrid, blocks, UNIT_KINDS, UK_OBSERVER, UK_INFANTRY, UK_HOWITZER, UK_MORTAR, UK_ATGUN, UK_MG, UK_SNIPER, ORD_ATTACK, ORD_MOVE, ORD_FIRE_AT, SIDE_PLAYER,
   moraleState, MORALE_SHAKEN, MORALE_PINNED, type World, type Unit, type AiState,
 } from './world.ts';
 
@@ -197,6 +197,7 @@ export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[])
     // 目標：打不穿的車（穿甲規則）→ 對方的機槍組（R080，第三版）→ 迫擊砲先壓還沒被釘住的軟目標（士氣規則）→ 其餘照第一版
     const want = nearest(g, ok.filter(t => hopeless.has(t.id)))
       ?? (st.v === 3 ? nearest(g, ok.filter(t => t.kind === UK_MG)) : undefined)
+      ?? (st.v === 3 && w.eco?.sw ? nearest(g, ok.filter(t => t.kind === UK_SNIPER)) : undefined)   // R091：再來是對方的狙擊手（看得到才算）
       ?? (w.rules?.morale && g.kind === UK_MORTAR ? nearest(g, ok.filter(t => !kind(t).armored && moraleState(t) < MORALE_PINNED)) ?? nearest(g, ok.filter(t => !kind(t).armored)) : undefined);
     if (want) { override.set(g.id, g.order === ORD_ATTACK && g.target === want.id ? null : { t: 'attack', side, ids: [g.id], target: want.id }); continue; }
     // 反砲兵射擊：沒有看得到、打得到的目標，手上沒有在打活的目標，也不是正在（或正要）轟對方指揮部 → 朝聽出來的那一區打；那附近有自己人就不打

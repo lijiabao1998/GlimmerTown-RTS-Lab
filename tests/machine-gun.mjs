@@ -66,7 +66,7 @@ const groups = {
     const before = ['e2a8d369', 'b08601ba', 'c69cd5f2', 'b6993d76'], now = [];
     for (const map of [0, 1]) for (const rules of [null, { ap: 1, morale: 2 }]) now.push(duel({ map, seed: 31 + map, ticks: 3000, rules, end: true, a: { level: 3, v: 3 }, b: { level: 2, v: 3 } }).hash);
     assert.deepEqual(now, before, 'flag: third-version battles without the flag are bit for bit what they were before this card');
-    assert.deepEqual([UK_MG, UNIT_KINDS.length], [41, 42], 'flag: the machine-gun team is appended as kind 41');
+    assert.deepEqual([UK_MG, UNIT_KINDS[UK_MG].name], [41, '機槍組'], 'flag: the machine-gun team is appended as kind 41');   // R091 之後還有 42、43，只看 41 是機槍組
     assert.deepEqual([K.name, K.hp, K.men, K.speed, K.range, K.sight, K.reload, K.dmgUnit, K.dmgBld, K.sup, K.supArea, K.cost, K.buildTicks, K.setup, K.garrison, K.armored, K.pierce],
       ['機槍組', 40, 3, 12, 12 * SUB, 7 * SUB, 12, 6, 1, 30, 384, 30, 180, true, false, false, 10], 'fixture: the numbers on the card are the numbers in src/sim/world.ts');
     const eco = extra => { const w = createWorld(3); step(w, [{ t: 'eco', inf: 1, ...extra }]); return w; };

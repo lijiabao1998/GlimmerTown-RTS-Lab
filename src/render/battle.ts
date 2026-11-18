@@ -4,7 +4,7 @@ import { reliefShade } from './relief.ts';
 import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
-  SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_ZOMBIE, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
+  SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_ZOMBIE, UK_SNIPER, UK_AT91, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
   UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, moraleState, MORALE_PINNED, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
@@ -626,7 +626,7 @@ export class BattleView {
         ng++;
         if ((u.kind === UK_MORTAR || u.kind === UK_MG) && u.alive) nm = this.crew22(u, x, z, col, nm);
       }
-      if (this.sec89.has(u.kind)) nm = this.sec89.draw(u, x, z, simT, col, nm); else if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(u, x, z, simT, u.kind === UK_ZOMBIE ? C_ZOMBIE : col, nm);
+      if (this.sec89.has(u.kind)) nm = this.sec89.draw(u, x, z, simT, col, nm); else if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(u, x, z, simT, u.kind === UK_ZOMBIE ? C_ZOMBIE : col, nm); if (!this.sec89.has(u.kind) && (u.kind === UK_SNIPER || u.kind === UK_AT91)) nm = this.squad21(u, x, z, simT, col, nm);   // R091
       if (u.kind === UK_OBSERVER) {
         const y = this.unitHeight(u);
         m.position.set(x, y, z); m.rotation.set(0, this.yaw[u.id], u.alive ? 0 : Math.PI / 2); m.scale.setScalar(1); m.updateMatrix();
@@ -776,7 +776,7 @@ export class BattleView {
     if (e.e === 'fire') {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
-      if (u.kind === UK_INFANTRY || u.kind === UK_MG) {   // R021 步槍、R080 機槍：小小的槍口火光
+      if (u.kind === UK_INFANTRY || u.kind === UK_MG || u.kind === UK_SNIPER) {   // R021 步槍、R080 機槍、R091 狙擊手：小小的槍口火光（反戰車小組走下面砲的那一支：後焰）
         const a = Math.atan2(u.aimZ, u.aimX), x0 = e.x / SUB + Math.cos(a) * 0.18, z0 = e.z / SUB + Math.sin(a) * 0.18, y0 = this.unitHeight(u) + 0.16;
         this.glow!.spawn({ x: x0, y: y0, z: z0, t0: t, life: 0.06, s0: 0.03, s1: 0.07, c0: 0xfff6c8, c1: 0xffa040, fog: u.side !== SIDE_PLAYER });
         return;
@@ -831,7 +831,7 @@ export class BattleView {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
       const x = u.x / SUB, z = u.z / SUB, fog = u.side !== SIDE_PLAYER;
-      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY || u.kind === UK_MG || u.kind === UK_ZOMBIE) {
+      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY || u.kind === UK_MG || u.kind === UK_ZOMBIE || u.kind === UK_SNIPER || u.kind === UK_AT91) {
         for (let k = 0; k < 3; k++) this.puff!.spawn({ x, y: 0.08, z, vy: 0.2, t0: t + 0.05 * k, life: 1.4, s0: 0.06, s1: 0.22, c0: 0x9a8b74, c1: 0xa59c8c, fog });
         return;
       }
@@ -1058,7 +1058,7 @@ export class BattleView {
     }
     this.lastMen[u.id] = men;
     const m = this.tmp, aim = Math.atan2(-u.aimZ, u.aimX), scale = y > 0 ? 0.75 : 1;   // 屋頂上站得擠一點
-    const prone = u.kind === UK_INFANTRY && !u.rout && this.w.rules?.morale === 2 && moraleState(u) >= MORALE_PINNED;   // R075：士氣第二版的局，釘住或垮掉的班趴著（釘住的動不了，手上還有路徑也一樣）；正在潰退跑的不趴。morale＝1 的舊局照舊站著
+    const prone = (u.kind === UK_SNIPER && !moving) || u.kind === UK_INFANTRY && !u.rout && this.w.rules?.morale === 2 && moraleState(u) >= MORALE_PINNED;   // R075：士氣第二版的局，釘住或垮掉的班趴著（釘住的動不了，手上還有路徑也一樣）；正在潰退跑的不趴。morale＝1 的舊局照舊站著
     if (prone) this.menDbg.prone += men;
     for (let i = 0; i < men && n < MEN_CAP; i++) {
       const [ax, az] = SLOTS[i], bob = moving ? 0.012 * Math.abs(Math.sin(t * 11 + i * 1.7)) : 0;

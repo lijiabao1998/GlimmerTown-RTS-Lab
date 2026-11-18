@@ -18,6 +18,7 @@ import { applyRules, type RulesCmd } from './rules.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import { FORMATION_PLA } from './platoon.ts';
+import { aim91, shotDmg91 } from './support91.ts';   // R091
 import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.ts';
 import { startZombies, zombiesStep, finishZombiesStep, zombieAim } from './zombies.ts';
 import {
@@ -38,7 +39,7 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
   | { t: 'map'; id: number; vegetation?: number; sym?: number; more?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
   | RulesCmd;   // R046：第 0 步的遭遇戰設定（兵力、補給速度；地圖之後、喪屍與布陣之前套，見 rules.ts）
 
@@ -66,7 +67,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 1 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -282,6 +283,7 @@ export function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit |
     if (!b || b.hp <= 0) { u.order = ORD_IDLE; return null; }         // 建築已經是瓦礫，或對地面打完了：停火
     return { x: center(u.tx), z: center(u.tz), unit: null, bld: b };
   }
+  if (k.team91) return aim91(w, u, homeOf(w, u));   // R091 狙擊手、反戰車小組：照類別挑（support91.ts）；攻擊、射擊指令照上面
   // R096：射程內的敵人照（距離、id）由小到大排，從最近的試起，第一個全部過關的就是目標。
   // 下面四個檢查都只讀世界，所以跟以前「全部過關的裡面挑（距離、id）最小的」是同一個；最貴的「看不看得到」放最後、只對排在前面的做
   const cand = AIM_CAND; cand.length = 0;
@@ -359,7 +361,7 @@ function fireUnit(w: World, u: Unit): void {
   u.cooldown = k.reload;
   if (u.order === ORD_FIRE_AT && !aim.bld) u.target--;
   w.events.push({ e: 'fire', unit: u.id, x: u.x, z: u.z });
-  const sh: Shell = { id: w.nextShell++, side: u.side, kind: smoke ? SHELL_SMOKE : k.indirect ? SHELL_HE : k.men ? SHELL_SMALL : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
+  const sh: Shell = { id: w.nextShell++, side: u.side, kind: smoke ? SHELL_SMOKE : k.indirect ? SHELL_HE : k.men && !k.hollow ? SHELL_SMALL : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
   if (!k.indirect) {
     const blockCell = firstBlock(w, u.x, u.z, aim.x, aim.z, homeOf(w, u));   // R021：從自己待的房子往外打
     if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % w.n); sh.ez = center((blockCell - (blockCell % w.n)) / w.n); sh.target = 0; }
@@ -381,7 +383,7 @@ function fireUnit(w: World, u: Unit): void {
 
 // R021：打裝甲目標時只剩穿甲率那一部分（坦克、榴彈砲的穿甲率是 100＝跟以前一樣）；R022：打非裝甲目標剩 soft（既有兵種是 100＝不變）
 // R044：開頂的車（驅逐戰車）被步兵打時照「打非裝甲目標」算（既有兵種沒有 openTop＝不變）
-function pierced(k: { pierce: number; soft: number; men: number }, t: Unit, dmg: number): number { const tk = UNIT_KINDS[t.kind]; return Math.floor((dmg * (tk.armored && !(tk.openTop && k.men > 0) ? k.pierce : k.soft)) / 100); }
+function pierced(k: { pierce: number; soft: number; men: number; hollow?: boolean }, t: Unit, dmg: number): number { const tk = UNIT_KINDS[t.kind]; return Math.floor((dmg * (tk.armored && !(tk.openTop && k.men > 0 && !k.hollow) ? k.pierce : k.soft)) / 100); }
 // R021：能進駐的單位待在還站著的房子裡時，射線不算自己這棟
 function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) return 0; const b = bldAt(w, cellOf(u.x), cellOf(u.z)); return b && b.hp > 0 ? b.id : 0; }
 
@@ -420,7 +422,7 @@ function land(w: World, s: Shell): void {
       const ap = w.rules?.ap && t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS ? apHit(w.units[s.shooter - 1].kind, s.sx, s.sz, t) : -1;
       if (ap === 0) bounce = s.kind === SHELL_AP;
       else if (ap === 1 && s.kind === SHELL_AP) damageUnit(w, t!, k.dmgUnit);
-      else if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, s.kind === SHELL_AP ? Math.floor(k.dmgUnit * armorPct(t, s.sx, s.sz) / 100) : k.dmgUnit));
+      else if (t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) damageUnit(w, t, pierced(k, t, s.kind === SHELL_AP ? Math.floor(k.dmgUnit * armorPct(t, s.sx, s.sz) / 100) : shotDmg91(k, t)));
       if (w.rules?.morale && t && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS) suppress(w, t, s.kind === SHELL_SMALL ? k.sup ?? SUP_SMALL : SUP_DIRECT);   // R052（死了、有裝甲的在 suppress 裡擋）
       if (w.rules?.morale && k.sup && k.supArea && s.kind === SHELL_SMALL) suppressZone(w, s.side, s.ex, s.ez, k.supArea, k.sup >> 1, t && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS ? t : null);   // R080 機槍組的掃射區：落點附近的其他敵人各加一半
     }

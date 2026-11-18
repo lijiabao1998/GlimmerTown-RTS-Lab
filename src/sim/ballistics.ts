@@ -81,6 +81,8 @@ export const PEN_MM: Record<number, readonly [number, number]> = {
   38: [59, 36],     // 一式 Chi-He：一式 47 公釐
   39: [80, 60],     // 一式 Ho-Ni I：九〇式 75 公釐
   40: [80, 60],     // 九〇式 75 公釐
+  42: [10, 3],      // R091 狙擊手：步槍口徑（跟機槍組同一種子彈）
+  43: [85, 80],     // R091 反戰車小組：空心裝藥約 100 公釐 × cos 30°（PIAT、巴祖卡 M6A3 那一級；1940 年的海斯沒有，卡面照實寫）。空心裝藥其實不隨距離變，守衛要求遠的比近的小，所以 80
   41: [10, 3],      // R080 機槍組：步槍口徑的穿甲彈（.303 W Mk I／7.92 公釐 SmK，100 公尺約 10 公釐）；打裝甲的傷害本來就只剩一成＝零
 };
 
@@ -97,7 +99,7 @@ export function penetration(kind: number, d: number): number {
 //    0＝彈開；1＝穿透。
 export function apHit(shooterKind: number, sx: number, sz: number, t: Unit): number {
   const plate = ARMOR_MM[t.kind], target = UNIT_KINDS[t.kind];
-  if (!plate || !target.armored || (UNIT_KINDS[shooterKind].men > 0 && target.openTop)) return -1;   // 步兵打開頂車照舊（R044）
+  if (!plate || !target.armored || (UNIT_KINDS[shooterKind].men > 0 && target.openTop && !UNIT_KINDS[shooterKind].hollow)) return -1;   // 步兵打開頂車照舊（R044）
   const pen = penetration(shooterKind, dist(sx, sz, t.x, t.z));
   if (pen < 0) return -1;
   return pen >= plate[armorFace(t, sx, sz)] ? 1 : 0;

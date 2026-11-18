@@ -22,7 +22,7 @@ const mutants = [
   ['crews_ignored', 't3', S, '      } else if (u.kind === UK_MORTAR || u.kind === UK_MG) others +=', '      } else if (false) others +=', 't3: with zombies and MG crews the whole men mesh stays within 800 figures'],
   ['zombies_ignored', 't3', S, '      else if (u.kind === UK_ZOMBIE) others +=', '      else if (false) others +=', 't3: zombies and crews keep every figure'],
   ['min_ignored', 't3', S, '      cap = MIN96;\n      for (let c = SECTION_MEN - 1; c >= MIN96; c--)', '      cap = 1;\n      for (let c = SECTION_MEN - 1; c >= 1; c--)', 't3: never more than 800 live figures, and a drawn section shows at least 3'],
-  ['leader_dropped', 't3', S, '      this.place(crowd.lay, id, i, s, x, z, c, sn, own, y <= 0);\n      if (prone)', '      this.place(crowd.lay, id, i + men - shown, s, x, z, c, sn, own, y <= 0);\n      if (prone)', 't3: a thinned section keeps its leader'],
+  ['leader_dropped', 't3', S, '      this.place(crowd.lay, id, i, s, x, z, c, sn, own, y <= 0);\n      if (lie)', '      this.place(crowd.lay, id, i + men - shown, s, x, z, c, sn, own, y <= 0);\n      if (lie)', 't3: a thinned section keeps its leader'],
   ['valve_ignored', 'valve', S, 'export function setCrowd96(on: boolean): void { on96 = on; }', 'export function setCrowd96(on: boolean): void { on96 = on || true; }', 'valve: with ?noR096=1 every figure is drawn as in R089'],
 ];
 try {

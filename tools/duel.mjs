@@ -10,27 +10,41 @@
 //   --rows   每一局印一列
 //   --end    eco 指令帶 end＝1（R077 勝負判定第二版：指揮部倒了不等不相干的砲彈）。預設不帶，R057 卡面的數字照樣重跑得出來
 //   --mg     eco 指令帶 mg＝1（R080 機槍組：雙方開局各一組、可以生產）；--mg 2：mg＝2（R081 機槍組第二版）。預設不帶
+//   --sw     eco 指令帶 sw＝1（R091 狙擊手、反戰車小組可以生產）。預設不帶；結果多回 sw91（造了幾組、開火、命中、陣亡、反戰車小組打掉的裝甲血量、狙擊手命中的類別）
 //   --pla    eco 指令帶 pla＝1（R095 步兵排：人口 24／56／64、可以出排、困難的電腦會出排）。預設不帶；結果多回 infBuilt（一局出了幾班）、infPeak（同時活著最多幾班）
 // 守衛與卡面的量測直接 import { duel, summarize }。
-import { createWorld, hashWorld, SIDE_PLAYER, SIDE_ENEMY, UK_MG, UK_INFANTRY } from '../src/sim/world.ts';
+import { createWorld, hashWorld, SIDE_PLAYER, SIDE_ENEMY, UK_MG, UK_INFANTRY, UK_SNIPER, UK_AT91, UK_OBSERVER, UNIT_KINDS } from '../src/sim/world.ts';
+import { dist } from '../src/sim/math.ts';
 import { step } from '../src/sim/step.ts';
 import { hqAlive } from '../src/sim/eco.ts';
 
 export const ECO = { t: 'eco', inf: 1, guns: 1, tanks: 1, armor2: 1, soviet: 1, international: 1 };   // 跟 src/main.ts 開局送的一樣（全部兵種）
 
 // 一局。a＝我方（side 0）、b＝敵方（side 1）的電腦：{ level, v? }。回傳勝負、步數與過程中的統計
-export function duel({ map = 1, seed = 1, ticks = 24000, rules = null, a = { level: 3 }, b = { level: 3 }, end = false, mg = false, pla = false, sym = false } = {}) {
+export function duel({ map = 1, seed = 1, ticks = 24000, rules = null, a = { level: 3 }, b = { level: 3 }, end = false, mg = false, pla = false, sym = false, sw = false } = {}) {
   const w = createWorld(seed), ai = (side, s) => ({ t: 'ai', side, level: s.level, ...(s.v ? { v: s.v } : {}) });
-  const first = [sym ? { t: 'map', id: map, vegetation: 1, sym: 1 } : { t: 'map', id: map, vegetation: 1 }, ...(rules ? [{ t: 'rules', ...rules }] : []), end || mg || pla ? { ...ECO, ...(end ? { end: 1 } : {}), ...(mg ? { mg: mg === 2 ? 2 : 1 } : {}), ...(pla ? { pla: 1 } : {}) } : ECO, ai(SIDE_ENEMY, b), ai(SIDE_PLAYER, a)];
+  const first = [sym ? { t: 'map', id: map, vegetation: 1, sym: 1 } : { t: 'map', id: map, vegetation: 1 }, ...(rules ? [{ t: 'rules', ...rules }] : []), end || mg || pla || sw ? { ...ECO, ...(end ? { end: 1 } : {}), ...(sw ? { sw: 1 } : {}), ...(mg ? { mg: mg === 2 ? 2 : 1 } : {}), ...(pla ? { pla: 1 } : {}) } : ECO, ai(SIDE_ENEMY, b), ai(SIDE_PLAYER, a)];
   const stat = { fires: [0, 0], kills: [0, 0], bounces: 0, morale: [0, 0, 0, 0], routs: 0, firstContact: -1, mgFires: [0, 0], mgLost: [0, 0] };   // mgFires、mgLost（R080）：雙方機槍組點射了幾次、陣亡幾組
   let routing = new Set();
+  // R091（--sw）：42、43 的開火、命中（落點離目標 ≤ 180，跟 land() 的判定一樣）、陣亡；43 打掉的裝甲血量；狙擊手命中的目標類別 [觀測員, 機槍組, 砲組, 小組, 步兵班, 其他]
+  const sw91 = sw ? { built: [[0, 0], [0, 0]], fires: [[0, 0], [0, 0]], hits: [[0, 0], [0, 0]], lost: [[0, 0], [0, 0]], armorDmg: [0, 0], sniperCats: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]] } : null;
+  const ix91 = kind => (kind === UK_SNIPER ? 0 : kind === UK_AT91 ? 1 : -1);
+  const cat91 = t => { const k = UNIT_KINDS[t.kind]; return t.kind === UK_OBSERVER ? 0 : k.sup ? 1 : !k.men && !k.armored && k.range > 0 ? 2 : k.team91 ? 3 : k.men ? 4 : 5; };
   step(w, first);
   const start = w.units.length, infPeak = [0, 0];   // R095：開局之後出生的步兵班、同時活著最多幾班
   while (w.winner < 0 && w.tick < ticks) {
+    const flying = sw91 ? w.shells.filter(s => s.target && ix91(w.units[s.shooter - 1]?.kind) >= 0).map(s => ({ id: s.id, side: s.side, i: ix91(w.units[s.shooter - 1].kind), t: w.units[s.target - 1], ex: s.ex, ez: s.ez, hp: w.units[s.target - 1].hp })) : null;
+    const n0 = w.units.length;
     step(w, []);
+    if (sw91) {
+      const armorHit = new Map();
+      for (const f of flying) if (f.side < 2 && !w.shells.some(s => s.id === f.id) && dist(f.t.x, f.t.z, f.ex, f.ez) <= 180) { sw91.hits[f.side][f.i]++; if (f.i === 0) sw91.sniperCats[f.side][cat91(f.t)]++; if (f.i === 1 && UNIT_KINDS[f.t.kind].armored) armorHit.set(f.t, [f.side, f.hp]); }
+      for (const [t, [s, hp]] of armorHit) sw91.armorDmg[s] += hp - t.hp;
+      for (const u of w.units.slice(n0)) if (u.side < 2 && ix91(u.kind) >= 0) sw91.built[u.side][ix91(u.kind)]++;
+    }
     for (const e of w.events) {
-      if (e.e === 'fire') { const u = w.units[e.unit - 1]; if (u && u.side < 2) { stat.fires[u.side]++; if (u.kind === UK_MG) stat.mgFires[u.side]++; } if (stat.firstContact < 0) stat.firstContact = w.tick; }
-      else if (e.e === 'kill') { const u = w.units[e.unit - 1]; if (u && u.side < 2) { stat.kills[1 - u.side]++; if (u.kind === UK_MG) stat.mgLost[u.side]++; } }
+      if (e.e === 'fire') { const u = w.units[e.unit - 1]; if (u && u.side < 2) { stat.fires[u.side]++; if (u.kind === UK_MG) stat.mgFires[u.side]++; if (sw91 && ix91(u.kind) >= 0) sw91.fires[u.side][ix91(u.kind)]++; } if (stat.firstContact < 0) stat.firstContact = w.tick; }
+      else if (e.e === 'kill') { const u = w.units[e.unit - 1]; if (u && u.side < 2) { stat.kills[1 - u.side]++; if (u.kind === UK_MG) stat.mgLost[u.side]++; if (sw91 && ix91(u.kind) >= 0) sw91.lost[u.side][ix91(u.kind)]++; } }
       else if (e.e === 'impact' && e.bounce) stat.bounces++;
       else if (e.e === 'morale') stat.morale[e.state]++;
     }
@@ -41,10 +55,18 @@ export function duel({ map = 1, seed = 1, ticks = 24000, rules = null, a = { lev
   // hqDown：到步數上限還沒宣布勝負、但有一方的指揮部其實已經倒了（勝負判定在等還在飛的砲彈；砲多的大地圖上天上幾乎隨時有砲彈）
   const hqDown = w.winner < 0 && !!w.eco && (!hqAlive(w, 0) || !hqAlive(w, 1));
   const infBuilt = [0, 1].map(s => w.units.filter(u => u.id > start && u.side === s && u.kind === UK_INFANTRY).length);
-  return { seed, map, winner: w.winner, ticks: w.tick, alive: [alive(0), alive(1)], hash: hashWorld(w), hqDown, ...stat, ...(pla ? { infBuilt, infPeak } : {}) };
+  return { seed, map, winner: w.winner, ticks: w.tick, alive: [alive(0), alive(1)], hash: hashWorld(w), hqDown, ...stat, ...(pla ? { infBuilt, infPeak } : {}), ...(sw91 ? { sw91 } : {}) };
 }
 
 const median = xs => { const s = [...xs].sort((p, q) => p - q); return s.length ? s[s.length >> 1] : 0; };
+// R091（--sw）：整批的 sw91，照 a、b 排（對調的那一局 a 在敵方那一側）
+function sw91Sum(rows) {
+  const rs = rows.filter(r => r.sw91);
+  if (!rs.length) return {};
+  const pick = (r, f, ab) => r.sw91[f][r.swapped ? 1 - ab : ab];
+  const add = (f, ab) => rs.reduce((acc, r) => pick(r, f, ab).map((v, i) => (acc[i] ?? 0) + v), []);
+  return { sw91: { ...Object.fromEntries(['built', 'fires', 'hits', 'lost', 'sniperCats'].map(f => [f, [add(f, 0), add(f, 1)]])), armorDmg: [0, 1].map(ab => rs.reduce((t, r) => t + pick(r, 'armorDmg', ab), 0)) } };
+}
 // 一批的結果：a 贏幾局、b 贏幾局、平手、打不完（到步數上限；hqDown＝其中指揮部已經倒了、只是遊戲還沒宣布的）、分出勝負的那些局多長
 export function summarize(rows) {
   const n = rows.length, aWins = rows.filter(r => r.winnerIs === 'a').length, bWins = rows.filter(r => r.winnerIs === 'b').length;
@@ -54,7 +76,9 @@ export function summarize(rows) {
     medianSeconds: Math.round(median(done) / 20), shortestSeconds: done.length ? Math.round(Math.min(...done) / 20) : 0, longestSeconds: done.length ? Math.round(Math.max(...done) / 20) : 0,
     bounces: sum(r => r.bounces), morale: [1, 2, 3].map(i => sum(r => r.morale[i])), routs: sum(r => r.routs),
     // R080：a、b 兩邊的機槍組整批對局點射了幾次、陣亡幾組（對調的那一局 a 在敵方那一側）
-    mgFires: [sum(r => r.mgFires[r.swapped ? 1 : 0]), sum(r => r.mgFires[r.swapped ? 0 : 1])], mgLost: [sum(r => r.mgLost[r.swapped ? 1 : 0]), sum(r => r.mgLost[r.swapped ? 0 : 1])] };
+    mgFires: [sum(r => r.mgFires[r.swapped ? 1 : 0]), sum(r => r.mgFires[r.swapped ? 0 : 1])], mgLost: [sum(r => r.mgLost[r.swapped ? 1 : 0]), sum(r => r.mgLost[r.swapped ? 0 : 1])],
+    // R091（--sw）：a、b 兩邊 [狙擊手, 反戰車小組] 的造了幾組、開火、命中、陣亡；反戰車小組打掉的裝甲血量；狙擊手命中的類別
+    ...sw91Sum(rows) };
 }
 // 一批：每個種子一局；swap 再加一局兩邊對調的（a 的設定放到敵方那一側）
 export function batch({ seeds, swap = false, a, b, ...rest }) {
@@ -73,7 +97,7 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replaceAll('\\',
   const [lo, hi] = String(arg('seeds', '1-10')).split('-').map(Number), seeds = Array.from({ length: (hi ?? lo) - lo + 1 }, (_, i) => lo + i);
   const rules = arg('rules', '') ? Object.fromEntries(String(arg('rules')).split(',').map(p => { const [k, v] = p.split('='); return [k, v === undefined ? 1 : Number(v)]; })) : null;
   const side = (lv, v) => ({ level: Number(arg(lv, 3)), ...(arg(v, '') ? { v: Number(arg(v)) } : {}) });
-  const t0 = Date.now(), rows = batch({ seeds, swap: has('swap'), map: Number(arg('map', 1)), ticks: Number(arg('ticks', 24000)), rules, a: side('a', 'av'), b: side('b', 'bv'), end: has('end'), pla: has('pla'), sym: has('sym'), mg: has('mg') ? (arg('mg', '') === '2' ? 2 : 1) : false });
+  const t0 = Date.now(), rows = batch({ seeds, swap: has('swap'), map: Number(arg('map', 1)), ticks: Number(arg('ticks', 24000)), rules, a: side('a', 'av'), b: side('b', 'bv'), end: has('end'), pla: has('pla'), sym: has('sym'), sw: has('sw'), mg: has('mg') ? (arg('mg', '') === '2' ? 2 : 1) : false });
   const ab = (r, pair) => (r.swapped ? [pair[1], pair[0]] : pair).join('／');   // 對調的那一局 a 在敵方那一側：照 a／b 的順序印，不照左右
   if (has('rows')) for (const r of rows) console.log(`seed ${r.seed}${r.swapped ? ' 對調' : ''}：${r.winnerIs} ${Math.round(r.ticks / 20)} 秒${r.hqDown ? '（指揮部已倒、遊戲還沒宣布）' : ''}，剩（a／b）${ab(r, r.alive)}，擊毀（a／b）${ab(r, r.kills)}，跳彈 ${r.bounces}，壓制 ${r.morale.slice(1).join('／')}，潰退 ${r.routs}`);
   console.log(JSON.stringify({ map: Number(arg('map', 1)), rules, ...(has('end') ? { end: 1 } : {}), ...(has('mg') ? { mg: arg('mg', '') === '2' ? 2 : 1 } : {}), a: side('a', 'av'), b: side('b', 'bv'), ...summarize(rows), wallSeconds: Math.round((Date.now() - t0) / 1000) }));
