@@ -19,15 +19,20 @@ window.__r089 = (() => {
     cam: (x, z, zoom) => { paused = true; view.target.set(x, 0, z); view.zoomBy(zoom / view.zoom); },
     clean: () => document.querySelectorAll('#start-order,#start-banner').forEach(e => e.remove()),
     // 每邊 per 個班擺在 (cx, cz) 附近的空格（我方在南、敵方在北、各 20 格寬）；fight＝會開火（不然 cooldown 擋著只量畫面）；sides＝1 只放我方；霧關掉＝最壞的情況
-    crowd: (per, cx, cz, fight, sides = 2, tanks = 0) => {   // tanks（R095）：每邊有幾個是坦克（放在最後）
+    crowd: (per, cx, cz, fight, sides = 2, tanks = 0, teams91 = 0) => {   // tanks（R095）：每邊有幾個是坦克（放在最後）；teams91（R091）：每邊再多幾組狙擊手、反戰車小組（預設 0＝跟以前一樣）
       paused = true; view.fogOn = false;
       const t = taken(), ids = [];
       for (const side of sides === 2 ? [0, 1] : [0]) for (let r = 0, n = 0; n < per && r < 8000; r++) {
         const row = Math.floor(r / 20), x = cx - 10 + (r % 20), z = side ? cz - 2 - row : cz + 2 + row;
         if (free(t, x, z)) { ids.push(put(t, side, x, z, { ...(fight ? { cooldown: 0 } : {}), ...(n >= per - tanks ? { kind: 0, hp: 100, hullX: side ? 256 : -256, hullZ: side ? 256 : -256 } : {}) })); n++; }
       }
+      for (const side of sides === 2 ? [0, 1] : [0]) for (let r = 0, n = 0; n < teams91 && r < 8000; r++) {   // R091
+        const row = Math.floor(r / 20), x = cx - 10 + (r % 20), z = side ? cz - 2 - row : cz + 2 + row, kind = n % 2 ? 43 : 42;
+        if (free(t, x, z)) { ids.push(put(t, side, x, z, { kind, hp: kind === 42 ? 20 : 30, ...(fight ? { cooldown: 0 } : {}) })); n++; }
+      }
       spawned(ids); return ids.length;
     },
+    hp: (id, hp) => { w.units[id - 1].hp = hp; },   // R091：把一個單位的血設成 hp（量少一個人的畫法）
     hurt: dhp => { for (const u of w.units) if (u.kind === 3 && u.alive) u.hp = Math.max(1, u.hp - dhp); },
     count: () => w.units.filter(u => u.kind === 3 && u.alive).length,
     // 處理器時間：在頁面裡直接叫 view.update n 次（同一個模擬時間），回平均毫秒

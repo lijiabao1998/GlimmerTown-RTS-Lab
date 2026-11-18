@@ -3,6 +3,7 @@
 //       node tests/support91.mjs <群組名>   只跑那一群（故意弄壞的隔離副本裡用；tests/support91-negative.mjs）
 // 電腦（驗收 22–24）在 tests/support91-ai.mjs；難度的高下與量測在 tests/support91-duel-*.mjs；真 Chrome 在 tests/support91-browser.mjs。
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createWorld, hashWorld, center, cellOf, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, SIDE_PLAYER as ME, SIDE_ENEMY as FOE, SHELL_AP, SHELL_SMALL,
   UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_HEAVY, UK_DESTROYER, UK_ZOMBIE, UK_MG, UK_SNIPER, UK_AT91, BK_HOUSE, bldMaxHp, wireBlocks, ORD_ATTACK } from '../src/sim/world.ts';
 import { step, runLog, spotted } from '../src/sim/step.ts';
@@ -277,7 +278,7 @@ const groups = {
   },
   // 驗收 4、22–24（刪減第 1、2 項之後）：電腦永遠不造、不指揮這兩種兵；帶 sw 的局，第二版、第三版電腦每一步的世界跟不帶 sw 的一樣（雜湊扣掉 sw 那一項）、
   // 勝負與結束的步數一樣；第三版的迫擊砲、榴彈砲：看得到對方的狙擊手就先打它（機槍組更前面），看不到的不拿來做決定
-  ai() {
+  quiet() {
     const noSw = w => { const s = w.eco?.sw; if (s) delete w.eco.sw; const h = hashWorld(w); if (s) w.eco.sw = s; return h; };
     for (const v of [2, 3]) for (const map of [0, 1]) for (let seed = 1; seed <= 5; seed++) {
       const open = sw => { const w = createWorld(seed); step(w, [{ t: 'map', id: map, vegetation: 1, sym: 1 }, eco(sw ? { sw: 1 } : {}), { t: 'ai', side: ME, level: 3, v }, { t: 'ai', side: FOE, level: 3, v }]); return w; };
@@ -289,6 +290,8 @@ const groups = {
       }
       assert.deepEqual([a.winner, a.tick], [b.winner, b.tick], `quiet: v${v} map ${map} seed ${seed}: same winner, same last step`);
     }
+  },
+  counter() {
     const scene = ({ sw = true, mg = false, spotter = true } = {}) => {
       const w = field(); w.eco = { supply: [0, 0], hq: [0, 0], queue: [[], []], prog: [0, 0], ...(sw ? { sw: 1 } : {}) };
       const mortar = put(w, ME, UK_MORTAR, 8, 16); if (spotter) put(w, ME, UK_OBSERVER, 12, 20);
@@ -301,6 +304,15 @@ const groups = {
     assert.deepEqual([s2.mortar.order, s2.mortar.target], [ORD_ATTACK, s2.gun.id], 'counter: a machine gun still comes before the sniper');
     assert.notEqual(s3.mortar.target, s3.sn.id, 'counter: an unseen sniper is not acted on');
     assert.notEqual(s4.mortar.target, s4.sn.id, 'counter: without sw the third version does not single out snipers');
+  },
+  // 接線（文字檢查；瀏覽器守衛驗真的行為）：頁面照閥送 sw、照閥放「步兵支援」那一組；兩種兵照兵種畫（不看閥）；既有的瀏覽器守衛預設不帶 sw
+  wiring() {
+    const src = f => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+    const main = src('src/main.ts'), battle = src('src/render/battle.ts'), cdp = src('tools/cdp.mjs');
+    assert(main.includes('...(V.r091 ? { sw: 1 } : {}), ...(V.r095 ? { pla: 1 } : {})'), 'wiring: a new battle sends sw only when the R091 valve is on');
+    assert(main.includes('...(V.r091 ? support91Items() : [])'), 'wiring: the 步兵支援 group is there only when the R091 valve is on');
+    assert(battle.includes('if (!this.sec89.has(u.kind) && (u.kind === UK_SNIPER || u.kind === UK_AT91)) nm = this.squad21(u, x, z, simT, col, nm);'), 'wiring: with R089 off both kinds are drawn like a section, whatever the valve');
+    assert(/const full91 = \/\(\^\|&\)noR091=\/\.test\(full\) \? full : `\$\{full \? full \+ '&' : ''\}noR091=1`;/.test(cdp), 'wiring: tools/cdp.mjs opens pages with noR091=1 unless a guard asks for R091');
   },
 };
 
