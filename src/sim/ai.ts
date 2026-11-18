@@ -67,7 +67,7 @@ function turnStep(w: World, u: Unit, t: Unit): [number, number] | null {
 export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
   const out: AiCmd[] = [], side = st.side, lv = st.level;
   const mine = w.units.filter(u => u.alive && u.side === side);
-  const seen = w.units.filter(u => u.alive && u.side !== side && spotted(w, side, u.x, u.z));
+  const seen = w.units.filter(u => u.alive && !u.ride && u.side !== side && spotted(w, side, u.x, u.z));
   if (seen.length) {   // 記住最後看到敵人的地方（重心），之後朝那裡推進
     let sx = 0, sz = 0;
     for (const u of seen) { sx += u.x; sz += u.z; }

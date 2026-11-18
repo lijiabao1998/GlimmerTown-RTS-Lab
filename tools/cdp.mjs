@@ -143,7 +143,9 @@ export async function withBrowser(opt, fn) {
       // 要測 R087 的守衛在網址寫 noR087=0（網址自己寫了 noR087 就照它的）。
       // R091：預設在網址加 noR091=1，既有守衛照舊測沒有 sw 的局（end-rule-browser 把新開一局的 eco 指令整條比對）；要測 R091 的守衛寫 noR091=0。
       const full91 = /(^|&)noR091=/.test(full) ? full : `${full ? full + '&' : ''}noR091=1`;
-      const url87 = /(^|&)noR087=/.test(full91) ? full91 : `${full91 ? full91 + '&' : ''}noR087=1`;
+      // R092：預設在網址加 noR092=1，既有守衛照舊測沒有 tp 的局；要測 R092 的守衛寫 noR092=0。
+      const full92 = /(^|&)noR092=/.test(full91) ? full91 : `${full91 ? full91 + '&' : ''}noR092=1`;
+      const url87 = /(^|&)noR087=/.test(full92) ? full92 : `${full92 ? full92 + '&' : ''}noR087=1`;
       // R095：預設在網址加 noR095=1，既有守衛照舊測沒有步兵排的局（人口上限、生產列、隊形寫的時候就是這樣）；要測 R095 的守衛寫 noR095=0。
       const url = /(^|&)noR095=/.test(url87) ? url87 : `${url87}&noR095=1`;
       // R089：預設在網址加 noR089=1，既有守衛照舊測一班 6 個人的畫面（readable-browser 照 UNIT_KINDS.men 數趴下的人、smoke 的預算寫的時候就是這樣）；

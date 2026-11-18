@@ -59,7 +59,7 @@ function toward(w: World, x: number, z: number, tx: number, tz: number, cells: n
 export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[]): AiCmd[] {
   const side = st.side, lv = st.level, n = w.n;
   const mine = w.units.filter(u => u.alive && u.side === side);
-  const seen = w.units.filter(u => u.alive && u.side !== side && spotted(w, side, u.x, u.z)), seenIds = new Set(seen.map(u => u.id));
+  const seen = w.units.filter(u => u.alive && !u.ride && u.side !== side && spotted(w, side, u.x, u.z)), seenIds = new Set(seen.map(u => u.id));
   const kind = (u: Unit) => UNIT_KINDS[u.kind];
   const ownCorner = side === SIDE_PLAYER ? n - 6 : 5, hq = w.eco ? hqAlive(w, side) : null, foeHq = w.eco ? hqAlive(w, 1 - side) : null;
   const homeX = hq ? Math.floor(((hq.x * 2 + hq.w) * SUB) / 2) : center(ownCorner), homeZ = hq ? Math.floor(((hq.z * 2 + hq.d) * SUB) / 2) : center(ownCorner);

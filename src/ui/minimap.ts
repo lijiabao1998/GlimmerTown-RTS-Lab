@@ -22,7 +22,7 @@ export interface Dot { x: number; z: number; side: number }
 // 要畫的點：我方活著的全部；敵方只有看得到的（R100）；死掉的不畫
 export function miniDots(w: World, visible: (u: Unit) => boolean): Dot[] {
   const out: Dot[] = [];
-  for (const u of w.units) if (u.alive && (u.side === SIDE_PLAYER || visible(u))) out.push({ x: u.x / 256, z: u.z / 256, side: u.side });
+  for (const u of w.units) if (u.alive && !u.ride && (u.side === SIDE_PLAYER || visible(u))) out.push({ x: u.x / 256, z: u.z / 256, side: u.side });
   return out;
 }
 

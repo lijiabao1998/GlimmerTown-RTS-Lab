@@ -32,7 +32,7 @@ function atTier(w: World, u: Unit, t: Unit): number {
 export function aim91(w: World, u: Unit, home: number): { x: number; z: number; unit: Unit | null; bld: null } | null {
   const k = UNIT_KINDS[u.kind], cand = CAND91; cand.length = 0;
   for (const t of w.units) {
-    if (!t.alive || t.side === u.side) continue;
+    if (!t.alive || t.ride || t.side === u.side) continue;
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
     const tier = k.team91 === 1 ? sniperTier(t) : atTier(w, u, t);

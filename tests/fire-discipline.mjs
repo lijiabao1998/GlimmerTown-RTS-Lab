@@ -36,7 +36,7 @@ function combatChecks(advance) {
 combatChecks(step);
 for(let kind=0;kind<UNIT_KINDS.length;kind++)for(const side of [0,1]){
  const w=fixture(kind);w.units[0].side=side;
- const allowed=side===0&&![2,3,11,41].includes(kind);   // 觀測員、步兵、喪屍、機槍組（R080：三個人的小組，跟步兵一樣不在停火紀律裡）
+ const allowed=side===0&&![2,3,11,41,44,45].includes(kind);   // R092：運輸車沒有射程，不收停火   // 觀測員、步兵、喪屍、機槍組（R080：三個人的小組，跟步兵一樣不在停火紀律裡）
  applyCommand(w,{...hold([1,1,0,-1,999]),side});
  assert.equal(w.units[0].holdFire,allowed?1:undefined,`kind ${kind} side ${side}`);
  const before=hashWorld(w);const clone=structuredClone(w);delete clone.units[0].holdFire;

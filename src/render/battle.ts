@@ -1,7 +1,7 @@
 // 戰場畫面：只讀世界、不改世界（AGENTS.md 規則 2）。兩個 tick 之間用 alpha 插值，畫面 60fps、模擬 20 步／秒。
 import * as THREE from 'three';
 import { reliefShade } from './relief.ts';
-import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts';
+import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts'; import { TRANSPORT_ART } from './transportArt.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
   SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_ZOMBIE, UK_SNIPER, UK_AT91, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
@@ -40,7 +40,7 @@ const TANK_SCALE23: Record<number, number> = { [UK_LIGHT]: 0.8, [UK_HEAVY]: 1.18
 // hull＝車體（長、高、寬）、top＝砲塔／戰鬥室（長、高、寬；砲管跟著長度伸縮）、fwd＝砲塔沿車頭前移（格）、casemate＝固定戰鬥室（平常朝車頭，正在打時才對準）
 // 裝甲車：長、矮、窄，小砲塔；驅逐戰車：低車體、壓扁的戰鬥室、長砲管；突擊砲：寬低車體、寬扁戰鬥室、短粗砲管
 type Art44 = { hull: [number, number, number]; top: [number, number, number]; fwd: number; casemate: boolean };
-const ART44: Record<number, Art44> = { ...INTERNATIONAL_ART, ...SOVIET_ART,
+const ART44: Record<number, Art44> = { ...INTERNATIONAL_ART, ...SOVIET_ART, ...TRANSPORT_ART,
   [UK_ARMORED_CAR]: { hull: [0.92, 0.56, 0.58], top: [0.5, 0.7, 0.5], fwd: 0, casemate: false },   // 比輕坦克（0.8／0.68／0.8）長、矮、窄
   [UK_DESTROYER]: { hull: [1.05, 0.72, 0.95], top: [1.45, 0.55, 1.2], fwd: 0.04, casemate: true },
   [UK_ASSAULT]: { hull: [1.0, 0.7, 1.15], top: [0.78, 0.62, 1.4], fwd: 0.07, casemate: true },
@@ -404,7 +404,7 @@ export class BattleView {
 
   visibleUnit(u: Unit): boolean {
     if (this.w.zombies && u.side !== SIDE_PLAYER && u.kind !== UK_ZOMBIE) return false; // 起手敵軍的穩定 id 空槽
-    return u.side === SIDE_PLAYER || this.visibleAt(u.x, u.z);
+    return !u.ride && (u.side === SIDE_PLAYER || this.visibleAt(u.x, u.z));   // R092：車上的人不畫（點選、血條、效果、R089 人群都跟著跳過）
   }
 
   // ---- 地面貼圖 ----
@@ -621,7 +621,7 @@ export class BattleView {
       } else if (GUN_SCALE22[u.kind]) {
         // R022 反戰車砲、迫擊砲畫進同一個砲的網格：用縮放改比例（反戰車砲壓低、砲管放平；迫擊砲短、砲管翹）；不多一次繪製呼叫
         const [gx, gy, gz] = GUN_SCALE22[u.kind] ?? GUN_SCALE22[UK_HOWITZER];
-        m.position.set(x + bx * 0.1, back * 0.035, z + bz * 0.1); m.rotation.set(0, u.pathIdx < u.path.length ? this.yaw[u.id] + Math.PI : aim, u.alive ? -back * 0.12 : 0.2); m.scale.set(gx, gy, gz); m.updateMatrix();
+        const tw = u.towBy ? this.yaw[u.towBy] : 0, tb = u.towBy ? 0.6 : 0; m.position.set(x + bx * 0.1 - Math.cos(tw) * tb, back * 0.035, z + bz * 0.1 + Math.sin(tw) * tb); m.rotation.set(0, u.pathIdx < u.path.length || u.towBy ? this.yaw[u.id] + Math.PI : aim, u.alive ? -back * 0.12 : 0.2); m.scale.set(gx, gy, gz); m.updateMatrix();
         this.gun.setMatrixAt(ng, m.matrix); this.gun.setColorAt(ng, col);
         ng++;
         if ((u.kind === UK_MORTAR || u.kind === UK_MG) && u.alive) nm = this.crew22(u, x, z, col, nm);
@@ -1017,7 +1017,7 @@ export class BattleView {
     const dt = t - this.turretT;
     this.turretT = t;
     for (const u of this.w.units) {
-      const want = ART44[u.kind]?.casemate && !this.engaged44(u, t) && u.hullX !== undefined && u.hullZ !== undefined ? Math.atan2(-u.hullZ, u.hullX) : Math.atan2(-u.aimZ, u.aimX);   // R044 固定戰鬥室沒在打就轉回車頭
+      const want = UNIT_KINDS[u.kind].carry ? this.yaw[u.id] : ART44[u.kind]?.casemate && !this.engaged44(u, t) && u.hullX !== undefined && u.hullZ !== undefined ? Math.atan2(-u.hullZ, u.hullX) : Math.atan2(-u.aimZ, u.aimX);   // R044 固定戰鬥室沒在打就轉回車頭
       if (dt < 0 || dt > 1) { this.turretYaw[u.id] = want; continue; }
       let d = want - this.turretYaw[u.id];
       d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
