@@ -6,11 +6,12 @@ import * as W from '../src/sim/world.ts';
 import { step } from '../src/sim/step.ts';
 import { applyBuild, buildError, territory, BUILD_KINDS_24, WALL_KINDS, WIRE_KIND } from '../src/sim/build.ts';
 import { applyTrench, trenchError, TRENCH_KINDS } from '../src/sim/trenches.ts';
-import { BattleView, setView98 } from '../src/render/battle.ts';
+import { BattleView, setView98, setStreets } from '../src/render/battle.ts';
 import { tile128 } from '../tools/tile128.mjs';
 
 let rs = 9898; const rnd = m => { rs = (Math.imul(rs, 1103515245) + 12345) >>> 0; return (rs >>> 8) % m; };
 const opts = { fog: false, fx: true, r016: true, r118: true };
+setStreets(true);   // 跟遊戲一樣（main.ts 的 setStreets(V.r027)）：路緣畫在貼著房子的路格上，所以改到的格要多一圈
 const same = (a, b) => a.length === b.length && Buffer.compare(Buffer.from(a.buffer, a.byteOffset, a.length), Buffer.from(b.buffer, b.byteOffset, b.length)) === 0;
 function world(map, seed) {
   const w = W.createWorld(seed);
@@ -23,8 +24,8 @@ function item(real, plan) {
   const kinds = [...BUILD_KINDS_24, ...WALL_KINDS, WIRE_KIND];
   const pv = preview(real, plan);
   for (let t = 0; t < 400; t++) {
-    const x = rnd(real.n), z = rnd(real.n);
-    if (!territory(W.SIDE_PLAYER, x, z, real.n)) continue;
+    const x = rnd(real.n), z = rnd(real.n), road = (a, b) => a >= 0 && b >= 0 && a < real.n && b < real.n && real.ter[b * real.n + a] === W.TER_ROAD;
+    if (!territory(W.SIDE_PLAYER, x, z, real.n) || (t < 200 && !(road(x - 1, z) || road(x + 1, z) || road(x, z - 1) || road(x, z + 1)))) continue;   // 先找貼著路的格（路緣）
     const cmd = rnd(4) === 0 ? { t: 'trench', side: W.SIDE_PLAYER, kind: rnd(TRENCH_KINDS.length), x, z, ...(rnd(2) ? { rot: 1 } : {}) }
       : { t: 'build', side: W.SIDE_PLAYER, kind: kinds[rnd(kinds.length)].kind, x, z, ...(rnd(2) ? { rot: 1 } : {}) };
     if ((cmd.t === 'trench' ? trenchError(pv, cmd) : buildError(pv, cmd)) === null) return cmd;

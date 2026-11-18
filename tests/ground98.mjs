@@ -25,8 +25,9 @@ function gpu(v) {
   const full = tex => { s.px = Uint8Array.from(v.groundPx); s.ver = tex.version; s.tex = tex; s.fulls++; };
   const stale = tex => tex !== s.tex || tex.version !== s.ver;   // 新的貼圖物件第一次用一定整張；同一張 version 變了也整張
   const fake = { copyTextureToTexture(src, dst, box, at) {
-    assert.equal(dst, v.groundTex, 'shadow: the upload goes to the ground texture in use');
-    assert.equal(src.image.data, v.groundPx, 'shadow: the staging texture reads the current groundPx (after a size change too)');
+    // 用 assert(a === b)：assert.equal 比大陣列失敗時 Node 會去算兩邊的差異，算不完（審查 R098 時卡過）
+    assert(dst === v.groundTex, 'shadow: the upload goes to the ground texture in use');
+    assert(src.image.data === v.groundPx, 'shadow: the staging texture reads the current groundPx (after a size change too)');
     const Wd = v.groundTex.image.width, x0 = box.min.x, y0 = box.min.y, x1 = box.max.x, y1 = box.max.y;
     assert(x0 >= 0 && y0 >= 0 && x1 <= Wd && y1 <= Wd && x0 < x1 && at.x === x0 && at.y === y0, `shadow: rectangle ${x0},${y0}-${x1},${y1} lies inside the ${Wd}-pixel texture at its own position`);
     assert.equal(y1 - y0, PX, `shadow: each rectangle is exactly one cell row (${PX} pixels) high`);
