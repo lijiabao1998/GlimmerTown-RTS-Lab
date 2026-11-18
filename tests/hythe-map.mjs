@@ -14,10 +14,11 @@ import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 import { createSandboxWorld } from '../src/sim/sandbox.ts';
 import { mapEntry } from '../src/sim/mapRegistry.ts';
+import { initSkirmish } from '../src/ui/skirmish.ts';
 import { findPath } from '../src/sim/path.ts';
 import { randInt } from '../src/sim/rng.ts';
 import * as H from '../src/sim/hytheMap.ts';
-import { heur90, hb90 } from '../src/sim/pathRule90.ts';
+import { heur90, hb90, snap90 } from '../src/sim/pathRule90.ts';
 
 const only = process.argv[2], run = (name, f) => { if (only && only !== name) return; f(); console.log(`OK hythe-map/${name}`); };
 const ECO = { t: 'eco', inf: 1, guns: 1, tanks: 1, armor2: 1, soviet: 1, international: 1, end: 1, pla: 1, mg: 2 };
@@ -30,7 +31,6 @@ run('gen', () => {
     const w = hythe(seed), n = w.n;
     assert.equal(n, 128, 'gen: the map is 128×128');
     const pre = w.blds.length; counts.push(pre);
-    assert(pre >= 350 && pre <= 460, `gen: seed ${seed} has 350–460 buildings before the HQs (${pre})`);
     for (const b of w.blds) for (let dz = 0; dz < b.d; dz++) for (let dx = 0; dx < b.w; dx++) {
       const x = b.x + dx, z = b.z + dz, t = w.ter[z * n + x];
       assert(t !== W.TER_ROAD && t !== W.TER_MUD && !H.inHytheSpawn(x, z), `gen: seed ${seed} building ${b.id} (kind ${b.kind}) is not on a road, the mud, a bridge or a spawn corner (${x},${z})`);
@@ -55,6 +55,7 @@ run('gen', () => {
     assert.equal(groups.length, 5, `gen: seed ${seed} the canal is crossed by exactly 5 bridges (${groups.length})`);
     for (const [bx, bz] of H.HYTHE_BRIDGES) assert(groups.some(g => g.includes(bz * n + bx)), `gen: bridge ${bx},${bz} is one of them`);
     assert(veg(w) <= 64 && veg(w) >= 20, `gen: seed ${seed} vegetation grows and stays ≤ 64 (${veg(w)})`);
+    assert(pre >= 350 && pre <= 460, `gen: seed ${seed} has 350–460 buildings before the HQs (${pre})`);
     if (seed % 5 === 0) {   // 指揮部與坦克開得到每一座橋（開 eco 的世界）
       const e = hythe(seed, [ECO]), hqs = e.blds.filter(b => b.kind === W.BK_HQ);
       assert.equal(hqs.length, 2, 'gen: both headquarters are placed');
@@ -87,7 +88,7 @@ run('first', () => {
   assert(h.length > 0);
 });
 
-const PINNED = ['b54bf36d', '0e0ffac4', 'bb240d77'];   // R090 施工時取（map 5、植被、沒有 sym）
+const PINNED = ['68ee5a37', '4907516a', '5363d341'];   // R090 施工時取（map 5、植被、沒有 sym；圓形砲塔移到 (9,21) 之後）
 run('pinned', () => {
   const got = [1, 2, 3].map(s => W.hashWorld(hythe(s, [], 0)));
   assert.deepEqual(got, PINNED, `pinned: tick-0 hashes of seeds 1–3 (${got.join(' ')})`);
@@ -185,11 +186,14 @@ run('mirror', () => {
   const pick = a => a[randInt(st, a.length)];
   for (let k = 0; k < 500; k++) { const wire = k % 3 === 0 && wires.length; same(pick(opens), wire ? pick(wires) : pick(houses), wire ? W.UK_INFANTRY : W.UK_TANK, `blocked goal ${k}: the snapped paths are point mirrors`); }
   for (let k = 0; k < 300; k++) same(pick(opens), pick(opens), W.UK_TANK, `open goal ${k}: the paths are point mirrors`);
-  for (let k = 0; k < 60 && wires.length; k++) {   // 換終點用這個單位自己的「擋不擋」：步兵不會換到鐵絲網上
+  let wired = 0;
+  for (let k = 0; k < 120 && wires.length; k++) {   // 換終點用這個單位自己的「擋不擋」：步兵把鐵絲網當成擋住，換到的格就是用它算的那一格
     const s = pick(opens), g = pick(wires), p = findPath(w, s[0], s[1], g[0], g[1], 0, 0, W.UK_INFANTRY), e = p.at(-1);
-    if (e === undefined) continue; const ex = e % n, ez = (e - ex) / n;
-    assert(!W.wireAt(w, ex, ez), `mirror: an infantry order onto wire at ${g} does not end on wire (${ex},${ez})`);
+    const want = snap90(w, (x, z) => W.wireBlocks(w, x, z, W.UK_INFANTRY) || W.blocks(w, x, z), s[0], s[1], g[0], g[1]);
+    if (e === undefined || want < 0) continue;
+    assert.equal(e, want, `mirror: an infantry order onto wire at ${g} ends on the cell its own blocking rule snaps to`); wired++;
   }
+  assert(wired >= 60, `mirror: coverage (${wired} infantry orders onto wire)`);
 });
 
 run('white', () => {
@@ -222,6 +226,9 @@ run('page', () => {
   step(c.w, recorded.map(x => x.cmd));
   assert.equal(W.hashWorld(c.w), W.hashWorld(runLog(W.createWorld(1944), recorded, 1)), 'page: the page opening equals replaying its own log');
   for (const extra of [{ skirmish: undefined }, { skirmish: sk(false) }]) assert.doesNotThrow(() => ctx(extra).reset(), 'sandbox: reset() without 海斯 never reads MAP_HYTHE');
+  // 閥：?noR090=1 的頁面沒有海斯可選，網址的 map=hythe 不理
+  const on = initSkirmish(new URLSearchParams('map=hythe'), true), off = initSkirmish(new URLSearchParams('map=hythe&noR090=1'), true);
+  assert.deepEqual([on.canHythe, on.hythe, off.canHythe, off.hythe], [true, true, false, false], 'valve: ?map=hythe chooses 海斯, and ?noR090=1 offers no 海斯');
   for (const [large, expanded, n] of [[true, false, 64], [false, true, 96]]) { const d = ctx({ large, expanded, skirmish: undefined }); d.reset(); assert.deepEqual([d.w.n, ...Array.from(d.focus)], [n, n - 9, 0, n - 9], `page: the ${n} map still opens its camera at ${n - 9}`); }
 });
 

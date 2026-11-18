@@ -60,9 +60,10 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     const big = useRaster(w.n); if (big) raster.begin(w.n);
     for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) {
       const i = cellIdx(w, x, z), t = w.ter[i], id = w.occ[i], b = id ? w.blds[id - 1] : null;
-      ctx.fillStyle = b ? (stageOf(b) === STAGE_RUBBLE ? '#6f6559' : b.builtBy === SIDE_PLAYER ? '#a9c4e6' : '#cfc3a8')
+      const color = b ? (stageOf(b) === STAGE_RUBBLE ? '#6f6559' : b.builtBy === SIDE_PLAYER ? '#a9c4e6' : '#cfc3a8')
         : w.crater[i] ? '#4a3f33' : t === TER_ROAD ? '#8f7f62' : t === TER_FIELD ? '#9a9450' : t === TER_MUD ? '#4d6470' : '#5b7a42';
-      if (big) { raster.put(i, ctx.fillStyle as string); continue; }
+      if (big) { raster.put(i, color); continue; }   // R090：不經過畫布的 fillStyle（每次都要解析顏色字串）
+      ctx.fillStyle = color;
       cell(ctx, x, z);
       const foliage = a.vegetation !== false ? vegetationAt(w, x, z) : 0;
       if (!b && foliage) {
