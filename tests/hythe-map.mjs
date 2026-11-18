@@ -8,8 +8,9 @@ import vm from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import { performance } from 'node:perf_hooks';
 import * as W from '../src/sim/world.ts';
-import { step, formationAt, runLog } from '../src/sim/step.ts';
-import { applyMap, MAP_RYE, MAP_HILLS } from '../src/sim/maps.ts';
+import { step, formationAt, runLog, commandTick } from '../src/sim/step.ts';
+import { applyMap, applyMoreHouses, MAP_RYE, MAP_HILLS } from '../src/sim/maps.ts';
+import { startZombies } from '../src/sim/zombies.ts';
 import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 import { createSandboxWorld } from '../src/sim/sandbox.ts';
@@ -130,9 +131,10 @@ run('route', () => {
     const us = w.units.filter(u => u.alive && u.side === 0), jobs = [];
     for (let j = 0; j < 47; j++) { const u = us[j % us.length], [ox, oz] = formationAt(w, 0, j); jobs.push([W.cellOf(u.x), W.cellOf(u.z), Math.max(0, 8 + ox), Math.max(0, 8 + oz), 0, 0, u.kind]); }
     const blockedJobs = w.blds.filter(b => b.hp > 0).slice(0, 60).map(b => [W.cellOf(us[0].x), W.cellOf(us[0].z), b.x, b.z, 0, 0, W.UK_TANK]);
-    const time = (f, js) => { const t = []; for (let r = 0; r < 5; r++) { const t0 = performance.now(); for (const j of js) f(w, ...j); t.push(performance.now() - t0); } return med(t); };
-    const go = time(r097, jobs), gn = time(findPath, jobs); tOld += go; tNew += gn; groupMs.push(gn);
-    bOld += time(r097, blockedJobs); bNew += time(findPath, blockedJobs);
+    // 舊、新輪流量 7 次，各取最快那次：機器忙的時候（別的守衛、無頭瀏覽器）慢的那幾次是被搶走的時間，不是演算法
+    const time = js => { const o = [], m = []; for (let r = 0; r < 7; r++) { let t0 = performance.now(); for (const j of js) r097(w, ...j); o.push(performance.now() - t0); t0 = performance.now(); for (const j of js) findPath(w, ...j); m.push(performance.now() - t0); } return [Math.min(...o), Math.min(...m)]; };
+    const [go, gn] = time(jobs); tOld += go; tNew += gn; groupMs.push(gn);
+    const [bo, bn] = time(blockedJobs); bOld += bo; bNew += bn;
     for (const [sx, sz, gx, gz] of blockedJobs) {   // 擋住的終點：換到 8 圈以內走得到的格
       const p = findPath(w, sx, sz, gx, gz, 0, 0, W.UK_TANK), e = p.at(-1), ex = e % n, ez = (e - ex) / n;
       assert(p.length && !W.blocks(w, ex, ez) && Math.max(Math.abs(ex - gx), Math.abs(ez - gz)) <= 8, `route: a blocked goal ${gx},${gz} snaps to an open cell within 8 rings (${ex},${ez})`);
@@ -230,6 +232,29 @@ run('page', () => {
   const on = initSkirmish(new URLSearchParams('map=hythe'), true), off = initSkirmish(new URLSearchParams('map=hythe&noR090=1'), true);
   assert.deepEqual([on.canHythe, on.hythe, off.canHythe, off.hythe], [true, true, false, false], 'valve: ?map=hythe chooses 海斯, and ?noR090=1 offers no 海斯');
   for (const [large, expanded, n] of [[true, false, 64], [false, true, 96]]) { const d = ctx({ large, expanded, skirmish: undefined }); d.reset(); assert.deepEqual([d.w.n, ...Array.from(d.focus)], [n, n - 9, 0, n - 9], `page: the ${n} map still opens its camera at ${n - 9}`); }
+  // 卡面驗收 3（審查 2026-11-18）：真的 reset() 與 issue()、真的遭遇戰設定（initSkirmish；skirmish.start 套規則、R087 多放房子），
+  // 兵力 1–3 × 對稱 × 喪屍（mode=zombies，地圖 5 不收）× R087 開關：第 1 步都等於重播自己的紀錄；兵力 2、對稱的四組再走到第 600 步（電腦在打）
+  const issueSrc = src.match(/function issue\([^]*?\n\}/)?.[0];
+  assert(issueSrc, 'page: issue() exists');
+  for (const force of [1, 2, 3]) for (const sym of [0, 1]) for (const zombies of [false, true]) for (const r087 of [true, false]) {
+    const q = new URLSearchParams(`map=hythe&force=${force}${zombies ? '&mode=zombies' : ''}${r087 ? '' : '&noR087=1'}`), tag = `force ${force}, sym ${sym}, zombies ${zombies}, r087 ${r087}`;
+    const c = vm.createContext({
+      setViewSide() {}, clearGestureInput() {}, battleAudio: undefined, createWorld: W.createWorld, createSandboxWorld, applyMap, applyMoreHouses, startZombies, MAP_RYE, MAP_HILLS, MAP_LARGE, MAP_TOWN, MAP_HYTHE: H.MAP_HYTHE, SIDE_ENEMY: W.SIDE_ENEMY, seed: 1944,
+      V: { r006: false, r018: true, r019: true, r026: true, r045: true, r057: true, r078: true, r084: !!sym, r087, r109: false },
+      large: false, expanded: false, q, skirmish: initSkirmish(q, true), netLive: () => false, commandTick, pending: [],
+      makeView() {}, view: { target: { set() {} } }, selected: new Set(), newStats: () => ({}), reportView: undefined, planner: { clear() {}, refreshPreview() {} }, ui() {}, syncBattleAudio() {},
+      ecoCmd: () => ECO, aiLevel: 3,
+    });
+    vm.runInContext(reset + issueSrc, c); c.reset();
+    const page = c.w, log = JSON.parse(JSON.stringify(c.log)), ids = log.map(e => e.cmd.t);
+    assert.deepEqual([page.map, page.n, log[0].cmd.t, log[0].cmd.id, ids.includes('ai'), ids.includes('zombies') === zombies], [5, 128, 'map', 5, true, true], `page: the real reset() opens map 5 with the map command first and the AI on (${tag})`);
+    assert(!page.zombies, `page: map 5 never starts zombies, even with mode=zombies (${tag})`);
+    step(page, log.map(e => e.cmd));
+    assert.equal(W.hashWorld(page), W.hashWorld(runLog(W.createWorld(1944), log, 1)), `page: the opening on the page equals the replay of its own log at tick 1 (${tag})`);
+    if (force !== 2 || !sym) continue;
+    while (page.tick < 600) step(page, []);
+    assert.equal(W.hashWorld(page), W.hashWorld(runLog(W.createWorld(1944), log, 600)), `page: the page game equals the replay of its own log at tick 600 (${tag})`);
+  }
 });
 
 run('text', () => {

@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import * as W from '../src/sim/world.ts';
 import { step } from '../src/sim/step.ts';
 import { initMinimap } from '../src/ui/minimap.ts';
+import { vegetationAt, VEG_HEDGE, VEG_WOOD } from '../src/sim/vegetation.ts';
 import { ECO } from '../tools/duel.mjs';
 
 class Context {
@@ -19,7 +20,7 @@ class Context {
   clearRect() { this.log.push('clear'); } setTransform(...m) { this.log.push(`t${m.map(v => +v.toFixed(4)).join(',')}`); }
   drawImage(img) { this.log.push(`d${img.width}x${img.height}${img.isBase ? 'B' : ''}`); }
   createImageData(w, h) { return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }; }
-  putImageData(img) { this.put = img; this.log.push(`p${img.width}`); }
+  putImageData(img) { this.put = { width: img.width, data: img.data.slice() }; this.puts = (this.puts ?? 0) + 1; this.log.push(`p${img.width}`); }   // 存當下的內容（之後再寫不會改到）
 }
 const canvases = [];
 class El {
@@ -52,13 +53,25 @@ assert.deepEqual(got, BASE, 'minimap: maps 0–4 paint exactly as before R090 (e
 console.log(`OK minimap90/old-maps: ${Object.keys(got).length} fingerprints equal f9a4155`);
 
 // 地圖 5：點陣那一條路——每一格一個像素、顏色跟舊畫法同一份；一次 drawImage、變換是菱形；沒有一格一格的 fill
-const w5 = world(5, 1, 0), { base, raster } = paint(w5), n = w5.n;
-assert(raster && raster.ctx.put && raster.ctx.put.width === n, 'map5: the raster is n × n and was put once');
-const diamonds = base.ctx.log.filter(op => op.startsWith('f') && op.split(',').length === 8).length;   // 小樹林本來就是小菱形（≤ 64 格）
-assert(diamonds <= 64, `map5: no per-cell diamond fills on 128 (${diamonds} diamonds, only the woods)`);
-const s = 150 / (2 * n), dpr = 2;
-assert(base.ctx.log.includes(`t${[s * dpr, (s / 2) * dpr, -s * dpr, (s / 2) * dpr, 75 * dpr, 0].map(v => +v.toFixed(4)).join(',')}`), 'map5: the raster is drawn through the diamond transform');
+const w5 = world(5, 1, 0), { mini, base, raster } = paint(w5), n = w5.n;
+assert(raster && raster.ctx.put && raster.ctx.put.width === n && raster.ctx.puts === 1, 'map5: the raster is n × n and was put once');
+const woods = base.ctx.log.filter(op => op.startsWith('f#314b30')).length, hedges = base.ctx.log.filter(op => op.startsWith('r#c4cf80')).length;
+const diamonds = base.ctx.log.filter(op => op.startsWith('f') && op.split(',').length === 8).length;   // 小樹林本來就是小菱形
+assert(diamonds === woods, `map5: no per-cell diamond fills on 128 (${diamonds} diamonds, ${woods} of them woods)`);
+let wantWoods = 0, wantHedges = 0;
+for (let z = 0; z < n; z++) for (let x = 0; x < n; x++) { const v = w5.occ[z * n + x] ? 0 : vegetationAt(w5, x, z); if (v === VEG_WOOD) wantWoods++; else if (v === VEG_HEDGE) wantHedges++; }
+assert(wantWoods + wantHedges >= 20 && woods === wantWoods && hedges === wantHedges, `map5: every free hedge and wood cell is drawn on top of the raster (${hedges}/${wantHedges} hedges, ${woods}/${wantWoods} woods)`);
+const s = 150 / (2 * n), dpr = 2, diamond = `t${[s * dpr, (s / 2) * dpr, -s * dpr, (s / 2) * dpr, 75 * dpr, 0].map(v => +v.toFixed(4)).join(',')}`;
+const at = base.ctx.log.indexOf(diamond);
+assert(at >= 0 && base.ctx.log[at + 1] === `d${n}x${n}`, `map5: the raster is drawn once through the diamond transform (${base.ctx.log.slice(at, at + 2).join(' ')})`);
+assert.equal(base.ctx.log.filter(op => op === `d${n}x${n}`).length, 1, 'map5: one drawImage of the raster');
 const old = (i) => { const t = w5.ter[i], id = w5.occ[i], b = id ? w5.blds[id - 1] : null; return b ? (W.stageOf(b) === W.STAGE_RUBBLE ? '#6f6559' : b.builtBy === 0 ? '#a9c4e6' : '#cfc3a8') : w5.crater[i] ? '#4a3f33' : t === W.TER_ROAD ? '#8f7f62' : t === W.TER_FIELD ? '#9a9450' : t === W.TER_MUD ? '#4d6470' : '#5b7a42'; };
 const d = raster.ctx.put.data;
 for (let i = 0; i < n * n; i++) { const c = old(i), o = i * 4; assert(d[o] === parseInt(c.slice(1, 3), 16) && d[o + 1] === parseInt(c.slice(3, 5), 16) && d[o + 2] === parseInt(c.slice(5, 7), 16) && d[o + 3] === 255, `map5: cell ${i} has the old painter's colour ${c}`); }
-console.log(`OK minimap90/map5: ${n}×${n} raster with the old colours, one drawImage through the diamond transform`);
+// 改了一格（炸出彈坑）、說底圖髒了：下一幀重寫點陣、再上傳一次，那一格是彈坑的顏色
+const hole = 64 * n + 40;
+assert(!w5.crater[hole] && !w5.occ[hole], 'map5: the test cell is a plain cell');
+w5.crater[hole] = 1; mini.dirty(); mini.frame(2);
+const d2 = raster.ctx.put.data, o2 = hole * 4;
+assert(raster.ctx.puts === 2 && [d2[o2], d2[o2 + 1], d2[o2 + 2]].join() === '74,63,51', `map5: after dirty() the next frame re-puts the raster with the new cell colour (${raster.ctx.puts} puts, ${[d2[o2], d2[o2 + 1], d2[o2 + 2]]})`);
+console.log(`OK minimap90/map5: ${n}×${n} raster with the old colours, one drawImage through the diamond transform, ${hedges} hedges and ${woods} woods on top, repainted after dirty()`);

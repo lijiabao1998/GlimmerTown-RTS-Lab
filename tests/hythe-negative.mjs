@@ -34,6 +34,11 @@ const cases = [
   ['valve_ignored', 'src/ui/skirmish.ts', [['const canHythe = valves(q).r090 && canVillage;', 'const canHythe = canVillage;']], 'hythe-map', 'page', /^valve: \?map=hythe chooses 海斯, and \?noR090=1 offers no 海斯$/],
   // 畫面
   ['raster_small', 'src/ui/minimapRaster.ts', [['export const useRaster = (n: number): boolean => n >= RASTER_N;', 'export const useRaster = (n: number): boolean => n >= 32;']], 'minimap90', '', /^minimap: maps 0–4 paint exactly as before R090/],
+  // 審查 2026-11-18：點陣有寫沒畫、還沒寫就上傳、植被不疊、髒了不重寫
+  ['raster_not_drawn', 'src/ui/minimapRaster.ts', [['    ctx.drawImage(cvs, 0, 0);', '']], 'minimap90', '', /^map5: the raster is drawn once through the diamond transform/],
+  ['raster_put_early', 'src/ui/minimapRaster.ts', [["    if (!this.img) this.img = this.cvs.getContext('2d')!.createImageData(n, n);", "    if (!this.img) { this.img = this.cvs.getContext('2d')!.createImageData(n, n); this.cvs.getContext('2d')!.putImageData(this.img, 0, 0); }"], ["    cvs.getContext('2d')!.putImageData(this.img!, 0, 0);\n", '']], 'minimap90', '', /^map5: cell 0 has the old painter's colour/],
+  ['foliage_dropped', 'src/ui/minimap.ts', [['    if (w.occ[cellIdx(w, x, z)] || !foliage) return;', '    return;']], 'minimap90', '', /^map5: every free hedge and wood cell is drawn on top of the raster/],
+  ['raster_stale', 'src/ui/minimap.ts', [['    const big = useRaster(w.n); if (big) raster.begin(w.n);', '    const big = useRaster(w.n); if (big && raster.begin(w.n) === undefined && raster.done) return; if (big) raster.done = true;']], 'minimap90', '', /^map5: after dirty\(\) the next frame re-puts the raster/],
 ];
 try {
   for (const d of ['src', 'tools']) fs.cpSync(path.join(root, d), path.join(temp, d), { recursive: true });

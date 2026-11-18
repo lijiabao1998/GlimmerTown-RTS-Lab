@@ -122,6 +122,7 @@ body.r069 #sb-enter, body.r069 #map-pick, body.r069 #zombies-pick, body.r069 #to
 #start-menu button { box-sizing: border-box; min-width: 44px; min-height: 44px; margin: 0; padding: 6px 8px; border: 1px solid #6c745f; border-radius: 5px;
   background: #3c4535; color: #f3eedf; font: inherit; line-height: 1.2; cursor: pointer; touch-action: manipulation; }
 #start-menu .sm-seg button, #start-menu .sm-extra button { flex: 1 1 0; }
+#start-menu .sm-seg.sm-wide button { flex: 1 1 30%; }
 #start-menu .sm-extra.sm-many button { flex: 1 1 auto; padding: 6px 4px; }
 #start-menu .sm-seg button small { display: block; color: #d9dcc6; font-size: 11px; }
 #start-menu button[aria-pressed="true"] { background: #2f5f9a; border-color: #9cc6ff; }
@@ -167,7 +168,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
   const view = (): MenuView => {
     const s = host.state(), audio = el('b-audio'), tut = el('tutorial-open');
     const maps: MapChoice[] = ['rye', ...(el('map-pick') ? ['large' as const] : []), ...(el('town-pick') ? ['town' as const] : [])];
-    const modes: ModeChoice[] = ['battle', ...(el('zombies-pick') ? ['zombies' as const] : []), ...(el('sb-enter') ? ['sandbox' as const] : [])];
+    const modes: ModeChoice[] = ['battle', ...(el('zombies-pick') && !(sk?.hythe && s.map === 'rye') ? ['zombies' as const] : []), ...(el('sb-enter') ? ['sandbox' as const] : [])];
     if (sk && s.rye) maps.splice(1, 0, 'village');   // R046：萊伊之外另有亂數村莊
     if (sk?.canHills) maps.splice(maps.indexOf('village') + 1 || 1, 0, 'hills');   // R055：丘陵（有高度的地圖）排在 32×32 那幾張的最後
     if (sk?.canHythe) maps.push('hythe');   // R090：海斯（128×128）排在最後
@@ -179,7 +180,7 @@ export function initStartMenu(host: StartMenuHost): StartMenu {
     const m = menuLayout(view()), focused = root.contains(document.activeElement) ? document.activeElement!.id : '';
     const html = `<div class="sm-panel">
       <div class="sm-head"><h1 id="sm-title">${esc(m.title)}</h1><p class="sm-sub">${esc(m.sub)}</p></div>
-      <div class="sm-rows">${m.rows.map(r => `<div class="sm-row" id="${r.id}">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}<div class="sm-seg">${r.items.map(it => button(it)).join('')}</div>${r.note ? `<p class="sm-note">${esc(r.note)}</p>` : ''}</div>`).join('')}</div>
+      <div class="sm-rows">${m.rows.map(r => `<div class="sm-row" id="${r.id}">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}<div class="sm-seg${r.items.length > 5 ? ' sm-wide' : ''}">${r.items.map(it => button(it)).join('')}</div>${r.note ? `<p class="sm-note">${esc(r.note)}</p>` : ''}</div>`).join('')}</div>
       <div class="sm-side"><div class="sm-main">${m.main.map((it, i) => button(it, i === 0 ? 'sm-primary' : '')).join('')}</div>
       <div class="sm-extra${m.extra.length > 3 ? ' sm-many' : ''}">${m.extra.map(it => button(it)).join('')}</div></div>
     </div>`;

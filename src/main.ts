@@ -504,7 +504,7 @@ if (V.r130) townPick = initTownPick({
   toggle: () => { expanded = !expanded; large = false; reset(); },
 });
 if (V.r045) zombiesPick = initZombiesPick({
-  state: () => ({ show: phase === 'build' && !w.sandbox, active: !!w.zombies }),
+  state: () => ({ show: phase === 'build' && !w.sandbox && w.map !== MAP_HYTHE, active: !!w.zombies }),   // R090：海斯沒有喪屍模式
   toggle: () => { if (w.zombies) q.delete('mode'); else q.set('mode', 'zombies'); reset(); },
 });
 

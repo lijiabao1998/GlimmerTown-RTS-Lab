@@ -40,7 +40,7 @@ export const HYTHE_BRIDGES: readonly (readonly [number, number])[] = HYTHE_ROADS
 
 // 地標（固定；守衛逐項比對種類、位置、大小）：[種類, x, z, 寬, 深, 層]
 // 圓形砲塔：1×1、2 層的石塔（BK_CHURCH，跟萊伊的 Ypres Tower 同一種畫法；真的圓塔另做美術）
-export const MARTELLO: readonly (readonly [number, number])[] = [[3, 27], [9, 21], [27, 3]];   // 中間那座原本在 (14,16)：攻方出生角落的出口、正好在對角線上，等於替攻方基地加一座石塔（經典 40 局逾時 22 → 17，見卡面）
+export const MARTELLO: readonly (readonly [number, number])[] = [[3, 27], [9, 21], [27, 3]];   // 中間那座原本在 (14,16)：攻方出生角落的出口、正好在對角線上，等於替攻方基地加一座石塔（經典種子 1–40 逾時 22 → 16，見卡面）
 // 看橋的碉堡：前四座橋，各一座在內陸那一頭、橋的 4 格以內（BK_PILLBOX 1×1）
 export const HYTHE_PILLBOXES: readonly (readonly [number, number])[] = HYTHE_BRIDGES.slice(0, 4).map(([bx, bz]) => {
   for (let r = 2; r <= 4; r++) for (const [dx, dz] of [[r, r], [r - 1, r], [r, r - 1], [r + 1, r - 2], [r - 2, r + 1]]) {

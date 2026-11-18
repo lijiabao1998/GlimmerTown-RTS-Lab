@@ -230,8 +230,8 @@ run('hythe', () => {
       m5++;
     } else assert.deepEqual(findPath(w, ...a), refFindPath(w, ...a), `path: query ${q} (${tag(w)}: ${a.join(',')}) identical to the 74fa704 A* with map-5 searches in between`);
     total++;
-    if (q % 20 === 19) {
-      const bad = { ...h5 }, limit = 1 + rnd(600); let reads = 0;
+    if (q % 4 === 3) {   // 800 次；讀到第 1–300 次鐵絲網就拋，約八成搜到一半拋錯（卡面驗收 2：≥ 200）
+      const bad = { ...h5 }, limit = 1 + rnd(300); let reads = 0;
       Object.defineProperty(bad, 'wires', { get() { if (++reads > limit) throw new Error('boom'); return h5.wires; } });
       const a5 = query(h5, q); a5[6] = UK_INFANTRY;
       try { findPath(bad, ...a5); } catch (e) { if (e.message !== 'boom') throw e; thrown++; }
@@ -239,7 +239,7 @@ run('hythe', () => {
       assert.deepEqual(findPath(o, ...b), refFindPath(o, ...b), `hythe: after a map-5 search threw, query ${q} (${tag(o)}: ${b.join(',')}) is identical to the 74fa704 A*`);
     }
   }
-  assert(total >= 3000 && m5 >= 250 && thrown >= 60, `hythe: coverage (${total} queries, ${m5} on map 5, ${thrown} map-5 searches threw halfway)`);
+  assert(total >= 3000 && m5 >= 250 && thrown >= 200, `hythe: coverage (${total} queries, ${m5} on map 5, ${thrown} map-5 searches threw halfway)`);
   console.log(`  ${total} queries (${m5} on map 5, ${thrown} map-5 searches threw); maps 0–4 identical to 74fa704 throughout`);
 });
 

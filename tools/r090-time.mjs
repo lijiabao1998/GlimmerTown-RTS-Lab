@@ -1,6 +1,6 @@
 // R090 海斯（地圖 5）在這台筆電、真顯示卡上的時間（GT_REAL_GPU=1 node tools/r090-time.mjs [--check]；CI 沒有顯示卡，不進 CI）。卡面驗收 8：
-//   建好畫面（makeView＋開局第一次 refreshPreview）≤ 300 毫秒、小地圖重畫 ≤ 4 毫秒；R098 的三項（換段那一幀、布陣點一下、地面上傳）在地圖 5 上重量一次，
-//   跟河鎮同一次量。手機 412×860、dpr 2；R098 的項目照 tools/r098-time.mjs 的量法（同一頁裡閥輪流開關、交錯取中位數）。量之前確認沒有別的無頭瀏覽器在跑。
+//   建好畫面（makeView＋開局第一次 refreshPreview）≤ 300 毫秒、小地圖重畫 ≤ 4 毫秒；R098 的三項（換段那一幀、布陣點一下、地面上傳的三種）在地圖 5 上重量一次，
+//   ≤ 同一次量的河鎮 1.5 倍（也印出跟 R098 卡面在鋪滿的 128 圖上的數字比）。手機 412×860、dpr 2；R098 的項目照 tools/r098-time.mjs 的量法（同一頁裡閥輪流開關、交錯取中位數）。量之前確認沒有別的無頭瀏覽器在跑。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,7 +34,11 @@ try {
       const h = out.hythe, t = out.town;
       assert(h.build <= 300, `time: building the Hythe view ≤ 300 ms (${r2(h.build)})`);
       assert(h.mini <= 4, `time: repainting the Hythe minimap ≤ 4 ms (${r2(h.mini)})`);
-      for (const k of ['tap', 'stage8']) assert(h[k].on <= 1.5 * t[k].on, `time: R098's ${k} on Hythe ≤ 1.5× the town in the same run (${r2(h[k].on)} vs ${r2(t[k].on)})`);
+      for (const k of ['tap', 'stage8', 'he', 'tracks', 'quarter']) assert(h[k].on <= 1.5 * t[k].on, `time: R098's ${k} on Hythe ≤ 1.5× the town in the same run (${r2(h[k].on)} vs ${r2(t[k].on)})`);
+      // 卡面寫的是「不比 R098 在鋪滿的 128 圖上的數字差 1.5 倍以上」：那幾個數字記在 R098 卡面（換段 11.9–14.0、點一下 61.5–72.7、一發砲 0.7、兩支裝甲連 0.8、四分之一張 1.9 毫秒），只印出來對照，
+      // 上傳那三項 R098 自己就量不準（什麼都不做那一項 0.4–3.1 毫秒），所以門檻用同一次量的河鎮
+      const R098 = { stage8: 14.0, tap: 72.7, he: 0.7, tracks: 0.8, quarter: 1.9 };
+      console.log('vs R098 on the full 128:', Object.entries(R098).map(([k, v]) => `${k} ${r2(h[k].on)}/${v} = ${r2(h[k].on / v)}×`).join(', '));
       console.log('r090-time: all thresholds met');
     }
   });

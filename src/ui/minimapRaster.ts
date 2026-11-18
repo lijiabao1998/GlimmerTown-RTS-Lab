@@ -22,12 +22,13 @@ export class MiniRaster {
     const d = this.img!.data, o = i * 4;
     d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
   }
-  // 一次畫成菱形（不平滑：一格一個菱形色塊，跟舊畫法一樣是實心的格）
+  // 一次畫成菱形。要平滑：手機上小地圖一格常常不到 1.5 個像素，不平滑（取最近的那一格）會有一成到一半的格一個像素都沒有——
+  // 圓形砲塔、碉堡、一半的路會不見；舊畫法每格一個反鋸齒的菱形，至少混進一個像素。'high' 在縮小時多看幾格（審查 2026-11-18）
   draw(ctx: CanvasRenderingContext2D, g: { w: number; s: number }, dpr: number): void {
     const cvs = this.cvs!;
     cvs.getContext('2d')!.putImageData(this.img!, 0, 0);
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     ctx.setTransform(g.s * dpr, (g.s / 2) * dpr, -g.s * dpr, (g.s / 2) * dpr, (g.w / 2) * dpr, 0);
     ctx.drawImage(cvs, 0, 0);
     ctx.restore();
