@@ -19,7 +19,7 @@ import { SmokeView } from './smoke.ts';
 import { MultiRangePreview } from './multiRange.ts';
 import { RangePreview } from './rangePreview.ts';
 import { VegetationView } from './vegetation.ts';
-import { TrenchRaster } from './trenches.ts';
+import { TrenchRaster } from './trenches.ts'; import { view98, roofSig98, townSnap98, type TownSnap98 } from './view98.ts'; import { GroundUpload98 } from './groundUpload.ts'; import { previewSnap98, previewCells98 } from './previewDiff.ts'; export { setView98 } from './view98.ts';   // R098 大地圖的畫面先撐住
 import { HealthBars } from './healthBars.ts';
 import { OrderLines } from './orderLines.ts';
 import { WallMarks } from './wallMarks.ts';
@@ -154,7 +154,7 @@ export class BattleView {
   private nextSmoke = 0;
   private marker: { x: number; z: number; until: number; col: THREE.Color } | null = null;
   private tmp = new THREE.Object3D();
-  private observerHeights = new Map<number, { x: number; z: number; height: number }>();
+  private observerHeights = new Map<number, { x: number; z: number; height: number; key: string }>(); private up98 = new GroundUpload98(); private town98: TownSnap98 | null = null;
   private territory = -1;           // R006 布陣：≥0 時地面貼圖把那一方可蓋的半場染色（不加繪製呼叫）
 
   // ---- R004 破壞的重量（?noR004=1 時全部不建，舊效果照舊）----
@@ -212,7 +212,7 @@ export class BattleView {
   // ---- R016 開戰時布陣的房子從地面升起（?noR016=1 時直接出現）----
   private r16 = false;
   private rising = new Map<number, number>();   // 建築 id → 升完的模擬時間
-  private skipRising = (b: Building) => this.rising.has(b.id);
+  private skipRising = (b: Building) => this.rising.has(b.id); private isRising98 = (id: number) => this.rising.has(id);
 
   readonly trench118: TrenchRaster;
   readonly vegetation116: VegetationView;
@@ -246,11 +246,11 @@ export class BattleView {
     ground.receiveShadow = true;
     this.sizeTo(w.n);
     for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
-    this.groundTex.needsUpdate = true;
+    this.up98.full(this.groundTex);
     this.scene.add(ground);
 
     const toon = (o: THREE.MeshToonMaterialParameters = {}) => new THREE.MeshToonMaterial({ gradientMap: this.ramp, ...o });
-    this.town = new THREE.Mesh(buildTown(w).geometry(), toon({ vertexColors: true }));
+    this.town = new THREE.Mesh(buildTown(w).geometry(), toon({ vertexColors: true })); this.town98 = townSnap98(w, this.isRising98);
     this.town.castShadow = this.town.receiveShadow = true;
     this.scene.add(this.town);
     this.prepareRegionTown();
@@ -319,7 +319,7 @@ export class BattleView {
     sc.left = sc.bottom = -n * 0.8; sc.right = sc.top = n * 0.8; sc.near = 1; sc.far = n * 4;
     sc.updateProjectionMatrix();
     this.groundTex?.dispose();
-    this.groundPx = new Uint8Array(W * W * 4);
+    this.groundPx = new Uint8Array(W * W * 4); this.up98.resize(n, PX, this.groundPx);
     this.groundTex = new THREE.DataTexture(this.groundPx, W, W);
     this.groundTex.magFilter = this.groundTex.minFilter = THREE.NearestFilter;
     this.groundTex.colorSpace = THREE.SRGBColorSpace;
@@ -337,12 +337,12 @@ export class BattleView {
     const id = this.w.occ[cellIdx(this.w, Math.floor(u.x / SUB), Math.floor(u.z / SUB))];
     const b = id ? this.w.blds[id - 1] : null;
     if (!b || b.hp <= 0) return 0;
-    const cached = this.observerHeights.get(u.id);
-    if (cached && cached.x === u.x && cached.z === u.z) return cached.height;
+    const cached = this.observerHeights.get(u.id), key = roofSig98(this.w, Math.floor(u.x / SUB), Math.floor(u.z / SUB), this.town98);   // R098：網格重建時四周 3×3 格的房子與鐵絲網變了才重打（換段時不再全部清）
+    if (cached && cached.x === u.x && cached.z === u.z && cached.key === key) return cached.height;
     // Anchor the garrison indicator to the real roof/floor surface, including damage.
     const ray = new THREE.Raycaster(new THREE.Vector3(u.x / SUB, 20, u.z / SUB), new THREE.Vector3(0, -1, 0));
     const height = ray.intersectObject(this.pickTown ?? this.town, false)[0]?.point.y ?? 0;
-    this.observerHeights.set(u.id, { x: u.x, z: u.z, height });
+    this.observerHeights.set(u.id, { x: u.x, z: u.z, height, key });
     return height;
   }
 
@@ -357,13 +357,13 @@ export class BattleView {
   // R006：換一個世界來畫（布陣預覽世界 ↔ 真的世界）；重畫地面貼圖與房子，單位網格不動
   // R042：大小不同的世界先照新的 w.n 重配所有跟大小有關的緩衝，不沿用舊大小
   setWorld(w: World, territorySide = -1) {
-    this.w = w; this.mapId = w.map; this.territory = territorySide; this.observerHeights.clear();
+    const pv98 = previewSnap98(this.w, this.territory, this.trench118); this.w = w; this.mapId = w.map; this.territory = territorySide; this.observerHeights.clear();
     this.sizeTo(w.n);
     this.trench118.sync(w, true);
-    for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
-    this.groundTex.needsUpdate = true;
+    const cells98 = previewCells98(pv98, w, territorySide, this.trench118); if (cells98) for (const c of cells98) this.paintCell(c % w.n, (c - (c % w.n)) / w.n); else for (let z = 0; z < w.n; z++) for (let x = 0; x < w.n; x++) this.paintCell(x, z);
+    if (cells98) this.up98.dirty(this.groundTex); else this.up98.full(this.groundTex);   // R098：布陣預覽只重畫改到的格（previewDiff.ts）
     this.clearRegionTown();
-    this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry();
+    this.town.geometry.dispose(); this.town.geometry = buildTown(w).geometry(); this.town98 = townSnap98(w, this.isRising98);
     this.prepareRegionTown();
     this.vegetation116.sync(w);
   }
@@ -409,7 +409,7 @@ export class BattleView {
 
   // ---- 地面貼圖 ----
   private paintCell(x: number, z: number) {
-    const w = this.w, i = cellIdx(w, x, z), ter = w.ter[i], dep = w.crater[i];
+    const w = this.w, i = cellIdx(w, x, z), ter = w.ter[i], dep = w.crater[i]; this.up98.mark(x, z);
     const b = w.occ[i] ? w.blds[w.occ[i] - 1] : null, rubble = !!b && stageOf(b) === STAGE_RUBBLE;
     const W = this.n * PX;
     for (let py = 0; py < PX; py++) for (let px = 0; px < PX; px++) {
@@ -534,9 +534,9 @@ export class BattleView {
     }
     if (wearSync(this.w, this.marks14, this.r4 && this.fxOn ? this.puff : null, this.r4 && this.fxOn ? this.debris : null, simT, (x, z) => this.visibleAt(x * SUB, z * SUB))) townDirty = true;   // R088：換了段（洞、塌一角、塌一半）也要重建整鎮
     if (townDirty && this.n >= 96) this.clearRegionTown();
-    if (townDirty) { this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); }
+    if (townDirty) { if (!view98()) this.observerHeights.clear(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); this.town98 = townSnap98(this.w, this.isRising98); }
     if (townDirty && this.n >= 96) this.prepareRegionTown();
-    if (groundDirty) this.groundTex.needsUpdate = true;
+    if (groundDirty) this.up98.dirty(this.groundTex);
     this.vegetation116.sync(this.w, vegetationDirty);
   }
 
@@ -704,7 +704,7 @@ export class BattleView {
     if (this.rising.size) {   // R016：升完的房子併回城鎮網格
       let done = false;
       for (const [id, until] of this.rising) if (simT >= until) { this.rising.delete(id); done = true; }
-      if (done) { this.clearRegionTown(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); this.prepareRegionTown(); this.observerHeights.clear(); }
+      if (done) { this.clearRegionTown(); this.town.geometry.dispose(); this.town.geometry = buildTown(this.w, this.skipRising).geometry(); this.town98 = townSnap98(this.w, this.isRising98); this.prepareRegionTown(); if (!view98()) this.observerHeights.clear(); }
     }
     if (this.r4) this.updateFx(simT);
     const at = { prevX: this.prevX, prevZ: this.prevZ, alpha };
@@ -1008,7 +1008,7 @@ export class BattleView {
     if (this.dirtyN) {
       for (let i = 0; i < this.dirtyN; i++) { const c = this.dirtyList[i]; this.paintCell(c % n, (c - (c % n)) / n); }
       this.dirtyN = 0;
-      this.groundTex.needsUpdate = true;   // 一步最多上傳一次
+      this.up98.dirty(this.groundTex);   // 一步最多上傳一次（R098：改過的格列留到 render 前一列一列傳）
     }
   }
 
@@ -1166,7 +1166,7 @@ export class BattleView {
       this.cam.position.z += a * Math.cos(this.lastT * 67 + ph);
       this.cam.updateMatrixWorld();
     }
-    this.pipe.render(renderer, this.scene, this.cam, style, cssW, cssH, dpr);
+    this.up98.flush(renderer, this.groundTex); this.pipe.render(renderer, this.scene, this.cam, style, cssW, cssH, dpr);
   }
 
   // 換世界（重開、跑腳本）時釋放 GPU 資源
