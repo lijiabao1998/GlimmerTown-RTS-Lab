@@ -13,7 +13,7 @@ const mutants = [
   ['no_sort', 'aim', St, '  cand.sort((a, b) => a - b);\n', '', 'aim: the nearest-first search picks the same target as before'],
   ['skip_spotted', 'aim', St, '    if (!spotted(w, u.side, t.x, t.z)) continue;\n', '', 'aim: the nearest-first search picks the same target as before'],
   ['stale_scratch', 'aim', St, 'const cand = AIM_CAND; cand.length = 0;', 'const cand = AIM_CAND;', 'aim: the nearest-first search picks the same target as before'],
-  ['key_narrow', 'aim', St, 'const AIM_ID = 2 ** 32,', 'const AIM_ID = 1 << 20,', 'aim: a target whose id is above 2^20 is still picked'],
+  ['key_narrow', 'aim', St, 'const AIM_ID = 4294967296,', 'const AIM_ID = 1048576,', 'aim: a target whose id is above 2^20 is still picked'],
   ['t3_off', 't3', S, '    if (want > budget) {', '    if (false) {', 't3: 1,280 wanted figures draw 6 per section from the first frame'],
   ['proportional', 't3', S, '      for (let c = SECTION_MEN - 1; c >= MIN96; c--) { let sum = 0; for (let m = 1; m <= SECTION_MEN; m++) sum += this.hist[m] * Math.min(m, c); if (sum <= budget) { cap = c; break; } }', '      cap = Math.max(MIN96, Math.floor(SECTION_MEN * budget / want));', 't3: when some sections are under strength every section still shows at least 3'],
   ['no_hard_stop', 't3', S, 'this.secDrawn < this.secBudget;', 'true;', 't3: never more than 800 live figures'],

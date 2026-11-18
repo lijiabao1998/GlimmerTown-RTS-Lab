@@ -301,7 +301,7 @@ export function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit |
   }
   return null;
 }
-const AIM_ID = 2 ** 32, AIM_CAND: number[] = [];   // R096：找目標重複用的陣列（模擬是單執行緒，pickAim 不會重入）
+const AIM_ID = 4294967296, AIM_CAND: number[] = [];   // R096：AIM_ID＝2^32（模擬裡不准用次方）；找目標重複用的陣列（模擬是單執行緒，pickAim 不會重入）
 
 // The solution is invalidated every tick, including during reload or movement.
 function syncRanging(w: World, u: Unit, aim: { x: number; z: number; unit: Unit | null } | null): void {
