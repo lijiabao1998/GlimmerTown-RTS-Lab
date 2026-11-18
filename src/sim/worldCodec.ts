@@ -3,6 +3,7 @@
 // 世界裡大部分是普通的數字與陣列，原樣留著；整張圖大小的表（型別陣列）用「值、連續幾格」壓起來。
 // 只給畫面看的事件清單不存。之後哪張卡往 World 加新的型別陣列，要在這裡加一行（守衛會擋）。
 import { platoonOk } from './platoon.ts';
+import { swOk } from './support91.ts';   // R091
 import { UNIT_KINDS, type World } from './world.ts';
 import { HEIGHT_MAX } from './terrain.ts';
 
@@ -62,6 +63,7 @@ export function decodeWorld(x: unknown): World | null {
   if (!ints(r, WORLD_INTS) || !r.units.every(unitOk) || !r.blds.every((b, i) => ints(b, BLD_INTS) && b.id === i + 1) || !r.shells.every(s => ints(s, SHELL_INTS))) return null;
   if (r.more !== undefined && r.more !== 1) return null;   // R087：更多房屋的旗標只有 1
   if (!platoonOk(r)) return null;   // R095：排的旗標只有 1、排號只在步兵班上、沒有旗標就沒有排的記號
+  if (!swOk(r)) return null;   // R091：sw 只有 1；沒有 sw 就沒有 42、43 號單位
   let vegetation: World['vegetation'];
   if (r.vegetation !== undefined) {
     const v = r.vegetation;

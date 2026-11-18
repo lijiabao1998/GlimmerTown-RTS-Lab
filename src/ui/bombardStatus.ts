@@ -1,4 +1,4 @@
-import { bldAt, ORD_FIRE_AT, SHELL_SMOKE, type World } from '../sim/world.ts';
+import { bldAt, ORD_FIRE_AT, SHELL_SMOKE, UNIT_KINDS, type World } from '../sim/world.ts';
 import { fireDisciplineEligible } from '../sim/fireDiscipline.ts';
 
 // Presentation only: target is remaining rounds only for an active fireAt order.
@@ -8,6 +8,7 @@ export function bombardStatus(w: World, selected: ReadonlySet<number>, enabled =
   let eligible = 0, finite = 0, rounds = 0, buildings = 0, ending = 0, held = 0, moving = 0;
   for (const u of w.units) {
     if (!selected.has(u.id) || !fireDisciplineEligible(u, w)) continue;   // R085 審查：帶世界（sym 的局第 1 方也算）
+    if (UNIT_KINDS[u.kind].men) continue;   // R091：狙擊手、反戰車小組收停火，但不是砲（「門」是數砲的量詞）
     eligible++;
     if (u.order !== ORD_FIRE_AT) continue;
     if (u.target > 0) { finite++; rounds += u.target; }

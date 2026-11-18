@@ -2,7 +2,7 @@
 // 看不到的不畫；人多時整個小兵網格自動降級（完整＋陰影 → 完整 → 密集），守住手機預算。
 // 只讀世界、不改世界、不用亂數；狀態只跟著畫面的更新走（同一串更新得到同一份實例）。開關照 R086–R088：模組的 setter，預設關。
 import * as THREE from 'three';
-import { SUB, cellIdx, inGrid, UNIT_KINDS, UK_INFANTRY, UK_MG, UK_MORTAR, UK_ZOMBIE, moraleState, MORALE_PINNED, type Unit, type World } from '../sim/world.ts';
+import { SUB, cellIdx, inGrid, UNIT_KINDS, UK_INFANTRY, UK_MG, UK_MORTAR, UK_ZOMBIE, UK_SNIPER, UK_AT91, moraleState, MORALE_PINNED, type Unit, type World } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';
 import { soldier } from './unitArt.ts';
 
@@ -36,6 +36,9 @@ export const L_MOVE = 0, L_HALT = 1, L_PRONE = 2, L_ROOF = 3, L_ROOF_PRONE = 4;
 export const LAYOUTS89: readonly Lay[] = [MOVE, HALT, PRONE, scaled(HALT, 0.75), PRONE.map(([x, z]): [number, number] => [x, z * 0.75])];
 // 哪一種單位畫成大班（R091 加新的步兵種類只加這張表）
 export const CROWD89: Record<number, { men: number; lay: readonly Lay[] }> = { [UK_INFANTRY]: { men: SECTION_MEN, lay: LAYOUTS89 } };
+// R091 狙擊手、反戰車小組：兩個人（走：一前一後；停：並排；趴：並排隔開一點；屋頂上縮小）。上一行的字面量是守衛的錨點，所以另起一行加
+const TEAM91: readonly Lay[] = [[[0.08, 0], [-0.08, 0]], [[0, 0.07], [0, -0.07]], [[0, 0.09], [0, -0.09]], [[0, 0.055], [0, -0.055]], [[0, 0.07], [0, -0.07]]];
+CROWD89[UK_SNIPER] = { men: 2, lay: TEAM91 }; CROWD89[UK_AT91] = { men: 2, lay: TEAM91 };
 
 // BattleView 裡這個模組要讀寫的東西（BattleView 用 `this as never` 交過來；改名的話 tests/section89.mjs 會紅）
 export interface Host89 {
@@ -121,7 +124,8 @@ export class Section89 {
     const men = u.alive ? Math.min(crowd.men, Math.ceil((u.hp * crowd.men) / k.hp)) : 0;
     const y = H.unitHeight(u), moving = u.pathIdx < u.path.length, aim = Math.atan2(-u.aimZ, u.aimX), heading = Number.isFinite(H.yaw[id]) ? H.yaw[id] : aim;
     const prone = !u.rout && w.rules?.morale === 2 && moraleState(u) >= MORALE_PINNED;   // 跟 R075 同一條規則
-    const want = y > 0 ? (prone ? L_ROOF_PRONE : L_ROOF) : prone ? L_PRONE : moving ? L_MOVE : L_HALT;
+    const lie = prone || (k.team91 === 1 && !moving);   // R091：停著的狙擊手趴著（上一行是守衛的錨點，不動）
+    const want = y > 0 ? (lie ? L_ROOF_PRONE : L_ROOF) : lie ? L_PRONE : moving ? L_MOVE : L_HALT;
     // 隊形的方向：走的時候（沒趴下）跟著路；停下、趴下時轉向瞄準的方向（人也朝那裡）。最快 TURN89 弧度／秒
     const goal = moving && !prone ? heading : aim;
     if (this.lay[id] === UNSET) {   // 第一次看到：直接就位；走著的照下一格的方向（讀回存檔時 yaw 還是瞄準的方向）
@@ -153,17 +157,17 @@ export class Section89 {
     if (!this.onScreen(x, y, z)) { this.culled += men; return n; }
     if (on96 && !this.pre) this.prepass();
     const shown = on96 ? Math.min(men, this.cap96) : men;   // R096 T3：人太多時每班少畫幾個（少的從號碼大的先少：班長、布倫機槍組留著）
-    const a = H.men.instanceMatrix.array as Float32Array, max = H.men.instanceMatrix.count, face = moving || prone ? this.ori[id] : aim, n0 = n;   // 走著、趴著的人朝隊形的方向（躺著的長 0.30，跟隊形不同向會疊在一起）
+    const a = H.men.instanceMatrix.array as Float32Array, max = H.men.instanceMatrix.count, face = moving || lie ? this.ori[id] : aim, n0 = n;   // 走著、趴著的人朝隊形的方向（躺著的長 0.30，跟隊形不同向會疊在一起）
     for (let i = 0; i < shown && n < max && this.secDrawn < this.secBudget; i++, this.secDrawn++) {
       this.place(crowd.lay, id, i, s, x, z, c, sn, own, y <= 0);
-      if (prone) put89(a, n, this.px, y + PRONE_LIFT89, this.pz, face, PRONE_TILT89, 1, 1, 1);
+      if (lie) put89(a, n, this.px, y + PRONE_LIFT89, this.pz, face, PRONE_TILT89, 1, 1, 1);
       else {
         const bob = moving ? 0.012 * Math.abs(Math.sin(t * 11 + i * 1.7)) : 0, big = i === 0 ? 1.05 : 1, kneel = i === 1 && !moving ? 0.8 : 1;   // 班長大一點點；停下的布倫機槍手跪著
         put89(a, n, this.px, y + bob, this.pz, face, 0, big, big * kneel, big);
       }
       H.men.setColorAt(n, col); n++;
     }
-    this.live += n - n0; H.menDbg.alive += n - n0; if (prone) H.menDbg.prone += n - n0;
+    this.live += n - n0; H.menDbg.alive += n - n0; if (lie) H.menDbg.prone += n - n0;
     return n;
   }
 

@@ -61,6 +61,7 @@ export const UK_DESTROYER = 9;   // R044 驅逐戰車（射程遠、打車痛、
 export const UK_ASSAULT = 10;    // R044 突擊砲（打建築強、承傷七成五、慢、射程稍短）
 
 export const UK_MG = 41;         // R080 機槍組（三個人一挺重機槍：射程遠、要架好才能打、專門壓制；編號接在 R142 的國際裝備後面）
+export const UK_SNIPER = 42, UK_AT91 = 43;   // R091 狙擊手（遠射、一發打倒一個人）、反戰車小組（近距離打穿甲的空心裝藥）；eco 帶 sw 才能出
 export const UK_ZOMBIE = 11;   // R045：六隻一群，只在可選防守模式出現，不能生產
 
 export interface UnitKind {
@@ -88,6 +89,9 @@ export interface UnitKind {
   sup?: number;         // R080 一次命中加多少壓制（沒有這一欄＝步槍的 SUP_SMALL；只有機槍組有）
   supArea?: number;     // R080 掃射區：落點這個半徑內的其他敵方單位各加一半（位置單位）
   openTop?: boolean;    // R044 開頂車廂（驅逐戰車）：步兵打它照「打非裝甲目標」算（只加不改：既有兵種沒有這一欄）
+  team91?: number;      // R091 1＝狙擊手、2＝反戰車小組：待命時怎麼挑目標、一發打掉多少（support91.ts）
+  hollow?: boolean;     // R091 空心裝藥：雖然有人數，打的是穿甲彈；打開頂車照打車算
+  hold?: boolean;       // R091 有人數也收停火紀律（R143）
 }
 
 // 數字都是暫定，玩家看得到的數字由業主定（AGENTS.md 規則 6）。
@@ -154,6 +158,10 @@ UNIT_KINDS.push(
 
 // R080 機槍組（只往後加，id 41）。數字的相對關係與出處在 docs/tasks/R080-機槍組.md；都是暫定
 UNIT_KINDS.push({ name: '機槍組', hp: 40, speed: 12, range: 12 * SUB, minRange: 0, reload: 12, indirect: false, dmgUnit: 6, dmgBld: 1, splash: 0, sight: 7 * SUB, armor: 100, radius: 0, cost: 30, buildTicks: 180, garrison: false, armored: false, pierce: 10, men: 3, soft: 100, setup: true, sup: 30, supArea: 384 });
+
+// R091 狙擊手（42）、反戰車小組（43），只往後加。數字、出處與「誰剋誰」在 docs/tasks/R091-狙擊手與反戰車小組.md；都是暫定
+UNIT_KINDS.push({ name: '狙擊手', hp: 20, speed: 12, range: 11 * SUB, minRange: 0, reload: 60, indirect: false, dmgUnit: 10, dmgBld: 1, splash: 0, sight: 11 * SUB, armor: 100, radius: 0, cost: 30, buildTicks: 240, garrison: true, armored: false, pierce: 10, men: 2, soft: 100, setup: true, team91: 1, hold: true },
+  { name: '反戰車小組', hp: 30, speed: 12, range: 3 * SUB, minRange: 0, reload: 100, indirect: false, dmgUnit: 60, dmgBld: 20, splash: 0, sight: 7 * SUB, armor: 100, radius: 0, cost: 25, buildTicks: 200, garrison: false, armored: false, pierce: 100, men: 2, soft: 25, setup: true, team91: 2, hollow: true, hold: true });
 
 export const ORD_IDLE = 0;
 export const ORD_MOVE = 1;
@@ -236,7 +244,7 @@ export type SimEvent =
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
-export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number; pla?: number }   // R044 armor2；R095 pla＝步兵排：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number; pla?: number; sw?: number }   // R091 sw＝步兵支援（狙擊手、反戰車小組）；R044 armor2；R095 pla＝步兵排：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number; v?: 2 | 3; gather?: number; go?: number; size?: number }   // R057 v＝2：第二版（ai2.ts）；gather＝在基地集結從哪一步開始、go＝上一波哪一步出發、size＝那一波幾台   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
@@ -318,6 +326,7 @@ export function wireAt(w: World, x: number, z: number): Building | null {
 export const mgSecond = (w: World): boolean => (w.eco?.mg ?? 0) >= 2;
 export function wireBlocks(w: World, x: number, z: number, kind: number): boolean {
   if (kind === UK_MG && mgSecond(w)) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R081：第二版的機槍組也是徒步，鐵絲網擋得住（下一行原樣不動，有守衛錨著）
+  if ((kind === UK_SNIPER || kind === UK_AT91) && (w.eco?.sw ?? 0) >= 1) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R091：兩種都是徒步
   return onFoot(kind) && (wireAt(w, x, z)?.hp ?? 0) > 0;
 }
 
@@ -468,7 +477,7 @@ export function hashWorld(w: World): string {
   if (w.sym) f.int(0x5359).int(w.sym);   // R084 只在有時折
   if (w.more) f.int(0x4d48).int(w.more);   // R087 只在有時折
   if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); if (w.rules.morale) f.int(0x524d).int(w.rules.morale); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
-  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); if (e.pla) f.int(0x5041).int(e.pla); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); if (e.pla) f.int(0x5041).int(e.pla); if (e.sw) f.int(0x5357).int(e.sw); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); if (a.v) f.int(0x4156).int(a.v); if (a.gather !== undefined) f.int(0x4147).int(a.gather); if (a.go !== undefined) f.int(0x4157).int(a.go); if (a.size !== undefined) f.int(0x415a).int(a.size); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);

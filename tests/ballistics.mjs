@@ -34,7 +34,7 @@ const CARD_ARMOR = { 0: [30, 20, 15], 6: [15, 13, 10], 7: [78, 65, 55], 8: [12, 
 const CARD_PEN = { 0: [44, 32], 3: [21, 0], 4: [44, 32], 6: [20, 9], 7: [53, 40], 8: [20, 9], 9: [54, 41], 10: [41, 35],
   12: [40, 28], 13: [40, 28], 14: [69, 50], 15: [94, 85], 16: [69, 50], 17: [128, 115], 18: [67, 55], 19: [94, 85], 20: [113, 95], 21: [67, 55],
   23: [59, 46], 24: [71, 60], 25: [97, 88], 26: [97, 88], 28: [92, 71], 29: [20, 9], 30: [106, 85], 31: [138, 112], 32: [120, 99], 33: [106, 85], 34: [108, 80],
-  35: [30, 18], 36: [22, 16], 37: [59, 36], 38: [59, 36], 39: [80, 60], 40: [80, 60], 41: [10, 3] };
+  35: [30, 18], 36: [22, 16], 37: [59, 36], 38: [59, 36], 39: [80, 60], 40: [80, 60], 41: [10, 3], 42: [10, 3], 43: [85, 80] };   // R091 狙擊手、反戰車小組
 const meters = cells => cells * METERS_PER_CELL, units = cells => cells * SUB;
 // 一片空地（沒有房子、路、彈坑、植被），上面只放守衛自己擺的單位
 function field(ap) {
@@ -215,6 +215,7 @@ const groups = {
     assert(pens(PAK40, PANTHER, FACE_SIDE, 500) && pens(TIGER, IS2, FACE_SIDE, 500), 'relations: the Panther and the IS-2 can be taken from the side');
     every([SHINHOTO, CHIHE], SHERMAN, [FACE_FRONT], false, 'the Type 1 47 mm bounces off the Sherman\'s front');
     every([SHINHOTO, CHIHE], SHERMAN, [FACE_SIDE], true, 'the Type 1 47 mm defeats the Sherman\'s side');
+    for (const m of [100, 300]) for (const t of [TIGER, PANTHER]) assert(!pens(43, t, FACE_FRONT, m) && pens(43, t, FACE_SIDE, m), `relations: the R091 AT team bounces off the ${UNIT_KINDS[t].name}'s front and defeats its side (${m} m)`);   // R091：大車要打側面、後面
   },
   // 驗收 11：規則的值與雜湊
   hash() {

@@ -1,5 +1,5 @@
 // R010 戰報：從世界與模擬事件算出一局的戰果。純函式、不碰 DOM、不改世界（Node 守衛直接測）。
-import { INTERNATIONAL_KINDS, INTERNATIONAL_GUNS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, STAGE_ROOFLESS, stageOf, type World, type SimEvent } from '../sim/world.ts';
+import { INTERNATIONAL_KINDS, INTERNATIONAL_GUNS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_SNIPER, UK_AT91, STAGE_ROOFLESS, stageOf, type World, type SimEvent } from '../sim/world.ts';
 import { SIDE_PLAYER, SIDE_ENEMY } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 const KINDS = [UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY];   // R021 加步兵
@@ -16,7 +16,7 @@ export interface Report {
   lastKill: { x: number; z: number; tick: number } | null;
 }
 
-const sameCol = (kind: number, k: number) => kind === k || (INTERNATIONAL_KINDS.includes(kind) && k === (INTERNATIONAL_GUNS.includes(kind) ? UK_HOWITZER : UK_TANK)) || (kind >= 12 && (k === UK_TANK ? kind <= 20 : k === UK_HOWITZER && kind >= 21 && kind <= 22)) || (k === UK_HOWITZER && (kind === UK_ATGUN || kind === UK_MORTAR)) || (k === UK_TANK && (kind === UK_LIGHT || kind === UK_HEAVY || kind === UK_ARMORED_CAR || kind === UK_DESTROYER || kind === UK_ASSAULT)) || (k === UK_INFANTRY && kind === UK_MG);   // R022 反戰車砲、迫擊砲算在「砲」那一欄；R023 輕、重坦克（R044 裝甲車、驅逐戰車、突擊砲）算在「坦克」
+const sameCol = (kind: number, k: number) => kind === k || (INTERNATIONAL_KINDS.includes(kind) && k === (INTERNATIONAL_GUNS.includes(kind) ? UK_HOWITZER : UK_TANK)) || (kind >= 12 && (k === UK_TANK ? kind <= 20 : k === UK_HOWITZER && kind >= 21 && kind <= 22)) || (k === UK_HOWITZER && (kind === UK_ATGUN || kind === UK_MORTAR)) || (k === UK_TANK && (kind === UK_LIGHT || kind === UK_HEAVY || kind === UK_ARMORED_CAR || kind === UK_DESTROYER || kind === UK_ASSAULT)) || (k === UK_INFANTRY && kind === UK_MG) || (k === UK_INFANTRY && (kind === UK_SNIPER || kind === UK_AT91));   // R022 反戰車砲、迫擊砲算在「砲」那一欄；R023 輕、重坦克（R044 裝甲車、驅逐戰車、突擊砲）算在「坦克」
 const count = (w: World, side: number, alive: boolean) => KINDS.map(k => w.units.filter(u => u.side === side && sameCol(u.kind, k) && (!alive || u.alive)).length);
 
 // ecoStart（R081 第二次審查）：重播在第一步之後重建統計，這時候也要從這一步開始數陣亡
