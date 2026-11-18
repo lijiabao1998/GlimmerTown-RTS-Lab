@@ -45,7 +45,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.lineTo(p3x, p3y); ctx.closePath(); ctx.fill();
   };
   const foliage128 = (ctx: CanvasRenderingContext2D, w: World, x: number, z: number) => {   // R090：點陣畫完地格之後再疊植被（同一套樣子）
-    const foliage = a.vegetation !== false ? vegetationAt(w, x, z) : 0;
+    const foliage = a.vegetation === false ? 0 : vegetationAt(w, x, z);   // 寫法跟下面舊的那行不同：R116、vegetation-view 的故意弄壞版靠那一行定位，只能出現一次
     if (w.occ[cellIdx(w, x, z)] || !foliage) return;
     const [px, py] = toMini(g, x + 0.5, z + 0.5);
     ctx.fillStyle = foliage === VEG_HEDGE ? '#c4cf80' : '#314b30';
