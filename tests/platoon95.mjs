@@ -211,8 +211,8 @@ export const groups = {
     assert(m.includes('progMax: progMax95(q0),') && m.includes('countdown95(w, V.r125)') && m.includes('reason95(w, kind,') && !/UNIT_KINDS\[q0\[0\]\]/.test(m), 'wiring: the production bar reads the queue through platoon95.ts');
     const eco = src('src/sim/eco.ts');
     assert(eco.includes('if (e.prog[side] < ticksOf(q[0]))') && eco.includes('+ popOf(q[0]) > (e.pop ?? ECO_POP)') && !/UNIT_KINDS\[q\[0\]\]/.test(eco), 'wiring: the economy reads the queue through platoon.ts');
-    // 介面看世界的旗標、不看閥：生產列一定有「步兵排」（沒有旗標的局才藏起來）、全排看 w.eco.pla；佇列那一行用短字
-    assert(m.includes('cost: UNIT_KINDS[UK_INFANTRY].cost }, PLATOON_UI_ITEM] : [])') && src('src/ui/platoon95.ts').includes('pla = !!s.world.eco?.pla') && src('src/ui/platoon95.ts').includes("if (!s.active || !s.world.eco?.pla) return false;") && !/V\.r095/.test(src('src/ui/platoon95.ts')), 'wiring: the platoon UI follows the world flag, not this page\'s valve');
+    // 生產列有沒有「步兵排」看這一頁的閥（?noR095=1 的頁面整顆不放：既有守衛量每一顆鍵）；有的話藏不藏、全排能不能用看世界的旗標；佇列那一行用短字
+    assert(m.includes('cost: UNIT_KINDS[UK_INFANTRY].cost }, ...(V.r095 ? [PLATOON_UI_ITEM] : [])] : [])') && src('src/ui/platoon95.ts').includes('pla = !!s.world.eco?.pla') && src('src/ui/platoon95.ts').includes("if (!s.active || !s.world.eco?.pla) return false;") && !/V\.r095/.test(src('src/ui/platoon95.ts')), 'wiring: the platoon UI follows the world flag, not this page\'s valve');
     assert(src('src/ui/production.ts').includes('(it.short ?? it.label[0])') && /short: '排'/.test(src('src/ui/platoon95.ts')), 'wiring: the queue strip shows a platoon as 排, not 步');
     console.log('  wiring: OK');
   },

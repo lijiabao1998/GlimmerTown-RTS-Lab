@@ -29,7 +29,7 @@ const mutants = [
   ['ai_no_core_gate', 'ai', A3, 'core >= CORE_FIRST && has(UK_INFANTRY) * 2 < core', 'has(UK_INFANTRY) * 2 < core', 'ai: below four core vehicles there is no platoon'],
   ['formation_wrap9', 'formation', 'src/sim/step.ts', 'const T = w.eco?.pla ? FORMATION_PLA : FORMATION,', 'const T = FORMATION,', 'formation: 25 distinct cells'],
   ['select_all_infantry', 'select', U, 'u.pl !== undefined && pls.has(u.pl)', 'true', 'select: one section selects the living sections of its platoon'],
-  ['ui_reads_valve', 'wiring', 'src/main.ts', 'cost: UNIT_KINDS[UK_INFANTRY].cost }, PLATOON_UI_ITEM] : [])', 'cost: UNIT_KINDS[UK_INFANTRY].cost }, ...(V.r095 ? [PLATOON_UI_ITEM] : [])] : [])', "wiring: the platoon UI follows the world flag, not this page's valve"],
+  ['ui_ignores_world', 'wiring', 'src/ui/platoon95.ts', 'const s = read(), pla = !!s.world.eco?.pla;', 'const s = read(), pla = true;', "wiring: the platoon UI follows the world flag, not this page's valve"],
   ['short_dropped', 'wiring', 'src/ui/production.ts', '(it.short ?? it.label[0])', 'it.label[0]', 'wiring: the queue strip shows a platoon as 排'],
   ['countdown_always_pop', 'readers', U, ': popShort ? ', ': true ? ', 'readers: the platoon only blames population when population is the reason'],
   ['rule_pla_value', 'flag', Pl, "if (e && e.pla !== undefined && e.pla !== 1) return false;", '', 'flag: the save codec refuses pla 2'],

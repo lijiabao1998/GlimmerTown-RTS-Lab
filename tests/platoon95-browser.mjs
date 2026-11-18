@@ -31,10 +31,17 @@ await runOrSkip('platoon95', async () => {
         const overlap = rects.some((a, i) => rects.some((b, j) => j > i && a[1] < b[1] + b[3] - 0.5 && b[1] < a[1] + a[3] - 0.5 && a[2] < b[2] + b[4] - 0.5 && b[2] < a[2] + a[4] - 0.5));
         assert(rects.length === 13 && rects.some(r => r[0] === 'pb-k256') && rects.every(r => r[3] >= 44 && r[4] >= 44) && !overlap, `bar: 13 buttons including 步兵排, each at least 44 px, none overlapping (${wd}×${ht}: ${rects.length}, ${JSON.stringify(rects.filter(r => r[3] < 44 || r[4] < 44))}, overlap ${overlap})`);
       }
+      // 窄手機（跟 smoke 同一條：360×780 生產列 ≤ 200 像素高、320×640 不超過畫面高的三分之一、每顆鍵 ≥ 44），多了「步兵排」也一樣
+      for (const [wd, ht] of [[360, 780], [320, 640]]) {
+        await size(wd, ht);
+        await open(`seed=1944&noR100=1&${ON}`); await E('__rts.startBattle(); __rts.pause(true); __rts.stepN(1); 0'); await frames();
+        const [hh, mw, mh, n] = await E("(() => { const bs = [...document.querySelectorAll('#prodbar button')].filter(b => !b.hidden).map(b => b.getBoundingClientRect()); return [document.getElementById('prodbar').getBoundingClientRect().height, Math.min(...bs.map(r => r.width)), Math.min(...bs.map(r => r.height)), bs.length]; })()");
+        assert(n === 13 && hh <= (wd >= 360 ? 200 : ht / 3) && mw >= 44 && mh >= 44, `bar: on a ${wd}×${ht} phone the bar with 步兵排 stays within smoke's limits (height ${hh.toFixed(0)}, smallest ${mw.toFixed(0)}×${mh.toFixed(0)}, ${n} buttons)`);
+      }
       await size(412, 860);
       await open('seed=1944&noR100=1&noR095=1&noR089=0'); await E('__rts.startBattle(); __rts.pause(true); 0'); await frames();
-      const offLog = await E('__rts.log()'), hidden = await E("document.getElementById('pb-k256')?.hidden ?? true");
-      assert(hidden && offLog.filter(e => e.cmd.t === 'eco').every(e => e.cmd.pla === undefined), 'valve: with ?noR095=1 there is no 步兵排 button and the eco command has no pla');
+      const offLog = await E('__rts.log()'), absent = await E("!document.getElementById('pb-k256') && document.querySelectorAll('#prodbar button').length === 12");
+      assert(absent && offLog.filter(e => e.cmd.t === 'eco').every(e => e.cmd.pla === undefined), 'valve: with ?noR095=1 the bar is as before (no 步兵排 button) and the eco command has no pla');
       // 2. 觸控按「步兵排」、出生、全排
       await open(`seed=1944&noR100=1&${ON}`); await E('__rts.startBattle(); __rts.pause(true); __rts.stepN(200); 0'); await frames();
       const before = Math.max(...(await E('__rts.units()')).map(u => u.id));   // __rts.units() 沒有排號：排裡的三班＝之後新出生的步兵
