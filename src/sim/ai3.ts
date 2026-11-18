@@ -1,6 +1,7 @@
 // R078 電腦第三版的生產：主力優先、支援按比例。ai 指令帶 v＝3 才用；戰術照第二版（ai2.ts），第一版的 aiThink 照舊先跑（它還負責記住看過敵方裝甲的時間）。
 // 病根與量到的數字在 docs/tasks/R078-難度校正.md：第一版普通以上的生產是一串「每種支援各保持一個」排在坦克前面，死一個補一個，幾乎輪不到造坦克，
 // 所以電腦互打時簡單（只造坦克）反而贏困難。整數、決定性、不抽 World.rng；只看自己的單位、自己的佇列與補給、自己看得到的敵人。
+import { PLATOON_ITEM, costOf, queueUnits } from './platoon.ts';
 import { hqAlive } from './eco.ts';
 import { dist } from './math.ts';
 import { ARMOR_MEMORY, freeNear, type AiCmd } from './ai.ts';
@@ -23,17 +24,17 @@ export function produce3(w: World, st: AiState, mine: Unit[], seen: Unit[]): num
   if (!e || !hqAlive(w, side)) return null;
   const q = e.queue[side];
   if (q.length >= QUEUE_MAX) return null;
-  const count = (ok: (kind: number) => boolean) => mine.filter(u => ok(u.kind)).length + q.filter(ok).length;   // 活著的＋排在佇列裡的
+  const count = (ok: (kind: number) => boolean) => mine.filter(u => ok(u.kind)).length + queueUnits(q).filter(ok).length;   // 活著的＋排在佇列裡的（R095：排展開成三班）
   const has = (k: number) => count(x => x === k);
   let want: number;
   if (has(UK_OBSERVER) < 1) want = UK_OBSERVER;
   else if (lv < 2) {   // 簡單：跟第一版的簡單一樣——一班步兵、一門榴彈砲（有兩台車之後），其餘中坦克
     want = e.inf && has(UK_INFANTRY) < 1 ? UK_INFANTRY : has(UK_HOWITZER) < 1 && count(k => UNIT_KINDS[k].armored) >= 2 ? UK_HOWITZER : UK_TANK;
   } else {
-    const guns = !!e.guns, a2 = !!e.armor2, top = lv >= 3 ? 2 : 1, core = count(isCore), sup = count(k => !isCore(k) && k !== UK_OBSERVER);
+    const guns = !!e.guns, a2 = !!e.armor2, top = lv >= 3 ? 2 : 1, core = count(isCore), sup = count(k => !isCore(k) && k !== UK_OBSERVER), plaHard = !!e.pla && lv >= 3;   // R095：有排的局，困難的步兵改走「排」那一條
     const foeArmor = seen.some(u => UNIT_KINDS[u.kind].armored), sawArmor = a2 && st.armor !== undefined && w.tick - st.armor <= ARMOR_MEMORY;
     // 支援的清單（照順序、各有上限）：步兵、榴彈砲（普通 1、困難 2）→ 看得到敵方裝甲時的反戰車砲 → 迫擊砲 → 裝甲車 → 反戰車砲
-    const support = e.inf && has(UK_INFANTRY) < top ? UK_INFANTRY : has(UK_HOWITZER) < top ? UK_HOWITZER : guns && foeArmor && has(UK_ATGUN) < 1 ? UK_ATGUN
+    const support = e.inf && !plaHard && has(UK_INFANTRY) < top ? UK_INFANTRY : has(UK_HOWITZER) < top ? UK_HOWITZER : guns && foeArmor && has(UK_ATGUN) < 1 ? UK_ATGUN
       : guns && has(UK_MORTAR) < 1 ? UK_MORTAR : a2 && has(UK_ARMORED_CAR) < 1 ? UK_ARMORED_CAR : guns && has(UK_ATGUN) < 1 ? UK_ATGUN : -1;
     // 特種車（各保持一台）：主力夠了才出突擊砲、重坦克（困難）、輕坦克（普通）；看過敵方裝甲就出驅逐戰車
     const enough = core >= CORE_FIRST;
@@ -41,7 +42,9 @@ export function produce3(w: World, st: AiState, mine: Unit[], seen: Unit[]): num
       : e.tanks && enough && lv >= 3 && has(UK_HEAVY) < 1 ? UK_HEAVY : e.tanks && enough && lv === 2 && has(UK_LIGHT) < 1 ? UK_LIGHT : -1;
     // 支援數 × 比例 < 主力數才輪得到支援；否則出主力（陣亡的支援單位不會一直排在坦克前面補）
     want = support >= 0 && sup * SUPPORT_RATIO < core ? support : special >= 0 ? special : UK_TANK;
+    if (plaHard && e.inf && core >= CORE_FIRST && has(UK_INFANTRY) * 2 < core && has(UK_INFANTRY) < (w.n >= 64 ? 6 : 3)) want = PLATOON_ITEM;   // R095：主力夠了、班數×2 < 主力、班數不到 3（大地圖 6）就出一個排
   }
+  if (want === PLATOON_ITEM) return e.supply[side] >= costOf(want) ? want : null;   // R095：排的記號不是單位種類
   return e.supply[side] >= UNIT_KINDS[want].cost ? want : null;   // 補給不夠就等，跟第一版一樣
 }
 

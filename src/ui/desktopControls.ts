@@ -20,6 +20,7 @@ export interface DesktopDeps {
   toggleFireMode: () => void;   // 同工具列「砲擊」那顆鍵
   selectAll: () => void;        // 同工具列「全選」那顆鍵
   toggleHoldFire: () => void;   // 同 R143 那顆浮動鍵（桌機改成按 G）
+  selectPlatoon?: () => void;   // R095 同「全排」那顆浮動鍵（桌機按 P）
   help: () => void;
 }
 
@@ -68,6 +69,7 @@ export function initDesktopControls(d: DesktopDeps): void {
     else if (a === 'home') home();
     else if (a === 'fire-mode') { d.toggleFireMode(); d.hud()?.update(); }
     else if (a === 'hold-fire') d.toggleHoldFire();
+    else if (a === 'select-platoon') { d.selectPlatoon?.(); d.hud()?.update(); }
     else if (a === 'help') d.help();
   };
   const keys = initDesktopKeys({

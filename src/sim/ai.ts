@@ -1,5 +1,6 @@
 // R018 電腦對手 v1：在 step() 裡想、只看世界、整數、決定性；不抽 World.rng。
 // 不偷看迷霧：敵人的位置只用「自己這一方看得到的」（spotted 由 step.ts 傳進來，避免循環 import）；對方出生角落算開局就知道的地圖情報。
+import { queueUnits } from './platoon.ts';
 import { dist } from './math.ts';
 import { hqAlive } from './eco.ts';
 import { armorPct, ARMOR_FRONT } from './armor.ts';
@@ -77,7 +78,7 @@ export function aiThink(w: World, st: AiState, spotted: Spotted): AiCmd[] {
   const foeHq = w.eco ? hqAlive(w, 1 - side) : null;
   if (foeHq && !seen.length) { st.ox = center(foeHq.x) + (SUB >> 1); st.oz = center(foeHq.z) + (SUB >> 1); }
   if (w.eco && hqAlive(w, side)) {
-    const e = w.eco, q = e.queue[side], has = (k: number) => mine.filter(u => u.kind === k).length + q.filter(x => x === k).length;
+    const e = w.eco, q = queueUnits(e.queue[side]), has = (k: number) => mine.filter(u => u.kind === k).length + q.filter(x => x === k).length;
     if (q.length < 2) {
       // R022 有砲（guns）時普通以上各保持一門：看到敵方坦克就先補反戰車砲；平常排在榴彈砲後面
       const foeArmor = seen.some(u => UNIT_KINDS[u.kind].armored), guns = e.guns && lv >= 2;

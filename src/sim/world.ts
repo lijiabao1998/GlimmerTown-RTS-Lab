@@ -194,6 +194,7 @@ export interface Unit {
   fireAmmo?: number;    // R107：只有明確煙幕任務才保存；舊世界沒有此欄位
   sup?: number;         // R052 壓制值 1–100（rules.morale 開著、被打過才有；0 就沒有這一欄）
   rout?: 1;             // R052 潰退中：照自己的路往後退，不收指令
+  pl?: number;          // R095 排號（同一排的三班都是第一班的 id；只有 eco.pla 的局、只有步兵班）
   aimX: number; aimZ: number; // 最後一次開火的方向（位置單位的向量；渲染轉砲塔用）
 }
 
@@ -235,7 +236,7 @@ export type SimEvent =
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
-export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number }   // R044 armor2：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number; pla?: number }   // R044 armor2；R095 pla＝步兵排：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number; v?: 2 | 3; gather?: number; go?: number; size?: number }   // R057 v＝2：第二版（ai2.ts）；gather＝在基地集結從哪一步開始、go＝上一波哪一步出發、size＝那一波幾台   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
@@ -448,6 +449,7 @@ export function hashWorld(w: World): string {
     if (u.fireAmmo !== undefined) f.int(0x5341).int(u.fireAmmo);
     if (u.sup) f.int(0x5355).int(u.sup);          // R052：只在有時折
     if (u.rout === 1) f.int(0x524f).int(1);
+    if (u.pl) f.int(0x504c).int(u.pl);           // R095：只在有時折
   }
   if (w.vegetation) {
     f.int(0x5647).int(w.vegetation.version).int(w.vegetation.cells.length);
@@ -466,7 +468,7 @@ export function hashWorld(w: World): string {
   if (w.sym) f.int(0x5359).int(w.sym);   // R084 只在有時折
   if (w.more) f.int(0x4d48).int(w.more);   // R087 只在有時折
   if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); if (w.rules.morale) f.int(0x524d).int(w.rules.morale); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
-  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); if (e.pla) f.int(0x5041).int(e.pla); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); if (a.v) f.int(0x4156).int(a.v); if (a.gather !== undefined) f.int(0x4147).int(a.gather); if (a.go !== undefined) f.int(0x4157).int(a.go); if (a.size !== undefined) f.int(0x415a).int(a.size); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
