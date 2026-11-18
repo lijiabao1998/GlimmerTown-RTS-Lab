@@ -41,6 +41,7 @@ await runOrSkip('platoon95', async () => {
       await tap('pb-k256');
       await E('__rts.stepN(2)'); await frames();
       assert((await E('__rts.eco()')).queue[0].includes(256), 'touch: tapping 步兵排 queues a platoon');
+      assert.match(await E("document.getElementById('pb-queue')?.textContent ?? ''"), /排/, 'touch: the queue strip shows the platoon as 排');
       for (let i = 0; i < 20; i++) { await E('__rts.stepN(20)'); await frames(); }
       const pl = (await E('__rts.units()')).filter(u => u.alive && u.side === 0 && u.kind === 3 && u.id > before);
       assert.equal(pl.length, 3, `touch: the platoon arrives as three sections (${pl.length})`);

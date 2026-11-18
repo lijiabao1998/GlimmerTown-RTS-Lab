@@ -163,14 +163,14 @@
     #hud #fire-discipline button { width: 44px; height: 44px; }
     @media (max-width: 640px) { #hud #fire-discipline { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
     @media (max-width: 411px) { #hud.cover-durability #fire-discipline { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
-    /* R095 全排：停火鍵的右邊；R901 手機直的版面放在停火鍵下面 */
-    #hud #platoon95 { left: calc(max(8px, env(safe-area-inset-left)) + 144px); top: calc(max(8px, env(safe-area-inset-top)) + 58px); }
+    /* R095 全排：停火鍵的右邊（R901 手機直的版面也是：跟停火鍵同一列，不會掉到生產列底下） */
+    #hud #platoon95 { left: calc(max(8px, env(safe-area-inset-left)) + 156px); top: calc(max(8px, env(safe-area-inset-top)) + 58px); }
     #hud #platoon95[hidden] { display: none; }
     #hud #platoon95 button { width: 44px; height: 44px; }
     @media (max-width: 640px) { #hud #platoon95 { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
     @media (max-width: 411px) { #hud.cover-durability #platoon95 { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
     @media (max-width: 480px) and (orientation: portrait) {
-      body.r901 #hud #platoon95 { left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 432px); padding: 0; background: none; }
+      body.r901 #hud #platoon95 { left: calc(max(8px, env(safe-area-inset-left)) + 52px); top: calc(max(8px, env(safe-area-inset-top)) + 380px); padding: 0; background: none; }
     }
     /* R144: align the action itself with the existing 44px left rail, 6px below 框. */
     @media (max-width: 480px) and (orientation: portrait) {

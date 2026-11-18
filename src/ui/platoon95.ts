@@ -1,7 +1,7 @@
 // R095 步兵排的介面：生產列的「步兵排」、倒數與「為什麼不能按」（排的記號不是單位種類）、全排（浮動鍵與桌機的 P）。
 // 看的是世界的旗標（w.eco.pla），不是這一台的閥：連線時兩台閥不一樣也一樣。
-import { PLATOON_ITEM, PLATOON_COST, ticksOf } from '../sim/platoon.ts';
-import { ECO_QUEUE, hqAlive } from '../sim/eco.ts';
+import { PLATOON_ITEM, PLATOON_COST, ticksOf, popOf } from '../sim/platoon.ts';
+import { ECO_QUEUE, ECO_POP, hqAlive } from '../sim/eco.ts';
 import { TICK_HZ, UK_INFANTRY, type World } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';
 import { productionCountdown } from './productionCountdown.ts';
@@ -16,7 +16,8 @@ export function countdown95(w: World, enabled = true): string {
   const q = w.eco?.queue[SIDE_PLAYER] ?? [];
   if (!enabled || w.winner >= 0 || !w.eco || !hqAlive(w, SIDE_PLAYER) || q[0] !== PLATOON_ITEM) return productionCountdown(w, enabled);
   const remaining = ticksOf(PLATOON_ITEM) - w.eco.prog[SIDE_PLAYER];
-  return `步兵排：${remaining > 0 ? `製造剩餘 ${Math.ceil(remaining / TICK_HZ)} 遊戲秒` : '等待部署（要空出 3 格人口）'} · 後續 ${q.length - 1}`;
+  const popShort = w.units.filter(u => u.alive && u.side === SIDE_PLAYER).length + popOf(PLATOON_ITEM) > (w.eco.pop ?? ECO_POP);   // 人口真的不夠才這樣說（出口被擋住時跟單一單位一樣只說等待部署）
+  return `步兵排：${remaining > 0 ? `製造剩餘 ${Math.ceil(remaining / TICK_HZ)} 遊戲秒` : popShort ? '等待部署（要空出 3 格人口）' : '等待部署'} · 後續 ${q.length - 1}`;
 }
 export function reason95(w: World, kind: number, enabled = true): string {
   if (kind !== PLATOON_ITEM) return productionBlockReason(w, kind, enabled);

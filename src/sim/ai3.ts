@@ -31,7 +31,7 @@ export function produce3(w: World, st: AiState, mine: Unit[], seen: Unit[]): num
   else if (lv < 2) {   // 簡單：跟第一版的簡單一樣——一班步兵、一門榴彈砲（有兩台車之後），其餘中坦克
     want = e.inf && has(UK_INFANTRY) < 1 ? UK_INFANTRY : has(UK_HOWITZER) < 1 && count(k => UNIT_KINDS[k].armored) >= 2 ? UK_HOWITZER : UK_TANK;
   } else {
-    const guns = !!e.guns, a2 = !!e.armor2, top = lv >= 3 ? 2 : 1, core = count(isCore), sup = count(k => !isCore(k) && k !== UK_OBSERVER), plaHard = !!e.pla && lv >= 3;   // R095：有排的局，困難的步兵改走「排」那一條
+    const guns = !!e.guns, a2 = !!e.armor2, top = lv >= 3 ? 2 : 1, core = count(isCore), sup = count(k => !isCore(k) && k !== UK_OBSERVER), plaHard = !!e.pla && lv >= 3 && w.n >= 64;   // R095：有排的局，困難的步兵在大地圖（64、96）改走「排」那一條；小地圖一局兩分鐘、出排只會輸（卡面的退路），照舊出單班
     const foeArmor = seen.some(u => UNIT_KINDS[u.kind].armored), sawArmor = a2 && st.armor !== undefined && w.tick - st.armor <= ARMOR_MEMORY;
     // 支援的清單（照順序、各有上限）：步兵、榴彈砲（普通 1、困難 2）→ 看得到敵方裝甲時的反戰車砲 → 迫擊砲 → 裝甲車 → 反戰車砲
     const support = e.inf && !plaHard && has(UK_INFANTRY) < top ? UK_INFANTRY : has(UK_HOWITZER) < top ? UK_HOWITZER : guns && foeArmor && has(UK_ATGUN) < 1 ? UK_ATGUN
@@ -42,7 +42,7 @@ export function produce3(w: World, st: AiState, mine: Unit[], seen: Unit[]): num
       : e.tanks && enough && lv >= 3 && has(UK_HEAVY) < 1 ? UK_HEAVY : e.tanks && enough && lv === 2 && has(UK_LIGHT) < 1 ? UK_LIGHT : -1;
     // 支援數 × 比例 < 主力數才輪得到支援；否則出主力（陣亡的支援單位不會一直排在坦克前面補）
     want = support >= 0 && sup * SUPPORT_RATIO < core ? support : special >= 0 ? special : UK_TANK;
-    if (plaHard && e.inf && core >= CORE_FIRST && has(UK_INFANTRY) * 2 < core && has(UK_INFANTRY) < (w.n >= 64 ? 6 : 3)) want = PLATOON_ITEM;   // R095：主力夠了、班數×2 < 主力、班數不到 3（大地圖 6）就出一個排
+    if (plaHard && e.inf && core >= CORE_FIRST && has(UK_INFANTRY) * 2 < core && has(UK_INFANTRY) < 6) want = PLATOON_ITEM;   // R095：主力夠了、班數×2 < 主力、班數不到 6 就出一個排（只在大地圖）
   }
   if (want === PLATOON_ITEM) return e.supply[side] >= costOf(want) ? want : null;   // R095：排的記號不是單位種類
   return e.supply[side] >= UNIT_KINDS[want].cost ? want : null;   // 補給不夠就等，跟第一版一樣

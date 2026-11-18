@@ -1,5 +1,5 @@
 // R019 生產列（DOM）：補給、三種單位按鈕、佇列與目前那一台的進度。只顯示、只呼叫傳進來的動作。
-export interface ProdItem { kind: number; label: string; cost: number; group?: string; role?: string }
+export interface ProdItem { kind: number; label: string; cost: number; group?: string; role?: string; short?: string }   // short（R095）：佇列那一行用的字（步兵排＝排，不然跟步兵一樣是「步」）
 export interface ProdState { visible: boolean; supply: number; queue: number[]; prog: number; progMax: number; queueMax: number; countdown?: string; hq?: string; context?: object }
 export interface ProdBar { update: () => void }
 
@@ -23,7 +23,7 @@ export function initProduction(items: ProdItem[], a: { state: () => ProdState; p
     const filter = () => { for (const it of items) { const button = $('pb-k' + it.kind); button.remove(); if ((it.group ?? '通用裝備') === select.value) root.insertBefore(button, root.querySelector('.info')); } };
     select.addEventListener('change', () => { filter(); feedbackKind = undefined; layoutValid = false; update(); }); filter();
   }
-  const label = new Map(items.map(it => [it.kind, it.group ? it.label : it.label[0]]));
+  const label = new Map(items.map(it => [it.kind, it.group ? it.label : (it.short ?? it.label[0])]));
   let last = '';
   let layoutValid = false, lastHint: HTMLElement | null = null, lastHintText: string | null = null;
   let lastWidth = -1, lastHeight = -1;
