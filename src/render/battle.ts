@@ -24,6 +24,7 @@ import { HealthBars } from './healthBars.ts';
 import { OrderLines } from './orderLines.ts';
 import { WallMarks } from './wallMarks.ts';
 import { wearSync, wearRoofFall, wearCollapse } from './wear88.ts';   // R088 建築破壞的過程
+import { Section89, section89On } from './section89.ts'; export { setSection89 } from './section89.ts';   // R089 更大規模的步兵（畫面）
 
 // R027 人行道與黑白路緣（只有手排地圖；畫面開關）
 let streets27 = true;
@@ -136,6 +137,7 @@ export class BattleView {
   private bodyBorn = new Float32Array(BODY_CAP);
   private lastMen = new Int8Array(MAX_UNITS + 1).fill(-1);
   readonly menDbg = { alive: 0, prone: 0, crew: 0 };   // crew（R080）：這一幀畫了幾個砲組、機槍組的組員
+  readonly sec89 = new Section89(this as never);   // R089：一班十個人、看不到的不畫、人多時整個小兵網格降級（只讀這個畫面的欄位）
   private discs: THREE.InstancedMesh;
   private rings: THREE.InstancedMesh;
   private armorArcs: THREE.InstancedMesh | null = null;
@@ -479,7 +481,7 @@ export class BattleView {
   onEvents(events: SimEvent[], simT: number) {
     this.men.castShadow = !this.w.zombies;
     if ((this.w.zombies || this.w.n >= 96) && !this.menDense) this.menDense = soldier(false);
-    if (this.w.zombies || this.w.n >= 96) this.zombieUnitSlots();
+    this.zombieUnitSlots();   // R089：每張圖的單位陣列都會長（以前只有喪屍與 96 圖；別的圖 id 超過 512 會越界）
     for (const e of events) if (e.e === 'spawn') { const u = this.w.units[e.unit - 1]; this.prevX[u.id] = u.x; this.prevZ[u.id] = u.z; }
     if (this.mapId !== this.w.map) this.setWorld(this.w, this.territory); // tick0 的 map 重播要同步城鎮與地面。
     if (this.n !== this.w.n) this.setWorld(this.w, this.territory);   // R042：同一個世界在 tick0 換了大小，緩衝照新的 w.n 重配
@@ -582,7 +584,7 @@ export class BattleView {
     if (this.r8) this.turn8(simT);
     this.lastT = simT; this.frameNo++;
     if (this.r4) { this.puff!.begin(); this.glow!.begin(); this.debris!.begin(); this.ring!.begin(); }
-    if (w.units.length >= this.prevX.length) console.error(`單位 id ${w.units.length} 超過已配置渲染容量 ${this.prevX.length - 1}（src/render/battle.ts）`);
+    if (w.units.length >= this.prevX.length) this.zombieUnitSlots();   // R089：沒走過 onEvents 就畫的畫面（讀回存檔、重建）id 超過陣列也先長（以前只報錯、那個單位畫在 NaN）
     let nh = 0, ng = 0, no = 0, nd = 0, nr = 0, nm = 0, na = 0;
     for (const u of w.units) {
       if (!this.visibleUnit(u)) continue;
@@ -624,7 +626,7 @@ export class BattleView {
         ng++;
         if ((u.kind === UK_MORTAR || u.kind === UK_MG) && u.alive) nm = this.crew22(u, x, z, col, nm);
       }
-      if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(u, x, z, simT, u.kind === UK_ZOMBIE ? C_ZOMBIE : col, nm);
+      if (this.sec89.has(u.kind)) nm = this.sec89.draw(u, x, z, simT, col, nm); else if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(u, x, z, simT, u.kind === UK_ZOMBIE ? C_ZOMBIE : col, nm);
       if (u.kind === UK_OBSERVER) {
         const y = this.unitHeight(u);
         m.position.set(x, y, z); m.rotation.set(0, this.yaw[u.id], u.alive ? 0 : Math.PI / 2); m.scale.setScalar(1); m.updateMatrix();
@@ -710,8 +712,8 @@ export class BattleView {
     if (this.orders11.mesh) this.orders11.paint(w, selected, at, this);
     this.range113?.update(w, selected, showRanges);
     this.multi122.update(w, selected, showRanges && this.multiRangeEnabled);
-    nm = this.bodies21(nm);
-    this.men.geometry = (w.zombies || w.n >= 96) && nm > 320 ? this.menDense! : this.menNormal; // 滿人口群眾保留頭／身／雙腿，仍只有同一個網格呼叫。
+    nm = section89On() ? this.sec89.bodies(nm) : this.bodies21(nm);
+    this.men.geometry = section89On() ? this.sec89.finish(nm) : (w.zombies || w.n >= 96) && nm > 320 ? this.menDense! : this.menNormal; // 滿人口群眾保留頭／身／雙腿，仍只有同一個網格呼叫。
     fin(this.men, nm);
     if (this.armorArcs) fin(this.armorArcs, na);
     fin(this.observerMesh, no); fin(this.hull, nh); fin(this.turret, nh); fin(this.gun, ng); fin(this.discs, nd); fin(this.rings, nr); fin(this.shells, ns); fin(this.fxMesh, nf);
