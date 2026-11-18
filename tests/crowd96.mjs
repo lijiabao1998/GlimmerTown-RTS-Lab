@@ -11,7 +11,6 @@ import { duel, ECO } from '../tools/duel.mjs';
 import * as S89 from '../src/render/section89.ts';
 import { BattleView, setSection89, setCrowd96 } from '../src/render/battle.ts';
 
-const DEFAULT_96 = (() => { const v = new BattleView(W.createWorld(7), {}); setSection89(true); v.snapshot(); v.update(1, 1, new Set()); const r = v.sec89.dbg.ratio; v.dispose(); return r; })();
 const src = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const { UNIT_KINDS, UK_INFANTRY, UK_TANK, UK_ZOMBIE, SUB, ORD_ATTACK, ORD_FIRE_AT } = W;
 
@@ -90,9 +89,12 @@ const STRESS = { 40: 'bb2fb329', 56: '3c7d858f', 64: 'a6a51f76' };
 
 // 畫面：32 格的空地放 count 個班（雙方各半、霧關掉、鏡頭看得到全部）
 const OPTS = { fx: true, fog: false, observerDetails: true, r004: true, r008: true, r009: true, r011: true, r014: true, r016: true };
-function crowd(count, zombies = 0) {
+function crowd(count, zombies = 0, mgs = 0, hpOf = () => 60) {
   const w = W.createWorld(7); w.ter.fill(0); w.occ.fill(0); w.crater.fill(0); w.blds = []; w.units = []; w.shells = [];
-  for (let i = 0; i < count + zombies; i++) w.units.push({ id: i + 1, side: i < count ? i % 2 : 0, kind: i < count ? UK_INFANTRY : UK_ZOMBIE, x: W.center(i % 32), z: W.center(Math.floor(i / 32)), hp: 60, alive: true, order: 0, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 1e9, aimX: SUB, aimZ: 0 });
+  for (let i = 0; i < count + zombies + mgs; i++) {
+    const kind = i < count ? UK_INFANTRY : i < count + zombies ? UK_ZOMBIE : W.UK_MG;
+    w.units.push({ id: i + 1, side: i < count ? i % 2 : 0, kind, x: W.center(i % 32), z: W.center(Math.floor(i / 32)), hp: i < count ? hpOf(i) : UNIT_KINDS[kind].hp, alive: true, order: 0, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 1e9, aimX: SUB, aimZ: 0 });
+  }
   const v = new BattleView(w, OPTS); v.target.set(16, 0, 16); v.zoom = 0.05; v.layout(1000, 1000);
   let t = 1; const f = () => { v.snapshot(); v.update(1, t, new Set()); t += 0.05; return v.sec89.dbg; };
   return { w, v, f };
@@ -100,6 +102,8 @@ function crowd(count, zombies = 0) {
 // 每一班畫了幾個人（照位置分給最近的班）
 const perSection = (w, v, count) => { const a = v.men.instanceMatrix.array, got = new Array(count).fill(0); for (let i = 0; i < v.men.count; i++) { const x = a[i * 16 + 12], z = a[i * 16 + 14], c = Math.floor(z) * 32 + Math.floor(x); if (c < count && Math.abs(a[i * 16 + 1]) < 0.5) got[c]++; } return got; };
 const fnv = (h, x) => Math.imul(h ^ x, 0x01000193) >>> 0;
+const DEFAULT_96 = (() => { setSection89(true); const A = crowd(128); A.f(); const d = A.f(); A.v.dispose(); return d.live; })();   // 還沒有人碰 setCrowd96：應該照 R089 全部畫
+const DIG89 = 'ffa5a777';   // R089（8a7351a）畫 crowd(128) 兩幀的指紋
 const digest = v => { const m = v.men, a = new Uint32Array(m.instanceMatrix.array.buffer, 0, m.count * 16); let h = fnv(0x811c9dc5, m.count); for (const x of a) h = fnv(h, x); return h; };
 
 export const groups = {
@@ -123,35 +127,68 @@ export const groups = {
       assert.equal(`${r.hash} ${r.ticks}`, `${hash} ${ticks}`, `aim: duel ${key} ends exactly as before R096`);
     }
     for (const [pop, hash] of Object.entries(STRESS)) { const w = stressWorld(+pop); for (let i = 0; i < 600; i++) step(w, []); assert.equal(W.hashWorld(w), hash, `aim: the ${pop}-a-side stress battle ends exactly as before R096`); }
-    console.log(`  aim: ${n} unit-ticks compared (${picked} with a target), 8 duels and 3 stress battles unchanged`);
+    // id 超過 2^20 的單位（喪屍模式打一千波以上才會有）：照樣挑對
+    const wb = W.createWorld(1); wb.units = []; const shooter = { id: 1, side: 0, kind: UK_INFANTRY, x: W.center(5), z: W.center(5), hp: 60, alive: true, order: 0, target: 0, tx: 0, tz: 0, path: [], pathIdx: 0, cooldown: 0, aimX: SUB, aimZ: 0 };
+    const dead = { ...shooter, id: 0, side: 1, alive: false, hp: 0 }, far = 2 ** 20 + 1;
+    wb.units = new Array(far).fill(dead); wb.units[0] = shooter; wb.units[far - 1] = { ...shooter, id: far, side: 1, x: W.center(7) };
+    let big; try { big = pickAim(wb, shooter)?.unit?.id ?? 0; } catch (e) { big = `threw ${e.message}`; }
+    assert.equal(big, oldPick(wb, shooter)?.id ?? 0, `aim: a target whose id is above 2^20 is still picked (${big})`);
+    console.log(`  aim: ${n} unit-ticks compared (${picked} with a target), 8 duels and 3 stress battles unchanged, id ${far} picked`);
   },
-  // T3：想畫 1,280 個 → 第一幀寫到 800 停、之後每班 6 個（768）、連續 60 幀一樣；800 個以內逐位不變；喪屍與砲手照畫；最少 3 個；最多 800 個
+  // T3：這一幀數好再畫——想畫 1,280 個 → 第一幀就每班 6 個（768）、連續 60 幀一樣；800 個以內逐位不變；不到 6 個人的班不會被擠掉；
+  // 喪屍與砲手先扣掉；鏡頭一跳也沒有哪一班少一幀；放寬要連續 60 幀；少畫的是號碼大的人；不管怎樣活著的小兵最多 800 個
   t3() {
     setSection89(true); setCrowd96(true);
-    const A = crowd(128), d0 = A.f(), d1 = A.f(), counts = new Set();
+    const A = crowd(128), d0 = A.f(), counts = new Set();
     for (let i = 0; i < 60; i++) counts.add(A.f().live);
     const per = perSection(A.w, A.v, 128);
-    assert(d0.live <= S89.LIVE96 && d1.live === 768 && d1.want === 1280 && d1.tris <= S89.MEN_TRIS89 && counts.size === 1 && counts.has(768) && per.every(c => c === 6), `t3: 1,280 wanted figures draw 6 per section (${d0.live} on the first frame, then ${d1.live}; ${[...counts]}; per section ${[...new Set(per)]})`);
+    assert(d0.live === 768 && d0.want === 1280 && d0.cap === 6 && d0.tris <= S89.MEN_TRIS89 && counts.size === 1 && counts.has(768) && per.every(c => c === 6), `t3: 1,280 wanted figures draw 6 per section from the first frame (${d0.live}; ${[...counts]}; per section ${[...new Set(per)]})`);
+    // 少畫的是號碼大的：每班留的是 0–5 號（照停下的隊形的位置）
+    const a = A.v.men.instanceMatrix.array, first = [];
+    for (let i = 0; i < A.v.men.count; i++) { const x = a[i * 16 + 12], z = a[i * 16 + 14]; if (Math.floor(x) === 0 && Math.floor(z) === 0) first.push([x, z]); }
+    const slots = S89.LAYOUTS89[S89.L_HALT].slice(0, 6).map(([lx, lz]) => [0.5 + lx, 0.5 + lz]);
+    assert(first.length === 6 && slots.every(q => first.some(p => Math.abs(p[0] - q[0]) < 1e-4 && Math.abs(p[1] - q[1]) < 1e-4)), `t3: a thinned section keeps its leader, Bren group and the next men (slots 0–5) ${JSON.stringify(first)}`);
     A.v.dispose();
     const dig = on => { setCrowd96(on); const B = crowd(80); B.f(); B.f(); const r = [digest(B.v), B.v.sec89.dbg.live]; B.v.dispose(); return r; };
     const on800 = dig(true), off800 = dig(false);
     assert(on800[1] === 800 && on800[0] === off800[0], `t3: 800 wanted figures draw exactly as R089 (${on800} vs ${off800})`);
     setCrowd96(true);
-    const C = crowd(60, 60); C.f(); const c1 = C.f();
-    assert(c1.live === 420 && c1.F === 780, `t3: zombies and crews keep every figure; only sections draw fewer (${c1.live} section figures, ${c1.F} in all)`);
+    // 一半的班只剩 5 個人：不能照比例算（舊的算法會讓最後幾班一個人都不畫）
+    for (const [label, hpOf] of [['worn first', i => (i < 64 ? 30 : 60)], ['worn last', i => (i < 64 ? 60 : 30)], ['mixed', i => (i % 4 < 2 ? 30 : 60)]]) {
+      const M = crowd(128, 0, 0, hpOf); M.f(); const dm = M.f(), pm = perSection(M.w, M.v, 128);
+      assert(dm.live <= S89.LIVE96 && pm.every(c => c >= S89.MIN96), `t3: when some sections are under strength every section still shows at least 3 (${label}: ${dm.live} figures, cap ${dm.cap}, per section ${[...new Set(pm)]})`);
+      M.v.dispose();
+    }
+    // 喪屍與砲手：先扣掉、照畫；加起來最多 800、小兵 ≤ 32,000 個三角形
+    const C = crowd(60, 60); const c1 = C.f();
+    assert(c1.live === 420 && c1.F === 780 && c1.others === 360, `t3: zombies and crews keep every figure; only sections draw fewer (${c1.live} section figures, ${c1.F} in all, others ${c1.others})`);
     C.v.dispose();
-    const D = crowd(270); D.f(); const dd = D.f(), perD = perSection(D.w, D.v, 270).filter(c => c > 0);
+    const G = crowd(80, 40, 20); const g1 = G.f();
+    assert(g1.others === 300 && g1.F - g1.live === 300 && g1.F <= S89.LIVE96 && g1.tris <= S89.MEN_TRIS89, `t3: with zombies and MG crews the whole men mesh stays within 800 figures and 32,000 triangles (${g1.F} figures, others ${g1.others}, ${g1.tris} triangles)`);
+    G.v.dispose();
+    // 鏡頭一跳：從只看得到幾班跳到全部，那一幀就每班 6 個，沒有哪一班少掉
+    const J = crowd(128); J.v.target.set(2, 0, 2); J.v.zoom = 3; J.f(); J.v.target.set(16, 0, 16); J.v.zoom = 0.05; const j1 = J.f(), pj = perSection(J.w, J.v, 128);
+    assert(j1.live === 768 && pj.every(c => c === 6), `t3: on the frame the camera jumps to the whole crowd no section is missing (${j1.live}; ${[...new Set(pj)]})`);
+    // 放寬：20 班離開畫面，每班可以畫 7 個，但要連續 60 幀才放；回來馬上收
+    const away = J.w.units.slice(0, 20), home = away.map(u => [u.x, u.z]);
+    for (const u of away) { u.x = W.center(900); u.z = W.center(900); }
+    let k = 0, capAt59 = 0; for (; k < 60; k++) { const d = J.f(); if (k === 58) capAt59 = d.cap; }
+    const capAt60 = J.v.sec89.dbg.cap;
+    away.forEach((u, i) => { [u.x, u.z] = home[i]; }); const back = J.f();
+    assert(capAt59 === 6 && capAt60 === 7 && back.cap === 6 && back.live <= S89.LIVE96, `t3: the cap rises only after 60 frames and drops at once (frame 59 ${capAt59}, frame 60 ${capAt60}, back ${back.cap})`);
+    J.v.dispose();
+    const D = crowd(270); const dd = D.f(), perD = perSection(D.w, D.v, 270).filter(c => c > 0);
     assert(dd.live <= S89.LIVE96 && perD.filter(c => c < S89.MIN96).length <= 1, `t3: never more than 800 live figures, and a drawn section shows at least 3 (only the one cut by the 800 limit may show fewer: ${dd.live}; ${[...new Set(perD)]})`);
     D.v.dispose();
-    console.log(`  t3: 1,280 wanted → ${d1.live} (6 a section, steady 60 frames); 800 → bit-identical; zombies kept; 2,700 wanted → ${dd.live}`);
+    console.log(`  t3: 1,280 wanted → ${d0.live} (6 a section from the first frame, steady); 800 → bit-identical; under-strength mixes all ≥ 3; zombies/crews kept; camera jump OK; cap rises after 60 frames; 2,700 wanted → ${dd.live}`);
   },
-  // 閥：?noR096=1（開關關著）→ 想畫 1,280 個的時候照 R089 全部畫
+  // 閥：?noR096=1（開關關著）→ 想畫 1,280 個的時候照 R089 全部畫，逐位跟 R089 一樣
   valve() {
     setSection89(true); setCrowd96(false);
-    const A = crowd(128); A.f(); const d = A.f();
-    assert(d.live === 1280 && d.ratio === 1, `valve: with ?noR096=1 every figure is drawn as in R089 (${d.live})`);
+    const A = crowd(128); A.f(); const d = A.f(), h = digest(A.v).toString(16).padStart(8, '0');
+    assert(d.live === 1280 && h === DIG89, `valve: with ?noR096=1 every figure is drawn as in R089 (${d.live} figures, ${h} vs ${DIG89})`);
     A.v.dispose();
-    console.log('  valve: off → 1,280 figures');
+    console.log('  valve: off → 1,280 figures, bit-identical to R089');
   },
   // 純：畫面不改世界；新的程式碼沒有亂數與時鐘
   purity() {
@@ -165,7 +202,7 @@ export const groups = {
   },
   // 接線：總機開、閥、模組預設關；src/sim 只有 pickAim 那一段（四個檢查都還在）
   wiring() {
-    assert.equal(DEFAULT_96, 1, 'wiring: T3 starts off');
+    assert.equal(DEFAULT_96, 1280, 'wiring: T3 starts off (a crowd of 1,280 is drawn in full until the hub turns it on)');
     assert.match(src('src/main.ts'), /setSection89\(V\.r089\); setCrowd96\(V\.r096\);/, 'wiring: the hub turns R096 on unless ?noR096=1');
     assert.match(src('src/valves.ts'), /get r096\(\) \{ return on\('096'\); \}/, 'wiring: ?noR096=1 is a valve');
     const body = src('src/sim/step.ts').split('export function pickAim')[1].split('\nfunction syncRanging')[0];

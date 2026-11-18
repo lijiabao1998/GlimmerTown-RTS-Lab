@@ -27,7 +27,7 @@ await runOrSkip('crowd96', async () => {
       }
       for (const zoom of [1, 0.55]) {
         const m = got[`true/${zoom}`], o = got[`false/${zoom}`], s = m.men.sec, so = o.men.sec;
-        console.log(`r096 phone 64 map, 64 sections a side, zoom ${zoom}: on ${m.calls}/${m.triangles} (want ${s.want}, live ${s.live}, ratio ${s.ratio?.toFixed?.(3)}, men tris ${s.tris}) · off ${o.calls}/${o.triangles} (live ${so.live}, men tris ${so.tris})`);
+        console.log(`r096 phone 64 map, 64 sections a side, zoom ${zoom}: on ${m.calls}/${m.triangles} (want ${s.want}, live ${s.live}, cap ${s.cap}, others ${s.others}, men tris ${s.tris}) · off ${o.calls}/${o.triangles} (live ${so.live}, men tris ${so.tris})`);
         assert(m.calls <= 22 && m.triangles <= 80000 && s.tris <= 32000 && s.live <= 800, `budget: with R096 the crowd stays within 22 calls, 80,000 triangles and 32,000 men triangles at zoom ${zoom} (${m.calls}/${m.triangles}, men ${s.tris}, live ${s.live})`);
       }
       assert(got['false/0.55'].men.sec.live > 800, `fixture: without R096 the crowd really is above 800 figures (${got['false/0.55'].men.sec.live})`);

@@ -288,7 +288,7 @@ export function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit |
     if (!t.alive || t.side === u.side) continue;
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
-    cand.push(d * AIM_ID + t.id);   // 距離是整數、id < 2^20：一個數就排得出（距離、id）
+    cand.push(d * AIM_ID + t.id);   // 距離是整數（≤ 射程 7,168）、id < 2^32：一個數就排得出（距離、id），乘起來 < 2^53 還是精確的
   }
   cand.sort((a, b) => a - b);
   for (const c of cand) {
@@ -301,7 +301,7 @@ export function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit |
   }
   return null;
 }
-const AIM_ID = 1 << 20, AIM_CAND: number[] = [];   // R096：找目標重複用的陣列（模擬是單執行緒，pickAim 不會重入）
+const AIM_ID = 2 ** 32, AIM_CAND: number[] = [];   // R096：找目標重複用的陣列（模擬是單執行緒，pickAim 不會重入）
 
 // The solution is invalidated every tick, including during reload or movement.
 function syncRanging(w: World, u: Unit, aim: { x: number; z: number; unit: Unit | null } | null): void {
