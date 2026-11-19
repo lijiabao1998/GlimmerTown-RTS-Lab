@@ -58,15 +58,16 @@ function game(map, seed, extra, rules, ais, ticks) {
 // 跑到 cond 成立或 limit 步
 const until = (w, cond, limit = 2000) => { for (let i = 0; i < limit && !cond(); i++) step(w, []); return w.tick; };
 const rngOf = seed => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-// R030：上車、拖砲、到了放下、跳車各數幾次（每一步之前記連結，之後比）
+// R030：上車、拖砲、到了放下、跳車各數幾次（每一步之前記連結，之後比）。「到了放下」只算車還活著、停下來、車和人這一步都沒收到指令的
 const links = w => new Map(w.units.filter(u => u.ride || u.towBy).map(u => [u.id, [u.ride, u.towBy]]));
-function tally(w, before, k) {
+function tally(w, before, k, cmds) {
+  const hit = new Set(cmds.flatMap(c => c.ids ?? []));
   for (const u of w.units) {
     const p = before.get(u.id);
     if (!p) { if (u.ride) k.board++; else if (u.towBy) k.tow++; continue; }
     if (u.ride || u.towBy) continue;
     const car = w.units[(p[0] || p[1]) - 1];
-    if (car?.alive) { if (u.alive) k.drop++; } else if (p[0]) k.bail++;
+    if (car?.alive) { if (u.alive && car.order !== ORD_MOVE && !hit.has(car.id) && !hit.has(u.id)) k.drop++; } else if (p[0]) k.bail++;
   }
 }
 // R030：隨機下一道我方的指令。一半以上是車：載著的有時開去敵人那裡（被打爛才會跳車），不然開近一點（開得到、會放下）；
@@ -98,7 +99,7 @@ function busyGame(tp) {
     const cmds = [];
     if (r() < 0.02) cmds.push({ t: 'produce', side: ME, kind: [UK_TRUCK, UK_INFANTRY, UK_ATGUN, UK_HALFTRACK][Math.floor(r() * 4)] });
     if (r() < 0.08) { const c = order92(w, r); if (c) cmds.push(c); }
-    const before = links(w); step(w, cmds); tally(w, before, k);
+    const before = links(w); step(w, cmds); tally(w, before, k, cmds);
     if (w.tick % 100 === 0) hs.push(hashWorld(w));
   }
   return { hs, k };
@@ -107,8 +108,8 @@ function busyGame(tp) {
 const LOG92 = [{ tick: 0, cmd: { t: 'map', id: 1, vegetation: 1 } }, { tick: 0, cmd: { t: 'eco', inf: 1, guns: 1, tanks: 1, tp: 1 } }, { tick: 0, cmd: { t: 'produce', side: 0, kind: 44 } }, { tick: 0, cmd: { t: 'produce', side: 0, kind: 45 } }, { tick: 640, cmd: { t: 'produce', side: 0, kind: 4 } }];
 
 const groups = {
-  // 驗收 2：舊局逐位不變（R030 從 flag 拆出來：flag 的故意弄壞不用每次跑這十二局）
-  pinned() {
+  // 驗收 2：舊局逐位不變（R030 從 flag 拆出來：flag 的故意弄壞不用每次跑這十二局。不能叫 pinned：R092 的釘住那一群已經叫 pinned）
+  golden() {
     assert.equal(hashWorld(runScript()), 'eea1d59b', 'flag: the golden script battle is unchanged');
     const now = {}, v3 = [{ t: 'ai', side: 0, level: 3, v: 3 }, { t: 'ai', side: 1, level: 2, v: 3 }];
     for (const map of [0, 1, 2, 3, 5]) for (const real of [false, true]) now[`${map}/${real ? 'real' : 'classic'}`] = hashWorld(game(map, 31 + map, {}, real ? { ap: 1, morale: 2 } : null, v3, map === 5 ? 4000 : 3000));
@@ -165,7 +166,7 @@ const groups = {
     assert(back, 'save: the world with tp, a rider and a towed gun reads back');
     for (let i = 0; i < 600; i++) { step(w, []); step(back, []); }
     assert.equal(hashWorld(back), hashWorld(w), 'save: 600 steps after loading, the hash equals the uninterrupted run');
-    const bad = (why, f) => { const r = JSON.parse(text); f(r); assert.equal(decodeWorld(r), null, `save: refused — ${why}`); };
+    const bad = (why, f) => { for (const tp of [1, 2]) { const r = JSON.parse(text); r.eco.tp = tp; f(r); assert.equal(decodeWorld(r), null, `save: refused — ${why}${tp === 2 ? ' (tp 2)' : ''}`); } };   // R030：tp 1、2 都要擋
     bad('tp 3', r => { r.eco.tp = 3; });
     { const r = JSON.parse(text); r.eco.tp = 2; r.eco.queue[0] = [UK_TRUCK];   // R030：帶車、有人坐、有砲被拖、佇列有卡車的 tp 2 存檔
       const w2 = decodeWorld(JSON.parse(JSON.stringify(r))), b2 = w2 && decodeWorld(JSON.parse(JSON.stringify(encodeWorld(w2))));
@@ -502,7 +503,7 @@ const groups = {
   // 驗收 21：連線（Node 的鎖步雙端合作）與對稱
   net() {
     const player = (role, send) => { const c = { w: createWorld(1944), log: [], pending: [], phase: 'build', hashes: [], given: 0, k: { board: 0, tow: 0, drop: 0, bail: 0 } };
-      c.host = { world: () => c.w, log: () => c.log, hash: () => hashWorld(c.w), phase: () => c.phase, begin: s => { c.w = createWorld(s); c.log = []; c.pending = []; c.phase = 'battle'; }, tick: () => { const now = c.session.feed(c.w, c.pending) ?? c.pending; c.pending = []; const before = links(c.w); step(c.w, now); tally(c.w, before, c.k); c.hashes[c.w.tick] = hashWorld(c.w); }, remake() {}, focus() {} };
+      c.host = { world: () => c.w, log: () => c.log, hash: () => hashWorld(c.w), phase: () => c.phase, begin: s => { c.w = createWorld(s); c.log = []; c.pending = []; c.phase = 'battle'; }, tick: () => { const now = c.session.feed(c.w, c.pending) ?? c.pending; c.pending = []; const before = links(c.w); step(c.w, now); tally(c.w, before, c.k, now); c.hashes[c.w.tick] = hashWorld(c.w); }, remake() {}, focus() {} };
       c.issue = cmd => { if (!c.session.live()) c.log.push({ tick: c.w.tick, cmd }); else c.given++; c.pending.push(cmd); };
       c.session = new Session(role, c.host, m => send(c, m), false); return c; };
     const rnd = rngOf(92), wire = []; let now = 0, seq = 0;
@@ -578,7 +579,7 @@ const groups = {
         for (const u of [...feet, ...cars]) { u.x += Math.floor(r() * 200) - 100; u.z += Math.floor(r() * 200) - 100; }
         const g = feet.find(u => tows92(u.kind)); if (g && r() < 0.4) { const t = put(s, ME, UK_TRUCK, cellOf(g.x), cellOf(g.z)); t.x = g.x; t.z = g.z; g.towBy = t.id; }   // 選了砲、沒選拖它的車
         const sel = new Set(feet.map(u => u.id)), add = pair92(s, sel);
-        step(s, [move(ME, [...feet, ...add.map(id => s.units[id - 1])], 26)]);
+        step(s, [move(ME, [...feet, ...cars], 26)]);   // 每台停著的車都一起動：搭車鍵少加的車也抓得到（拖砲的那台不在 cars 裡）
         const loaded = cars.filter(c => s.units.some(u => u.ride === c.id || u.towBy === c.id)).map(c => c.id);
         assert.deepEqual(loaded, add, `ui: in random scene ${n} the vehicles 搭車 adds are exactly the ones that load (${add} / ${loaded}; ${cars.length} vehicles, ${feet.length} on foot)`);
       } }

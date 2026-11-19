@@ -176,7 +176,7 @@
     #hud #transport92 { left: calc(max(8px, env(safe-area-inset-left)) + 220px); top: calc(max(8px, env(safe-area-inset-top)) + 58px); }
     #hud #transport92[hidden] { display: none; }
     #hud #transport92 button { width: 44px; height: 44px; }
-    @media (max-width: 640px) { #hud #transport92 { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }
+    @media (max-width: 640px) { #hud #transport92 { top: calc(max(8px, env(safe-area-inset-top)) + 100px); z-index: 1; } }   /* R030：窄的畫面（沒有 R901 時）小地圖會蓋到搭車鍵：搭車鍵畫在小地圖上面，只在出現時遮住小地圖左邊一截 */
     @media (max-width: 411px) { #hud.cover-durability #transport92 { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
     @media (max-width: 480px) and (orientation: portrait) {
       body.r901 #hud #transport92 { left: calc(max(8px, env(safe-area-inset-left)) + 100px); top: calc(max(8px, env(safe-area-inset-top)) + 380px); padding: 0; background: none; }

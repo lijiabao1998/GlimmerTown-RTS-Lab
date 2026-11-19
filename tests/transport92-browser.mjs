@@ -95,6 +95,15 @@ await runOrSkip('transport92', async () => {
       const [tick, hash, log] = await E('[__rts.tick(), __rts.hash(), __rts.log()]');   // 這一幕的單位是夾具放的、不在紀錄裡：頁面＝Node 重播由下面閥那一段的 playLog 驗
       assert(log.some(c => c.cmd.t === 'move' && c.cmd.ids.includes(inf) && c.cmd.ids.includes(tr)), 'replay: the move with the truck and the section is in the log');
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
+      // R030：沒有 R901（?noR901=1）的直的窄手機，小地圖跟搭車鍵在同一排；搭車鍵要畫在小地圖上面、點得到
+      await open('noR092=0&noR901=1&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); __r089.clean(); 0');
+      { const i9 = await E('__r089.place(0, 3, 8, 24)'); await E('__r089.place(0, 44, 9, 24)'); await E(`__rts.select([${i9}]); __rts.stepN(1); 0`); await frames();
+        for (const [w, h] of [[412, 915], [390, 844], [360, 780]]) {
+          await size(w, h);
+          const k = await E("(()=>{const b=document.getElementById('b-ride');if(!b||b.hidden||b.offsetParent===null)return null;const r=b.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {r901:document.body.classList.contains('r901'),w:r.width,h:r.height,hit:b.contains(document.elementFromPoint(x,y)),at:document.elementFromPoint(x,y)?.id}})()");
+          assert(k && !k.r901 && k.w >= 44 && k.h >= 44 && k.hit, `ride: with ?noR901=1 at ${w}×${h} the centre of 搭車 is the key itself, not the minimap (R030; ${JSON.stringify(k)})`);
+        }
+        await size(412, 915); }
       // R030 的閥：照舊送 tp 1
       await open('noR092=0&noR030=1&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); 0');
       assert.equal((await E('__rts.log()')).find(c => c.cmd.t === 'eco').cmd.tp, 1, 'valve: ?noR030=1 sends tp 1 (the R092 rule)');

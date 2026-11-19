@@ -1,5 +1,5 @@
 // R092 在獨立副本故意弄壞每一處；每一處都要先紅在指定的那一句（只跑那一支、那一群）。卡面驗收 30。
-// 卡面挑錯之後拿掉的：rider_aim_order（step.ts:277 的檢查到不了，沒有改那一行）。R030 加了 20 處（hint_tank 放回來：Node 看 main.ts 那一行）。
+// 卡面挑錯之後拿掉的：rider_aim_order（step.ts:277 的檢查到不了，沒有改那一行）。R030 加了 21 處（hint_tank 放回來：Node 看 main.ts 那一行）。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -67,6 +67,8 @@ const cases = [
   ['pair_moving', U92, [[' && c.order === ORD_IDLE && !c.rout', ' && !c.rout']], 'ui', /^ui: 搭車 does not add a truck that is already driving/],
   ['codec_tp2_links', T92, [['  if (e?.tp !== 1 && e?.tp !== 2) {', '  if (e?.tp !== 1) {']], 'save', /^save: a save with tp 2 \(R030\) reads back/],
   ['tp_value_unhashed', W, [[' if (e.tp) f.int(0x5450).int(e.tp);', ' if (e.tp) f.int(0x5450).int(e.tp ? 1 : 0);']], 'flag', /^flag: tp 2 folds differently from tp 1/],
+  ['no_arrival_drop_net', T92, [['    if (dead || c.order !== ORD_MOVE || pinned(w, c)) {', '    if (dead || pinned(w, c)) {']], 'net', /^net: in lockstep sections boarded, guns were towed, loads were dropped on arrival/],
+  ['codec_tp2_unchecked', T92, [['  const used = new Set<number>();', '  if (e?.tp === 2) return true;   const used = new Set<number>();']], 'save', /^save: refused — .* \(tp 2\)/],
   ['cdp_default', 'tools/cdp.mjs', [["const full92 = /(^|&)noR092=/.test(full91) ? full91 :", 'const full92 = full91; const unused92 = /(^|&)noR092=/.test(full91) ? full91 :']], 'wiring', /^wiring: tools\/cdp\.mjs opens pages with noR092=1/],
 ];
 try {
