@@ -81,7 +81,7 @@ https://lijiabao1998.github.io/GlimmerTown-RTS-Lab/
 
 ```
 倉庫 lijiabao1998/GlimmerTown-RTS-Lab。先讀 AGENTS.md、docs/迭代不改壞標準.md、docs/GPT-方向.md。
-這一波：待辦第 {序} 項「{項目}」。卡號 R{號}（比 origin/main 的 docs/tasks/、LOG.md 與開著的 origin/gpt/* 分支裡出現過的最大 R 號再大 1，最小 R100）。
+這一波：待辦第 {序} 項「{項目}」。卡號 R{號}（只看 R100–R899：比 origin/main 的 docs/tasks/、LOG.md 與開著的 origin/gpt/* 分支裡出現過、落在 R100–R899 的最大 R 號再大 1，最小 R100；R900–R999 是 Grok、R001–R099 與 R1000–R1099 是 Claude 的，tools/gpt-lane.mjs 照這樣擋）。
 1. git switch --no-track -c gpt/{主題} origin/main（分支名一定要 gpt/ 開頭）
 2. 第一個提交只放 docs/tasks/R{號}-{主題}.md：標題下一行寫卡頭
    <!-- card: sim=yes|no; golden=舊→新|無; valve=?noR{號}|無; owner_ok= -->

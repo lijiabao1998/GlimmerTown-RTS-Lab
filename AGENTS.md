@@ -81,7 +81,7 @@
 
 **GPT 車道守衛會擋**（`tools/gpt-lane.mjs`）：
 - `main` 的開關不是運行（只改方向檔的狀態更新除外）；方向檔「## 待辦」以上除了開關那一行有任何改動；把開關改成運行。
-- **白名單以外的檔案**（改名也算：舊路徑、新路徑都要在白名單裡）。白名單：`src/`（`src/render/post.ts` 除外）、`index.html`、`docs/tasks/R100` 以上的卡、`docs/GPT-方向.md`、`tests/*.mjs`、`tools/golden.json`、`LOG.md`、`README.md`。其他（`.github/`、`tools/`、規則檔、`package*.json`、`vite.config.*`、`.npmrc`、`public/`……）都不准。
+- **白名單以外的檔案**（改名也算：舊路徑、新路徑都要在白名單裡）。白名單：`src/`（`src/render/post.ts` 除外）、`index.html`、`docs/tasks/R100` 以上的卡（R1000–R1099 除外：那是 Claude 的卡，R1000）、`docs/GPT-方向.md`、`tests/*.mjs`、`tools/golden.json`、`LOG.md`、`README.md`。其他（`.github/`、`tools/`、規則檔、`package*.json`、`vite.config.*`、`.npmrc`、`public/`……）都不准。
 - 不是剛好新增一張卡；卡號小於 R100 或不比 main 上用過的大；卡頭缺機讀欄；`sim=no` 卻改了模擬或黃金雜湊；改了黃金雜湊卻沒寫舊→新；第一個提交不是只有卡；驗收段落在第一個提交之後被改；只有卡面還沒施工。
 
 **狀態更新 PR**（只改 `docs/GPT-方向.md`，例如把開關改成停止、記卡住表）：不用卡、不用 R 號標題，分支 `gpt/status-<日期>`、標題「方向檔：<做了什麼>」。
