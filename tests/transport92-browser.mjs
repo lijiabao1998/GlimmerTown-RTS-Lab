@@ -1,7 +1,8 @@
 // R092 運輸在真的 Chrome（CI 是 SwiftShader；手機 412×915 觸控）：卡面驗收 25–28。網址帶 noR092=0（tools/cdp.mjs 預設關掉 R092）。
 //   新開的局 eco 帶 tp；分組選單有「運輸」，兩顆鍵在四種尺寸都是完整、點得到的 44px 鍵；點了扣補給、排進佇列；
 //   搭車：選一班步兵 →「搭車」出現 → 按下只改選取（指令紀錄不多一筆）→ 點地面：那一班上車、從畫面消失；點卡車的位置選到的是卡車；到了之後又畫出來；頁面雜湊＝Node 重播；
-//   「搭車」在三種直的手機尺寸不壓到別的鍵和小地圖；閥：?noR092=1 不送 tp、沒有那一組；同一頁重播一局帶 tp、有人坐車、有砲被拖的紀錄，雜湊跟 Node 一樣。
+//   「搭車」在三種直的手機尺寸不壓到別的鍵和小地圖；860 寬另開非觸控桌機與觸控對照；
+//   閥：?noR092=1 不送 tp、沒有那一組；帶 tp、乘員、拖砲的紀錄照樣重播；真的離頁存檔、關閥再開頁按「繼續上一局」，原步數、乘員、拖砲與後續步數仍一致。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -12,6 +13,7 @@ import { runOrSkip } from '../tools/net-harness.mjs';
 import { fixture89, measure } from '../tools/r089-fixture.mjs';
 import { createWorld, hashWorld } from '../src/sim/world.ts';
 import { runLog } from '../src/sim/step.ts';
+import { SAVE_KEY, checkSave } from '../src/ui/saveGame.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r092-browser-'));
 await runOrSkip('transport92', async () => {
@@ -23,6 +25,11 @@ await runOrSkip('transport92', async () => {
       const size = async (w, h) => { await page.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: true }); await frames(); await frames(); };
       const pick = group => E(`(()=>{const c=document.querySelector('#pb-catalog');c.value=${JSON.stringify(group)};c.dispatchEvent(new Event('change'));return [...c.options].map(o=>o.value)})()`);
       const visible = () => E(`[...document.querySelectorAll('#prodbar button')].filter(b=>!b.hidden&&b.offsetParent!==null&&b.id.startsWith('pb-k')).map(b=>b.id)`);
+      const press = async id => {
+        const r = await E(`(()=>{const b=document.getElementById(${JSON.stringify(id)});if(!b||b.hidden)return null;const r=b.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height,hit:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}})()`);
+        assert(r && r.w >= 44 && r.h >= 44 && r.hit, `save fixture: ${id} is a reachable 44px target (${JSON.stringify(r)})`);
+        await touchTap(page, r.x, r.y); await frames();
+      };
       // 驗收 25：新開的局與生產列
       await open('noR092=0&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); 0'); await frames();
       assert.equal((await E('__rts.log()')).find(c => c.cmd.t === 'eco').cmd.tp, 1, 'page: a new battle sends tp 1');
@@ -93,8 +100,52 @@ await runOrSkip('transport92', async () => {
       const want = runLog(createWorld(1944), lg2, 1060);
       assert(want.units.some(u => u.ride) && want.units.some(u => u.towBy), 'valve: in the replayed game someone rides and a gun is towed at step 1060');
       assert.equal(await E(`__rts.playLog(1944, ${JSON.stringify(lg2)}, 1060)`), hashWorld(want), 'valve: with the valve off the page replays a game with tp, a rider and a towed gun to the Node hash');
+      // R146 補驗 28：由真正的頁面離開事件寫 SAVE_KEY，換成關閥的新頁面，再走正式選單的讀檔路徑。
+      await open('noR092=0&seed=1944', { menu: true }); await press('sm-start');
+      assert.equal(await E(`__rts.pause(true); __rts.playLog(1944, ${JSON.stringify(lg2)}, 1060)`), hashWorld(want), 'save fixture: the running page has the rider/towed-gun world before saving');
+      assert.deepEqual(await E('[__rts.phase(), __rts.paused(), __rts.tick()]'), ['battle', true, 1060], 'save fixture: this is a paused, savable battle');
+      await open('noR092=1&seed=9', { menu: true, keep: true }); await frames();
+      const rawSave = await E(`localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
+      assert.equal(typeof rawSave, 'string', 'save: leaving the enabled page writes a real localStorage save');
+      const loaded = checkSave(rawSave);
+      assert(loaded.ok, `save: the stored game passes the production decoder (${loaded.why ?? 'OK'})`);
+      assert.equal(hashWorld(loaded.save.world), hashWorld(want), 'save: the stored world is the exact pre-navigation battle');
+      assert.deepEqual(loaded.save.log, lg2, 'save: the stored command log is complete');
+      assert(loaded.save.world.units.some(u => u.ride) && loaded.save.world.units.some(u => u.towBy), 'save: both mounted passengers and towed guns are in the stored world');
+      assert.deepEqual(await E('[__rts.phase(), __rts.tick()]'), ['build', 0], 'save: before pressing Continue the new page has not adopted the save');
+      await press('sm-continue');
+      assert.deepEqual(await E('[__rts.phase(), __rts.paused(), __rts.tick(), __rts.hash()]'), ['battle', true, 1060, hashWorld(want)], 'save: with noR092=1 Continue restores the saved battle at the exact tick and hash');
+      assert.deepEqual(await E('__rts.log()'), lg2, 'save: Continue restores the complete command log');
+      assert.equal((await pick('通用裝備')).includes('運輸'), false, 'save: the resumed page keeps the transport catalogue valve off');
+      const mounted = want.units.filter(u => u.alive && u.ride), seen = await E('__rts.seen()');
+      for (const u of mounted) {
+        assert.equal(await E(`__r089.ride(${u.id})`), u.ride, 'save: the loaded passenger still belongs to its original vehicle');
+        assert(!seen.includes(u.id) && seen.includes(u.ride), 'save: the loaded passenger stays hidden while its vehicle is visible');
+      }
+      await E('__rts.stepN(100); 0');
+      assert.equal(await E('__rts.hash()'), hashWorld(runLog(createWorld(1944), lg2, 1160)), 'save: after loading with the valve off another 100 steps equal uninterrupted Node simulation');
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
-      console.log(`transport92 browser: catalog 4 sizes, ride button and boarding (${men0} → ${aboard.men.alive} figures), replay tick ${tick} hash ${hash.slice(0, 8)}, valve`);
+      console.log(`transport92 browser: catalog 4 sizes, ride button and boarding (${men0} → ${aboard.men.alive} figures), replay tick ${tick} hash ${hash.slice(0, 8)}, valve, actual save/load tick 1060 → 1160`);
+    });
+    // R146 補驗 27：同為 860×412、同一對可搭車單位，分別真的建立無觸控與有觸控的頁面（不只把手機頁面改寬）。
+    for (const mobile of [false, true]) await withBrowser({ root: tmp, width: 860, height: 412, mobile, port: mobile ? 12470 : 12460 }, async ({ open, page }) => {
+      const E = s => page.evaluate(s), frames = () => E('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+      await open('noR092=0&noR070=0&seed=1944');
+      await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); __r089.clean(); 0');
+      const inf = await E('__r089.place(0, 3, 8, 24)'), tr = await E('__r089.place(0, 44, 9, 24)');
+      const pair = await E(`__rts.units().filter(u=>u.id===${inf}||u.id===${tr})`);
+      assert(pair.length === 2 && pair.every(u => u.alive && u.side === 0) && Math.hypot(pair[0].x - pair[1].x, pair[0].z - pair[1].z) <= 512, 'pointer fixture: a living section and empty truck are within boarding reach');
+      await E(`__rts.select([${inf}]); __rts.stepN(1); 0`); await frames();
+      const input = await E(`({coarse:matchMedia('(pointer: coarse)').matches,touch:navigator.maxTouchPoints,desktop:document.body.classList.contains('r070'),width:innerWidth})`);
+      assert.equal(input.width, 860, 'pointer fixture: both pages really have an 860px viewport');
+      assert.equal(input.coarse, mobile, 'pointer fixture: the two pages have different primary pointer types');
+      assert.equal(input.touch > 0, mobile, 'pointer fixture: only the touch page has touch points');
+      assert.equal(input.desktop, !mobile, 'pointer fixture: only the non-touch page installs desktop controls');
+      const ride = await E(`(()=>{const b=document.getElementById('b-ride');if(!b||b.hidden||b.offsetParent===null)return null;const r=b.getBoundingClientRect();return {w:r.width,h:r.height,inside:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,hit:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}})()`);
+      assert.equal(!!ride, mobile, `pointer: 搭車 is ${mobile ? 'shown on touch' : 'absent on a non-touch desktop'} at 860px (${JSON.stringify(input)})`);
+      if (mobile) assert(ride.w >= 44 && ride.h >= 44 && ride.inside && ride.hit, 'pointer: the 860px touch control is a whole, reachable 44px key');
+      assert.equal(page.errors.length, 0, `pointer page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
+      console.log(`transport92 pointer: 860×412 ${mobile ? 'touch, shown' : 'non-touch desktop, absent'}`);
     });
     console.log('transport92-browser: all OK');
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

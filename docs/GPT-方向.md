@@ -45,6 +45,7 @@
 
 | 項目 | R 號 | PR | 完成日 | 沒跑的守衛 |
 |---|---|---|---|---|
+| R092 運輸補驗、補齊發布紀錄（修補47） | R146 | [驗收紀錄](tasks/R146-R092收尾.md) | 2026-11-19 | R092 的 [#150](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/150) 已發布；手機尺寸以桌機 Chrome 驗，未跑 Android 實機 |
 | 砲擊任務剩餘發數與任務結束辨識（待辦44） | R145 | [#114](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/114) | 2026-11-01（發布） | main db9eedc、CI／Pages 41282886931 綠（Claude R071 補記：原本留在待辦） |
 | 射擊鍵手機排列（待辦46） | R144 | [#113](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/113) | 2026-10-31（發布） | main1b3b23e、CI41189899683與Pages綠；公網SHA256 e9310dd0cc364f616a4617ab2c2d76c6c907d142bf8debbf8595d7ae6f9dc10f逐位相同 |
 | 車砲射擊紀律（待辦43） | R143 | [#112](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/112) | 2026-10-31（發布） | main9902dab、CI41184355660與Pages綠；公網SHA256 87b559c1a176840fd8106d61d1ef0acfef0ade2b4cc9207cbc4b9522d61857fd逐位相同 |
