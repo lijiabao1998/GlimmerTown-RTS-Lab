@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createWorld, hashWorld, center, cellOf, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, ORD_MOVE, ORD_ATTACK, SHELL_AP, SHELL_SMALL, SHELL_HE, UK_AT91, SIDE_PLAYER as ME, SIDE_ENEMY as FOE,
-  UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_MG, UK_SNIPER, UK_TRUCK, UK_HALFTRACK, MORALE_PINNED, moraleState } from '../src/sim/world.ts';
+  UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_MG, UK_SNIPER, UK_LIGHT, UK_ARMORED_CAR, UK_TRUCK, UK_HALFTRACK, BK_WIRE, wireAt, wireBlocks, MORALE_PINNED, moraleState } from '../src/sim/world.ts';
 import { step, runLog, spotted } from '../src/sim/step.ts';
 import { applyRules } from '../src/sim/rules.ts';
 import { setAi, aiThink } from '../src/sim/ai.ts';
@@ -14,7 +14,8 @@ import { isCommand } from '../src/sim/commandCheck.ts';
 import { runScript } from '../src/sim/script.ts';
 import { encodeWorld, decodeWorld } from '../src/sim/worldCodec.ts';
 import { PRODUCIBLE } from '../src/sim/eco.ts';
-import { ARMOR_MM, PEN_MM } from '../src/sim/ballistics.ts';
+import { ARMOR_MM, PEN_MM, apHit, penetration } from '../src/sim/ballistics.ts';
+import { applyBuild } from '../src/sim/build.ts';
 import { rides92, tows92, REACH92 } from '../src/sim/transport92.ts';
 import { productionBlockReason } from '../src/ui/productionBlockReason.ts';
 import { reloadStatus } from '../src/ui/reloadStatus.ts';
@@ -136,6 +137,34 @@ const groups = {
     assert.equal(i2.ride, t2.id, 'board: a new move for the truck alone keeps the section aboard');
     until(v, () => !i2.ride, 600);
     assert(cellOf(i2.x) >= 26, `board: it gets off at the new destination (${cellOf(i2.x)})`);
+  },
+  // R146 補驗 8：完整鐵絲網上的下車點，仍能從擋路的起點走出去。
+  boardWire() {
+    const w = field();
+    assert.equal(applyBuild(w, { t: 'build', side: ME, kind: BK_WIRE, x: 24, z: 20, rot: 0 }), null, 'boardWire: the fixture legally builds intact wire');
+    const wire = wireAt(w, 24, 20), wireHp = wire.hp;
+    assert(wireHp > 0 && wireBlocks(w, 24, 20, UK_INFANTRY) && !wireBlocks(w, 24, 20, UK_TRUCK), 'boardWire: intact wire blocks feet but admits the truck');
+    const tr = put(w, ME, UK_TRUCK, 4, 20), inf = put(w, ME, UK_INFANTRY, 5, 20);
+    step(w, [move(ME, [tr, inf], 28, 20)]);
+    assert.equal(inf.ride, tr.id, 'boardWire: the section boards through the real joint move');
+    // 車單獨改目的地，避免多選隊形把目的地移到鐵絲網旁邊。
+    step(w, [move(ME, [tr], 24, 20)]);
+    until(w, () => !inf.ride, 2000);
+    assert.deepEqual([tr.order, inf.ride, inf.order, tr.x, tr.z, inf.x, inf.z],
+      [ORD_IDLE, undefined, ORD_IDLE, center(24), center(20), center(24), center(20)], 'boardWire: natural arrival drops the section on the intact wire cell');
+    assert(inf.cooldown >= UNIT_KINDS[UK_INFANTRY].reload && wire.hp === wireHp, 'boardWire: dismount reloads without destroying the wire');
+    step(w, [move(ME, [inf], 22, 20)]);
+    assert(inf.order === ORD_MOVE && inf.path.length > 0 && !inf.ride, 'boardWire: the dismounted section accepts its own exit move');
+    until(w, () => inf.order === ORD_IDLE, 400);
+    assert.deepEqual([inf.x, inf.z, inf.ride], [center(22), center(20), undefined], 'boardWire: the section reaches open ground after dismounting on wire');
+    // 對照：不是鐵絲網失效。另一個步兵從外面穿過同一段時必須繞路。
+    const outside = put(w, ME, UK_INFANTRY, 25, 19);
+    step(w, [move(ME, [outside], 25, 21)]);
+    for (let i = 0; i < 400 && outside.order !== ORD_IDLE; i++) {
+      assert(!wireBlocks(w, cellOf(outside.x), cellOf(outside.z), UK_INFANTRY), 'boardWire: a section starting outside never enters intact wire');
+      step(w, []);
+    }
+    assert.deepEqual([outside.x, outside.z, wire.hp], [center(25), center(21), wireHp], 'boardWire: the outside control arrives around the same undamaged wire');
   },
   // 驗收 9：兩格
   reach() {
@@ -303,6 +332,63 @@ const groups = {
     assert.deepEqual([F, S, B].map(h => hit(UK_AT91, UK_HALFTRACK, h, SHELL_AP)), [45, 60, 70], 'damage: an AT team hits it for 45 / 60 / 75 (from behind it is gone in one: 70)');
     assert.equal(hit(UK_MORTAR, UK_HALFTRACK, S, SHELL_HE), 15, 'damage: a mortar round dead centre takes 15 from a half-track');
     assert.equal(hit(UK_HOWITZER, UK_HALFTRACK, S, SHELL_HE), 70, 'damage: a howitzer round dead centre takes 70 (exactly its health)');
+  },
+  // R146 補驗 19：原卡十列的每一格。這些只是遊戲內的規則，不是現實裝備的量測。
+  damageTable() {
+    // 經典表的原始傷害（尚未扣目標剩餘 hp），獨立抄自 R092:471–480。
+    const rows = [
+      [UK_INFANTRY, SHELL_SMALL, 12, [1, 1, 1]],
+      [UK_MG, SHELL_SMALL, 6, [0, 0, 0]],
+      [UK_SNIPER, SHELL_SMALL, 10, [1, 1, 1]],
+      [UK_TANK, SHELL_AP, 34, [25, 34, 42]],
+      [UK_LIGHT, SHELL_AP, 24, [12, 16, 21]],
+      [UK_ARMORED_CAR, SHELL_AP, 14, [3, 4, 5]],
+      [UK_ATGUN, SHELL_AP, 14, [36, 48, 60]],
+      [UK_AT91, SHELL_AP, 15, [45, 60, 75]],
+      [UK_MORTAR, SHELL_HE, 30, [15, 15, 15]],
+      [UK_HOWITZER, SHELL_HE, 70, [70, 70, 70]],
+    ];
+    const faces = [[-SUB, 0, 75], [0, SUB, 100], [SUB, 0, 125]];
+    let checked = 0;
+    for (const real of [false, true]) for (const [shooter, shell, truckDamage, halfDamage] of rows) {
+      for (const kind of [UK_TRUCK, UK_HALFTRACK]) for (const face of (kind === UK_TRUCK ? [1] : [0, 1, 2])) {
+        const w = field(real ? { ap: 1 } : null), hull = faces[face], k = UNIT_KINDS[shooter], tk = UNIT_KINDS[kind];
+        const t = put(w, FOE, kind, 10, 16, { hullX: hull[0], hullZ: hull[1] }), s = put(w, ME, shooter, 7, 16);
+        const label = `damageTable: ${real ? 'ap' : 'classic'} kind ${shooter} -> ${kind} face ${face}`;
+        // 獨立推遊戲規則：正／側／後面明確放置，不呼叫 armorPct 算答案。
+        const faceDamage = shell === SHELL_AP && tk.armored ? Math.floor(k.dmgUnit * hull[2] / 100) : k.dmgUnit;
+        const classic = Math.floor(faceDamage * (tk.armored ? k.pierce : k.soft) / 100);
+        assert.equal(classic, kind === UK_TRUCK ? truckDamage : halfDamage[face], `${label}: independent formula agrees with the original card cell`);
+        let expected = classic, hitRule = -1;
+        if (real && shell !== SHELL_HE) {
+          if (tk.armored) {
+            // 三格、軸向的同一個既有命中夾具；只讀資料表，受測 helper 不當 oracle。
+            const [near, far] = PEN_MM[shooter];
+            const expectedPen = Math.max(0, Math.floor((near * 900 - (near - far) * 200) / 900));
+            assert.equal(penetration(shooter, 3 * SUB), expectedPen, `${label}: independent interpolation matches penetration`);
+            hitRule = expectedPen >= [14, 8, 8][face] ? 1 : 0;
+            expected = hitRule === 0 ? 0 : shell === SHELL_AP ? k.dmgUnit : classic;
+          }
+          assert.equal(apHit(shooter, s.x, s.z, t), hitRule, `${label}: independent plate comparison matches apHit`);
+        }
+        // 經由真正的 step/land 命中；每一發都查傷害，HE 第二發起吃既有彈坑掩護。
+        let expectedHp = tk.hp, rounds = 0;
+        do {
+          const before = t.hp, ground = shell === SHELL_HE && rounds > 0 ? 75 : 100;
+          const loss = Math.min(expectedHp, Math.floor(expected * tk.armor * ground / 10000));
+          expectedHp -= loss;
+          w.shells.push({ id: w.nextShell++, side: ME, kind: shell, shooter: s.id, sx: s.x, sz: s.z, ex: t.x, ez: t.z, t: 0, T: 1, target: shell === SHELL_HE ? 0 : t.id, hitBld: 0 });
+          step(w, []); rounds++;
+          assert.equal(before - t.hp, loss, `${label}: round ${rounds} actual damage matches the independent expected value`);
+          assert.equal(t.alive, expectedHp > 0, `${label}: round ${rounds} survival follows remaining health`);
+          if (shell === SHELL_HE) assert(w.crater[cellIdx(w, 10, 16)] > 0, `${label}: impact leaves the crater used by the following round`);
+        } while (expected > 0 && expectedHp > 0 && rounds < 100);
+        assert(expected === 0 || expectedHp === 0, `${label}: positive damage eventually exhausts health`);
+        if (!real && shooter === UK_MORTAR && kind === UK_HALFTRACK) assert.equal(rounds, 6, `${label}: crater cover makes the original table's six rounds`);
+        checked++;
+      }
+    }
+    assert.equal(checked, 80, 'damageTable: all ten rows cover truck and three half-track faces under both rule modes');
   },
   // 驗收 20：電腦看不到車上的人，不對他們下指令
   counter() {
