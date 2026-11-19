@@ -172,8 +172,8 @@
     @media (max-width: 480px) and (orientation: portrait) {
       body.r901 #hud #platoon95 { left: calc(max(8px, env(safe-area-inset-left)) + 52px); top: calc(max(8px, env(safe-area-inset-top)) + 380px); padding: 0; background: none; }
     }
-    /* R092 搭車：全排的右邊（R901 手機直的版面也是左邊那一排、全排的下一格，不壓到右邊的小地圖） */
-    #hud #transport92 { left: calc(max(8px, env(safe-area-inset-left)) + 204px); top: calc(max(8px, env(safe-area-inset-top)) + 58px); }
+    /* R092 搭車：全排的右邊，跟「開火」到「全排」一樣隔 64px（R030；R901 手機直的版面也是左邊那一排、全排的下一格，不壓到右邊的小地圖） */
+    #hud #transport92 { left: calc(max(8px, env(safe-area-inset-left)) + 220px); top: calc(max(8px, env(safe-area-inset-top)) + 58px); }
     #hud #transport92[hidden] { display: none; }
     #hud #transport92 button { width: 44px; height: 44px; }
     @media (max-width: 640px) { #hud #transport92 { top: calc(max(8px, env(safe-area-inset-top)) + 100px); } }

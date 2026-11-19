@@ -4,8 +4,9 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R030 | 2026-11-19 | Claude | R092 運輸修補（合併後審查確認的 6 條）：新局 `tp`＝2，拖著的砲不接的攻擊、射擊不卸砲（`tp`＝1 照舊）；搭車鍵與模擬共用 `match92` 照車配、看釘住；搭車鍵右移 16px 不壓全排；補 4 個守衛漏洞 | `transport92`（23 群：多 `pinned`、`replay`）、`transport92-negative`（55 處）、瀏覽器量三條框 | PR 待合併（下一張補） | 車開不到目的地時搭車鍵加的車可能空著；拖著的砲點一下可能選到砲 |
 | R146 | 2026-11-19 | Codex | 補驗 R092 運輸，補記 R071、R092 已合併。19 條 Claude 分支的內容逐一與對應合併提交相同，已清除剩餘兩條遠端分支 | 大圖逐步對照、上下車、規則表、生產、瀏覽器讀檔、繪製與計時，數據見卡 | [R146 驗收紀錄](docs/tasks/R146-R092收尾.md) | 手機畫面以電腦瀏覽器測量，未做 Android 實機測試 |
-| R092 | 2026-11-19 | Claude | 運輸：卡車（44）、半履帶車（45）；同一道移動兩格內上車或掛砲、到了放下、一台一個；車上的人看不見打不到；跳車傷害；搭車鍵；電腦不造不用 | `transport92`（20 群）、`transport92-quiet`、`transport92-negative`（36 處）、兩支瀏覽器 | [#150](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/150)（3587bc3），[main CI／Pages](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/44475010505) 通過；補驗見 R146 | 車借坦克網格；不分輪履帶 |
+| R092 | 2026-11-19 | Claude | 運輸：卡車（44）、半履帶車（45）；同一道移動兩格內上車或掛砲、到了放下、一台一個；車上的人看不見打不到；跳車傷害；搭車鍵；電腦不造不用 | `transport92`（19 群）、`transport92-quiet`、`transport92-negative`（36 處）、兩支瀏覽器 | [#150](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/150)（3587bc3），[main CI／Pages](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/44475010505) 通過；補驗見 R146 | 車借坦克網格；不分輪履帶 |
 | R099 | 2026-11-19 | Claude | 請業主再劃一段卡號：Claude 段 R001–R099 剩 10 個、全是路線圖預留的；建議 R1000–R1099（改 card-numbers 的寫法），或從 GPT 段切 R800–R899 | `card-numbers`、`readme` | ✅ #149（ae950ae） | 等業主回答 |
 | R091 | 2026-11-18 | Claude | 步兵支援兵器（一）：狙擊手（42，11 格、一發打倒一個人）、反戰車小組（43，3 格空心裝藥穿甲、可停火埋伏）；eco 帶 sw；電腦不造不指揮、會先打狙擊手 | `support91`（15 群）、`support91-negative`（25 處）、`support91-browser` | ✅ #148（5e8e59d） | 工兵、火焰噴射器移到下一段；電腦不會用 |
 | R090 | 2026-11-18 | Claude | 更大的戰場：128×128 的海斯與皇家軍事運河（地圖 5）——五座橋、碉堡、圓形砲塔、城堡、機場；地圖 5 的尋路多估＋終點擋住就近換（47 個一起走 0.14 倍）；小地圖點陣 | `hythe-map`（10 群）、`hythe-duel`、`hythe-net`、`hythe-map-browser`、`minimap90`、`hythe-negative`（24 處）；CI 的 unit 分五份 | ✅ #147（937fed5） | 電腦只走對角線，四座橋是佈景；仗沒變大；地面上傳未達卡面 |
