@@ -68,7 +68,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 1 ? 1 : 0, cmd.tp === 1 ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -122,7 +122,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
     u.target = smoke || !standing ? FIRE_AT_ROUNDS : 0;
     u.path = inRange(u, center(gx), center(gz)) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, center(gx), center(gz))) ? [] : findPath(w, ux, uz, gx, gz, 0, 0, u.kind); u.pathIdx = 0;   // R055：直射的在射程內但被稜線擋住，也要往前開
   });
-  if (w.eco?.tp && cmd.t !== 'fireDiscipline') hitch92(w, cmd.t === 'move', us);   // R092 上車、掛砲、解掛（指令逐單位算完之後）
+  if (w.eco?.tp && cmd.t !== 'fireDiscipline') hitch92(w, cmd.t === 'move', us, cmd.t === 'stop');   // R092 上車、掛砲、解掛（指令逐單位算完之後）
 }
 
 function tooClose(u: Unit, x: number, z: number): boolean {

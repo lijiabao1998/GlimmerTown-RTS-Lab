@@ -12,11 +12,30 @@ export const rides92 = (kind: number): boolean => UNIT_KINDS[kind].radius === 0 
 // 能被拖的：沒有裝甲、沒有人數、有碰撞半徑、要架設或間接射擊的砲
 export const tows92 = (kind: number): boolean => { const k = UNIT_KINDS[kind]; return !k.armored && k.men === 0 && k.radius > 0 && (k.setup || k.indirect); };
 const pinned = (w: World, u: Unit): boolean => !!w.rules?.morale && moraleState(u) >= MORALE_PINNED;
+export const pinned92 = pinned;   // R030：搭車鍵用同一條「被釘住」
 const unhitch = (g: Unit): void => { delete g.towBy; g.cooldown = Math.max(g.cooldown, UNIT_KINDS[g.kind].reload); };
 
+// R030 照車配：車照傳進來的順序（id 由小到大）逐台，每台挑兩格內（距離、id）最小、這一次還沒配到、能坐車或能被拖、沒被釘住的那一個。
+// hitch92 和搭車鍵（ui/transport92.ts 的 pair92）都用這一條，兩邊配出來的一定一樣。人也要照 id 由小到大傳進來；已經在車上、掛著的由呼叫的那一邊先濾掉
+// （hitch92 濾掉；搭車鍵不濾拖著的砲：選了砲沒選它的車，點地面那一步砲會先解掛、變成能配的）。只讀不寫（搭車鍵每一幀都呼叫）
+export function match92(w: World, cars: Unit[], units: Unit[]): [Unit, Unit][] {
+  const out: [Unit, Unit][] = [], taken = new Set<number>();
+  for (const c of cars) {
+    let best: Unit | null = null, bd = 0;
+    for (const u of units) {
+      if (taken.has(u.id) || !(rides92(u.kind) || tows92(u.kind)) || pinned(w, u)) continue;
+      const d = dist(c.x, c.z, u.x, u.z);
+      if (d <= REACH92 && (!best || d < bd)) { best = u; bd = d; }
+    }
+    if (best) { taken.add(best.id); out.push([c, best]); }
+  }
+  return out;
+}
+
 // 指令逐單位算完之後（step.ts 的 applyCommand）：us 是這道指令收下的單位
-export function hitch92(w: World, isMove: boolean, us: Unit[]): void {
-  if (!isMove) { for (const g of us) if (g.towBy) unhitch(g); return; }   // 攻擊、射擊、停：拖著的砲解掛，砲自己那一道指令照舊生效
+// isStop：這道指令是「停」。R030（tp＝2）：攻擊、射擊只卸下接了的砲（拖著的砲在指令之前一定是待命，算完還是待命＝沒接）；tp＝1 照舊每一門都卸（舊紀錄）
+export function hitch92(w: World, isMove: boolean, us: Unit[], isStop = false): void {
+  if (!isMove) { for (const g of us) if (g.towBy && (w.eco?.tp !== 2 || isStop || g.order !== ORD_IDLE)) unhitch(g); return; }   // 攻擊、射擊、停：拖著的砲解掛，砲自己那一道指令照舊生效
   const sorted = us.slice().sort((a, b) => a.id - b.id), ids = new Set(sorted.map(u => u.id));
   for (const g of sorted) if (g.towBy) {
     if (!ids.has(g.towBy)) unhitch(g);   // 車沒一起動：解掛，照自己剛算的路走
@@ -24,18 +43,11 @@ export function hitch92(w: World, isMove: boolean, us: Unit[]): void {
   }
   const busy = new Set<number>();
   for (const u of w.units) if (u.alive) { if (u.ride) busy.add(u.ride); if (u.towBy) busy.add(u.towBy); }
-  for (const c of sorted) {   // 照車配：每台空車挑兩格內（距離、id）最小的那一個
-    if (!UNIT_KINDS[c.kind].carry || c.order !== ORD_MOVE || !c.path.length || pinned(w, c) || busy.has(c.id)) continue;
-    let best: Unit | null = null, bd = 0;
-    for (const u of sorted) {
-      if (u.ride || u.towBy || !(rides92(u.kind) || tows92(u.kind)) || pinned(w, u)) continue;
-      const d = dist(c.x, c.z, u.x, u.z);
-      if (d <= REACH92 && (!best || d < bd)) { best = u; bd = d; }
-    }
-    if (!best) continue;
+  const cars = sorted.filter(c => UNIT_KINDS[c.kind].carry && c.order === ORD_MOVE && c.path.length && !pinned(w, c) && !busy.has(c.id));   // 空車、這一步要開、沒被釘住
+  for (const [c, best] of match92(w, cars, sorted.filter(u => !u.ride && !u.towBy))) {   // 跟車一起動、照舊掛著的砲不換車
     if (rides92(best.kind)) best.ride = c.id; else best.towBy = c.id;
     best.order = ORD_IDLE; best.path = []; best.pathIdx = 0; best.target = 0; delete best.fireAmmo;
-    best.x = c.x; best.z = c.z; busy.add(c.id);
+    best.x = c.x; best.z = c.z;
   }
 }
 
@@ -59,12 +71,12 @@ export function carry92(w: World, hurt: (u: Unit, dmg: number) => void): void {
   }
 }
 
-// 存檔：tp 只有 1；沒有 tp 就沒有 44／45、沒有 ride／towBy；活著的連結要指向活著、同一方的車，一台只掛一個
+// 存檔：tp 只有 1、2（R030）；沒有 tp 就沒有 44／45、沒有 ride／towBy；活著的連結要指向活著、同一方的車，一台只掛一個
 export function tpOk(r: Record<string, unknown>): boolean {
   const e = r.eco as { tp?: unknown; queue?: unknown } | undefined, units = r.units as Record<string, unknown>[];
-  if (e && e.tp !== undefined && e.tp !== 1) return false;
+  if (e && e.tp !== undefined && e.tp !== 1 && e.tp !== 2) return false;   // R030：2＝被拒絕的攻擊、射擊不卸砲
   const car = (k: unknown) => k === UK_TRUCK || k === UK_HALFTRACK;
-  if (e?.tp !== 1) {
+  if (e?.tp !== 1 && e?.tp !== 2) {
     if (units.some(u => car(u.kind) || u.ride !== undefined || u.towBy !== undefined)) return false;
     return !(e && Array.isArray(e.queue) && e.queue.some(q => Array.isArray(q) && q.some(car)));
   }

@@ -1,9 +1,8 @@
 // R092 運輸：生產列 R142 分組選單裡的「運輸」一組、「搭車」浮動鍵、每一幀把車上的人從選取拿掉。
 // 那一組有沒有看這一頁的閥（main.ts），能不能按看世界的 tp（productionBlockReason）。「搭車」只改選取、不送指令（鎖步連線不受影響）。
-import { UK_TRUCK, UK_HALFTRACK, UNIT_KINDS, type World } from '../sim/world.ts';
+import { UK_TRUCK, UK_HALFTRACK, UNIT_KINDS, ORD_IDLE, type World } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
-import { rides92, tows92, REACH92 } from '../sim/transport92.ts';
-import { dist } from '../sim/math.ts';
+import { match92, pinned92 } from '../sim/transport92.ts';
 
 export const transport92Items = () => [
   { kind: UK_TRUCK, label: '卡車', cost: UNIT_KINDS[UK_TRUCK].cost, group: '運輸', role: '卡車 · 跟一班步兵或一門砲一起選，點地面＝載過去，到了就放下；一打就爛，車上的人會受傷' },
@@ -11,24 +10,17 @@ export const transport92Items = () => [
 ];
 
 interface Read92 { world: World; selected: Set<number>; active: boolean }
-// 選到的人、砲各配一台兩格內最近的空車（照 id 逐個看；一台配一個）。回傳要加進選取的車
+// R030 照車配，跟模擬（hitch92）同一條 match92：我方每台活著、停著、空著、沒被釘住、沒潰退的車照 id 逐台，挑兩格內最近、選到的人或砲。
+// 選到的拖著的砲也算（它的車沒被選，點地面那一步會先解掛）。回傳配到的車（要加進選取的）；沒配到的車不加，加了點地面也會空車開走。
+// 正在開的車不加（自己有事、或是隊友在開）；按下到點地面之間有人、車走開或被釘住，那台車還是可能空著
 export function pair92(w: World, selected: ReadonlySet<number>): number[] {
   const busy = new Set<number>();
   for (const u of w.units) if (u.alive) { if (u.ride) busy.add(u.ride); if (u.towBy) busy.add(u.towBy); }
   const sel = w.units.filter(u => selected.has(u.id) && u.alive);
   if (sel.some(u => UNIT_KINDS[u.kind].carry)) return [];   // 已經選了車：照選的配
-  const out: number[] = [];
-  for (const u of sel) {
-    if (u.side !== SIDE_PLAYER || u.ride || u.towBy || !(rides92(u.kind) || tows92(u.kind))) continue;
-    let best = 0, bd = 0;
-    for (const c of w.units) {
-      if (!c.alive || c.side !== u.side || !UNIT_KINDS[c.kind].carry || busy.has(c.id) || out.includes(c.id)) continue;
-      const d = dist(u.x, u.z, c.x, c.z);
-      if (d <= REACH92 && (!best || d < bd)) { best = c.id; bd = d; }
-    }
-    if (best) out.push(best);
-  }
-  return out;
+  const mine = sel.filter(u => u.side === SIDE_PLAYER && !u.rout && !u.ride);   // 潰退中的不收指令（step.ts）
+  const cars = w.units.filter(c => c.alive && c.side === SIDE_PLAYER && UNIT_KINDS[c.kind].carry && c.order === ORD_IDLE && !c.rout && !busy.has(c.id) && !pinned92(w, c));
+  return match92(w, cars, mine).map(([c]) => c.id);
 }
 
 export function initTransport92(read: () => Read92, add: (ids: number[]) => void, pruned: () => void, opts: { show?: boolean } = {}): { frame: () => void } {

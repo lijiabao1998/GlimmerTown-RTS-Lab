@@ -2,6 +2,7 @@
 //   新開的局 eco 帶 tp；分組選單有「運輸」，兩顆鍵在四種尺寸都是完整、點得到的 44px 鍵；點了扣補給、排進佇列；
 //   搭車：選一班步兵 →「搭車」出現 → 按下只改選取（指令紀錄不多一筆）→ 點地面：那一班上車、從畫面消失；點卡車的位置選到的是卡車；到了之後又畫出來；頁面雜湊＝Node 重播；
 //   「搭車」在三種直的手機尺寸不壓到別的鍵和小地圖；860 寬另開非觸控桌機與觸控對照；
+//   R030：新局送 tp 2、?noR030=1 送 tp 1；「開火」「全排」「搭車」三條同時打開量框，「搭車」不壓到另外兩條（直的手機三種、860×412 觸控）；
 //   閥：?noR092=1 不送 tp、沒有那一組；帶 tp、乘員、拖砲的紀錄照樣重播；真的離頁存檔、關閥再開頁按「繼續上一局」，原步數、乘員、拖砲與後續步數仍一致。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,6 +17,10 @@ import { runLog } from '../src/sim/step.ts';
 import { SAVE_KEY, checkSave } from '../src/ui/saveGame.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r092-browser-'));
+// R030：把三條浮動鍵（和裡面的鍵）同時打開、量框、再照原樣藏回去（同一段同步程式，不會畫出來）
+const BARS = `(()=>{const ids=['fire-discipline','platoon95','transport92'],saved=[];for(const id of ids){const e=document.getElementById(id);if(!e)continue;saved.push([e,e.hidden]);e.hidden=false;for(const b of e.querySelectorAll('button')){saved.push([b,b.hidden]);b.hidden=false;}}
+  const r=Object.fromEntries(ids.map(id=>{const e=document.getElementById(id);if(!e||e.offsetParent===null)return [id,null];const q=e.getBoundingClientRect();return [id,[q.left,q.top,q.right,q.bottom]];}));for(const [e,h] of saved)e.hidden=h;return r;})()`;
+const barsApart = r => { const t = r.transport92, cross = q => q && !(t[2] <= q[0] || q[2] <= t[0] || t[3] <= q[1] || q[3] <= t[1]); return !!(t && r.platoon95 && r['fire-discipline']) && !cross(r.platoon95) && !cross(r['fire-discipline']); };
 await runOrSkip('transport92', async () => {
   try {
     await build({ root: ROOT, logLevel: 'error', plugins: [fixture89(ROOT)], build: { outDir: tmp } });
@@ -32,7 +37,7 @@ await runOrSkip('transport92', async () => {
       };
       // 驗收 25：新開的局與生產列
       await open('noR092=0&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); 0'); await frames();
-      assert.equal((await E('__rts.log()')).find(c => c.cmd.t === 'eco').cmd.tp, 1, 'page: a new battle sends tp 1');
+      assert.equal((await E('__rts.log()')).find(c => c.cmd.t === 'eco').cmd.tp, 2, 'page: a new battle sends tp 2 (R030)');
       const groups = await pick('運輸'); await frames();
       assert(groups.includes('運輸'), `catalog: the group menu offers 運輸 (${groups.join('、')})`);
       assert.deepEqual(await visible(), ['pb-k44', 'pb-k45'], 'catalog: the group shows the truck and the half-track');
@@ -65,6 +70,8 @@ await runOrSkip('transport92', async () => {
         await size(w, h);
         const bad = await E(`(()=>{const b=document.getElementById('b-ride'),r=b.getBoundingClientRect(),others=[...document.querySelectorAll('button, select, #minimap')].filter(o=>o!==b&&!b.contains(o)&&o.offsetParent!==null&&!o.hidden);const hit=others.filter(o=>{const q=o.getBoundingClientRect();return q.width&&q.height&&!(q.right<=r.left||q.left>=r.right||q.bottom<=r.top||q.top>=r.bottom)}).map(o=>o.id||o.tagName);return {w:r.width,h:r.height,hit,tap:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}})()`);
         assert(bad.w >= 44 && bad.h >= 44 && !bad.hit.length && bad.tap, `ride: at ${w}×${h} 搭車 is a 44px key that overlaps no other key or the minimap (${JSON.stringify(bad)})`);
+        const bars = await E(BARS);
+        assert(barsApart(bars), `ride: at ${w}×${h} the 搭車 bar overlaps neither 全排 nor 開火 when all three show (R030; ${JSON.stringify(bars)})`);
       }
       await size(412, 915); await frames();
       const logLen = (await E('__rts.log()')).length;
@@ -88,6 +95,18 @@ await runOrSkip('transport92', async () => {
       const [tick, hash, log] = await E('[__rts.tick(), __rts.hash(), __rts.log()]');   // 這一幕的單位是夾具放的、不在紀錄裡：頁面＝Node 重播由下面閥那一段的 playLog 驗
       assert(log.some(c => c.cmd.t === 'move' && c.cmd.ids.includes(inf) && c.cmd.ids.includes(tr)), 'replay: the move with the truck and the section is in the log');
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
+      // R030：沒有 R901（?noR901=1）的直的窄手機，小地圖跟搭車鍵在同一排；搭車鍵要畫在小地圖上面、點得到
+      await open('noR092=0&noR901=1&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); __r089.clean(); 0');
+      { const i9 = await E('__r089.place(0, 3, 8, 24)'); await E('__r089.place(0, 44, 9, 24)'); await E(`__rts.select([${i9}]); __rts.stepN(1); 0`); await frames();
+        for (const [w, h] of [[412, 915], [390, 844], [360, 780]]) {
+          await size(w, h);
+          const k = await E("(()=>{const b=document.getElementById('b-ride');if(!b||b.hidden||b.offsetParent===null)return null;const r=b.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {r901:document.body.classList.contains('r901'),w:r.width,h:r.height,hit:b.contains(document.elementFromPoint(x,y)),at:document.elementFromPoint(x,y)?.id}})()");
+          assert(k && !k.r901 && k.w >= 44 && k.h >= 44 && k.hit, `ride: with ?noR901=1 at ${w}×${h} the centre of 搭車 is the key itself, not the minimap (R030; ${JSON.stringify(k)})`);
+        }
+        await size(412, 915); }
+      // R030 的閥：照舊送 tp 1
+      await open('noR092=0&noR030=1&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); 0');
+      assert.equal((await E('__rts.log()')).find(c => c.cmd.t === 'eco').cmd.tp, 1, 'valve: ?noR030=1 sends tp 1 (the R092 rule)');
       // 驗收 28：閥
       await open('noR092=1&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); 0');
       assert.equal((await E('__rts.log()')).find(c => c.cmd.t === 'eco').cmd.tp, undefined, 'valve: ?noR092=1 sends no tp');
@@ -144,6 +163,7 @@ await runOrSkip('transport92', async () => {
       const ride = await E(`(()=>{const b=document.getElementById('b-ride');if(!b||b.hidden||b.offsetParent===null)return null;const r=b.getBoundingClientRect();return {w:r.width,h:r.height,inside:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,hit:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}})()`);
       assert.equal(!!ride, mobile, `pointer: 搭車 is ${mobile ? 'shown on touch' : 'absent on a non-touch desktop'} at 860px (${JSON.stringify(input)})`);
       if (mobile) assert(ride.w >= 44 && ride.h >= 44 && ride.inside && ride.hit, 'pointer: the 860px touch control is a whole, reachable 44px key');
+      if (mobile) { const bars = await E(BARS); assert(barsApart(bars), `pointer: at 860×412 touch the 搭車 bar overlaps neither 全排 nor 開火 when all three show (R030; ${JSON.stringify(bars)})`); }
       assert.equal(page.errors.length, 0, `pointer page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
       console.log(`transport92 pointer: 860×412 ${mobile ? 'touch, shown' : 'non-touch desktop, absent'}`);
     });

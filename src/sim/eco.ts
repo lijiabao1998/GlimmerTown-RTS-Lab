@@ -63,7 +63,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, sov
   if (pla) startPlatoons(w);   // R095：步兵排的旗標、人口上限 24／56／64
   if (mg) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_MG, b); }   // R080：雙方各一組機槍組（mg 旗標；也是可以生產它的開關）
   if (sw) w.eco.sw = 1;   // R091：步兵支援（狙擊手、反戰車小組）可以生產；開局不送兵
-  if (tp) w.eco.tp = 1;   // R092：運輸可以生產；開局不送車
+  if (tp) w.eco.tp = tp === 2 ? 2 : 1;   // R092：運輸可以生產；開局不送車。R030：2＝被拒絕的攻擊、射擊不卸砲
 }
 
 export const hqAlive = (w: World, side: number): Building | null => {
