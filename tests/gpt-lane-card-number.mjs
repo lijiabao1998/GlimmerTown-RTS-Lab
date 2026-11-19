@@ -41,6 +41,8 @@ runCase('Claude range does not reserve GPT numbers', '| R099 | Claude |\n', '099
 runCase('highest available GPT number accepted', '| R898 | complete |\n| R905 | Grok |\n', '898', 899, true);
 runCase('withdrawn GPT R899 remains reserved', '| R899 | withdrawn GPT |\n| R905 | Grok |\n', '905', 899, false);
 runCase('Grok range cannot be borrowed by GPT', '| R139 | complete |\n', '139', 900, false);
+runCase('Claude range R1000 cannot be borrowed by GPT (R1000)', '| R139 | complete |\n', '139', 1000, false);
+runCase('Claude R1000 rows do not exhaust the GPT range (R1000)', '| R139 | complete |\n| R1000 | Claude |\n', '1000', 140, true);
 const unfiltered = guard.replace('used.filter(n => n >= 100 && n <= 899)', 'used');
 assert.notEqual(unfiltered, guard, 'range negative control must change the production guard');
 runCase('negative control: unfiltered Grok card recreates R140 rejection', '| R139 | complete |\n| R905 | Grok |\n', '905', 140, false, unfiltered);

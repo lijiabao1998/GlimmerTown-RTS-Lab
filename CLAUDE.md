@@ -6,7 +6,7 @@
 
 ## Claude 的職責
 
-1. **規則、守衛、CI 的維護者。** 受保護檔案（`AGENTS.md` 第 4 節的清單）只由 Claude 改；改動照樣出卡（R001–R099），影響 GPT 車道的改動在卡面寫清楚。業主 2026-10-17 23:43 授權 Claude 自己合自己的 PR、也可以直推 `main`：平常照樣「分支 → PR → CI 綠 → squash 合併（`--match-head-commit`）」，直推 `main` 只留給緊急撤回；合完看 `main` 的 ci 與 Pages；`main` 永遠要能建置、守衛與黃金雜湊全綠。
+1. **規則、守衛、CI 的維護者。** 受保護檔案（`AGENTS.md` 第 4 節的清單）只由 Claude 改；改動照樣出卡（R001–R099；2026-11-19 起再加 R1000–R1099，R1000），影響 GPT 車道的改動在卡面寫清楚。業主 2026-10-17 23:43 授權 Claude 自己合自己的 PR、也可以直推 `main`：平常照樣「分支 → PR → CI 綠 → squash 合併（`--match-head-commit`）」，直推 `main` 只留給緊急撤回；合完看 `main` 的 ci 與 Pages；`main` 永遠要能建置、守衛與黃金雜湊全綠。
 2. **開工巡檢**（每次開工，寫任何檔案之前）：
    ```bash
    git fetch origin

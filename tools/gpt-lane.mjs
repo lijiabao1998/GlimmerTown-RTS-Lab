@@ -60,7 +60,7 @@ if (files.includes(DIR_FILE)) {
 const ALLOWED = [
   /^src\/(?!render\/post\.ts$).+/,          // 程式（後製＝全局觀感除外）
   /^index\.html$/,
-  /^docs\/tasks\/R(?!0\d\d-)\d{3,}-[^/]+\.md$/, // GPT 的卡（R001–R099 是 Claude 的）
+  /^docs\/tasks\/R(?!0\d\d-|10\d\d-)\d{3,}-[^/]+\.md$/, // GPT 的卡（R001–R099、R1000–R1099 是 Claude 的；R1000 起）
   /^docs\/GPT-方向\.md$/,
   /^tests\/[^/]+\.mjs$/,                      // GPT 自己加的守衛
   /^tools\/golden\.json$/,
@@ -81,7 +81,7 @@ if (!statusOnly) {
     // 已撤回且卡面刪除的迭代仍由歷史日誌列保留，不准重用。
     const used = [...git('ls-tree', '-r', '--name-only', BASE, 'docs/tasks').matchAll(/R(\d{3,})-/g), ...(show(BASE, 'LOG.md') ?? '').matchAll(/^\s*\|\s*R(\d{3,})\s*\|/gm)].map(m => Number(m[1]));
     const maxUsed = Math.max(99, ...used.filter(n => n >= 100 && n <= 899));
-    if (num < 100) no(`GPT 的卡號從 R100 起（R001–R099 留給 Claude），這張是 R${num}。`);
+    if (num < 100) no(`GPT 的卡號從 R100 起（R001–R099、R1000–R1099 留給 Claude），這張是 R${num}。`);
     else if (num > 899) no(`GPT 的卡號只到 R899（R900–R999 留給 Grok），這張是 R${num}。`);
     else if (num <= maxUsed) no(`卡號 R${num} 不比 main 上用過的最大號 R${maxUsed} 大：卡號只往上加，不重用（撤回過的號也不用）。`);
     const text = show(HEAD, card) ?? '';

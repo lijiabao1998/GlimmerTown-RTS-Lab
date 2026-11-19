@@ -14,7 +14,7 @@ const walk = d => fs.readdirSync(path.join(ROOT, d), { withFileTypes: true }).fl
 const FROZEN = ['004', '006', '008', '009', '010', '011', '012', '014', '015', '016', '018', '019', '021', '022', '023', '024', '026', '027', '028',
   '037', '041', '043', '044', '045', '100', '101', '104', '105', '107', '109', '113', '115', '116', '117', '118', '120', '121', '122', '123', '124',
   '125', '126', '127', '128', '130', '131', '134', '135', '136', '137', '138', '139'];
-const table = read('src/valves.ts'), listed = [...table.matchAll(/get r(\d{3})\(\) \{ return on\('(\d{3})'\); \}/g)];
+const table = read('src/valves.ts'), listed = [...table.matchAll(/get r(\d{3,4})\(\) \{ return on\('(\d{3,4})'\); \}/g)];   // R1000：Claude 的新號段是四位數
 for (const [, a, b] of listed) assert.equal(a, b, `valves: getter r${a} reads its own number`);
 const numbers = listed.map(m => m[1]);
 assert.equal(new Set(numbers).size, numbers.length, 'valves: no duplicate valve');
