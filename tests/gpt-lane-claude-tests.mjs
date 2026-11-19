@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 const guard = readFileSync(new URL('../tools/gpt-lane.mjs', import.meta.url), 'utf8');
-const runCase = (name, touched, pass, script = guard) => {
+// R1000：why＝擋下來時 stdout 要有的理由；夾具的 base 另外放兩張 Claude 的卡（三位數、四位數），touched 可以是它們
+const runCase = (name, touched, pass, script = guard, why = /Claude 的結構守衛/) => {
   const dir = mkdtempSync(join(tmpdir(), 'rts-lane-'));
   try {
     const git = (...args) => execFileSync('git', args, { cwd: dir, stdio: 'pipe' }).toString().trim();
@@ -14,6 +15,7 @@ const runCase = (name, touched, pass, script = guard) => {
     git('init', '-q'); git('config', 'user.name', 'lane fixture'); git('config', 'user.email', 'fixture@example.invalid');
     put('docs/GPT-方向.md', '## 開關\n\n**運行**\n\n## 待辦\n'); put('LOG.md', '| R140 | done |\n');
     put('tests/hub-budget.mjs', 'claude\n'); put('tests/valves.mjs', 'claude\n'); put('tests/card-numbers.mjs', 'claude\n'); put('tests/other.mjs', 'gpt\n');
+    put('docs/tasks/R030-claude.md', 'claude card\n'); put('docs/tasks/R1000-claude.md', 'claude card\n');   // R1000：Claude 的卡，三位數與四位數
     git('add', '.'); git('commit', '-qm', 'base'); const base = git('rev-parse', 'HEAD');
     put('docs/tasks/R141-fixture.md', '# R141\n<!-- card: sim=no; golden=無; valve=無; owner_ok= -->\n## 驗收（動手前寫）\nFrozen check.\n');
     git('add', '.'); git('commit', '-qm', 'card first');
@@ -21,7 +23,7 @@ const runCase = (name, touched, pass, script = guard) => {
     put('guard.mjs', script);
     const r = spawnSync(process.execPath, ['guard.mjs'], { cwd: dir, env: { ...process.env, BASE: base, HEAD_REF: 'HEAD', BRANCH: 'gpt/fixture' }, encoding: 'utf8' });
     assert.equal(r.status, pass ? 0 : 1, `${name}: ${r.stdout}\n${r.stderr}`);
-    if (!pass) assert.match(r.stdout, /Claude 的結構守衛/, `${name}: rejected for the intended reason`);
+    if (!pass) assert.match(r.stdout, why, `${name}: rejected for the intended reason`);
     console.log(`OK ${name}`);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 };
@@ -34,3 +36,11 @@ assert.notEqual(old, guard, 'negative control removes the R061 rule');
 assert.throws(() => runCase('negative control: without the rule GPT could edit hub-budget', 'tests/hub-budget.mjs', false, old), /AssertionError|expected/i);
 assert.throws(() => runCase('negative control: without the rule GPT could edit card-numbers', 'tests/card-numbers.mjs', false, old), /AssertionError|expected/i);
 console.log('OK negative control: without the R061 rule the edit would pass the lane');
+// R1000：Claude 的卡（R001–R099、R1000–R1099）GPT 改不到，理由是白名單以外
+const OUTSIDE = /白名單以外/;
+runCase('GPT may not edit a Claude card R030', 'docs/tasks/R030-claude.md', false, guard, OUTSIDE);
+runCase('GPT may not edit a Claude card R1000 (new range)', 'docs/tasks/R1000-claude.md', false, guard, OUTSIDE);
+const oldList = guard.replace('(?!0\\d\\d-|10\\d\\d-)', '(?!0\\d\\d-)');
+assert.notEqual(oldList, guard, 'negative control puts back the whitelist that only protects R001–R099');
+assert.throws(() => runCase('negative control: with the old whitelist GPT could edit R1000', 'docs/tasks/R1000-claude.md', false, oldList, OUTSIDE), /AssertionError|expected/i);
+console.log('OK negative control: with the old whitelist GPT could edit a Claude R1000 card');
