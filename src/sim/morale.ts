@@ -60,7 +60,7 @@ function setSup(w: World, u: Unit, value: number): void {
 
 // 加壓制：amount 是還沒算掩體、指揮部之前的量
 export function suppress(w: World, u: Unit, amount: number): void {
-  if (!u.alive || amount <= 0 || !suppressible(u)) return;
+  if (!u.alive || u.ride || amount <= 0 || !suppressible(u)) return;
   let a = Math.floor((amount * supPct(coverPct(w, u))) / 100);
   if (nearHq(w, u)) a = Math.floor((a * 3) / 4);
   if (second(w) && u.hp * 2 < UNIT_KINDS[u.kind].hp) a = Math.floor((a * WOUNDED_PCT) / 100);

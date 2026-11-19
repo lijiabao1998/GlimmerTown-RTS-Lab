@@ -9,6 +9,7 @@ export function reloadStatus(w: World, selected: ReadonlySet<number>, enabled = 
     if (!selected.has(u.id) || !u.alive || u.side !== SIDE_PLAYER) continue;
     const k = UNIT_KINDS[u.kind];
     if (!INTERNATIONAL_KINDS.includes(u.kind) && !k.armored && !SOVIET_KINDS.includes(u.kind) && u.kind !== UK_HOWITZER && u.kind !== UK_ATGUN && u.kind !== UK_MORTAR) continue;
+    if (k.carry) continue;   // R092 運輸車沒有武裝（上一行是守衛錨點，不動）
     const ms = w.rules?.morale ? moraleState(u) : 0;   // R052：受壓裝填慢一倍、釘住慢四倍、潰退不開火（剩餘時間照釘住估）
     if (ms) pressed++;
     if (u.cooldown <= 0) ready++;

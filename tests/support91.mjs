@@ -89,7 +89,7 @@ const groups = {
     assert.deepEqual(on.units.map(u => u.kind).sort(), plain.units.map(u => u.kind).sort(), 'flag: no starting units for sw (the opening is the same as without it)');
     for (const bad of ['x', 1.5, '1']) assert.equal(isCommand({ ...ECO, sw: bad }), false, `flag: the command check refuses sw ${JSON.stringify(bad)}`);
     assert.equal(isCommand({ ...ECO, sw: 1 }), true, 'flag: the command check takes sw 1');
-    assert.equal(UNIT_KINDS.length, 44, 'flag: two kinds appended (42, 43)');
+    assert.deepEqual([UNIT_KINDS[42].name, UNIT_KINDS[43].name], ['狙擊手', '反戰車小組'], 'flag: two kinds appended (42, 43)');   // R092 之後還有 44、45，只看 42、43
     for (const kind of [UK_SNIPER, UK_AT91]) assert.deepEqual(UNIT_KINDS[kind], ROW[kind], `flag: kind ${kind} matches the card's table`);
     assert.deepEqual([UNIT_KINDS[UK_SNIPER].range, PEN_MM[UK_SNIPER], PEN_MM[UK_AT91]], [11 * SUB, [10, 3], [85, 80]], 'flag: sniper range 11 cells; penetration 10/3 and 85/80');
     assert(PRODUCIBLE.includes(UK_SNIPER) && PRODUCIBLE.includes(UK_AT91), 'flag: both are producible');

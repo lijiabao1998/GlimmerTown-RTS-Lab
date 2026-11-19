@@ -19,6 +19,7 @@ import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import { FORMATION_PLA } from './platoon.ts';
 import { aim91, shotDmg91 } from './support91.ts';   // R091
+import { hitch92, carry92 } from './transport92.ts';   // R092
 import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.ts';
 import { startZombies, zombiesStep, finishZombiesStep, zombieAim } from './zombies.ts';
 import {
@@ -39,7 +40,7 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
   | { t: 'map'; id: number; vegetation?: number; sym?: number; more?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
   | RulesCmd;   // R046：第 0 步的遭遇戰設定（兵力、補給速度；地圖之後、喪屍與布陣之前套，見 rules.ts）
 
@@ -67,12 +68,12 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 1 ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 1 ? 1 : 0, cmd.tp === 1 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
     const u = unitById(w, id | 0);
-    if (u && u.alive && u.side === cmd.side && !seen.has(u.id) && !u.rout) { seen.add(u.id); us.push(u); }   // R052：潰退中的不收指令（rout 只在士氣規則開著時才會有）
+    if (u && u.alive && u.side === cmd.side && !u.ride && !seen.has(u.id) && !u.rout) { seen.add(u.id); us.push(u); }   // R052：潰退中的不收指令（rout 只在士氣規則開著時才會有）
   }
   us.sort((a, b) => a.id - b.id);
   const cx = (v: number) => Math.max(0, Math.min(w.n - 1, v | 0));
@@ -98,7 +99,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
     if (UNIT_KINDS[u.kind].range === 0) return; // unarmed (observer); old command format stays intact
     if (cmd.t === 'attack') {
       const t = unitById(w, cmd.target | 0);
-      if (!t || !t.alive || t.side === u.side || tooClose(u, t.x, t.z)) return;
+      if (!t || !t.alive || t.ride || t.side === u.side || tooClose(u, t.x, t.z)) return;
       delete u.fireAmmo;
       u.order = ORD_ATTACK; u.target = t.id; u.tx = t.x; u.tz = t.z;
       u.path = inRange(u, t.x, t.z) ? [] : findPath(w, ux, uz, cellOf(t.x), cellOf(t.z), 0, 0, u.kind); u.pathIdx = 0;
@@ -121,6 +122,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
     u.target = smoke || !standing ? FIRE_AT_ROUNDS : 0;
     u.path = inRange(u, center(gx), center(gz)) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, center(gx), center(gz))) ? [] : findPath(w, ux, uz, gx, gz, 0, 0, u.kind); u.pathIdx = 0;   // R055：直射的在射程內但被稜線擋住，也要往前開
   });
+  if (w.eco?.tp && cmd.t !== 'fireDiscipline') hitch92(w, cmd.t === 'move', us);   // R092 上車、掛砲、解掛（指令逐單位算完之後）
 }
 
 function tooClose(u: Unit, x: number, z: number): boolean {
@@ -167,7 +169,7 @@ function firstBlockCells(w: World, cells: readonly number[], ignoreBuilding = 0)
 export function spotted(w: World, side: number, x: number, z: number, ignoreSmokeId = 0): boolean {
   if (!inGrid(w, cellOf(x), cellOf(z))) return false;
   for (const u of w.units) {
-    if (!u.alive || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight + highSight(w, u.x, u.z, x, z)) continue;   // R055：站得比那一格高，多看一兩格（沒有高度表＝0）
+    if (!u.alive || u.ride || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight + highSight(w, u.x, u.z, x, z)) continue;   // R055：站得比那一格高，多看一兩格（沒有高度表＝0）
     if (smokeBlocks(w, u.x, u.z, x, z, ignoreSmokeId)) continue;
     const cells = lineCells(cellOf(u.x), cellOf(u.z), cellOf(x), cellOf(z), w.n);
     if (w.vegetation && vegetationBlocks(w, cells)) continue;
@@ -182,7 +184,7 @@ export function spotted(w: World, side: number, x: number, z: number, ignoreSmok
 function moveUnit(w: World, u: Unit): void {
   if (u.order === ORD_ATTACK) {
     const t = unitById(w, u.target);
-    if (!t || !t.alive || tooClose(u, t.x, t.z)) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }   // 目標死了或鑽進最小射程：放棄，回到自己找目標
+    if (!t || !t.alive || t.ride || tooClose(u, t.x, t.z)) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }   // 目標死了或鑽進最小射程：放棄，回到自己找目標
     // 舊指令可盲射最後座標；失去視野後不追蹤敵人的新位置。
     if (spotted(w, u.side, t.x, t.z)) { u.tx = t.x; u.tz = t.z; }
     if (inRange(u, u.tx, u.tz) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, u.tx, u.tz))) { u.path = []; u.pathIdx = 0; return; }   // R055：直射的被稜線擋住就繼續往前開，開到看得到
@@ -238,7 +240,7 @@ const moving = (u: Unit) => u.pathIdx < u.path.length;
 const anchored = (u: Unit) => (UNIT_KINDS[u.kind].indirect || UNIT_KINDS[u.kind].setup) && !moving(u);
 
 function separate(w: World): void {
-  const vs = w.units.filter(u => u.alive && UNIT_KINDS[u.kind].radius > 0);
+  const vs = w.units.filter(u => u.alive && UNIT_KINDS[u.kind].radius > 0 && !u.towBy);
   if (vs.length < 2) return;
   const px: number[] = vs.map(() => 0), pz: number[] = vs.map(() => 0);
   for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) {
@@ -288,7 +290,7 @@ export function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit |
   // 下面四個檢查都只讀世界，所以跟以前「全部過關的裡面挑（距離、id）最小的」是同一個；最貴的「看不看得到」放最後、只對排在前面的做
   const cand = AIM_CAND; cand.length = 0;
   for (const t of w.units) {
-    if (!t.alive || t.side === u.side) continue;
+    if (!t.alive || t.ride || t.side === u.side) continue;
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
     cand.push(d * AIM_ID + t.id);   // 距離是整數（≤ 射程 7,168）、id < 2^32：一個數就排得出（距離、id），乘起來 < 2^53 還是精確的
@@ -417,7 +419,7 @@ function land(w: World, s: Shell): void {
     let bounce = false;
     if (s.hitBld) { if (w.rules?.morale) suppressHouse(w, s.hitBld, s.kind === SHELL_SMALL ? k.sup ?? SUP_SMALL : SUP_DIRECT, k.sup && mgSecond(w) ? s.side : -1); const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一；R052 裡面的人被壓（先壓再算房子，倒了也算）
     else {
-      const t = unitById(w, s.target);
+      const t0 = unitById(w, s.target), t = t0 && !t0.ride ? t0 : null;   // R092：目標中途上了車就當沒有目標（落在地上）
       // R051（rules 帶 ap 才走）：-1 這一發不歸厚度規則管、0 彈開、1 穿透。穿甲彈穿透吃完整傷害；步兵的槍穿透照下面原本的算法；彈開零傷害
       const ap = w.rules?.ap && t && t.alive && dist(t.x, t.z, s.ex, s.ez) <= AP_HIT_RADIUS ? apHit(w.units[s.shooter - 1].kind, s.sx, s.sz, t) : -1;
       if (ap === 0) bounce = s.kind === SHELL_AP;
@@ -436,7 +438,7 @@ function land(w: World, s: Shell): void {
   }
   const R = k.splash;
   for (const t of w.units) {
-    if (!t.alive) continue;
+    if (!t.alive || t.ride) continue;   // R092：車上的人不吃濺射
     const d = dist(t.x, t.z, s.ex, s.ez);
     if (d < R) damageUnit(w, t, pierced(k, t, Math.floor((k.dmgUnit * (R - d)) / R)));
   }
@@ -530,8 +532,9 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   }
   for (const u of w.units) if (u.alive) moveUnit(w, u);
   separate(w);
-  for (const u of w.units) if (u.alive) fireUnit(w, u);
+  for (const u of w.units) if (u.alive && !u.ride && !u.towBy) fireUnit(w, u);
   updateShells(w);
+  if (w.eco?.tp) carry92(w, (u, d) => damageUnit(w, u, d, false));   // R092 放下或跟著車（這一步該死的都死了）
   if (w.rules?.morale) moraleStep(w);   // R052：陣亡的震撼、壓制值照時間退
   if (w.zombies) finishZombiesStep(w);
   if (!w.sandbox) checkWinner(w);
