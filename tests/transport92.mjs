@@ -134,7 +134,7 @@ const groups = {
     assert.deepEqual([ARMOR_MM[UK_HALFTRACK], ARMOR_MM[UK_TRUCK], PEN_MM[UK_TRUCK], PEN_MM[UK_HALFTRACK]], [[14, 8, 8], undefined, undefined, undefined], 'flag: half-track armour 14/8/8, no gun on either');
     assert(PRODUCIBLE.includes(UK_TRUCK) && PRODUCIBLE.includes(UK_HALFTRACK), 'flag: both are producible');
     const all = UNIT_KINDS.map((_, k) => k);
-    assert.deepEqual([all.filter(rides92), all.filter(tows92)], [[2, 3, 5, 41, 42, 43], [1, 4, 21, 22, 28, 34, 40]], 'flag: who rides and who is towed');
+    assert.deepEqual([all.filter(rides92), all.filter(tows92)], [[2, 3, 5, 41, 42, 43], [1, 4, 21, 22, 28, 34, 40, 46]], 'flag: who rides and who is towed');
   },
   // 驗收 3、7：沒有 tp 造不出來、不上車；帶 tp 照價錢與時間造；喪屍防守不開放
   produce() {
@@ -264,7 +264,7 @@ const groups = {
       step(w, [move(ME, [tr, u], 24)]);
       (u.ride ? got.ride : u.towBy ? got.tow : got.none).push(kind);
     }
-    assert.deepEqual([got.ride, got.tow], [[2, 3, 5, 41, 42, 43], [1, 4, 21, 22, 28, 34, 40]], 'one: every kind beside a truck: only riders board and only towable guns hitch');
+    assert.deepEqual([got.ride, got.tow], [[2, 3, 5, 41, 42, 43], [1, 4, 21, 22, 28, 34, 40, 46]], 'one: every kind beside a truck: only riders board and only towable guns hitch');
   },
   // 驗收 11：誰不上車
   refuse() {

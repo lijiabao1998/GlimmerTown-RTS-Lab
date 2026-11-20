@@ -5,6 +5,7 @@
 import { platoonOk } from './platoon.ts';
 import { swOk } from './support91.ts';   // R091
 import { tpOk } from './transport92.ts';   // R092
+import { airOk } from './air93.ts';   // R093
 import { UNIT_KINDS, type World } from './world.ts';
 import { HEIGHT_MAX } from './terrain.ts';
 
@@ -65,6 +66,7 @@ export function decodeWorld(x: unknown): World | null {
   if (r.more !== undefined && r.more !== 1) return null;   // R087：更多房屋的旗標只有 1
   if (!platoonOk(r)) return null;   // R095：排的旗標只有 1、排號只在步兵班上、沒有旗標就沒有排的記號
   if (!swOk(r)) return null;   // R091：sw 只有 1；沒有 sw 就沒有 42、43 號單位
+  if (!airOk(r)) return null;   // R093：air 只有 1；沒有 air 就沒有 sky、沒有 46 號
   if (!tpOk(r)) return null;   // R092：tp 只有 1、2（R030）；沒有 tp 就沒有 44、45 號單位與 ride／towBy
   let vegetation: World['vegetation'];
   if (r.vegetation !== undefined) {

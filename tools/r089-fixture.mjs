@@ -44,6 +44,7 @@ window.__r089 = (() => {
     // R092：在 (cx, cz) 附近第一個空格放一個 kind，回傳 id；ride(id)＝坐在哪一台車上（0＝沒有）
     place: (side, kind, cx, cz) => { const t = taken(); for (let r = 0; r < 12; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === r && free(t, cx + dx, cz + dz)) { const id = put(t, side, cx + dx, cz + dz, { kind, hp: UNIT_KINDS[kind].hp, cooldown: 0 }); spawned([id]); return id; } return 0; },
     ride: id => w.units[id - 1]?.ride ?? 0,
+    sky93: list => { w.sky = { version: 1, next: list.length + 1, ready: [0, 0, 0, 0], planes: list.map((p, i) => ({ id: i + 1, ...p })) }; return list.length; },   // R093：直接把飛機放進天上（量預算、拍照用）
     hp: (id, hp) => { w.units[id - 1].hp = hp; },   // R091：把一個單位的血設成 hp（量少一個人的畫法）
     hurt: dhp => { for (const u of w.units) if (u.kind === 3 && u.alive) u.hp = Math.max(1, u.hp - dhp); },
     count: () => w.units.filter(u => u.kind === 3 && u.alive).length,

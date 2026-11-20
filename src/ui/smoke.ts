@@ -2,6 +2,7 @@
 import { SUB, UK_HOWITZER, UNIT_KINDS, bldAt, type World } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { Command } from '../sim/step.ts';
+import { air93Route } from './air93.ts';   // R093 空中鍵
 
 export type AmmoMode = 'he' | 'smoke';
 export interface OrderHit {
@@ -16,6 +17,7 @@ export interface OrderRoute {
 const validCell = (w: World, x: number, z: number) => Number.isInteger(x) && Number.isInteger(z) && x >= 0 && z >= 0 && x < w.n && z < w.n;
 
 export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode: boolean, ammo: AmmoMode, hit: OrderHit): OrderRoute | null {
+  const air = air93Route(w, hit); if (air !== undefined) return air;   // R093 空中鍵：不用先選單位
   const ids = [...selected].filter(id => w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER);
   if (!ids.length) return null;
   const target = hit.unit ? w.units[hit.unit - 1] : null;
