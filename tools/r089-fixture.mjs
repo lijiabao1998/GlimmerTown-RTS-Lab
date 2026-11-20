@@ -46,6 +46,7 @@ window.__r089 = (() => {
     ride: id => w.units[id - 1]?.ride ?? 0,
     sky93: list => { w.sky = { version: 1, next: list.length + 1, ready: [0, 0, 0, 0], planes: list.map((p, i) => ({ id: i + 1, ...p })) }; return list.length; },   // R093：直接把飛機放進天上（量預算、拍照用）
     hp: (id, hp) => { w.units[id - 1].hp = hp; },   // R091：把一個單位的血設成 hp（量少一個人的畫法）
+    bld50: (side, kind, x, z, hp) => { const id = w.blds.length + 1, maxHp = kind === 14 ? 500 : kind === 15 ? 600 : 400; w.blds.push({ id, kind, x, z, w: 2, d: 2, floors: 1, hp: hp || maxHp, maxHp, builtBy: side }); for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) w.occ[(z + dz) * w.n + x + dx] = id; view.onEvents([{ e: 'build', bld: id }], view.lastT || 0); return id; },   // R050：直接擺一棟兵營、車廠或補給站（量預算、拍照用；hp 給 1 就是工地的樣子）
     hurt: dhp => { for (const u of w.units) if (u.kind === 3 && u.alive) u.hp = Math.max(1, u.hp - dhp); },
     count: () => w.units.filter(u => u.kind === 3 && u.alive).length,
     // 處理器時間：在頁面裡直接叫 view.update n 次（同一個模擬時間），回平均毫秒
