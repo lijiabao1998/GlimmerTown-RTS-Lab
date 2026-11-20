@@ -128,7 +128,7 @@ const planner = new BuildPlanner({
   world: () => w, view: () => view, building: () => phase === 'build', simT: () => simT(), ui: () => ui(), hud: () => hud?.update(), size: () => [innerWidth, innerHeight],
 }, { trenches: V.r118, walls: V.r120, wire: V.r121, materials: V.r105, kinds: BUILD_KINDS_NOW });
 document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
-const ecoCmd = (): Command => sw1002({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r093 ? { air: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r092 ? { tp: V.r030 ? 2 : 1 } : {}), ...(V.r091 ? { sw: 1 } : {}), ...(V.r095 ? { pla: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) }); const sw1002 = (c: Command): Command => (V.r1002 ? { ...c, sw: 2 } as Command : c);   // R1002：閥開著送 sw＝2（R091 那一段是守衛的錨點，所以在外面蓋過去；R091 開著時 sw 照原位置）
+const ecoCmd = (): Command => sw1002({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r093 ? { air: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r092 ? { tp: V.r030 ? 2 : 1 } : {}), ...(V.r091 ? { sw: 1 } : {}), ...(V.r095 ? { pla: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) }); const sw1002 = (c: Command): Command => (V.r1002 ? { ...c, sw: 2 } as Command : c); const ai1005 = (c: Command): Command => (V.r1005 && c.t === 'ai' && c.v === 3 ? { ...c, v: 4 } : c);   /* R1005：電腦第四版（關掉＝照舊送 v＝3） */   // R1002：閥開著送 sw＝2（R091 那一段是守衛的錨點，所以在外面蓋過去；R091 開著時 sw 照原位置）
 let prodBar: ProdBar | undefined;
 // R018 電腦難度：?ai=1|2|3
 let aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));   // R069：開始選單可以改
@@ -158,7 +158,7 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   if (build) { paused = true; planner.refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
     if (eco) issue(V.r050 && V.r1002 ? { ...ecoCmd(), tech: 1 } as Command : ecoCmd());   // R050
-    if (ai && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}) });
+    if (ai && !w.zombies) issue(ai1005({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}) }));
   }
   ui();
   syncBattleAudio();
@@ -208,7 +208,7 @@ function startBattle() {
   for (const c of planner.plan) issue(c);
   for (const c of enemy) issue(c);
   if (V.r019) issue(V.r050 && V.r1002 ? { ...ecoCmd(), tech: 1 } as Command : ecoCmd());   // R050：建造與科技（要有工兵）
-  if (V.r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}) });
+  if (V.r018 && !w.zombies) issue(ai1005({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}) }));
   phase = 'battle'; planner.clear();
   if (V.r016) { if (V.r041) startOrder(); else startBanner(); }
   view.setWorld(w, -1);

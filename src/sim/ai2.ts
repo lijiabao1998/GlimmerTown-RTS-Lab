@@ -9,6 +9,7 @@ import { coverPct } from './morale.ts';
 import { counterbatteryAreas, COUNTERBATTERY_TTL } from './counterbattery.ts';
 import { freeNear, type AiCmd } from './ai.ts';
 import { produce3, machineGuns3, mgTargetFor, mgBusy } from './ai3.ts';
+import { act1005 } from './ai1005.ts';   // R1005 第四版
 import {
   SUB, center, cellOf, inGrid, blocks, UNIT_KINDS, UK_OBSERVER, UK_INFANTRY, UK_HOWITZER, UK_MORTAR, UK_ATGUN, UK_MG, UK_SNIPER, ORD_ATTACK, ORD_MOVE, ORD_FIRE_AT, SIDE_PLAYER,
   moraleState, MORALE_SHAKEN, MORALE_PINNED, type World, type Unit, type AiState,
@@ -222,6 +223,8 @@ export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[])
       if (m) override.set(u.id, { t: 'attack', side, ids: [u.id], target: m.id });
     }
   }
+
+  if (st.four) act1005(w, st, mine, seen, override);   // R1005 第四版：新的四種兵（狙擊手、反戰車小組、工兵、火焰噴射器）與工地
 
   // ---- 合起來：第一版的指令拿掉被改寫的單位，再接上第二版的。一條群組指令只留「最後還是歸它管」的那些單位（前面的段落排進去、後面的段落又改掉的不算）----
   const out: AiCmd[] = [];
