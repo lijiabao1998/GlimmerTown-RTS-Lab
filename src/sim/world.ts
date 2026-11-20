@@ -31,6 +31,7 @@ export const BK_WIRE = 10; // R121：build指令種類，獨立障礙，不進�
 export const BK_OAST = 11;      // R087 啤酒花烘房（磚；八角烘爐＋圓錐頂＋白色風帽；只有 map 指令帶 more＝1 的新開的局才有）
 export const BK_MILL = 12;      // R087 塔式風車（木；磚基座、白色木板塔身、四片風帆）
 export const BK_WAREHOUSE = 13; // R087 河岸倉庫（木；一樓磚、上面塗焦油的木板、頂樓吊貨小屋）
+export const BK_BARRACKS = 14, BK_DEPOT = 15, BK_SUPPLY = 16;   // R050 兵營、車廠、補給站（eco 帶 tech 的局，工兵在戰場上蓋；tech50.ts）
 export const isWallKind = (kind: number): boolean => kind === BK_WALL_BRICK || kind === BK_WALL_STONE || kind === BK_WALL_CONCRETE;
 
 // R105 材質由種類推導，不往世界或指令加欄位；舊存檔保留已存的 hp／maxHp。
@@ -44,6 +45,7 @@ export function bldMaterial(kind: number): number {
   if (kind === BK_MILL || kind === BK_WAREHOUSE) return BM_WOOD;   // R087（烘房照預設是磚）
   if (kind === BK_CHURCH || kind === BK_WALL_STONE) return BM_STONE;
   if (kind === BK_PILLBOX || kind === BK_WALL_CONCRETE) return BM_CONCRETE;
+  if (kind === BK_BARRACKS || kind === BK_SUPPLY) return BM_WOOD;   // R050（車廠照預設是磚）
   return BM_BRICK;
 }
 
@@ -262,7 +264,7 @@ export type SimEvent =
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
-export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number }   // R093 air＝空中支援與防空；R091 sw＝步兵支援（狙擊手、反戰車小組）；R044 armor2；R095 pla＝步兵排：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number; tech?: number }   // R093 air＝空中支援與防空；R091 sw＝步兵支援（狙擊手、反戰車小組）；R044 armor2；R095 pla＝步兵排：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number; v?: 2 | 3; gather?: number; go?: number; size?: number }   // R057 v＝2：第二版（ai2.ts）；gather＝在基地集結從哪一步開始、go＝上一波哪一步出發、size＝那一波幾台   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
@@ -300,6 +302,7 @@ export interface World extends RngState {
   counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
   sandbox?: { version: 1; running: boolean; frame: number }; // R128：frame 是指令步序，tick 仍只計戰鬥時間
   zombies?: { version: 1; wave: number; next: number; pending: number; spawned: number; killed: number; lost: number };
+  tech?: { version: 1; sites: { id: number; left: number }[] };   // R050 還在蓋的工地（建築編號、還差多少工作量）；第一次蓋才建（tech50.ts）
   sky?: { version: 1; next: number; ready: number[]; planes: Plane93[] };   // R093 第一次叫飛機才建，之後不刪；ready 照 side*2+kind-1 排（air93.ts）
 }
 
@@ -365,6 +368,9 @@ export function speedPct(w: World, x: number, z: number): number {
 export function bldMaxHp(kind: number, w: number, d: number, floors: number): number {
   if (kind === BK_WIRE) return 60;
   if (kind === BK_HQ) return 1200;
+  if (kind === BK_BARRACKS) return 500;   // R050
+  if (kind === BK_DEPOT) return 600;
+  if (kind === BK_SUPPLY) return 400;
   if (kind === BK_PILLBOX) return 400;
   if (kind === BK_WALL_BRICK) return 130;
   if (kind === BK_WALL_STONE) return 220;
@@ -501,7 +507,7 @@ export function hashWorld(w: World): string {
   if (w.sym) f.int(0x5359).int(w.sym);   // R084 只在有時折
   if (w.more) f.int(0x4d48).int(w.more);   // R087 只在有時折
   if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); if (w.rules.morale) f.int(0x524d).int(w.rules.morale); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
-  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); if (e.pla) f.int(0x5041).int(e.pla); if (e.sw) f.int(0x5357).int(e.sw); if (e.tp) f.int(0x5450).int(e.tp); if (e.air) f.int(0x4152).int(e.air); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); if (e.pla) f.int(0x5041).int(e.pla); if (e.sw) f.int(0x5357).int(e.sw); if (e.tp) f.int(0x5450).int(e.tp); if (e.air) f.int(0x4152).int(e.air); if (e.tech) f.int(0x5445).int(e.tech); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); if (a.v) f.int(0x4156).int(a.v); if (a.gather !== undefined) f.int(0x4147).int(a.gather); if (a.go !== undefined) f.int(0x4157).int(a.go); if (a.size !== undefined) f.int(0x415a).int(a.size); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
@@ -514,5 +520,6 @@ export function hashWorld(w: World): string {
     for (const r of w.counterbattery) f.int(r.side).int(r.zone).int(r.cell).int(r.shots).int(r.last);
   }
   if (w.sky) { const a = w.sky; f.int(0x4149).int(a.version).int(a.next); for (const r of a.ready) f.int(r); f.int(a.planes.length); for (const p of a.planes) f.int(p.id).int(p.side).int(p.kind).int(p.x).int(p.z).int(p.sx).int(p.sz).int(p.tx).int(p.tz).int(p.t).int(p.T).int(p.hp); }   // R093：只在有時折
+  if (w.tech) { f.int(0x5443).int(w.tech.version).int(w.tech.sites.length); for (const s of w.tech.sites) f.int(s.id).int(s.left); }   // R050
   return f.hex();
 }

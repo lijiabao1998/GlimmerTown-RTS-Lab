@@ -3,6 +3,7 @@ import { SUB, UK_HOWITZER, UNIT_KINDS, bldAt, wireAt, type World } from '../sim/
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { Command } from '../sim/step.ts';
 import { air93Route } from './air93.ts';   // R093 空中鍵
+import { tech50Route } from './tech50.ts';   // R050 建造
 
 export type AmmoMode = 'he' | 'smoke';
 export interface OrderHit {
@@ -18,6 +19,7 @@ const validCell = (w: World, x: number, z: number) => Number.isInteger(x) && Num
 
 export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode: boolean, ammo: AmmoMode, hit: OrderHit): OrderRoute | null {
   const air = air93Route(w, hit); if (air !== undefined) return air;   // R093 空中鍵：不用先選單位
+  const b50 = tech50Route(w, selected, hit); if (b50 !== undefined) return b50;   // R050 建造：選好要蓋的之後，點地圖＝放工地（帶選取裡的工兵）
   const ids = [...selected].filter(id => w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER);
   if (!ids.length) return null;
   const target = hit.unit ? w.units[hit.unit - 1] : null;

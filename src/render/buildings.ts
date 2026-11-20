@@ -2,6 +2,7 @@
 // 三段的畫法照 GlimmerTown3D-lab@bece722 src/render/scene.ts:210-231（牆降高、屋頂消失、瓦礫用雜湊散落），改成二戰村莊的配色。
 import * as THREE from 'three';
 import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant, moreMarkFace } from './moreArt.ts';
+import { PAL50, RISE50, isTech50, tech50Art } from './tech50.ts';   // R050 兵營、車廠、補給站
 import { Geo } from './geo.ts';
 import { wearTier, wearable, tierFits, wearGeo, wearTop } from './wearArt.ts';
 import { hash2 } from '../sim/rng.ts';
@@ -83,6 +84,7 @@ const PAL: Record<number, { wall: THREE.Color; roof: THREE.Color; trim: THREE.Co
   [BK_WALL_STONE]: { wall: C(0xb2aea0), roof: C(0x898779), trim: C(0x716f63) },
   [BK_WALL_CONCRETE]: { wall: C(0x9c998e), roof: C(0xb8b5a9), trim: C(0x74746e) },
 };
+for (const [k, v] of Object.entries(PAL50)) PAL[Number(k)] = v;   // R050：沒屋頂的工地、瓦礫、碎片都照這三種的顏色
 const GLASS = C(0x2a3038), RUBBLE = [C(0x8a7d6e), C(0x6e6458), C(0x9b8f7f), C(0x5a4f45)], CHAR = C(0x2b2724), BEAM = C(0x4a3626);
 
 // R105 材質顏色：既有網格不變；不同牆體、空殼與瓦礫讀得到木／磚／石。
@@ -332,6 +334,7 @@ function intact(g: Geo, b: Building) {
   if (wallShown(b)) { boundaryWall(g, b, false); return; }
   if (b.kind === BK_HQ) { hq(g, b); return; }
   if (b.kind === BK_PILLBOX) { pillbox(g, b, false); return; }
+  if (isTech50(b.kind)) { tech50Art(g, b); return; }   // R050
   if (moreShown(b)) { moreIntact(g, b, wallHeight(b)); return; }   // R087 烘房、風車、倉庫
   if (artOn() && (civilian(b.kind) || (b.kind === BK_CHURCH && b.w >= 2 && b.d >= 2))) { artIntact(g, b); return; }   // R086 房屋細化
   const p = palette(b.kind), m = 0.1, x0 = b.x + m, z0 = b.z + m, x1 = b.x + b.w - m, z1 = b.z + b.d - m;
@@ -527,7 +530,7 @@ export function buildingGeo(g: Geo, b: Building, stage: number, tier?: number): 
 function distantBuilding(g: Geo, b: Building, lod: number): void {
   if (!moreArtOn && isMoreKind(b.kind)) b = { ...b, kind: MORE_LIKE[b.kind] };   // R087
   if (moreShown(b)) { moreDistant(g, b, lod, stageOf(b), wallHeight(b), rubbleColors(b.kind)[0]); return; }
-  if (isWallKind(b.kind) || b.kind === BK_HQ || b.kind === BK_PILLBOX) { buildingGeo(g, b, stageOf(b)); return; }
+  if (isWallKind(b.kind) || b.kind === BK_HQ || b.kind === BK_PILLBOX || isTech50(b.kind)) { buildingGeo(g, b, stageOf(b)); return; }   // R050：三種軍用建築遠景也畫全
   const p = paletteOf(b), x0 = b.x + 0.1, z0 = b.z + 0.1, x1 = b.x + b.w - 0.1, z1 = b.z + b.d - 0.1;
   const stage = stageOf(b), h = wallHeight(b), wall = facadeStyle(b) === FAC_TIMBER ? plasterOf(b) : p.wall;
   if (stage === STAGE_RUBBLE) { g.box(x0, 0, z0, x1, 0.09, z1, rubbleColors(b.kind)[0]); return; }
@@ -596,7 +599,8 @@ function wearTown(w: World, skip: ((b: Building) => boolean) | undefined, lod: n
 export function bldColors(kind: number): { wall: THREE.Color; roof: THREE.Color; trim: THREE.Color } { return palette(kind); }
 export const RUBBLE_COLORS = RUBBLE;
 export const ROOF_RISE: Record<number, number> = { [BK_HOUSE]: 0.32, [BK_COTTAGE]: 0.32, [BK_BARN]: 0.42, [BK_CHURCH]: 0.55, [BK_SHOP]: 0.22, [BK_HQ]: 0.16, [BK_PILLBOX]: 0.06, [BK_WALL_BRICK]: 0, [BK_WALL_STONE]: 0, [BK_WALL_CONCRETE]: 0 };
-for (const k of [BK_OAST, BK_MILL, BK_WAREHOUSE]) ROOF_RISE[k] = MORE_RISE[k];   // R087（roofRise 先照閥換成舊種類）
+for (const k of [BK_OAST, BK_MILL, BK_WAREHOUSE]) ROOF_RISE[k] = MORE_RISE[k];
+for (const [k, v] of Object.entries(RISE50)) ROOF_RISE[Number(k)] = v;   // R050   // R087（roofRise 先照閥換成舊種類）
 export const roofRise = (kind: number): number => ROOF_RISE[visibleKind(kind)] ?? 0.32;
 
 // 冒煙點：沒屋頂的房子從屋裡冒煙（渲染端的效果用）

@@ -6,7 +6,7 @@ import { reloadStatus } from './ui/reloadStatus.ts';
 import { unitSpec } from './ui/unitSpec.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { internationalItems } from './ui/internationalCatalog.ts'; import { support91Items } from './ui/support91.ts'; import { transport92Items, initTransport92 } from './ui/transport92.ts'; import { aa93Items, initAir93 } from './ui/air93.ts'; import { eng1002Items } from './ui/engineer1002.ts';   // R091、R092、R093、R1002
+import { internationalItems } from './ui/internationalCatalog.ts'; import { support91Items } from './ui/support91.ts'; import { transport92Items, initTransport92 } from './ui/transport92.ts'; import { aa93Items, initAir93 } from './ui/air93.ts'; import { eng1002Items } from './ui/engineer1002.ts'; import { tech50Items, pick50, block50, hint50 } from './ui/tech50.ts';   // R091、R092、R093、R1002、R050
 import { sovietItems } from './ui/sovietCatalog.ts';
 import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UNIT_KINDS, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, enemyPlan } from './sim/build.ts';
@@ -157,7 +157,7 @@ function reset(s = seed, build = V.r006, ai = V.r018, eco = V.r019, map = V.r026
   if (zombies) issue({ t: 'zombies' });
   if (build) { paused = true; planner.refreshPreview(); }
   else {   // 沒有布陣：開頁就開打，第 0 步放指揮部、電腦接手
-    if (eco) issue(ecoCmd());
+    if (eco) issue(V.r050 && V.r1002 ? { ...ecoCmd(), tech: 1 } as Command : ecoCmd());   // R050
     if (ai && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}) });
   }
   ui();
@@ -207,7 +207,7 @@ function startBattle() {
   const pv = planner.previewWorld(), enemy = w.zombies ? [] : enemyPlan(pv, BUILD_KINDS_NOW);
   for (const c of planner.plan) issue(c);
   for (const c of enemy) issue(c);
-  if (V.r019) issue(ecoCmd());
+  if (V.r019) issue(V.r050 && V.r1002 ? { ...ecoCmd(), tech: 1 } as Command : ecoCmd());   // R050：建造與科技（要有工兵）
   if (V.r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}) });
   phase = 'battle'; planner.clear();
   if (V.r016) { if (V.r041) startOrder(); else startBanner(); }
@@ -424,7 +424,7 @@ hud = initHud({
     const vehicleInfo = vehicleDurability(w, selected, phase === 'battle' && V.r135);
     return {
       tick: w.tick, paused, speed, fireMode, ammo, howitzers: sel.filter(u => u.kind === UK_HOWITZER).length, winner: w.winner === SIDE_ENEMY ? 1 : w.winner === SIDE_PLAYER ? 0 : w.winner, report: V.r010,
-      build: phase === 'build', hint: phase === 'build' ? planner.buildHint || BUILD_TIP : battleHint,
+      build: phase === 'build', hint: phase === 'build' ? planner.buildHint || BUILD_TIP : (typeof hint50 === 'function' ? hint50(w) : undefined) ?? battleHint,   /* R050：typeof——paused-hint 等守衛把這一段放進 vm 跑，vm 裡沒有 hint50 */
       mine: mine.length, theirs: theirs.length, ai: V.r018 && w.ai?.length ? AI_NAME[aiLevel] : undefined,
       mode: w.zombies ? `喪屍 · 第 ${w.zombies.wave} 波 · 擊倒 ${w.zombies.killed}` : undefined,
       observers: sel.filter(u => u.kind === UK_OBSERVER).length, tanks: sel.filter(u => UNIT_KINDS[u.kind].armored && !UNIT_KINDS[u.kind].carry).length, trucks: sel.filter(u => UNIT_KINDS[u.kind].carry && !UNIT_KINDS[u.kind].armored).length, halftracks: sel.filter(u => UNIT_KINDS[u.kind].carry && UNIT_KINDS[u.kind].armored).length, loaded: sel.filter(u => UNIT_KINDS[u.kind].carry && w.units.some(r => r.alive && (r.ride === u.id || r.towBy === u.id))).length, infantry: sel.filter(u => u.kind === UK_INFANTRY).length, mg: sel.filter(u => !!UNIT_KINDS[u.kind].sup).length, sniper: sel.filter(u => UNIT_KINDS[u.kind].team91 === 1).length, at91: sel.filter(u => UNIT_KINDS[u.kind].team91 === 2).length, eng: sel.filter(u => !!UNIT_KINDS[u.kind].demo).length, flame: sel.filter(u => !!UNIT_KINDS[u.kind].flame).length, guns: sel.filter(u => u.kind === UK_HOWITZER || u.kind === UK_ATGUN || u.kind === UK_MORTAR || !!UNIT_KINDS[u.kind].aa).length,
@@ -455,15 +455,15 @@ if (V.r901) initMobileChrome(canvas);
 prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }, ...(V.r095 ? [PLATOON_UI_ITEM] : [])] : []), ...(V.r080 ? [{ kind: UK_MG, label: '機槍組', cost: UNIT_KINDS[UK_MG].cost }] : []),
   ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
   ...(V.r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : []),
-  ...(V.r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : []), ...(V.r140 ? sovietItems() : []), ...(V.r142 ? internationalItems() : []), ...(V.r091 ? support91Items() : []), ...(V.r1002 ? eng1002Items() : []), ...(V.r092 ? transport92Items() : []), ...(V.r093 ? aa93Items() : [])], {
+  ...(V.r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : []), ...(V.r140 ? sovietItems() : []), ...(V.r142 ? internationalItems() : []), ...(V.r091 ? support91Items() : []), ...(V.r1002 ? eng1002Items() : []), ...(V.r092 ? transport92Items() : []), ...(V.r093 ? aa93Items() : []), ...(V.r050 && V.r1002 ? tech50Items() : [])], {
   state: () => {
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
     return { hq: phase === 'battle' ? hqDurability(w, V.r127) : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: progMax95(q0), queueMax: 5, countdown: phase === 'battle' ? countdown95(w, V.r125) : '' };
   },
-  produce: kind => issue({ t: 'produce', side: SIDE_PLAYER, kind }), after: () => { platoon95.frame(); transport92.frame(); },   // R095：全排鍵與「步兵排」那一顆（沙盒裡的守衛不跑生產列）
+  produce: kind => { if (!pick50(kind)) issue({ t: 'produce', side: SIDE_PLAYER, kind }); }, after: () => { platoon95.frame(); transport92.frame(); },   // R095：全排鍵與「步兵排」那一顆（沙盒裡的守衛不跑生產列）
   hq: V.r127,
   countdown: V.r125,
-  blockReason: V.r126 ? kind => reason95(w, kind, phase === 'battle') : undefined,
+  blockReason: V.r126 ? kind => block50(w, kind) ?? reason95(w, kind, phase === 'battle') : undefined,
 });
 // R013 說明面板：開著的時候暫停，關掉回到原來的暫停狀態
 let pausedBeforeHelp = false;

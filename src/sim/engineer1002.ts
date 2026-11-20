@@ -3,6 +3,7 @@
 import { dist } from './math.ts';
 import { findPath } from './path.ts';
 import { firstBlock, ridge, spotted } from './step.ts';   // step.ts 也 import 這一支；只在找目標時呼叫，不在載入時用，循環沒有關係（support91.ts 也這樣）
+import { site50, own50, build50 } from './tech50.ts';   // R050：自己的工地＝蓋、自己蓋好的那三種＝不接
 import { UNIT_KINDS, ORD_IDLE, ORD_FIRE_AT, SHELL_HE, cellOf, center, bldAt, wireAt, type Unit, type World, type Building } from './world.ts';
 
 export const DEMO_BLD = 60;      // 一包炸藥打掉建築多少血：碉堡、指揮部也是整整這麼多（直射打碉堡只刮四分之一那條不套用）
@@ -36,6 +37,7 @@ export function reach1002(w: World, u: Unit): boolean {
 export function fireAt1002(w: World, u: Unit, gx: number, gz: number): void {
   const t = demoTarget(w, gx, gz);
   if (!t) return;
+  if (!t.wire && own50(w, u.side, t.b)) return;   // R050：自己蓋好的兵營、車廠、補給站不炸
   u.order = ORD_FIRE_AT; u.tx = gx; u.tz = gz; u.target = 0; u.cooldown = Math.max(u.cooldown, UNIT_KINDS[u.kind].demo ?? 0);
   u.path = near1002(u, t.b) ? [] : findPath(w, cellOf(u.x), cellOf(u.z), gx, gz, 0, 0, u.kind); u.pathIdx = 0;
 }
@@ -45,6 +47,8 @@ export function fireAt1002(w: World, u: Unit, gx: number, gz: number): void {
 export function demo1002(w: World, u: Unit, hurt: (w: World, b: Building, dmg: number) => void): void {
   const t = demoTarget(w, u.tx, u.tz), need = UNIT_KINDS[u.kind].demo ?? 0;
   if (!t) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
+  if (!t.wire && t.b.builtBy === u.side && site50(w, t.b)) { build50(w, u, t.b); return; }   // R050：自己的工地＝蓋（不倒數、不炸）
+  if (!t.wire && own50(w, u.side, t.b)) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }   // R050：蓋好了（別的工兵剛蓋完）＝回待命
   if (u.pathIdx < u.path.length || !near1002(u, t.b)) { if (u.cooldown < need) u.cooldown = need; return; }
   const ax = center(u.tx) - u.x, az = center(u.tz) - u.z;
   if (ax || az) { u.aimX = ax; u.aimZ = az; }

@@ -6,6 +6,7 @@ import { stillConnected, keepsFootPaths } from './build.ts';
 import { MAP_LARGE, LARGE_POP } from './largeMap.ts';
 import { MAP_TOWN } from './expandedMap.ts'; import { MAP_HYTHE } from './hytheMap.ts';
 import { incomeTicks } from './rules.ts';
+import { locked50, income50, tech50Step, SUPPLY_TICKS50 } from './tech50.ts';   // R050
 import { PLATOON_ITEM, PLATOON_COST, PLATOON_SECTIONS, FORMATION_PLA, startPlatoons, ticksOf, popOf } from './platoon.ts';
 import {
   INTERNATIONAL_KINDS, SOVIET_KINDS, SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_SNIPER, UK_AT91, UK_TRUCK, UK_HALFTRACK, UK_AA, UK_ENGINEER, UK_FLAME, BK_HQ, TER_ROAD,
@@ -44,7 +45,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
 }
 
 // eco 指令：只在第 0 步有效；雙方各放一座指揮部、開始累積補給
-export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0, mg = 0, pla = 0, sw = 0, tp = 0, air = 0): void {
+export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0, mg = 0, pla = 0, sw = 0, tp = 0, air = 0, tech = 0): void {
   if (w.eco || w.tick !== 0) return;
   const hq = [0, 0];
   for (const side of (w.zombies ? [SIDE_PLAYER] : [SIDE_PLAYER, SIDE_ENEMY])) {
@@ -65,6 +66,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, sov
   if (sw) w.eco.sw = sw === 2 ? 2 : 1;   // R091：步兵支援（狙擊手、反戰車小組）可以生產；開局不送兵。R1002：2＝再加工兵、火焰噴射器
   if (tp) w.eco.tp = tp === 2 ? 2 : 1;   // R092：運輸可以生產；開局不送車。R030：2＝被拒絕的攻擊、射擊不卸砲
   if (air) w.eco.air = 1;   // R093：空中支援與防空；開局不送兵、不送飛機
+  if (tech && w.eco.sw === 2) w.eco.tech = 1;   // R050：建造與科技；開局不送建築。要跟 sw＝2 一起送（沒有工兵蓋不了，被鎖的兵種會永遠出不來）
 }
 
 export const hqAlive = (w: World, side: number): Building | null => {
@@ -80,6 +82,7 @@ export function produce(w: World, side: number, kind: number): void {
   if ((kind === UK_TRUCK || kind === UK_HALFTRACK) && (!e?.tp || w.zombies)) return;   // R092：要 tp；喪屍防守不開放（喪屍挑目標不跳過車上的人）
   if (kind === UK_AA && (!e?.air || w.zombies)) return;   // R093：要 air；喪屍防守不開放
   if ((kind === UK_ENGINEER || kind === UK_FLAME) && (e?.sw !== 2 || w.zombies)) return;   // R1002：要 sw＝2；喪屍防守不開放
+  if (locked50(w, side, kind)) return;   // R050：tech 開著時，兵營、車廠蓋好才造得出那幾種
   if (!e || (side !== 0 && side !== 1) || !PRODUCIBLE.includes(kind) || (INTERNATIONAL_KINDS.includes(kind) && !e.international) || (SOVIET_KINDS.includes(kind) && !e.soviet) || !hqAlive(w, side) || (kind === UK_INFANTRY && !e.inf) || ((kind === UK_ATGUN || kind === UK_MORTAR) && !e.guns) || ((kind === UK_LIGHT || kind === UK_HEAVY) && !e.tanks) || (ARMOR2.includes(kind) && !e.armor2) || (kind === UK_MG && !e.mg)) return;
   const cost = UNIT_KINDS[kind].cost;
   if (e.supply[side] < cost || e.queue[side].length >= ECO_QUEUE) return;
@@ -90,10 +93,12 @@ export function produce(w: World, side: number, kind: number): void {
 export function ecoStep(w: World): void {
   const e = w.eco;
   if (!e) return;
+  if (w.tech) tech50Step(w);   // R050：打成瓦礫的工地拿掉
   for (const side of [SIDE_PLAYER, SIDE_ENEMY]) {
     const hq = hqAlive(w, side);
     if (!hq) { e.queue[side] = []; e.prog[side] = 0; continue; }
     if (w.tick % (incomeTicks(w) || ECO_INCOME_TICKS) === 0) e.supply[side]++;   // R046：補給速度可由 rules 指令改（慢 40、快 10）
+    if (e.tech && w.tick % SUPPLY_TICKS50 === 0) e.supply[side] += income50(w, side);   // R050：補給站（每座每 40 步多 1，最多算兩座）
     const q = e.queue[side];
     if (!q.length) continue;
     if (e.prog[side] < ticksOf(q[0])) { e.prog[side]++; continue; }   // R095：排的記號不是單位種類，經過 ticksOf
