@@ -25,12 +25,13 @@ export function isCommand(x: unknown): x is Command {
     case 'build': case 'trench': return side(c.side) && int(c.kind) && int(c.x) && int(c.z) && optInt(c.rot);
     case 'ai': return side(c.side) && int(c.level) && optInt(c.v);
     case 'map': return int(c.id) && optInt(c.vegetation) && optInt(c.more) && optInt(c.sym);   // R087 more 排在 sym 前面（R084 的守衛錨著這一行的結尾）
-    case 'eco': return optInt(c.inf) && optInt(c.guns) && optInt(c.tanks) && optInt(c.armor2) && optInt(c.soviet) && optInt(c.international) && optInt(c.end) && optInt(c.mg) && optInt(c.air) && optInt(c.tp) && optInt(c.sw) && optInt(c.pla);
+    case 'eco': return optInt(c.tech) && optInt(c.inf) && optInt(c.guns) && optInt(c.tanks) && optInt(c.armor2) && optInt(c.soviet) && optInt(c.international) && optInt(c.end) && optInt(c.mg) && optInt(c.air) && optInt(c.tp) && optInt(c.sw) && optInt(c.pla);
     case 'produce': return side(c.side) && int(c.kind);
     case 'rules': return optInt(c.force) && optInt(c.income) && optInt(c.ap) && optInt(c.morale);
     case 'zombies': case 'sandboxReset': return true;
     case 'sandboxRun': return typeof c.running === 'boolean';
     case 'sandboxPlace': return side(c.side) && int(c.kind) && int(c.x) && int(c.z);
+    case 'construct': return side(c.side) && ids(c.ids) && int(c.kind) && int(c.x) && int(c.z);   // R050
     case 'air': return side(c.side) && int(c.kind) && int(c.x) && int(c.z);   // R093
     default: return false;
   }

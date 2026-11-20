@@ -846,7 +846,7 @@ export class BattleView {
       const b = this.w.blds[e.bld - 1];
       if (!b) return;
       if (this.r16 && this.ghosts) {
-        this.ghosts.add(buildingGeo(new Geo(), b, STAGE_INTACT), t, wallHeight(b) + roofRise(b.kind), b.x + b.w / 2, b.z + b.d / 2, hash2(b.id, 5, 91), true);
+        this.ghosts.add(buildingGeo(new Geo(), b, stageOf(b)), t, wallHeight(b) + roofRise(b.kind), b.x + b.w / 2, b.z + b.d / 2, hash2(b.id, 5, 91), true);
         this.rising.set(b.id, t + RISE_S);
       }
       if (this.lastStage.length > b.id) this.lastStage[b.id] = STAGE_INTACT;
