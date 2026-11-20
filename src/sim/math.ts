@@ -2,7 +2,8 @@
 
 export function isqrt(n: number): number {
   if (n <= 0) return 0;
-  let x = n, y = Math.floor((x + 1) / 2);
+  // R1006：起點取比 √n 大的最小的二的次方（n < 2^32；clz32 在白名單裡），不再從 n 本身對半砍十幾次。整數牛頓法從任何 ≥ ⌊√n⌋ 的起點都收斂到 ⌊√n⌋，答案逐位相同
+  let x = n < 4294967296 ? 1 << ((33 - Math.clz32(n)) >> 1) : n, y = Math.floor((x + Math.floor(n / x)) / 2);
   while (y < x) { x = y; y = Math.floor((x + Math.floor(n / x)) / 2); }
   return x;
 }
