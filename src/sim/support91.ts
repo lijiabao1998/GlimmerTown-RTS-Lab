@@ -4,7 +4,7 @@ import { apHit } from './ballistics.ts';
 import { armorFace } from './armor.ts';
 import { dist } from './math.ts';
 import { firstBlock, ridge, spotted } from './step.ts';   // step.ts 也 import 這一支；只在找目標時呼叫，不在載入時用，循環沒有關係（ai3.ts 也這樣）
-import { UNIT_KINDS, UK_OBSERVER, UK_SNIPER, UK_AT91, type UnitKind, type Unit, type World } from './world.ts';
+import { UNIT_KINDS, UK_OBSERVER, UK_SNIPER, UK_AT91, UK_ENGINEER, UK_FLAME, type UnitKind, type Unit, type World } from './world.ts';
 
 const T32 = 4294967296, T45 = 35184372088832;   // 2^32、2^45（模擬裡不准用次方）
 const CAND91: number[] = [];   // 模擬是單執行緒、找目標不會重入：重複用同一個陣列
@@ -61,12 +61,12 @@ export function shotDmg91(k: UnitKind, t: Unit): number {
   return k.dmgUnit;
 }
 
-// 存檔：sw 只能沒有或剛好是 1；沒有 sw 卻有 42、43 號單位（或排在佇列裡）的不收
+// 存檔：sw 只能沒有、1 或 2（R1002）；沒有 sw 卻有 42、43 號單位，或 sw 不是 2 卻有 47、48 號單位（或排在佇列裡）的不收
 export function swOk(r: Record<string, unknown>): boolean {
   const e = r.eco as { sw?: unknown; queue?: unknown } | undefined;
-  if (e && e.sw !== undefined && e.sw !== 1) return false;
-  if (e?.sw === 1) return true;
-  const ours = (k: unknown) => k === UK_SNIPER || k === UK_AT91;
+  if (e && e.sw !== undefined && e.sw !== 1 && e.sw !== 2) return false;
+  if (e?.sw === 2) return true;
+  const lvl = e?.sw === 1 ? 1 : 0, ours = (k: unknown) => (lvl < 1 && (k === UK_SNIPER || k === UK_AT91)) || k === UK_ENGINEER || k === UK_FLAME;   // R1002：sw＝1 收 42、43，不收 47、48
   if ((r.units as Record<string, unknown>[]).some(u => ours(u.kind))) return false;
   return !(e && Array.isArray(e.queue) && e.queue.some(q => Array.isArray(q) && q.some(ours)));
 }
