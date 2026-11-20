@@ -99,7 +99,8 @@ await runOrSkip('tech50', async () => {
       assert.equal((await pick('步兵支援')).includes('建造'), false, 'valve: ?noR050=1 offers no 建造');
       assert.doesNotMatch(await title('pb-k42'), /要先蓋兵營/, 'valve: without tech the sniper is not locked');
       await open('noR091=1&noR1002=0&noR050=0&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); 0');   // R1004：R091 的閥關著時 R1002 不再偷偷送 sw＝2
-      assert.deepEqual((({ sw, tech }) => [sw, tech])((await E('__rts.log()')).find(c => c.cmd.t === 'eco').cmd), [undefined, undefined], 'valve: ?noR091=1 sends no sw at all (and so no tech)');
+      assert.equal((await E('__rts.log()')).find(c => c.cmd.t === 'eco').cmd.sw, undefined, 'valve: ?noR091=1 sends no sw at all');
+      assert.deepEqual((({ sw, tech }) => [sw, tech])(await E('__rts.eco()')), [undefined, undefined], 'valve: so the battle has neither sw nor tech (the eco command still carries tech 1; without sw 2 the sim does not take it)');
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
       console.log(`tech50 browser: catalog 3 sizes, locked sniper, construct at ${spot} → barracks at tick ${t2}, replay, valve`);
     });
