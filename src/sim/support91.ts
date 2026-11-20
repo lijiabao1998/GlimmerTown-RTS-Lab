@@ -33,6 +33,7 @@ export function aim91(w: World, u: Unit, home: number): { x: number; z: number; 
   const k = UNIT_KINDS[u.kind], cand = CAND91; cand.length = 0;
   for (const t of w.units) {
     if (!t.alive || t.ride || t.side === u.side) continue;
+    if (Math.abs(t.x - u.x) > k.range || Math.abs(t.z - u.z) > k.range) continue;   // R1006：方框外的一定超出射程（不開根號）
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
     const tier = k.team91 === 1 ? sniperTier(t) : atTier(w, u, t);
