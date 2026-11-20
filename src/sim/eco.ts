@@ -8,7 +8,7 @@ import { MAP_TOWN } from './expandedMap.ts'; import { MAP_HYTHE } from './hytheM
 import { incomeTicks } from './rules.ts';
 import { PLATOON_ITEM, PLATOON_COST, PLATOON_SECTIONS, FORMATION_PLA, startPlatoons, ticksOf, popOf } from './platoon.ts';
 import {
-  INTERNATIONAL_KINDS, SOVIET_KINDS, SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_SNIPER, UK_AT91, UK_TRUCK, UK_HALFTRACK, UK_AA, BK_HQ, TER_ROAD,
+  INTERNATIONAL_KINDS, SOVIET_KINDS, SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_SNIPER, UK_AT91, UK_TRUCK, UK_HALFTRACK, UK_AA, UK_ENGINEER, UK_FLAME, BK_HQ, TER_ROAD,
   ORD_IDLE, ORD_MOVE, SIDE_PLAYER, SIDE_ENEMY, type World, type Building,
 } from './world.ts';
 
@@ -16,7 +16,7 @@ export const ECO_START = 60;          // 開局補給
 export const ECO_INCOME_TICKS = 20;   // 每 20 步（1 秒）+1
 export const ECO_QUEUE = 5;           // 佇列最多幾個
 export const ECO_POP = 16;            // 每方同時活著最多幾台（R043 大地圖寫進 eco.pop＝40）
-export const PRODUCIBLE = [...INTERNATIONAL_KINDS, ...SOVIET_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_SNIPER, UK_AT91, UK_TRUCK, UK_HALFTRACK, UK_AA];
+export const PRODUCIBLE = [...INTERNATIONAL_KINDS, ...SOVIET_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_SNIPER, UK_AT91, UK_TRUCK, UK_HALFTRACK, UK_AA, UK_ENGINEER, UK_FLAME];
 export const ARMOR2 = [UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT];   // R044：eco 帶 armor2 才能出
 
 const corner = (w: World, side: number) => (side === SIDE_PLAYER ? w.n - 1 : 0);
@@ -62,7 +62,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, sov
   if (inf) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_INFANTRY, b); }   // R021：雙方各一班步兵
   if (pla) startPlatoons(w);   // R095：步兵排的旗標、人口上限 24／56／64
   if (mg) for (const side of [SIDE_PLAYER, SIDE_ENEMY]) { const b = hqAlive(w, side); if (b) spawnUnit(w, side, UK_MG, b); }   // R080：雙方各一組機槍組（mg 旗標；也是可以生產它的開關）
-  if (sw) w.eco.sw = 1;   // R091：步兵支援（狙擊手、反戰車小組）可以生產；開局不送兵
+  if (sw) w.eco.sw = sw === 2 ? 2 : 1;   // R091：步兵支援（狙擊手、反戰車小組）可以生產；開局不送兵。R1002：2＝再加工兵、火焰噴射器
   if (tp) w.eco.tp = tp === 2 ? 2 : 1;   // R092：運輸可以生產；開局不送車。R030：2＝被拒絕的攻擊、射擊不卸砲
   if (air) w.eco.air = 1;   // R093：空中支援與防空；開局不送兵、不送飛機
 }
@@ -79,6 +79,7 @@ export function produce(w: World, side: number, kind: number): void {
   if ((kind === UK_SNIPER || kind === UK_AT91) && (!e?.sw || w.zombies)) return;   // R091：要 sw；喪屍防守不開放（打喪屍一發 2 點、反戰車小組不打喪屍）
   if ((kind === UK_TRUCK || kind === UK_HALFTRACK) && (!e?.tp || w.zombies)) return;   // R092：要 tp；喪屍防守不開放（喪屍挑目標不跳過車上的人）
   if (kind === UK_AA && (!e?.air || w.zombies)) return;   // R093：要 air；喪屍防守不開放
+  if ((kind === UK_ENGINEER || kind === UK_FLAME) && (e?.sw !== 2 || w.zombies)) return;   // R1002：要 sw＝2；喪屍防守不開放
   if (!e || (side !== 0 && side !== 1) || !PRODUCIBLE.includes(kind) || (INTERNATIONAL_KINDS.includes(kind) && !e.international) || (SOVIET_KINDS.includes(kind) && !e.soviet) || !hqAlive(w, side) || (kind === UK_INFANTRY && !e.inf) || ((kind === UK_ATGUN || kind === UK_MORTAR) && !e.guns) || ((kind === UK_LIGHT || kind === UK_HEAVY) && !e.tanks) || (ARMOR2.includes(kind) && !e.armor2) || (kind === UK_MG && !e.mg)) return;
   const cost = UNIT_KINDS[kind].cost;
   if (e.supply[side] < cost || e.queue[side].length >= ECO_QUEUE) return;

@@ -19,6 +19,7 @@ import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import { FORMATION_PLA } from './platoon.ts';
 import { aim91, shotDmg91 } from './support91.ts';   // R091
+import { fireAt1002, reach1002, demo1002, burns1002, burnIn1002, aimFlame } from './engineer1002.ts';   // R1002
 import { hitch92, carry92 } from './transport92.ts';   // R092
 import { call93, air93Step, seen93, BOMB93, type AirCmd } from './air93.ts';   // R093
 import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.ts';
@@ -70,7 +71,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0, cmd.air === 1 ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 2 ? 2 : cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0, cmd.air === 1 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   if (cmd.t === 'air') { call93(w, cmd.side | 0, cmd.kind | 0, cmd.x | 0, cmd.z | 0, spotted); return; }   // R093
   const seen = new Set<number>(), us: Unit[] = [];
@@ -112,6 +113,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
     if (cmd.ammo !== undefined && cmd.ammo !== 'smoke') return;
     const smoke = cmd.ammo === 'smoke';
     if (smoke && u.kind !== UK_HOWITZER) return;
+    if (UNIT_KINDS[u.kind].demo) { fireAt1002(w, u, cx(cmd.x), cx(cmd.z)); return; }   // R1002 工兵：打還站著的建築或還沒壞的網，走到挨著才炸（engineer1002.ts）
     const gx = cx(cmd.x), gz = cx(cmd.z), standing = blocks(w, gx, gz);
     if (!standing && !UNIT_KINDS[u.kind].indirect) return;
     if (tooClose(u, center(gx), center(gz))) return;                // 榴彈砲：最小射程內不接
@@ -131,6 +133,9 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
 function tooClose(u: Unit, x: number, z: number): boolean {
   return dist(u.x, u.z, x, z) < UNIT_KINDS[u.kind].minRange;
 }
+
+// R1002：射擊指令「到了沒」——工兵是挨著目標（engineer1002.ts），其他照射程
+const fireReach = (w: World, u: Unit): boolean => (UNIT_KINDS[u.kind].demo ? reach1002(w, u) : inRange(u, center(u.tx), center(u.tz)));
 
 function inRange(u: Unit, x: number, z: number): boolean {
   const k = UNIT_KINDS[u.kind], d = dist(u.x, u.z, x, z);
@@ -194,11 +199,11 @@ function moveUnit(w: World, u: Unit): void {
     if (inRange(u, u.tx, u.tz) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, u.tx, u.tz))) { u.path = []; u.pathIdx = 0; return; }   // R055：直射的被稜線擋住就繼續往前開，開到看得到
     if (u.pathIdx >= u.path.length || (w.tick + u.id) % 40 === 0) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), cellOf(u.tx), cellOf(u.tz), 0, 0, u.kind); u.pathIdx = 0; }
   }
-  if (u.order === ORD_FIRE_AT && inRange(u, center(u.tx), center(u.tz)) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, center(u.tx), center(u.tz)))) { u.path = []; u.pathIdx = 0; }
-  if (u.order === ORD_FIRE_AT && u.pathIdx >= u.path.length && (w.tick + u.id) % 20 === 0 && !UNIT_KINDS[u.kind].indirect && inRange(u, center(u.tx), center(u.tz)) && ridge(w, u.x, u.z, center(u.tx), center(u.tz))) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), u.tx, u.tz, 0, 0, u.kind); u.pathIdx = 0; }   // R055：直射的對房子砲擊被擠回稜線後面、路又走完了：每秒重新算一次路往前開（攻擊指令本來就會重算）
+  if (u.order === ORD_FIRE_AT && fireReach(w, u) && (UNIT_KINDS[u.kind].indirect || !ridge(w, u.x, u.z, center(u.tx), center(u.tz)))) { u.path = []; u.pathIdx = 0; }
+  if (u.order === ORD_FIRE_AT && u.pathIdx >= u.path.length && (w.tick + u.id) % 20 === 0 && !UNIT_KINDS[u.kind].indirect && fireReach(w, u) && ridge(w, u.x, u.z, center(u.tx), center(u.tz))) { u.path = findPath(w, cellOf(u.x), cellOf(u.z), u.tx, u.tz, 0, 0, u.kind); u.pathIdx = 0; }   // R055：直射的對房子砲擊被擠回稜線後面、路又走完了：每秒重新算一次路往前開（攻擊指令本來就會重算）
   if (u.pathIdx >= u.path.length) {
     if (u.order === ORD_MOVE) u.order = ORD_IDLE;
-    else if (u.order === ORD_FIRE_AT && !inRange(u, center(u.tx), center(u.tz))) u.order = ORD_IDLE;   // 走到底還打不到：放棄
+    else if (u.order === ORD_FIRE_AT && !fireReach(w, u)) u.order = ORD_IDLE;   // 走到底還打不到：放棄
     return;
   }
   const mv = w.rules?.morale ? movePct(u) : 100;   // R052：釘住（0）這一步不動、受壓（50）半速
@@ -282,6 +287,7 @@ export function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit |
     const t = unitById(w, u.target);
     return t && t.alive ? { x: u.tx, z: u.tz, unit: t, bld: null } : null;
   }
+  if (k.flame && u.order === ORD_FIRE_AT) { const t = burnIn1002(w, u); if (t) return { x: t.x, z: t.z, unit: t, bld: null }; }   // R1002 火焰噴射器：點房子＝燒裡面射程內的敵人（沒有就照舊打房子）
   if (u.order === ORD_FIRE_AT) {
     if (u.target > 0) return { x: center(u.tx), z: center(u.tz), unit: null, bld: null };   // 對地面：還有發數
     if (u.fireAmmo === SHELL_SMOKE) { u.order = ORD_IDLE; delete u.fireAmmo; return null; }
@@ -289,6 +295,7 @@ export function pickAim(w: World, u: Unit): { x: number; z: number; unit: Unit |
     if (!b || b.hp <= 0) { u.order = ORD_IDLE; return null; }         // 建築已經是瓦礫，或對地面打完了：停火
     return { x: center(u.tx), z: center(u.tz), unit: null, bld: b };
   }
+  if (k.flame) return aimFlame(w, u);   // R1002 火焰噴射器：燒得進目標躲著的那一棟；不挑封閉車身的車（engineer1002.ts）
   if (k.team91) return aim91(w, u, homeOf(w, u));   // R091 狙擊手、反戰車小組：照類別挑（support91.ts）；攻擊、射擊指令照上面
   // R096：射程內的敵人照（距離、id）由小到大排，從最近的試起，第一個全部過關的就是目標。
   // 下面四個檢查都只讀世界，所以跟以前「全部過關的裡面挑（距離、id）最小的」是同一個；最貴的「看不看得到」放最後、只對排在前面的做
@@ -353,6 +360,7 @@ function fireUnit(w: World, u: Unit): void {
   const k = UNIT_KINDS[u.kind];
   if (w.rules?.morale && !canFire(u)) { if (k.indirect) syncRanging(w, u, null); return; }   // R052：潰退不開火
   if (u.holdFire === 1 && fireDisciplineEligible(u, w)) { if (k.indirect) syncRanging(w, u, null); return; }
+  if (k.demo && u.order === ORD_FIRE_AT) { demo1002(w, u, damageBld); return; }   // R1002 工兵：挨著才倒數、倒數到 0 放一包炸藥（不走砲彈）
   if (u.order !== ORD_FIRE_AT) delete u.fireAmmo;
   const smoke = u.fireAmmo === SHELL_SMOKE;
   const aim = pickAim(w, u);
@@ -370,7 +378,7 @@ function fireUnit(w: World, u: Unit): void {
   const sh: Shell = { id: w.nextShell++, side: u.side, kind: smoke ? SHELL_SMOKE : k.indirect ? SHELL_HE : k.men && !k.hollow ? SHELL_SMALL : SHELL_AP, shooter: u.id, sx: u.x, sz: u.z, ex: aim.x, ez: aim.z, t: 0, T: 2, target: aim.unit ? aim.unit.id : 0, hitBld: 0 };
   if (!k.indirect) {
     const blockCell = firstBlock(w, u.x, u.z, aim.x, aim.z, homeOf(w, u));   // R021：從自己待的房子往外打
-    if (blockCell >= 0) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % w.n); sh.ez = center((blockCell - (blockCell % w.n)) / w.n); sh.target = 0; }
+    if (blockCell >= 0 && !(k.flame && burns1002(w, blockCell, aim.unit))) { sh.hitBld = w.occ[blockCell]; sh.ex = center(blockCell % w.n); sh.ez = center((blockCell - (blockCell % w.n)) / w.n); sh.target = 0; }
     sh.T = sh.kind === SHELL_SMALL ? Math.max(1, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / (3 * SUB))) : Math.max(2, Math.floor(dist(u.x, u.z, sh.ex, sh.ez) / SUB));
   } else {
     let r = Math.floor(d / 12);
@@ -393,10 +401,10 @@ function pierced(k: { pierce: number; soft: number; men: number; hollow?: boolea
 // R021：能進駐的單位待在還站著的房子裡時，射線不算自己這棟
 function homeOf(w: World, u: Unit): number { if (!UNIT_KINDS[u.kind].garrison) return 0; const b = bldAt(w, cellOf(u.x), cellOf(u.z)); return b && b.hp > 0 ? b.id : 0; }
 
-function damageUnit(w: World, u: Unit, dmg: number, allowGroundCover = true): void {
+function damageUnit(w: World, u: Unit, dmg: number, allowGroundCover = true, burn = false): void {   // R1002 burn：火燒不吃任何掩護（呼叫時 allowGroundCover 也給 false）
   if (!u.alive || dmg <= 0) return;
   const x = cellOf(u.x), z = cellOf(u.z);
-  const home = UNIT_KINDS[u.kind].garrison && blocks(w, x, z) ? bldAt(w, x, z) : null;
+  const home = !burn && UNIT_KINDS[u.kind].garrison && blocks(w, x, z) ? bldAt(w, x, z) : null;
   // R106：只用命中前已有的彈坑；建築掩護更強，不疊乘。倒塌傷害不吃地形掩護。
   const terrain = !allowGroundCover ? 100 : vegetationAt(w, x, z) ? 50 : inGrid(w, x, z) && w.crater[cellIdx(w, x, z)] > 0 ? 75 : 100;
   const ground = Math.min(terrain, allowGroundCover ? trenchCover(w, x, z) : 100);
@@ -419,6 +427,7 @@ function damageBld(w: World, b: Building, dmg: number): void {
 function land(w: World, s: Shell): void {
   if (s.kind === SHELL_SMOKE) { spawnSmoke(w, s); return; }
   const k = s.shooter ? UNIT_KINDS[w.units[s.shooter - 1].kind] : BOMB93;   // R093 炸彈沒有射手
+  if (k.flame && s.kind === SHELL_SMALL && !s.hitBld) { const t0 = unitById(w, s.target), t = t0 && t0.alive && !t0.ride && dist(t0.x, t0.z, s.ex, s.ez) <= AP_HIT_RADIUS ? t0 : null; if (t) { damageUnit(w, t, pierced(k, t, k.dmgUnit), false, true); if (w.rules?.morale) suppress(w, t, SUP_SMALL); } w.events.push({ e: 'impact', kind: s.kind, x: s.ex, z: s.ez, bld: 0 }); return; }   // R1002 火焰：燒到的不吃掩護（房子、碉堡、壕溝、樹林、彈坑都一樣）
   if (s.kind === SHELL_AP || s.kind === SHELL_SMALL) {
     let bounce = false;
     if (s.hitBld) { if (w.rules?.morale) suppressHouse(w, s.hitBld, s.kind === SHELL_SMALL ? k.sup ?? SUP_SMALL : SUP_DIRECT, k.sup && mgSecond(w) ? s.side : -1); const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一；R052 裡面的人被壓（先壓再算房子，倒了也算）

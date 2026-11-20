@@ -2,7 +2,7 @@
 // 看不到的不畫；人多時整個小兵網格自動降級（完整＋陰影 → 完整 → 密集），守住手機預算。
 // 只讀世界、不改世界、不用亂數；狀態只跟著畫面的更新走（同一串更新得到同一份實例）。開關照 R086–R088：模組的 setter，預設關。
 import * as THREE from 'three';
-import { SUB, cellIdx, inGrid, UNIT_KINDS, UK_INFANTRY, UK_MG, UK_MORTAR, UK_ZOMBIE, UK_SNIPER, UK_AT91, moraleState, MORALE_PINNED, type Unit, type World } from '../sim/world.ts';
+import { SUB, cellIdx, inGrid, UNIT_KINDS, UK_INFANTRY, UK_MG, UK_MORTAR, UK_ZOMBIE, UK_SNIPER, UK_AT91, UK_ENGINEER, UK_FLAME, moraleState, MORALE_PINNED, type Unit, type World } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';
 import { soldier } from './unitArt.ts';
 
@@ -39,6 +39,9 @@ export const CROWD89: Record<number, { men: number; lay: readonly Lay[] }> = { [
 // R091 狙擊手、反戰車小組：兩個人（走：一前一後；停：並排；趴：並排隔開一點；屋頂上縮小）。上一行的字面量是守衛的錨點，所以另起一行加
 const TEAM91: readonly Lay[] = [[[0.08, 0], [-0.08, 0]], [[0, 0.07], [0, -0.07]], [[0, 0.09], [0, -0.09]], [[0, 0.055], [0, -0.055]], [[0, 0.07], [0, -0.07]]];
 CROWD89[UK_SNIPER] = { men: 2, lay: TEAM91 }; CROWD89[UK_AT91] = { men: 2, lay: TEAM91 };
+// R1002 工兵：四個人（走：兩路縱隊；停：一字排開；趴：排開隔遠一點；屋頂上縮小）。火焰噴射器：兩個人，照 R091 的兩人隊形
+const ENG1002: readonly Lay[] = [[[0.12, 0.07], [-0.12, 0.07], [0.12, -0.07], [-0.12, -0.07]], [[0, 0.21], [0, 0.07], [0, -0.07], [0, -0.21]], [[0, 0.27], [0, 0.09], [0, -0.09], [0, -0.27]], [[0, 0.16], [0, 0.05], [0, -0.05], [0, -0.16]], [[0, 0.2], [0, 0.07], [0, -0.07], [0, -0.2]]];
+CROWD89[UK_ENGINEER] = { men: 4, lay: ENG1002 }; CROWD89[UK_FLAME] = { men: 2, lay: TEAM91 };
 
 // BattleView 裡這個模組要讀寫的東西（BattleView 用 `this as never` 交過來；改名的話 tests/section89.mjs 會紅）
 export interface Host89 {

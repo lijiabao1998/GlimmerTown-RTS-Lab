@@ -4,7 +4,7 @@ import { reliefShade } from './relief.ts';
 import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts'; import { TRANSPORT_ART } from './transportArt.ts'; import { Air93View, AA93_GUN } from './air93.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
-  SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_ZOMBIE, UK_SNIPER, UK_AT91, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
+  SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_ZOMBIE, UK_SNIPER, UK_AT91, UK_ENGINEER, UK_FLAME, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
   UNIT_KINDS, ORD_FIRE_AT, ORD_ATTACK, TICK_HZ, moraleState, MORALE_PINNED, type Unit, type World, type SimEvent, type Building,
 } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
@@ -626,7 +626,7 @@ export class BattleView {
         ng++;
         if ((u.kind === UK_MORTAR || u.kind === UK_MG) && u.alive) nm = this.crew22(u, x, z, col, nm);
       }
-      if (this.sec89.has(u.kind)) nm = this.sec89.draw(u, x, z, simT, col, nm); else if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(u, x, z, simT, u.kind === UK_ZOMBIE ? C_ZOMBIE : col, nm); if (!this.sec89.has(u.kind) && (u.kind === UK_SNIPER || u.kind === UK_AT91)) nm = this.squad21(u, x, z, simT, col, nm);   // R091
+      if (this.sec89.has(u.kind)) nm = this.sec89.draw(u, x, z, simT, col, nm); else if (u.kind === UK_INFANTRY || u.kind === UK_ZOMBIE) nm = this.squad21(u, x, z, simT, u.kind === UK_ZOMBIE ? C_ZOMBIE : col, nm); if (!this.sec89.has(u.kind) && (u.kind === UK_SNIPER || u.kind === UK_AT91)) nm = this.squad21(u, x, z, simT, col, nm); if (!this.sec89.has(u.kind) && (u.kind === UK_ENGINEER || u.kind === UK_FLAME)) nm = this.squad21(u, x, z, simT, col, nm);   // R091、R1002
       if (u.kind === UK_OBSERVER) {
         const y = this.unitHeight(u);
         m.position.set(x, y, z); m.rotation.set(0, this.yaw[u.id], u.alive ? 0 : Math.PI / 2); m.scale.setScalar(1); m.updateMatrix();
@@ -776,9 +776,9 @@ export class BattleView {
     if (e.e === 'fire') {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
-      if (u.kind === UK_INFANTRY || u.kind === UK_MG || u.kind === UK_SNIPER) {   // R021 步槍、R080 機槍、R091 狙擊手：小小的槍口火光（反戰車小組走下面砲的那一支：後焰）
+      if (u.kind === UK_INFANTRY || u.kind === UK_MG || u.kind === UK_SNIPER || u.kind === UK_ENGINEER || u.kind === UK_FLAME) {   // R021 步槍、R080 機槍、R091 狙擊手、R1002 工兵：小小的槍口火光（反戰車小組走下面砲的那一支：後焰）；R1002 火焰噴射器再沿著瞄準方向噴一串火、冒黑煙
         const a = Math.atan2(u.aimZ, u.aimX), x0 = e.x / SUB + Math.cos(a) * 0.18, z0 = e.z / SUB + Math.sin(a) * 0.18, y0 = this.unitHeight(u) + 0.16;
-        this.glow!.spawn({ x: x0, y: y0, z: z0, t0: t, life: 0.06, s0: 0.03, s1: 0.07, c0: 0xfff6c8, c1: 0xffa040, fog: u.side !== SIDE_PLAYER });
+        this.glow!.spawn({ x: x0, y: y0, z: z0, t0: t, life: 0.06, s0: 0.03, s1: 0.07, c0: 0xfff6c8, c1: 0xffa040, fog: u.side !== SIDE_PLAYER }); if (u.kind === UK_FLAME) for (let k = 0; k < 6; k++) { const v = 2 + 0.45 * k; this.glow!.spawn({ x: x0, y: y0, z: z0, vx: Math.cos(a) * v, vz: Math.sin(a) * v, drag: 2, t0: t + 0.03 * k, life: 0.45, s0: 0.05, s1: 0.18, c0: 0xffe070, c1: 0xff5010, fog: u.side !== SIDE_PLAYER }); if (k % 3 === 2) this.puff!.spawn({ x: x0 + Math.cos(a) * 0.6, y: y0, z: z0 + Math.sin(a) * 0.6, vx: Math.cos(a) * 0.6, vz: Math.sin(a) * 0.6, drag: 2, vy: 0.35, t0: t + 0.03 * k, life: 1.2, s0: 0.06, s1: 0.26, c0: 0x3a3430, c1: 0x6a625a, fog: u.side !== SIDE_PLAYER }); }
         return;
       }
       const a = Math.atan2(u.aimZ, u.aimX), gun = u.kind === UK_HOWITZER || u.kind === 22, L = gun ? 0.42 : u.kind === UK_MORTAR ? 0.16 : ART44[u.kind] ? muzzleL(u.kind) : 0.44, y = gun ? 0.32 : u.kind === UK_MORTAR ? 0.26 : u.kind === UK_ATGUN ? 0.15 : ART44[u.kind] ? muzzleY(u.kind) : 0.2;   // R044 新車的槍口照各自的砲塔縮放
@@ -831,7 +831,7 @@ export class BattleView {
       const u = this.w.units[e.unit - 1];
       if (!u || !this.visibleUnit(u)) return;
       const x = u.x / SUB, z = u.z / SUB, fog = u.side !== SIDE_PLAYER;
-      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY || u.kind === UK_MG || u.kind === UK_ZOMBIE || u.kind === UK_SNIPER || u.kind === UK_AT91) {
+      if (u.kind === UK_OBSERVER || u.kind === UK_INFANTRY || u.kind === UK_MG || u.kind === UK_ZOMBIE || u.kind === UK_SNIPER || u.kind === UK_AT91 || u.kind === UK_ENGINEER || u.kind === UK_FLAME) {
         for (let k = 0; k < 3; k++) this.puff!.spawn({ x, y: 0.08, z, vy: 0.2, t0: t + 0.05 * k, life: 1.4, s0: 0.06, s1: 0.22, c0: 0x9a8b74, c1: 0xa59c8c, fog });
         return;
       }

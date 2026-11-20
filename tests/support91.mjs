@@ -83,9 +83,9 @@ const groups = {
     assert.deepEqual(now, PINNED, 'flag: four third-version battles without sw are bit for bit what they were at 937fed5');
     const opened = extra => { const w = createWorld(5); step(w, [{ t: 'map', id: 1, vegetation: 1 }, eco(extra)]); return w; };
     const plain = opened({}), on = opened({ sw: 1 }), two = opened({ sw: 2 });
-    assert.deepEqual([plain.eco.sw, on.eco.sw, two.eco.sw], [undefined, 1, undefined], 'flag: sw is stored only when the eco command sends 1 (2 is reserved for the next card)');
+    assert.deepEqual([plain.eco.sw, on.eco.sw, two.eco.sw], [undefined, 1, 2], 'flag: sw is stored as the eco command sends it (1; R1002 took 2 for engineers and flamethrowers)');
     assert.notEqual(hashWorld(on), hashWorld(plain), 'flag: sw is folded into the hash');
-    assert.equal(hashWorld(two), hashWorld(plain), 'flag: sw 2 leaves no trace yet');
+    assert.notEqual(hashWorld(two), hashWorld(on), 'flag: sw 2 hashes apart from sw 1 (R1002)');
     assert.deepEqual(on.units.map(u => u.kind).sort(), plain.units.map(u => u.kind).sort(), 'flag: no starting units for sw (the opening is the same as without it)');
     for (const bad of ['x', 1.5, '1']) assert.equal(isCommand({ ...ECO, sw: bad }), false, `flag: the command check refuses sw ${JSON.stringify(bad)}`);
     assert.equal(isCommand({ ...ECO, sw: 1 }), true, 'flag: the command check takes sw 1');
@@ -132,7 +132,7 @@ const groups = {
     for (let i = 0; i < 600; i++) { step(w, []); step(back, []); }
     assert.equal(hashWorld(back), hashWorld(w), 'save: 600 steps after loading, the hash equals the uninterrupted run');
     const raw = JSON.parse(JSON.stringify(encodeWorld(w)));
-    assert.equal(decodeWorld({ ...raw, eco: { ...raw.eco, sw: 2 } }), null, 'save: sw 2 is refused');
+    assert.equal(decodeWorld({ ...raw, eco: { ...raw.eco, sw: 3 } }), null, 'save: sw 3 is refused (R1002 took 2)');
     const { sw, ...noSw } = raw.eco;
     assert.equal(decodeWorld({ ...raw, eco: noSw }), null, 'save: a save with kind 42/43 units but no sw is refused');
   },

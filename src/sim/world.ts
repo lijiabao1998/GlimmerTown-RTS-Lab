@@ -64,6 +64,7 @@ export const UK_MG = 41;         // R080 機槍組（三個人一挺重機槍：
 export const UK_SNIPER = 42, UK_AT91 = 43;   // R091 狙擊手（遠射、一發打倒一個人）、反戰車小組（近距離打穿甲的空心裝藥）；eco 帶 sw 才能出
 export const UK_TRUCK = 44, UK_HALFTRACK = 45;   // R092 卡車、半履帶車（載一個徒步單位或拖一門砲；沒有武裝）；eco 帶 tp 才能出
 export const UK_AA = 46;   // R093 防空砲（只打飛機；eco 帶 air 才能出）
+export const UK_ENGINEER = 47, UK_FLAME = 48;   // R1002 工兵（挨著建築放炸藥、剪鐵絲網）、火焰噴射器（燒得進房子和碉堡、不吃掩護）；eco 帶 sw＝2 才能出
 export const UK_ZOMBIE = 11;   // R045：六隻一群，只在可選防守模式出現，不能生產
 
 export interface UnitKind {
@@ -96,6 +97,8 @@ export interface UnitKind {
   hold?: boolean;       // R091 有人數也收停火紀律（R143）
   carry?: boolean;      // R092 運輸車：能載一個徒步單位，或拖一門砲（transport92.ts）
   aa?: number;          // R093 對空射程（位置單位，只算水平距離；air93.ts）；既有兵種都沒有這一欄
+  demo?: number;        // R1002 工兵：放一包炸藥要幾步（engineer1002.ts）；既有兵種都沒有這一欄
+  flame?: boolean;      // R1002 火焰噴射器：燒得進目標躲著的那一棟、不吃掩護（engineer1002.ts）
 }
 
 // 數字都是暫定，玩家看得到的數字由業主定（AGENTS.md 規則 6）。
@@ -172,6 +175,9 @@ UNIT_KINDS.push({ name: '卡車', hp: 40, speed: 30, range: 0, minRange: 0, relo
   { name: '半履帶車', hp: 70, speed: 22, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 7 * SUB, armor: 100, radius: 76, cost: 35, buildTicks: 240, garrison: false, armored: true, pierce: 100, men: 0, soft: 100, setup: false, carry: true });
 // R093 防空砲（46），只往後加。照 Bofors 40 mm 那一級：不打地面（range 0）、對空 8 格、每 10 步一發、要架好、能被卡車和半履帶車拖。數字與出處在 docs/tasks/R093-空中支援與防空.md；都是暫定
 UNIT_KINDS.push({ name: '防空砲', hp: 45, speed: 7, range: 0, minRange: 0, reload: 10, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 7 * SUB, armor: 100, radius: 64, cost: 35, buildTicks: 260, garrison: false, armored: false, pierce: 100, men: 0, soft: 100, setup: true, aa: 8 * SUB });
+// R1002 工兵（47）、火焰噴射器（48），只往後加。數字、出處與「誰剋誰」在 docs/tasks/R1002-工兵與火焰噴射器.md；都是暫定
+UNIT_KINDS.push({ name: '工兵', hp: 40, speed: 12, range: 5 * SUB, minRange: 0, reload: 30, indirect: false, dmgUnit: 8, dmgBld: 2, splash: 0, sight: 7 * SUB, armor: 100, radius: 0, cost: 30, buildTicks: 220, garrison: false, armored: false, pierce: 10, men: 4, soft: 100, setup: false, demo: 120 },
+  { name: '火焰噴射器', hp: 20, speed: 12, range: 2 * SUB, minRange: 0, reload: 40, indirect: false, dmgUnit: 24, dmgBld: 3, splash: 0, sight: 7 * SUB, armor: 100, radius: 0, cost: 30, buildTicks: 220, garrison: false, armored: false, pierce: 15, men: 2, soft: 100, setup: false, hold: true, flame: true });
 
 export const ORD_IDLE = 0;
 export const ORD_MOVE = 1;
@@ -343,6 +349,7 @@ export const mgSecond = (w: World): boolean => (w.eco?.mg ?? 0) >= 2;
 export function wireBlocks(w: World, x: number, z: number, kind: number): boolean {
   if (kind === UK_MG && mgSecond(w)) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R081：第二版的機槍組也是徒步，鐵絲網擋得住（下一行原樣不動，有守衛錨著）
   if ((kind === UK_SNIPER || kind === UK_AT91) && (w.eco?.sw ?? 0) >= 1) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R091：兩種都是徒步
+  if ((kind === UK_ENGINEER || kind === UK_FLAME) && (w.eco?.sw ?? 0) >= 2) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R1002：兩種都是徒步
   return onFoot(kind) && (wireAt(w, x, z)?.hp ?? 0) > 0;
 }
 

@@ -1,5 +1,5 @@
 // R107：輸入路由只讀世界、產生指令。命中的單位由畫面先做可見性篩選。
-import { SUB, UK_HOWITZER, UNIT_KINDS, bldAt, type World } from '../sim/world.ts';
+import { SUB, UK_HOWITZER, UNIT_KINDS, bldAt, wireAt, type World } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { Command } from '../sim/step.ts';
 import { air93Route } from './air93.ts';   // R093 空中鍵
@@ -49,5 +49,7 @@ export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode:
   const [x, z] = cell, b = bldAt(w, x, z);
   const guns = ids.filter(id => UNIT_KINDS[w.units[id - 1].kind].indirect);
   if ((b && b.hp > 0) || (fireMode && guns.length)) return fire(b && b.hp > 0 ? ids : guns, x, z);
+  const cut = (wireAt(w, x, z)?.hp ?? 0) > 0 ? ids.filter(id => !!UNIT_KINDS[w.units[id - 1].kind].demo) : [], rest = ids.filter(id => !cut.includes(id));   // R1002：點到還沒壞的鐵絲網＝工兵去剪，其他照舊走過去
+  if (cut.length) return { commands: [{ t: 'fireAt', side: SIDE_PLAYER, ids: cut, x, z }, ...(rest.length ? [{ t: 'move' as const, side: SIDE_PLAYER, ids: rest, x, z }] : [])], marker: { x: x + 0.5, z: z + 0.5, hostile: true } };
   return { commands: [{ t: 'move', side: SIDE_PLAYER, ids, x, z }], marker: { x: x + 0.5, z: z + 0.5, hostile: false } };
 }
