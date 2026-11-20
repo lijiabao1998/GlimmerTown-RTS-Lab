@@ -182,14 +182,14 @@
     @media (max-width: 480px) and (orientation: portrait) {
       body.r901 #hud #transport92 { left: calc(max(8px, env(safe-area-inset-left)) + 100px); top: calc(max(8px, env(safe-area-inset-top)) + 380px); padding: 0; background: none; }
     }
-    /* R093 空中鍵：搭車的右邊 64px（全排、搭車、空中一排）；窄的畫面畫在小地圖上面（R030 的教訓）；R901 直的手機放左邊那一排、搭車的下一格 */
+    /* R093 空中鍵：搭車的右邊 64px（全排、搭車、空中一排）；窄的畫面畫在小地圖上面（R030 的教訓）；R901 直的手機放左邊那一排、停火鍵的下一格（R1008） */
     #hud #air93 { left: calc(max(8px, env(safe-area-inset-left)) + 284px); top: calc(max(8px, env(safe-area-inset-top)) + 58px); }
     #hud #air93[hidden] { display: none; }
     #hud #air93 button { width: 44px; height: 44px; font-size: 12px; padding: 0; }
     @media (max-width: 640px) { #hud #air93 { top: calc(max(8px, env(safe-area-inset-top)) + 100px); z-index: 1; } }
     @media (max-width: 411px) { #hud.cover-durability #air93 { top: calc(max(8px, env(safe-area-inset-top)) + 148px); } }
     @media (max-width: 480px) and (orientation: portrait) {
-      body.r901 #hud #air93 { left: calc(max(8px, env(safe-area-inset-left)) + 148px); top: calc(max(8px, env(safe-area-inset-top)) + 380px); padding: 0; background: none; }
+      body.r901 #hud #air93 { left: max(8px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + 428px); padding: 0; background: none; }   /* R1008：左邊那一排、停火鍵正下方（原本在搭車右邊、離畫面中線不到 30px，點地圖會被 Chrome 的觸控校正算到這顆鍵上） */
     }
     /* R144: align the action itself with the existing 44px left rail, 6px below 框. */
     @media (max-width: 480px) and (orientation: portrait) {
