@@ -22,6 +22,7 @@ const cases = [
   ['income_uncapped', T, [['Math.min(SUPPLY_MAX50, done50(', 'Math.min(3, done50(']], 'income', /^income: one depot adds 1 every 40 steps/],
   ['codec_open', 'src/sim/worldCodec.ts', [['  if (!techOk(r)) return null;', '']], 'codecref', /^codec: refused — tech 2/],
   ['codec_any_site', T, [['return !!spec && (left as number) >= 1 && (left as number) <= spec.work;', 'return (left as number) >= 1;']], 'codecref', /^codec: refused — a site on a house/],
+  ['codec_no_tech_sites', T, [['return t === undefined && !blds.some(b => TECH50[b.kind as number] !== undefined);', 'return !blds.some(b => TECH50[b.kind as number] !== undefined);']], 'codecref', /^codec: refused — no tech but a site list/],   // R1004：沒有 tech 卻有工地清單（讀進來第一步就當）
   ['codec_no_tech_blds', T, [['return t === undefined && !blds.some(b => TECH50[b.kind as number] !== undefined);', 'return t === undefined;']], 'codecref', /^codec: refused — no tech but a barracks/],
   ['route_all_ids', 'src/ui/tech50.ts', [['ids: builders50(w, SIDE_PLAYER, ids).map(u => u.id), kind', 'ids: [...selected], kind']], 'route', /^route: armed, a tap with an engineer selected sends construct for the engineers only/],
   ['route_stays_armed', 'src/ui/tech50.ts', [["const kind = armed; armed = 0; flash = '';", "const kind = armed; flash = '';"]], 'route', /^route: sent, disarmed/],

@@ -9,7 +9,7 @@ import {
 } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { spotted } from '../sim/step.ts';
-import { territory } from '../sim/build.ts';
+import { territory } from '../sim/build.ts'; import { site50 } from '../sim/tech50.ts';   // R1004：工地重建畫面時不加煙
 import { buildTown, smokeSources, buildingGeo, bldColorsOf, wallHeight, wallShown, wallBounds, RUBBLE_COLORS, roofRise } from './buildings.ts';
 import { Geo } from './geo.ts';
 import { Pool, Ghosts, M_PUFF, M_GLOW, M_DEBRIS, M_RING, RISE_S } from './fx.ts';
@@ -294,7 +294,7 @@ export class BattleView {
       const t = w.tick / 20;
       for (const b of w.blds) {
         this.lastStage[b.id] = stageOf(b);
-        if (stageOf(b) === STAGE_ROOFLESS) {
+        if (stageOf(b) === STAGE_ROOFLESS && !site50(w, b)) {   // R1004：還在蓋的工地（血不到七成）不冒煙
           const bounds = wallShown(b) ? wallBounds(b) : null;
           this.addEmitter(E_SMOKE, b.id, bounds?.x0 ?? b.x, bounds?.z0 ?? b.z, bounds ? bounds.x1 - bounds.x0 : b.w, bounds ? bounds.z1 - bounds.z0 : b.d, wallHeight(b) * (bounds ? 0.72 : 1), t, Infinity, false);
         }
@@ -849,7 +849,7 @@ export class BattleView {
         this.ghosts.add(buildingGeo(new Geo(), b, stageOf(b)), t, wallHeight(b) + roofRise(b.kind), b.x + b.w / 2, b.z + b.d / 2, hash2(b.id, 5, 91), true);
         this.rising.set(b.id, t + RISE_S);
       }
-      if (this.lastStage.length > b.id) this.lastStage[b.id] = STAGE_INTACT;
+      if (this.lastStage.length > b.id) this.lastStage[b.id] = stageOf(b);   // R1004：工地出現時血 1＝沒有屋頂，記真的階段（記成完好，倒下時會演整棟有屋頂的倒塌）
       for (let k = 0; k < 6; k++) {
         const a = (k / 6) * Math.PI * 2, cx = b.x + b.w / 2, cz = b.z + b.d / 2, r = Math.max(b.w, b.d) * 0.55;
         this.puff!.spawn({ x: cx + Math.cos(a) * r, y: 0.05, z: cz + Math.sin(a) * r, vx: Math.cos(a) * 0.8, vz: Math.sin(a) * 0.8, drag: 2.5, vy: 0.1, t0: t + 0.03 * k, life: 1.6, s0: 0.12, s1: 0.4, c0: 0x9a8b74, c1: 0xb0a898 });
@@ -881,8 +881,8 @@ export class BattleView {
       this.addEmitter(E_SMOKE, b.id, fx, fz, fw, fd, wallH * 0.72, t + 0.4, Infinity, false);
       return;
     }
+    for (const em of this.emitters) if (em.id === b.id && (em.kind === E_FIRE || em.kind === E_SMOKE)) em.until = Math.min(em.until, t);   // R1004：蓋好（回到完好）也收火和煙
     if (to !== STAGE_RUBBLE) return;
-    for (const em of this.emitters) if (em.id === b.id && (em.kind === E_FIRE || em.kind === E_SMOKE)) em.until = Math.min(em.until, t);
     const h = (from === STAGE_INTACT ? wallH + rise : wallH * 0.72) + 0.05;
     const g = buildingGeo(new Geo(), b, from);
     if (!wearCollapse(this.w, this.ghosts!, this.puff!, this.debris!, b, from, t, h)) this.ghosts!.add(g, t, h, cx, cz, hash2(b.id, 3, 77));   // R088：分兩段倒下

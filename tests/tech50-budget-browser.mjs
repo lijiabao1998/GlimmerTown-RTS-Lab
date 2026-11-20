@@ -20,7 +20,10 @@ await runOrSkip('tech50-budget', async () => {
       const opening = async q => { await open(`${q}&noR1002=0&noR091=0&seed=1944&noR100=1`); await E('__rts.pause(true); 0'); return measure(E, frames); };
       const on = await opening('noR050=0'), off = await opening('noR050=1');
       assert.deepEqual([on.calls, on.triangles], [off.calls, off.triangles], `budget: the opening draws exactly what it drew without R050 (${on.calls}/${on.triangles})`);
-      await open('noR050=0&noR1002=0&noR091=0&seed=1944&noR100=1'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); __r089.clean(); 0');
+      await open('noR050=0&noR1002=0&noR091=0&seed=1944&noR100=1&noR018=1'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); __r089.clean(); 0');   // R1004：noR018＝沒有電腦（走時間時兩邊都不出兵、不動）
+      // R1004：暫停中畫面時間不走，剛放的建築一直在「升起來」的動畫網格裡（R016），量不到城鎮網格；先走 1 秒讓它們併回城鎮
+      const settle = async () => { await E('__rts.stepN(20); __rts.pause(true); 0'); for (let k = 0; k < 4; k++) await frames(); const r = await E('__rts.rising().rising'); assert.equal(r, 0, `budget: fixture — no building is still rising when measured (${r})`); };
+      await settle();
       const hq = await E('__rts.blds().filter(b => b.kind === 5).map(b => [b.x, b.z])');
       const worst = async (cx, cz, zoom) => { await E(`__r089.cam(${cx}, ${cz}, ${zoom})`); let m = null; for (let i = 0; i < 3; i++) { const x = await measure(E, frames); if (!m || x.triangles > m.triangles || x.calls > m.calls) m = x; } return m; };
       const cx = 16, cz = 16, base = { 1: await worst(cx, cz, 1), 0.55: await worst(cx, cz, 0.55) };
@@ -36,7 +39,7 @@ await runOrSkip('tech50-budget', async () => {
       assert.equal(plan.length, 7, `budget: fixture — room for three buildings a side and one site (${JSON.stringify(plan)})`);
       const ids = await E(`${JSON.stringify(plan)}.map(([s,k,x,z,hp]) => __r089.bld50(s, k, x, z, hp))`);
       assert(ids.every(Boolean), `budget: fixture — placed (${ids})`);
-      for (let k = 0; k < 4; k++) await frames();
+      await settle();
       const got = [];
       for (const zoom of [1, 0.55]) {
         const m = await worst(cx, cz, zoom), dt = m.triangles - base[zoom].triangles;

@@ -4,6 +4,7 @@ import { BK_BARRACKS, BK_DEPOT, BK_SUPPLY, UNIT_KINDS, type World } from '../sim
 import { TECH50, why50, builders50 } from '../sim/tech50.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { OrderHit, OrderRoute } from './smoke.ts';
+import { air93Arm } from './air93.ts';   // R1004：建造模式跟空中鍵互斥（air93.ts 也 import 這一支；只在按鍵時呼叫，循環沒有關係）
 
 export const ITEM50 = 1000;   // 生產列的假編號：1000＋建築種類（1014、1015、1016；兵種只到 48，步兵排是 256）
 const NAME: Record<number, string> = { [BK_BARRACKS]: '兵營', [BK_DEPOT]: '車廠', [BK_SUPPLY]: '補給站' };
@@ -21,6 +22,7 @@ const isItem = (kind: number) => TECH50[kind - ITEM50] !== undefined;
 export function pick50(kind: number): boolean {
   if (!isItem(kind)) return false;
   armed = armed === kind - ITEM50 ? 0 : kind - ITEM50; flash = '';
+  if (armed) air93Arm(0);   // R1004：選了要蓋的就把空中鍵放下（兩個都開著時點地圖會叫來轟炸、炸在自己基地）
   return true;
 }
 export const armed50 = (): number => armed;
