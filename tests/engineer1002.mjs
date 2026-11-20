@@ -154,7 +154,8 @@ const groups = {
       assert.equal(h.length, 0, 'demowalk: after stop nothing goes off'); }
     { const w = field(), e = put(w, ME, UK_ENGINEER, 10, 16, true);
       step(w, [{ t: 'fireAt', side: ME, ids: [e.id], x: 16, z: 16 }]);
-      assert.equal(e.order, ORD_IDLE, 'demowalk: open ground is not a target (the order is not taken)'); }
+      for (let i = 0; i < 30; i++) step(w, []);
+      assert.deepEqual([e.order, e.x, e.z, e.path.length, e.cooldown], [ORD_IDLE, center(10), center(16), 0, 0], 'demowalk: open ground is not a target (the order is not taken: no walk, no countdown)'); }
   },
   // 驗收 6：壓制
   demoslow() {
@@ -189,9 +190,10 @@ const groups = {
       step(w, []);
       assert.equal(e.order, ORD_IDLE, 'wire: a cut section ends the order'); }
     for (const kind of [UK_TANK, UK_INFANTRY]) {
-      const w = swEco(field()); wire(w, 10, 5); const u = put(w, ME, kind, 8, 5, true);
-      step(w, [{ t: 'fireAt', side: ME, ids: [u.id], x: 10, z: 5 }]);
-      assert.equal(u.order, ORD_IDLE, `wire: kind ${kind} does not take a fire order on wire`);
+      const w = swEco(field()); wire(w, 24, 5); const u = put(w, ME, kind, 8, 5, true);   // 網在射程外（16 格）：接了指令的話會走過去
+      step(w, [{ t: 'fireAt', side: ME, ids: [u.id], x: 24, z: 5 }]);
+      for (let i = 0; i < 30; i++) step(w, []);
+      assert.deepEqual([u.order, u.x, u.z, u.path.length], [ORD_IDLE, center(8), center(5), 0], `wire: kind ${kind} does not take a fire order on wire (no walk)`);
     }
   },
   // 驗收 8：火焰噴射器挑得到躲在房子裡的人
@@ -276,7 +278,13 @@ const groups = {
     assert(back, 'codec: a world with sw 2, an engineer mid-charge and a holding flamethrower reads back');
     for (let i = 0; i < 600; i++) { step(w, []); step(back, []); }
     assert.equal(hashWorld(back), hashWorld(w), 'codec: 600 steps after loading, the hash equals the uninterrupted run');
+  },
+  // 驗收 14（拒收的那一半，小世界、跑得快）：sw＝1 或沒有 sw 卻有 47、48；sw＝3；佇列裡的
+  codecref() {
+    const w = opened({ sw: 2 }), hq = w.blds[w.eco.hq[ME] - 1];
+    put(w, ME, UK_ENGINEER, hq.x - 1, hq.z - 1); put(w, ME, UK_FLAME, hq.x - 1, hq.z);
     const raw = JSON.parse(JSON.stringify(encodeWorld(w)));
+    assert(decodeWorld(raw), 'codec: sw 2 with an engineer and a flamethrower reads');
     assert.equal(decodeWorld({ ...raw, eco: { ...raw.eco, sw: 1 } }), null, 'codec: sw 1 with kind 47/48 units is refused');
     assert.equal(decodeWorld({ ...raw, eco: { ...raw.eco, sw: 3 } }), null, 'codec: sw 3 is refused');
     const { sw, ...noSw } = raw.eco; void sw;
