@@ -1,7 +1,7 @@
 // 戰場畫面：只讀世界、不改世界（AGENTS.md 規則 2）。兩個 tick 之間用 alpha 插值，畫面 60fps、模擬 20 步／秒。
 import * as THREE from 'three';
 import { reliefShade } from './relief.ts';
-import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts'; import { TRANSPORT_ART } from './transportArt.ts';
+import { INTERNATIONAL_ART, INTERNATIONAL_GUN_ART } from './internationalArt.ts'; import { SOVIET_ART, SOVIET_GUNS } from './sovietArt.ts'; import { TRANSPORT_ART } from './transportArt.ts'; import { Air93View, AA93_GUN } from './air93.ts';
 import { hash2 } from '../sim/rng.ts';
 import {
   SUB, cellIdx, inGrid, TER_ROAD, TER_FIELD, TER_MUD, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_ZOMBIE, UK_SNIPER, UK_AT91, SHELL_HE, SHELL_AP, SHELL_SMALL, SHELL_SMOKE, SHELL_MELEE, stageOf, STAGE_RUBBLE, STAGE_ROOFLESS, STAGE_INTACT,
@@ -51,7 +51,7 @@ const vehSize = (kind: number) => ART44[kind] ? Math.max(ART44[kind].hull[0], AR
 const muzzleL = (kind: number) => ART44[kind] ? 0.42 * ART44[kind].top[0] + ART44[kind].fwd : 0.44 * (TANK_SCALE23[kind] ?? 1);
 const muzzleY = (kind: number) => ART44[kind] ? 0.195 * ART44[kind].top[1] + 0.15 * (ART44[kind].hull[1] - ART44[kind].top[1]) : 0.2;
 // R022 砲的網格縮放（長、高、寬）：榴彈砲原樣；反戰車砲壓低放平；迫擊砲短而翹
-const GUN_SCALE22: Record<number, [number, number, number]> = { ...INTERNATIONAL_GUN_ART, ...SOVIET_GUNS, [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4], [UK_MG]: [0.36, 0.5, 0.34] };   // R080 機槍組：同一個砲的網格縮得很小（三腳架上的重機槍）
+const GUN_SCALE22: Record<number, [number, number, number]> = { ...AA93_GUN, ...INTERNATIONAL_GUN_ART, ...SOVIET_GUNS, [UK_HOWITZER]: [1, 1, 1], [UK_ATGUN]: [1.1, 0.58, 0.82], [UK_MORTAR]: [0.42, 0.95, 0.4], [UK_MG]: [0.36, 0.5, 0.34] };   // R080 機槍組：同一個砲的網格縮得很小（三腳架上的重機槍）
 // 一班六個人的位置（班長前進方向的本地座標：兩排三列）
 const SLOTS: [number, number][] = [[0.07, -0.15], [0.07, 0], [0.07, 0.15], [-0.11, -0.15], [-0.11, 0], [-0.11, 0.15]];
 const C_BODY = [new THREE.Color(0x3c4526), new THREE.Color(0x4a4944)];
@@ -217,7 +217,7 @@ export class BattleView {
   readonly trench118: TrenchRaster;
   readonly vegetation116: VegetationView;
   get vegetationInfo(): string { return this.vegetation116.hint; }
-  readonly multi122 = new MultiRangePreview();
+  readonly multi122 = new MultiRangePreview(); readonly air93 = new Air93View(this.scene, this.ramp);
   multiRangeEnabled = true;
   readonly range113: RangePreview | null;
   get rangeInfo(): string { return this.multi122.solution.legend || this.range113?.solution.legend || ''; }
@@ -687,7 +687,7 @@ export class BattleView {
     this.fx = this.fx.filter(f => simT < f.t0 + f.life);
     // R107：先保留最多 8×5 個必要煙幕實例，再讓短命爆炸粒子使用餘額。
     // 世界是唯一來源，剛載入的畫面與一直更新的畫面都能看到仍存活的煙團。
-    this.smoke107.update(w, this.fxOn && this.r107, this.fogOn, this.puff, this.fxMesh);
+    this.smoke107.update(w, this.fxOn && this.r107, this.fogOn, this.puff, this.fxMesh); this.air93.paint(w, simT, alpha, this, id => this.fire44[id], this.r4 && this.fxOn ? this.glow! : null, this.r4 && this.fxOn ? this.puff! : null);
     let nf = this.r4 ? 0 : this.smoke107.puffs;
     const c = new THREE.Color();
     for (const f of this.fx) {

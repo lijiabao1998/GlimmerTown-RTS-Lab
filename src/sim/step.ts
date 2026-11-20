@@ -20,6 +20,7 @@ import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
 import { FORMATION_PLA } from './platoon.ts';
 import { aim91, shotDmg91 } from './support91.ts';   // R091
 import { hitch92, carry92 } from './transport92.ts';   // R092
+import { call93, air93Step, seen93, BOMB93, type AirCmd } from './air93.ts';   // R093
 import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.ts';
 import { startZombies, zombiesStep, finishZombiesStep, zombieAim } from './zombies.ts';
 import {
@@ -40,8 +41,9 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
   | { t: 'map'; id: number; vegetation?: number; sym?: number; more?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
+  | AirCmd   // R093 空中支援：叫俯衝轟炸或偵察機（air93.ts）
   | RulesCmd;   // R046：第 0 步的遭遇戰設定（兵力、補給速度；地圖之後、喪屍與布陣之前套，見 rules.ts）
 
 export interface LoggedCommand { tick: number; cmd: Command }
@@ -68,8 +70,9 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0, cmd.air === 1 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
+  if (cmd.t === 'air') { call93(w, cmd.side | 0, cmd.kind | 0, cmd.x | 0, cmd.z | 0, spotted); return; }   // R093
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
     const u = unitById(w, id | 0);
@@ -168,6 +171,7 @@ function firstBlockCells(w: World, cells: readonly number[], ignoreBuilding = 0)
 // 每 tick 查當前世界，不保留快取。阻擋建築本身可見，後方不可見；瓦礫不擋。
 export function spotted(w: World, side: number, x: number, z: number, ignoreSmokeId = 0): boolean {
   if (!inGrid(w, cellOf(x), cellOf(z))) return false;
+  if (w.sky && seen93(w, side, x, z)) return true;   // R093 偵察機盤旋：半徑 6 格；看不進還站著的房子、小樹林、煙裡
   for (const u of w.units) {
     if (!u.alive || u.ride || u.side !== side || dist(u.x, u.z, x, z) > UNIT_KINDS[u.kind].sight + highSight(w, u.x, u.z, x, z)) continue;   // R055：站得比那一格高，多看一兩格（沒有高度表＝0）
     if (smokeBlocks(w, u.x, u.z, x, z, ignoreSmokeId)) continue;
@@ -414,7 +418,7 @@ function damageBld(w: World, b: Building, dmg: number): void {
 
 function land(w: World, s: Shell): void {
   if (s.kind === SHELL_SMOKE) { spawnSmoke(w, s); return; }
-  const k = UNIT_KINDS[w.units[s.shooter - 1].kind];
+  const k = s.shooter ? UNIT_KINDS[w.units[s.shooter - 1].kind] : BOMB93;   // R093 炸彈沒有射手
   if (s.kind === SHELL_AP || s.kind === SHELL_SMALL) {
     let bounce = false;
     if (s.hitBld) { if (w.rules?.morale) suppressHouse(w, s.hitBld, s.kind === SHELL_SMALL ? k.sup ?? SUP_SMALL : SUP_DIRECT, k.sup && mgSecond(w) ? s.side : -1); const b = w.blds[s.hitBld - 1]; damageBld(w, b, b.kind === BK_PILLBOX ? k.dmgBld >> 2 : k.dmgBld); }   // R024 直射打碉堡只刮掉四分之一；R052 裡面的人被壓（先壓再算房子，倒了也算）
@@ -534,6 +538,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   separate(w);
   for (const u of w.units) if (u.alive && !u.ride && !u.towBy) fireUnit(w, u);
   updateShells(w);
+  if (w.sky) air93Step(w, land);   // R093：放在 carry92 之前，這一步炸死的，跳車照算
   if (w.eco?.tp) carry92(w, (u, d) => damageUnit(w, u, d, false));   // R092 放下或跟著車（這一步該死的都死了）
   if (w.rules?.morale) moraleStep(w);   // R052：陣亡的震撼、壓制值照時間退
   if (w.zombies) finishZombiesStep(w);

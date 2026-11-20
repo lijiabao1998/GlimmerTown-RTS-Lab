@@ -145,7 +145,8 @@ export async function withBrowser(opt, fn) {
       const full91 = /(^|&)noR091=/.test(full) ? full : `${full ? full + '&' : ''}noR091=1`;
       // R092：預設在網址加 noR092=1，既有守衛照舊測沒有 tp 的局；要測 R092 的守衛寫 noR092=0。
       const full92 = /(^|&)noR092=/.test(full91) ? full91 : `${full91 ? full91 + '&' : ''}noR092=1`;
-      const url87 = /(^|&)noR087=/.test(full92) ? full92 : `${full92 ? full92 + '&' : ''}noR087=1`;
+      const full93 = /(^|&)noR093=/.test(full92) ? full92 : `${full92 ? full92 + '&' : ''}noR093=1`;   // R093：既有的瀏覽器守衛照舊測沒有 air 的局
+      const url87 = /(^|&)noR087=/.test(full92) ? full93 : `${full93 ? full93 + '&' : ''}noR087=1`;   // R093：照舊看 full92（transport92 的守衛錨著）；full93 從 full92 接出來，noR087 在不在一樣
       // R095：預設在網址加 noR095=1，既有守衛照舊測沒有步兵排的局（人口上限、生產列、隊形寫的時候就是這樣）；要測 R095 的守衛寫 noR095=0。
       const url = /(^|&)noR095=/.test(url87) ? url87 : `${url87}&noR095=1`;
       // R089：預設在網址加 noR089=1，既有守衛照舊測一班 6 個人的畫面（readable-browser 照 UNIT_KINDS.men 數趴下的人、smoke 的預算寫的時候就是這樣）；

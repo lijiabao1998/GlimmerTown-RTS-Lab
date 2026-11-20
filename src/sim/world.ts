@@ -63,6 +63,7 @@ export const UK_ASSAULT = 10;    // R044 突擊砲（打建築強、承傷七成
 export const UK_MG = 41;         // R080 機槍組（三個人一挺重機槍：射程遠、要架好才能打、專門壓制；編號接在 R142 的國際裝備後面）
 export const UK_SNIPER = 42, UK_AT91 = 43;   // R091 狙擊手（遠射、一發打倒一個人）、反戰車小組（近距離打穿甲的空心裝藥）；eco 帶 sw 才能出
 export const UK_TRUCK = 44, UK_HALFTRACK = 45;   // R092 卡車、半履帶車（載一個徒步單位或拖一門砲；沒有武裝）；eco 帶 tp 才能出
+export const UK_AA = 46;   // R093 防空砲（只打飛機；eco 帶 air 才能出）
 export const UK_ZOMBIE = 11;   // R045：六隻一群，只在可選防守模式出現，不能生產
 
 export interface UnitKind {
@@ -94,6 +95,7 @@ export interface UnitKind {
   hollow?: boolean;     // R091 空心裝藥：雖然有人數，打的是穿甲彈；打開頂車照打車算
   hold?: boolean;       // R091 有人數也收停火紀律（R143）
   carry?: boolean;      // R092 運輸車：能載一個徒步單位，或拖一門砲（transport92.ts）
+  aa?: number;          // R093 對空射程（位置單位，只算水平距離；air93.ts）；既有兵種都沒有這一欄
 }
 
 // 數字都是暫定，玩家看得到的數字由業主定（AGENTS.md 規則 6）。
@@ -168,6 +170,8 @@ UNIT_KINDS.push({ name: '狙擊手', hp: 20, speed: 12, range: 11 * SUB, minRang
 // R092 卡車（44）、半履帶車（45），只往後加。數字與出處在 docs/tasks/R092-運輸.md；都是暫定。半履帶車照 Sd.Kfz. 251 那一級，但不開頂（擋得住子彈、擋不住砲）
 UNIT_KINDS.push({ name: '卡車', hp: 40, speed: 30, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 6 * SUB, armor: 100, radius: 72, cost: 20, buildTicks: 140, garrison: false, armored: false, pierce: 100, men: 0, soft: 100, setup: false, carry: true },
   { name: '半履帶車', hp: 70, speed: 22, range: 0, minRange: 0, reload: 0, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 7 * SUB, armor: 100, radius: 76, cost: 35, buildTicks: 240, garrison: false, armored: true, pierce: 100, men: 0, soft: 100, setup: false, carry: true });
+// R093 防空砲（46），只往後加。照 Bofors 40 mm 那一級：不打地面（range 0）、對空 8 格、每 10 步一發、要架好、能被卡車和半履帶車拖。數字與出處在 docs/tasks/R093-空中支援與防空.md；都是暫定
+UNIT_KINDS.push({ name: '防空砲', hp: 45, speed: 7, range: 0, minRange: 0, reload: 10, indirect: false, dmgUnit: 0, dmgBld: 0, splash: 0, sight: 7 * SUB, armor: 100, radius: 64, cost: 35, buildTicks: 260, garrison: false, armored: false, pierce: 100, men: 0, soft: 100, setup: true, aa: 8 * SUB });
 
 export const ORD_IDLE = 0;
 export const ORD_MOVE = 1;
@@ -252,7 +256,7 @@ export type SimEvent =
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
-export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number }   // R091 sw＝步兵支援（狙擊手、反戰車小組）；R044 armor2；R095 pla＝步兵排：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
+export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number }   // R093 air＝空中支援與防空；R091 sw＝步兵支援（狙擊手、反戰車小組）；R044 armor2；R095 pla＝步兵排：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number; v?: 2 | 3; gather?: number; go?: number; size?: number }   // R057 v＝2：第二版（ai2.ts）；gather＝在基地集結從哪一步開始、go＝上一波哪一步出發、size＝那一波幾台   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
@@ -290,7 +294,11 @@ export interface World extends RngState {
   counterbattery?: CounterbatteryReport[]; // R115 首次真實間接開火才初始化，舊世界可缺省
   sandbox?: { version: 1; running: boolean; frame: number }; // R128：frame 是指令步序，tick 仍只計戰鬥時間
   zombies?: { version: 1; wave: number; next: number; pending: number; spawned: number; killed: number; lost: number };
+  sky?: { version: 1; next: number; ready: number[]; planes: Plane93[] };   // R093 第一次叫飛機才建，之後不刪；ready 照 side*2+kind-1 排（air93.ts）
 }
+
+// R093 一架飛機（不是單位）：kind 1 俯衝轟炸、2 偵察；t 從 −延遲 數起，位置照 air93.ts 的 place93 算
+export interface Plane93 { id: number; side: number; kind: number; x: number; z: number; sx: number; sz: number; tx: number; tz: number; t: number; T: number; hp: number }
 
 // 舊守衛專用（32×32）：src/ 不再用，改用下面看世界的 cellIdx／inGrid／gridLimit（R042，tests/map-size.mjs 掃描）
 export const idx = (x: number, z: number) => z * N + x;
@@ -486,7 +494,7 @@ export function hashWorld(w: World): string {
   if (w.sym) f.int(0x5359).int(w.sym);   // R084 只在有時折
   if (w.more) f.int(0x4d48).int(w.more);   // R087 只在有時折
   if (w.rules) { f.int(0x5255); if (w.rules.force) f.int(0x5246).int(w.rules.force); if (w.rules.income) f.int(0x5249).int(w.rules.income); if (w.rules.ap) f.int(0x5241).int(w.rules.ap); if (w.rules.morale) f.int(0x524d).int(w.rules.morale); }   // R046：只在有時折，各欄位各自帶標記（之後加欄位不動舊雜湊）
-  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); if (e.pla) f.int(0x5041).int(e.pla); if (e.sw) f.int(0x5357).int(e.sw); if (e.tp) f.int(0x5450).int(e.tp); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
+  if (w.eco) { const e = w.eco; for (let s = 0; s < 2; s++) { f.int(e.supply[s]).int(e.hq[s]).int(e.prog[s]).int(e.queue[s].length); for (const k of e.queue[s]) f.int(k); } if (e.inf) f.int(e.inf); if (e.guns) f.int(0x4755).int(e.guns); if (e.tanks) f.int(0x544b).int(e.tanks); if (e.armor2) f.int(0x4132).int(e.armor2); if (e.soviet) f.int(0x5356).int(e.soviet); if (e.international) f.int(0x494e).int(e.international); if (e.pop) f.int(0x504f).int(e.pop); if (e.end) f.int(0x454e).int(e.end); if (e.mg) f.int(0x4d47).int(e.mg); if (e.pla) f.int(0x5041).int(e.pla); if (e.sw) f.int(0x5357).int(e.sw); if (e.tp) f.int(0x5450).int(e.tp); if (e.air) f.int(0x4152).int(e.air); }   // R019（R021 步兵旗、R022 砲旗只在有時折；砲旗前面加標記，跟步兵旗分得開）
   if (w.ai) for (const a of w.ai) { f.int(a.side).int(a.level).int(a.next).int(a.ox).int(a.oz).int(a.seen).int(a.wp); if (a.armor !== undefined) f.int(0x4153).int(a.armor); if (a.v) f.int(0x4156).int(a.v); if (a.gather !== undefined) f.int(0x4147).int(a.gather); if (a.go !== undefined) f.int(0x4157).int(a.go); if (a.size !== undefined) f.int(0x415a).int(a.size); }   // R018：只有開了電腦才折（R044 裝甲記憶只在有時折）
   f.int(w.shells.length);
   for (const s of w.shells) f.int(s.id).int(s.side).int(s.kind).int(s.shooter).int(s.sx).int(s.sz).int(s.ex).int(s.ez).int(s.t).int(s.T).int(s.target).int(s.hitBld).int(s.rangingEpoch ?? 0);
@@ -498,5 +506,6 @@ export function hashWorld(w: World): string {
     f.int(0x4342).int(w.counterbattery.length);
     for (const r of w.counterbattery) f.int(r.side).int(r.zone).int(r.cell).int(r.shots).int(r.last);
   }
+  if (w.sky) { const a = w.sky; f.int(0x4149).int(a.version).int(a.next); for (const r of a.ready) f.int(r); f.int(a.planes.length); for (const p of a.planes) f.int(p.id).int(p.side).int(p.kind).int(p.x).int(p.z).int(p.sx).int(p.sz).int(p.tx).int(p.tz).int(p.t).int(p.T).int(p.hp); }   // R093：只在有時折
   return f.hex();
 }

@@ -4,7 +4,8 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
-| R1000 | 2026-11-19 | Claude | 新卡號段：業主「你來決定吧，反正卡號別衝突就行」→ Claude 再用 R1000–R1099；`card-numbers`、`valves` 認四位數；GPT 車道白名單照樣擋 Claude 的卡（R10xx）；AGENTS、CLAUDE.md、DECISIONS、路線圖（預留 R1001、R1002）；R030 合併資訊 | `card-numbers`、`valves`、`gpt-lane-claude-tests`、`gpt-lane-card-number` | PR 待合併（下一張補） | 只改守衛與文件 |
+| R093 | 2026-11-19 | Claude | 空中支援與防空（Claude 線最後一張）：新局 `air`＝1；空中鍵叫俯衝轟炸、偵察機（飛機不是單位、炸彈走既有的高爆落地）；防空砲（46）只打飛機、不擲骰；電腦不叫不造；交接寫進路線圖 | `air93`（22 群）、`air93-pinned`、`air93-quiet`、`air93-negative`（53 處）、兩支瀏覽器 | PR 待合併（號碼在 PR 上；squash 號只在 git log） | 電腦不用；防空不擲骰；對戰版鎖步沒驗 |
+| R1000 | 2026-11-19 | Claude | 新卡號段：業主「你來決定吧，反正卡號別衝突就行」→ Claude 再用 R1000–R1099；`card-numbers`、`valves` 認四位數；GPT 車道白名單照樣擋 Claude 的卡（R10xx）；AGENTS、CLAUDE.md、DECISIONS、路線圖（預留 R1001、R1002）；R030 合併資訊 | `card-numbers`、`valves`、`gpt-lane-claude-tests`、`gpt-lane-card-number` | ✅ #153（8dd903f） | 只改守衛與文件 |
 | R030 | 2026-11-19 | Claude | R092 運輸修補（合併後審查確認的 6 條）：新局 `tp`＝2，拖著的砲不接的攻擊、射擊不卸砲（`tp`＝1 照舊）；搭車鍵與模擬共用 `match92` 照車配、看釘住；搭車鍵右移 16px 不壓全排；補 4 個守衛漏洞 | `transport92`（23 群：多 `golden`、`replay`）、`transport92-negative`（57 處）、瀏覽器量三條框 | ✅ #152（c3356ed） | 車開不到目的地時搭車鍵加的車可能空著；拖著的砲點一下可能選到砲 |
 | R146 | 2026-11-19 | Codex | 補驗 R092 運輸，補記 R071、R092 已合併。19 條 Claude 分支的內容逐一與對應合併提交相同，已清除剩餘兩條遠端分支 | 大圖逐步對照、上下車、規則表、生產、瀏覽器讀檔、繪製與計時，數據見卡 | [R146 驗收紀錄](docs/tasks/R146-R092收尾.md) | 手機畫面以電腦瀏覽器測量，未做 Android 實機測試 |
 | R092 | 2026-11-19 | Claude | 運輸：卡車（44）、半履帶車（45）；同一道移動兩格內上車或掛砲、到了放下、一台一個；車上的人看不見打不到；跳車傷害；搭車鍵；電腦不造不用 | `transport92`（19 群）、`transport92-quiet`、`transport92-negative`（36 處）、兩支瀏覽器 | [#150](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/pull/150)（3587bc3），[main CI／Pages](https://github.com/lijiabao1998/GlimmerTown-RTS-Lab/actions/runs/44475010505) 通過；補驗見 R146 | 車借坦克網格；不分輪履帶 |
