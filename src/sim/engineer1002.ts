@@ -81,6 +81,7 @@ export function aimFlame(w: World, u: Unit): { x: number; z: number; unit: Unit 
     if (!t.alive || t.ride || t.side === u.side) continue;
     const tk = UNIT_KINDS[t.kind];
     if (tk.armored && !tk.openTop) continue;
+    if (Math.abs(t.x - u.x) > k.range || Math.abs(t.z - u.z) > k.range) continue;   // R1006：方框外的一定超出射程（不開根號；剛好在射程上的照樣往下算）
     const d = dist(u.x, u.z, t.x, t.z);
     if (d > k.range || d < k.minRange) continue;
     cand.push(d * T32 + t.id);
