@@ -145,7 +145,7 @@ await group('route', () => {
   assert(main.includes('const sw1002 = (c: Command): Command => (V.r1002 && V.r091 ? { ...c, sw: 2 } as Command : c);'), 'route: sw 2 needs both R091 and R1002 on');
   assert(main.includes("produce: kind => { if (pick50(kind)) hud?.update(); else issue({ t: 'produce', side: SIDE_PLAYER, kind }); },"), 'route: a build key refreshes the HUD at once');
   assert(main.includes('  if (!route) { hud?.update(); return; }'), 'route: a refused placement refreshes the HUD at once');
-  assert(main.includes('blockReason: V.r126 ? kind => block50(w, kind) ?? reason95('), 'route: build keys take their block reason from block50');
+  assert(main.includes('blockReason: V.r126 ? kind => block50(w, kind) ?? ') && main.includes(" ?? reason95(w, kind, phase === 'battle') : undefined,"), 'route: build keys take their block reason from block50');   // R1011：中間接了 block1011（指揮部那兩顆），所以只錨頭尾
 });
 
 // 驗收 3：建造模式與空中鍵互斥

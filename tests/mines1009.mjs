@@ -587,8 +587,8 @@ const groups = {
     assert.deepEqual(mine1009Items().map(i => [i.kind, i.label, i.cost, i.group]), [[1101, '反戰車雷', 15, '地雷'], [1102, '反人員雷', 10, '地雷']], 'ui: two items in the 地雷 group');
     assert.deepEqual([on1009({ r1009: true, r1002: true, r091: true }), on1009({ r1009: true, r1002: true, r091: false }), on1009({ r1009: true, r1002: false, r091: true }), on1009({ r1009: false, r1002: true, r091: true })], [true, false, false, false], 'ui: the 地雷 group and mine are on only when sw 2 is sent (R091 and R1002) and R1009 is on');
     const main = src('src/main.ts');
-    assert(main.includes("const ecoCmd = (): Command => sw1002({ t: 'eco', ...(on1009(V) ? { mine: 1 } : {}), "), 'ui: a new battle sends mine only through on1009');
-    assert(main.includes('...(V.r050 && V.r1002 ? tech50Items() : []), ...(on1009(V) ? mine1009Items() : [])'), 'ui: the 地雷 group is there only through on1009');
+    assert(main.includes("const ecoCmd = (): Command => sw1002({ t: 'eco', ") && main.includes("...(on1009(V) ? { mine: 1 } : {}), "), 'ui: a new battle sends mine only through on1009');
+    assert(main.includes('...(on1009(V) ? mine1009Items() : [])'), 'ui: the 地雷 group is there only through on1009');
     const w = camp(), e = put(w, ME, UK_ENGINEER, 20, 16);
     hint50(w); arm50(0); air93Arm(0);
     assert.equal(pick50(ITEM1009 + 1), true, 'ui: the 反戰車雷 key is taken (not production)');
@@ -665,7 +665,7 @@ const groups = {
     assert(JSON.stringify(budget).includes('672') && JSON.stringify(budget).includes('1195'), 'wiring: the hub budget is unchanged');
     assert(/get r1009\(\) \{ return on\('1009'\); \}/.test(src('src/valves.ts')) && src('README.md').includes('`?noR1009=1`'), 'wiring: the valve is in src/valves.ts and the README valve table');
     const cdp = src('tools/cdp.mjs');
-    assert(cdp.includes("const full1009 = /(^|&)noR1009=/.test(full1005) ? full1005 : `${full1005 ? full1005 + '&' : ''}noR1009=1`;") && cdp.includes('const url87 = /(^|&)noR087=/.test(full92) ? full1009 :'), 'wiring: tools/cdp.mjs opens pages with noR1009=1 unless a guard asks for it (url87 keeps its anchored start)');
+    assert(cdp.includes("const full1009 = /(^|&)noR1009=/.test(full1011) ? full1011 : `${full1011 ? full1011 + '&' : ''}noR1009=1`;") && cdp.includes('const url87 = /(^|&)noR087=/.test(full92) ? full1009 :'), 'wiring: tools/cdp.mjs opens pages with noR1009=1 unless a guard asks for it (url87 keeps its anchored start)');
     // 這張碰到的既有行上被別的守衛錨著的文字（施工時 grep 過）：每一段照舊只出現一次
     const anchors = [
       ['src/sim/step.ts', '  for (const u of w.units) if (u.alive && !u.ride && !u.towBy) fireUnit(w, u);'], ['src/sim/step.ts', 'cmd.sw === 2 ? 2 : cmd.sw === 1 ? 1 : 0'],
