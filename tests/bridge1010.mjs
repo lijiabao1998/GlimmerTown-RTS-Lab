@@ -122,10 +122,10 @@ const groups = {
   // 驗收 3：車過不了河、斜角
   ford() {
     const hy = bare(MAP_HYTHE), deck = new Set(hy.br.spans.flatMap(s => s.cells));
-    for (const kind of [UK_TANK, UK_TRUCK, UK_HOWITZER, UK_AA]) {
-      const p = findPath(hy, 115, 115, 12, 12, 0, 0, kind);
-      assert.equal(p[p.length - 1], 12 * 128 + 12, `ford: kind ${kind} finds a way across the canal`);
-      assert(p.every(c => !water(hy, c)), `ford: kind ${kind} never steps on a water cell`);
+    for (const kind of [UK_TANK, UK_TRUCK, UK_HOWITZER, UK_AA]) for (const [sx, sz, gx, gz] of [[115, 115, 12, 12], [90, 60, 60, 30]]) {   // 第二題：不擋水的話車會直接涉過運河（下面「不帶 br」那一題）
+      const p = findPath(hy, sx, sz, gx, gz, 0, 0, kind);
+      assert.equal(p[p.length - 1], gz * 128 + gx, `ford: kind ${kind} finds a way across the canal`);
+      assert(p.every(c => !water(hy, c)), `ford: kind ${kind} never steps on a water cell (${sx},${sz} → ${gx},${gz})`);
       assert(p.some(c => deck.has(c)), `ford: kind ${kind} crosses on a bridge`);
     }
     const foot = findPath(hy, 90, 60, 60, 30, 0, 0, UK_INFANTRY);
@@ -535,6 +535,32 @@ const groups = {
     } finally { Object.assign(globalThis, saved); }
     console.log('OK bridge1010/ui: valve, eco flag, budgets, cdp default, hud untouched; minimap repaints on break and repair only');
   },
+  // 驗收 24、25 的 Node 那一半（瀏覽器那一半在 tests/bridge1010-browser.mjs）：斷橋、木橋畫進城鎮網格的三角形；skip（海斯的區域城鎮）
+  async art() {
+    const { buildTown } = await import('../src/render/buildings.ts');
+    const setState = (w, si, state) => { const s = w.br.spans[si]; s.state = state; s.hp = state === 1 ? 0 : state === 2 ? WOOD1010 * s.cells.length : HP1010 * s.cells.length; s.left = 0; for (const c of s.cells) w.ter[c] = state === 1 ? TER_MUD : TER_ROAD; };   // 夾具：只給畫面用
+    const tris = (w, skip) => buildTown(w, skip).triangles;
+    const rye = opened(MAP_RYE), plain = opened(MAP_RYE, 1, { ...ECO, end: 1, sw: 2 }), base = tris(rye);
+    assert.equal(base, tris(plain), 'art: intact bridges add no triangle (the town of a br world equals the one without)');
+    const per = [];
+    for (const [si, st] of [[0, 1], [1, 1], [2, 2]]) { const w = structuredClone(rye); setState(w, si, st); per.push(tris(w) - base); }
+    assert(per.every(t => t > 0 && t <= 250), `art: each broken or timber Rye bridge adds 1–250 triangles (${per})`);
+    const mixed = structuredClone(rye); setState(mixed, 0, 1); setState(mixed, 1, 1); setState(mixed, 2, 2);
+    const ryeExtra = tris(mixed) - base;
+    assert(ryeExtra > 0 && 2 * ryeExtra <= 1000, `art: Rye broken, broken, timber adds ${ryeExtra} (two passes ${2 * ryeExtra} ≤ 1,000)`);
+    const hy = opened(MAP_HYTHE), hyBase = tris(hy), got = {};
+    for (const st of [1, 2]) {
+      const w = structuredClone(hy); for (let si = 0; si < 5; si++) setState(w, si, st);
+      const extra = tris(w) - hyBase; got[st] = extra;
+      assert(extra > 0 && 2 * extra <= 2500, `art: Hythe, all five ${st === 1 ? 'broken' : 'timber'}: +${extra} (two passes ${2 * extra} ≤ 2,500)`);
+      for (let si = 0; si < 5; si++) { const v = structuredClone(hy); setState(v, si, st); const one = tris(v) - hyBase; assert(one > 0 && one <= 250, `art: Hythe bridge ${si} ${st === 1 ? 'broken' : 'timber'} adds 1–250 (${one})`); }
+      assert.equal(tris(w, () => true), tris(hy, () => true), 'art: a skip that leaves every building out leaves the bridges out too (Hythe region town)');
+      const far = b => b.x + b.w < 60;   // 只看左半邊的區域：右半邊的橋（0、1、2）不算
+      const left = tris(w, far) - tris(hy, far), want = [3, 4].reduce((t, si) => { const v = structuredClone(hy); setState(v, si, st); return t + tris(v) - hyBase; }, 0);
+      assert.equal(left, [0, 1, 2].reduce((t, si) => { const v = structuredClone(hy); setState(v, si, st); return t + tris(v) - hyBase; }, 0), `art: a region skip draws only the bridges inside it (${left}, others ${want})`);
+    }
+    console.log(`OK bridge1010/art: intact adds nothing; Rye per bridge ${per}, mixed +${ryeExtra}; Hythe all broken +${got[1]}, all timber +${got[2]}; skip respected`);
+  },
   // 驗收 16：模擬層純度
   purity() {
     const s = src('src/sim/bridge1010.ts'), code = s.replace(/\/\/[^\n]*/g, '');
@@ -554,5 +580,5 @@ const groups = {
 
 const only = process.argv[2];
 if (only && !groups[only]) { console.error(`unknown group ${only}`); process.exit(2); }
-for (const [name, fn] of Object.entries(groups)) if (!only || only === name) fn();
+for (const [name, fn] of Object.entries(groups)) if (!only || only === name) await fn();
 console.log(only ? `bridge1010/${only}: OK` : 'bridge1010: all OK');

@@ -25,7 +25,7 @@ export function bridge1010Art(g: Geo, w: World, skip?: (b: Building) => boolean)
       for (const [dx, dz] of DIRS) {
         const nx = x + dx, nz = z + dz, j = nz * n + nx;
         if (nx < 0 || nz < 0 || nx >= n || nz >= n || s.cells.includes(j)) continue;
-        const shore = !wet[j] && w.ter[j] === TER_ROAD, water = !!wet[j];
+        const shore = !wet[j] && w.ter[j] === TER_ROAD && s.cells.includes((z - dz) * n + x - dx), water = !!wet[j];   // 橋頭：順著橋走上岸的那一邊（對面那一格也是這座橋）
         // 那一條邊上的一長條（沿著邊、往格裡面 t 那麼厚）
         const strip = (t: number, y0: number, y1: number, col: THREE.Color, inset = 0) => {
           const ax = dx > 0 ? x + 1 - t : dx < 0 ? x : x + inset, bx = dx > 0 ? x + 1 : dx < 0 ? x + t : x + 1 - inset;
