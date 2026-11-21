@@ -2,7 +2,7 @@
 // 三段的畫法照 GlimmerTown3D-lab@bece722 src/render/scene.ts:210-231（牆降高、屋頂消失、瓦礫用雜湊散落），改成二戰村莊的配色。
 import * as THREE from 'three';
 import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant, moreMarkFace } from './moreArt.ts';
-import { PAL50, RISE50, isTech50, tech50Art } from './tech50.ts';   // R050 兵營、車廠、補給站
+import { PAL50, RISE50, isTech50, tech50Art } from './tech50.ts'; import { bag1007Geo } from './sandbag1007.ts';   // R050 兵營、車廠、補給站
 import { hq1011Art } from './hq1011.ts';   // R1011 指揮部升級
 import { Geo } from './geo.ts';
 import { wearTier, wearable, tierFits, wearGeo, wearTop } from './wearArt.ts';
@@ -561,6 +561,7 @@ export function buildTown(w: World, skip?: (b: Building) => boolean, lod = 0): G
     if (lod) distantBuilding(g, b, lod); else buildingGeo(g, b, stageOf(b));
   }
   for (const b of w.wires?.segments ?? []) wireGeo(g, b);
+  bag1007Geo(g, w);   // R1007 沙包：在網的後面（wearTown 同一個順序，R088 的快取才逐位一樣）
   return g;
 }
 
@@ -588,6 +589,7 @@ function wearTown(w: World, skip: ((b: Building) => boolean) | undefined, lod: n
   }
   const wires = new Geo();
   for (const s of w.wires?.segments ?? []) wireGeo(wires, s);
+  bag1007Geo(wires, w);   // R1007 沙包：跟 buildTown 一樣排在網的後面
   const pos = new Float32Array(n + wires.pos.length), nor = new Float32Array(pos.length), col = new Float32Array(pos.length);
   let at = 0;
   for (const p of parts) { pos.set(p.pos, at); nor.set(p.nor, at); col.set(p.col, at); at += p.pos.length; }

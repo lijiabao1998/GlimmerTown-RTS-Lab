@@ -406,7 +406,7 @@ const groups = {
     const main = src('src/main.ts'), lines = main.split('\n').length - 1, budget = JSON.parse(src('tools/hub-budget.json'));
     assert(main.includes("import { hq1011Items, block1011 } from './ui/hq1011.ts';"), 'wiring: ① main.ts imports the R1011 items and reasons');
     assert(main.includes("sw1002({ t: 'eco', ...(V.r050 && V.r1002 && V.r1011 ? { hq11: 1 } : {}), "), 'wiring: ② a new battle sends hq11 from ecoCmd, only with R050, R1002 and R1011 on');
-    assert(main.includes('...(V.r050 && V.r1002 ? tech50Items() : []), ...(V.r050 && V.r1002 && V.r1011 ? hq1011Items() : [])], {'), 'wiring: ③ the 指揮部 group is there only with the same three valves');
+    assert(main.includes('...(V.r050 && V.r1002 ? tech50Items() : []), ...(V.r050 && V.r1002 && V.r1011 ? hq1011Items() : [])'), 'wiring: ③ the 指揮部 group is there only with the same three valves');
     assert(main.includes('kind => block50(w, kind) ?? block1011(w, kind) ?? reason95('), 'wiring: ④ the two keys take their reasons from block1011');
     const seg = (a, b) => { const i = main.indexOf(a), j = main.indexOf(b, i); return i < 0 || j < 0 ? '' : main.slice(i, j + b.length); };
     // 「issue()、playLog 逐字、總機行數跟施工前一樣」是這張卡這一次的事，在 c31548b 上一次性比過（卡面施工紀錄 10）；

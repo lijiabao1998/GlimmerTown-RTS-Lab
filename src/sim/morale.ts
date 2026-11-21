@@ -10,6 +10,7 @@ export { SUP_SHAKEN, SUP_PINNED, SUP_BROKEN, MORALE_OK, MORALE_SHAKEN, MORALE_PI
 import { dist } from './math.ts';
 import { vegetationAt } from './vegetation.ts';
 import { trenchCover } from './trenches.ts';
+import { cover1007 } from './sandbag1007.ts';   // R1007（sandbag1007.ts 也 import 這一支；只在呼叫時用）
 import { findPath } from './path.ts';
 
 export const SUP_MAX = 100;
@@ -39,7 +40,7 @@ export function coverPct(w: World, u: Unit): number {
   const home = UNIT_KINDS[u.kind].garrison && blocks(w, x, z) ? bldAt(w, x, z) : null;
   const terrain = vegetationAt(w, x, z) ? 50 : inGrid(w, x, z) && w.crater[cellIdx(w, x, z)] > 0 ? 75 : 100;
   const ground = Math.min(terrain, trenchCover(w, x, z));
-  return !home ? ground : Math.min(ground, home.kind === BK_PILLBOX ? 25 : 50);
+  return cover1007(w, u, x, z, true, !home ? ground : Math.min(ground, home.kind === BK_PILLBOX ? 25 : 50));   // R1007：沙包跟 damageUnit 同一支
 }
 // 掩體擋壓制的效果只有擋傷害的六成：人躲著不容易死，但照樣抬不起頭
 export const supPct = (cover: number): number => 100 - Math.floor(((100 - cover) * 3) / 5);
