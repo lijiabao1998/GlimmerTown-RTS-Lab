@@ -68,6 +68,7 @@ export function construct1007(w: World, cmd: { side: number; ids: readonly numbe
 // 血跟著長（長的是增量：中間被打掉的照扣）；做完出 wire 事件、回待命。已經蓋好（別的工兵剛蓋完）＝回待命
 export function build1007(w: World, u: Unit, s: Bag1007): void {
   if (s.left <= 0) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
+  if (u.cooldown < (UNIT_KINDS[u.kind].demo ?? 0)) u.cooldown = UNIT_KINDS[u.kind].demo ?? 0;   // 審查：堆的時候炸藥倒數保持滿的——這一格換了主人（被炸、被打散後對方在同一格重堆），倒數從頭算，不會一放下就被炸
   if (u.pathIdx < u.path.length || !near1002(u, s)) return;
   if (w.rules?.morale && !reloads(w, u)) return;
   const need = BAG1007.work, done = need - s.left, before = look1007(s);

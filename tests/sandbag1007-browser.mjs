@@ -10,7 +10,7 @@ import { build } from 'vite';
 import { withBrowser, ROOT } from '../tools/cdp.mjs';
 import { runOrSkip } from '../tools/net-harness.mjs';
 import { fixture89 } from '../tools/r089-fixture.mjs';
-import { createWorld, hashWorld, cellIdx, BK_SANDBAG } from '../src/sim/world.ts';
+import { createWorld, hashWorld, cellIdx, BK_SANDBAG, UK_INFANTRY, bldAt } from '../src/sim/world.ts';
 import { Geo } from '../src/render/geo.ts';
 import { bag1007Geo } from '../src/render/sandbag1007.ts';
 import { runLog } from '../src/sim/step.ts';
@@ -99,6 +99,37 @@ await runOrSkip('sandbag1007', async () => {
       assert.equal(await E('__rts.hash()'), h2, 'render: fixture — the sandbags are back (same hash)');
       assert(want > 0 && withBags.townTris - noBags.townTris === want && withBags.calls <= noBags.calls, `render: the finished sandbag is in the town mesh (${noBags.townTris} → ${withBags.townTris}, ${want} expected) and adds no draw call (${noBags.calls} → ${withBags.calls})`);
       assert.equal(hashWorld(nb), h2, `replay: the page at tick ${t2} equals the Node replay of its own log`);
+      // 審查（R1007 第 1 條）：沙包選好、選著工兵時，在真的畫面上點自己的人（步兵站著的那一格、工兵自己那一格）＝送 construct kind 17、選取不變；
+      // 先按沙包、沒選人時點工兵＝照舊選它（還選好著）。夾具：同一局再叫一班步兵走到工兵旁邊 2 格以外的空地
+      const cellU = u => [Math.floor(u.x / 256), Math.floor(u.z / 256)], inf = node(1944, lg0, 300).units.find(u => u.kind === UK_INFANTRY && u.side === 0 && u.alive);
+      let lgI = null, wi = null;
+      for (const [dx, dz] of [[-2, 0], [-3, 0], [0, -2], [-2, -2], [2, 0], [0, 2], [-4, 0], [-2, 2], [0, -3]]) {
+        const cand = [...lg, { tick: 300, cmd: { t: 'move', side: 0, ids: [inf.id], x: 26 + dx, z: 19 + dz } }], cw = node(1944, cand, 760), i = cw.units[inf.id - 1], [ix, iz] = cellU(i), [jx, jz] = cellU(cw.units[en.id - 1]);
+        if (i.alive && i.pathIdx >= i.path.length && !bldAt(cw, ix, iz) && Math.max(Math.abs(ix - jx), Math.abs(iz - jz)) >= 2 && why1007(cw, 0, BK_SANDBAG, { x: ix, z: iz, ids: [en.id] }) === '' && why1007(cw, 0, BK_SANDBAG, { x: jx, z: jz, ids: [en.id] }) === '') { lgI = cand; wi = cw; break; }
+      }
+      assert(lgI, 'own-tap: fixture — the squad stands in an open cell 2+ cells from the engineer, and both cells take a sandbag');
+      assert.equal(await E(`__rts.playLog(1944, ${JSON.stringify(lgI)}, 760)`), hashWorld(wi), 'own-tap: the page replays the game to the Node hash');
+      await E('__rts.pause(true); 0'); await pick('建造'); await frames();
+      const [ix, iz] = cellU(wi.units[inf.id - 1]), [jx, jz] = cellU(wi.units[en.id - 1]);
+      const armBag = async sel => { await E(`__rts.select(${JSON.stringify(sel)}); if (__r089.armed()[1] !== ${BK_SANDBAG}) document.getElementById('pb-k1017').click(); __rts.focus(${(ix + jx) / 2}, ${(iz + jz) / 2}, 1.3); 0`); await frames(); await frames(); };
+      const state = async () => [await E('__rts.selected()'), (await E('__r089.armed()'))[1]];
+      const sentSince = async n => (await E('__rts.log()')).slice(n).map(c => c.cmd);
+      await armBag([en.id]);
+      const at = [await E(`__rts.screenOfCell(${ix}, ${iz})`), await E(`__rts.screenOfCell(${jx}, ${jz})`)], who = [await E(`__rts.screenOf(${inf.id})`), await E(`__rts.screenOf(${en.id})`)];
+      for (let k = 0; k < 2; k++) {
+        const off = Math.hypot(at[k][0] - who[k][0], at[k][1] - who[k][1]), gap = await clear(at[k]);
+        assert(off <= 20 && gap > 30 && at[k][0] > 40 && at[k][0] < 372 && at[k][1] > 80 && at[k][1] < 700, `own-tap: fixture — the cell centre is on the unit (${off.toFixed(1)} px, a tap picks units within 26) and clear of keys (${gap.toFixed(0)} px)`);
+      }
+      let n2 = (await E('__rts.log()')).length;
+      await tapNow(page, ...at[0]); await frames();
+      assert.deepEqual([await sentSince(n2), ...(await state())], [[{ t: 'construct', side: 0, ids: [en.id], kind: BK_SANDBAG, x: ix, z: iz }], [en.id], 0], 'own-tap: a tap on our squad\'s cell sends construct kind 17 there; the engineer stays selected');
+      await armBag([en.id]); n2 = (await E('__rts.log()')).length;
+      await tapNow(page, ...at[1]); await frames();
+      assert.deepEqual([await sentSince(n2), ...(await state())], [[{ t: 'construct', side: 0, ids: [en.id], kind: BK_SANDBAG, x: jx, z: jz }], [en.id], 0], 'own-tap: a tap on the engineer\'s own cell stacks there too');
+      await armBag([]); n2 = (await E('__rts.log()')).length;
+      await tapNow(page, ...at[1]); await frames();
+      assert.deepEqual([await sentSince(n2), ...(await state())], [[], [en.id], BK_SANDBAG], 'own-tap: armed first with nobody selected, a tap on the engineer selects it and stays armed');
+      await E("dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); 0");
       // 驗收 26
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
       console.log(`sandbag1007 browser: 4 keys × 3 sizes; mud refused at ${mud.slice(0, 2)}; construct at ${spot.slice(0, 2)}; town ${before.townTris} before the tap, ${noBags.townTris} → ${withBags.townTris} with the sandbag (+${want}), calls ${noBags.calls} → ${withBags.calls}; replay at ${t2}`);

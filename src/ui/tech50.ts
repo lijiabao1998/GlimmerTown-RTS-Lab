@@ -27,6 +27,9 @@ export function pick50(kind: number): boolean {
   return true;
 }
 export const armed50 = (): number => armed;
+// R1007 審查：沙包選好、選取裡有能堆的工兵時，點到自己的人（含工兵自己）＝在點的那一格堆（沙包本來就是圍著人堆的），不換選取——main.ts 的 tap 問這一支。
+// 選取裡沒有能堆的工兵（先按沙包、再點工兵）、按著 Shift 加選、選好的是 R050 那三種（人站著的格本來就蓋不下）：照舊選人
+export const bag1007Tap = (w: World, selected: Iterable<number>, additive: boolean): boolean => !additive && armed === BK_SANDBAG && builders50(w, SIDE_PLAYER, [...selected]).length > 0;
 export function arm50(kind: number): void { armed = kind; flash = ''; }   // 守衛用
 
 // 不能按的理由：建造那三項看 why50（不給位置）；其他回 undefined（照原本的理由）

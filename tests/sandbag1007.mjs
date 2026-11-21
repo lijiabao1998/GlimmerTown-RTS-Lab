@@ -22,9 +22,14 @@ import { DEMO_BLAST } from '../src/sim/engineer1002.ts';
 import { BOMB93 } from '../src/sim/air93.ts';
 import { MAP_HYTHE, HYTHE_BRIDGES } from '../src/sim/hytheMap.ts';
 import { routeBattleOrder } from '../src/ui/smoke.ts';
-import { tech50Items, pick50, arm50, armed50, block50, hint50, ITEM50 } from '../src/ui/tech50.ts';
+import { tech50Items, pick50, arm50, armed50, block50, hint50, ITEM50, bag1007Tap } from '../src/ui/tech50.ts';
 import { bag1007Items, BAG_ITEM } from '../src/ui/sandbag1007.ts';
 import { ECO } from '../tools/duel.mjs';
+import vm from 'node:vm';
+import { stripTypeScriptTypes } from 'node:module';
+import * as B from '../src/render/buildings.ts';
+import { Geo } from '../src/render/geo.ts';
+import { bag1007Geo } from '../src/render/sandbag1007.ts';
 
 // 一片空地（32×32）＋雙方指揮部：我方 (24,24)、敵方 (4,4)；eco 帶 sw＝2、tech＝1、bag＝1，補給 500
 let BASE = null;   // createWorld(7) 只做一次，之後複製（掩護群要開兩千多個世界）
@@ -338,6 +343,20 @@ const groups = {
       f.sup = SUP_PINNED + 5; step(w, [{ t: 'fireAt', side: FOE, ids: [f.id], x: 16, z: 16 }]); let n = 1;
       while (s.hp > 0 && n < 3000) { f.sup = SUP_PINNED + 5; step(w, []); n++; }
       assert(Math.abs(n - 4 * need) <= 4, `demo: a pinned engineer counts down four times slower (${n} ≈ ${4 * need}; R1002 rule)`); }
+    // 審查（R1007 第 2 條）：我方工兵正在堆我方的工地，這一處被敵方工兵炸掉、或被一發迫擊砲打散；下一步敵方在同一格重堆（同一筆換成敵方的）。
+    // 我方工兵還拿著打那一格的指令：要從頭倒數 120 步才炸（卡面 3.5），不是在敵方放下的那一步就炸
+    for (const how of ['charge', 'shell']) {
+      const w = camp(), mine = put(w, ME, UK_ENGINEER, 10, 12), foe = put(w, FOE, UK_ENGINEER, 12, 12, how === 'charge');
+      step(w, [C(ME, [mine.id], 11, 12)]); const s = w.bags.segments[0];
+      if (how === 'charge') { step(w, [{ t: 'fireAt', side: FOE, ids: [foe.id], x: 11, z: 12 }]); let k = 0; while (s.hp > 0 && k < 1000) { step(w, []); k++; } }
+      else { for (let i = 0; i < 9; i++) step(w, []); shell(w, UK_MORTAR, SHELL_HE, center(11), center(12)); step(w, []); }
+      assert.deepEqual([s.hp, s.builtBy, mine.alive, mine.order, mine.tx, mine.tz], [0, ME, true, ORD_FIRE_AT, 11, 12], `demo: fixture (${how}) — our site is gone while our engineer still holds the order on that cell`);
+      const paid = w.eco.supply[FOE];
+      step(w, [C(FOE, [foe.id], 11, 12)]); let n = 1;
+      assert.deepEqual([s.builtBy, paid - w.eco.supply[FOE]], [FOE, BAG1007.cost], `demo: fixture (${how}) — the enemy restacks on the same cell (the record flips to the enemy)`);
+      while (s.hp > 0 && n < 1000) { step(w, []); n++; }
+      assert.equal(n, need, `demo: after an owner flip (${how}) our engineer counts a full charge down (${n} steps, ${need} wanted), not a blast the step the enemy placed it`);
+    }
   },
   // 驗收 9：不擋任何東西
   pass() {
@@ -531,6 +550,57 @@ const groups = {
     assert.deepEqual(tap(20, 16, [how.id, e.id], { fire: true })?.commands, [{ t: 'fireAt', side: ME, ids: [how.id], x: 20, z: 16 }], 'route: fire mode with a gun selected shells the sandbag');
     foe.x = center(20); foe.z = center(16);
     assert.deepEqual(tap(20, 16, [e.id, inf.id], { unit: foe.id })?.commands, [{ t: 'attack', side: ME, ids: [e.id, inf.id], target: foe.id }], 'route: a tap on an enemy standing in his sandbag is an attack as before');
+  },
+  // 審查（R1007 第 1 條）：main.ts 真的 tap()（從原始碼拿出來在 vm 裡跑，pickUnit 點到誰由夾具決定）：沙包選好、選著工兵時，點到自己的人（含工兵自己那一格）
+  // 交給 order（在點的那一格堆），選取不變；沒選工兵（先按沙包再點工兵）、Shift 加選、選好的是 R050 那三種、沒選好：照舊選人
+  tap() {
+    const w = camp(), e = put(w, ME, UK_ENGINEER, 16, 16), inf = put(w, ME, UK_INFANTRY, 18, 16), e2 = put(w, ME, UK_ENGINEER, 15, 18);
+    const plain = stripTypeScriptTypes(src('src/main.ts')), a = plain.indexOf('function tap('), b = plain.indexOf('\n}\n', a);
+    assert(a >= 0 && b > a, 'tap: fixture — main.ts has tap()');
+    const run = (sel, hit, additive = false) => {
+      const selected = new Set(sel), orders = [];
+      const c = vm.createContext({ w, selected, sandboxTool: null, V: {}, SIDE_PLAYER: ME, lastTap: { id: 0, t: 0 }, glide: { start() {} }, view: { target: { x: 0, z: 0 } }, hud: undefined, phase: 'battle',
+        performance: { now: () => 0 }, pickUnit: () => hit, order: (x, y) => orders.push([x, y]), planner: { placeAt() {} }, clearBattleHint() {}, sandboxPlaceAt() {}, bag1007Tap });
+      vm.runInContext(plain.slice(a, b + 2), c);
+      c.tap(100, 200, additive, 5000);
+      return { selected: [...selected], orders };
+    };
+    const order = (unit, x, z) => routeBattleOrder(w, [e.id], false, 'he', { unit, building: null, ground: { x: x + 0.5, z: z + 0.5 } });
+    hint50(w); arm50(BK_SANDBAG);
+    assert.deepEqual(run([e.id], inf.id), { selected: [e.id], orders: [[100, 200]] }, 'tap: armed with an engineer selected, a tap on our own soldier goes to order (stack there), the engineer stays selected');
+    assert.deepEqual(order(inf.id, 18, 16)?.commands, [C(ME, [e.id], 18, 16)], 'tap: and order sends construct kind 17 on the soldier\'s cell');
+    arm50(BK_SANDBAG);
+    assert.deepEqual(run([e.id], e.id), { selected: [e.id], orders: [[100, 200]] }, 'tap: a tap on the selected engineer itself goes to order too');
+    assert.deepEqual(order(e.id, 16, 16)?.commands, [C(ME, [e.id], 16, 16)], 'tap: and stacks on the engineer\'s own cell');
+    arm50(BK_SANDBAG);
+    assert.deepEqual(run([], e.id), { selected: [e.id], orders: [] }, 'tap: armed first with nobody selected, a tap on the engineer selects it as before');
+    assert.deepEqual(run([inf.id], e.id), { selected: [e.id], orders: [] }, 'tap: armed with only a soldier selected, a tap on the engineer selects it as before');
+    assert.deepEqual(run([e.id], e2.id, true), { selected: [e.id, e2.id], orders: [] }, 'tap: Shift adds a unit to the selection as before');
+    arm50(BK_BARRACKS);
+    assert.deepEqual(run([e.id], inf.id), { selected: [inf.id], orders: [] }, 'tap: armed with an R050 building the tap still selects (a 2×2 never fits under a unit)');
+    arm50(0);
+    assert.deepEqual(run([e.id], inf.id), { selected: [inf.id], orders: [] }, 'tap: not armed, a tap on our own unit selects it as before');
+  },
+  // 審查（R1007 第 3 條）：城鎮網格畫沙包的兩處——buildTown 自己（?noR088=1、沒有快取）與 R088 快取的 wearTown——都要畫；有沙包、有網時，快取與不快取逐位一樣
+  render() {
+    const w = opened({ sw: 2, tech: 1, bag: 1 }), free = [];
+    for (let i = 7; i < w.n * w.n && free.length < 9; i += 37) if (!w.occ[i] && w.ter[i] !== TER_MUD) free.push([i % w.n, Math.floor(i / w.n)]);
+    const wm = bldMaxHp(BK_WIRE, 1, 1, 1), wire = { id: (w.wires?.segments.length ?? 0) + 1, kind: BK_WIRE, x: free[8][0], z: free[8][1], w: 1, d: 1, floors: 1, hp: wm, maxHp: wm, builtBy: ME };
+    (w.wires ??= { version: 1, segments: [] }).segments.push(wire);
+    const none = structuredClone(w);
+    let k = 0; for (const side of [ME, FOE]) for (const [hp, left] of [[BAG1007.hp, 0], [BAG1007.hp / 2, 0], [1, BAG1007.work], [0, 0]]) { const [x, z] = free[k++]; bag(w, side, x, z, hp, left); }
+    assert.deepEqual(w.bags.segments.map(look1007), [3, 2, 1, 0, 3, 2, 1, 0], 'render: fixture — intact, damaged, site and scattered on both sides');
+    const per = bag1007Geo(new Geo(), w).triangles;
+    assert(per > 0 && B.wireGeo(new Geo(), wire).triangles > 0, `render: fixture — the sandbags and the wire draw triangles (${per})`);
+    const fp = g => { const h = createHash('sha256'); for (const v of [g.pos, g.nor, g.col]) h.update(Buffer.from(new Float32Array(v).buffer)); return h.digest('hex').slice(0, 16); };
+    const prod = (wear, cache) => { B.setWalls(true); B.setWireDetail(true); B.setMaterials(true); B.setBuildingDetails(true); B.setDamageDetails(true); B.setFacades(true); B.setHouseArt(true); B.setMoreArt(true); B.setWearArt(wear); B.setWearCache(cache); };
+    for (const [label, wear, cache] of [['cached, R088 on', true, true], ['wear art off, ?noR088=1', false, true], ['R088 on, not cached', true, false]]) for (const lod of [0, 1]) {
+      prod(wear, cache);
+      const d = B.buildTown(w, undefined, lod).triangles - B.buildTown(none, undefined, lod).triangles;
+      assert.equal(d, per, `render: buildTown draws the sandbags (${label}, lod ${lod}): +${d}, ${per} wanted`);
+    }
+    for (const lod of [0, 1]) { prod(true, true); const c = fp(B.buildTown(w, undefined, lod)); prod(true, false); assert.equal(fp(B.buildTown(w, undefined, lod)), c, `render: with sandbags and wire the cached town equals the uncached one byte for byte (R088, lod ${lod})`); }
+    prod(true, true);
   },
   // 驗收 17：介面與接線
   ui() {

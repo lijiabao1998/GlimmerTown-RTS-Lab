@@ -6,7 +6,7 @@ import { reloadStatus } from './ui/reloadStatus.ts';
 import { unitSpec } from './ui/unitSpec.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { internationalItems } from './ui/internationalCatalog.ts'; import { support91Items } from './ui/support91.ts'; import { transport92Items, initTransport92 } from './ui/transport92.ts'; import { aa93Items, initAir93 } from './ui/air93.ts'; import { eng1002Items } from './ui/engineer1002.ts'; import { tech50Items, pick50, block50, hint50 } from './ui/tech50.ts'; import { bag1007Items } from './ui/sandbag1007.ts';   // R091、R092、R093、R1002、R050、R1007
+import { internationalItems } from './ui/internationalCatalog.ts'; import { support91Items } from './ui/support91.ts'; import { transport92Items, initTransport92 } from './ui/transport92.ts'; import { aa93Items, initAir93 } from './ui/air93.ts'; import { eng1002Items } from './ui/engineer1002.ts'; import { tech50Items, pick50, block50, hint50, bag1007Tap } from './ui/tech50.ts'; import { bag1007Items } from './ui/sandbag1007.ts';   // R091、R092、R093、R1002、R050、R1007
 import { sovietItems } from './ui/sovietCatalog.ts';
 import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UNIT_KINDS, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, enemyPlan } from './sim/build.ts';
@@ -277,7 +277,7 @@ function tap(cx: number, cy: number, additive: boolean, t = performance.now()) {
   if (w.sandbox && sandboxTool !== null) { sandboxPlaceAt(cx, cy); return; }
   if (V.r109) clearBattleHint();
   const hit = pickUnit(cx, cy, t), u = hit ? w.units[hit - 1] : null;
-  if (u && u.side === SIDE_PLAYER) {
+  if (u && u.side === SIDE_PLAYER && !(typeof bag1007Tap === 'function' && bag1007Tap(w, selected, additive))) {   // R1007 審查：沙包選好、選著工兵時點到自己的人＝在那一格堆（下面的 order），不換選取
     // 雙擊：鏡頭跟過去。兩次放手的間隔用事件時間量（R037）；滑過去的動畫照樣用現在的時間起算
     if (V.r012 && lastTap.id === u.id && t - lastTap.t < 350) glide.start(view.target.x, view.target.z, u.x / SUB, u.z / SUB, performance.now() / 1000);
     lastTap = { id: u.id, t };

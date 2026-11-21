@@ -38,6 +38,8 @@ const cases = [
   ['wire_false', EN, [['return { b: s, wire: true, bag: 1 };', 'return { b: s, wire: false, bag: 1 };']], 'demo', /^demo: an enemy engineer walks up and scatters our sandbag with one charge/],
   ['own_built_blown', EN, [['  if (t.bag && t.b.builtBy === u.side && (t.b as Bag1007).left === 0) return;', '']], 'demo', /^demo: our engineer told to fire at our finished sandbag takes no order/],
   ['enemy_helps', EN, [['  if (t.bag && t.b.builtBy === u.side) { build1007(', '  if (t.bag) { build1007(']], 'demo', /^demo: an enemy engineer walks up and scatters our sandbag/],
+  // 審查（第 2 條）：堆的時候不撐住炸藥倒數——換了主人的那一筆一放下就被炸
+  ['no_flip_countdown', S, [['  if (u.cooldown < (UNIT_KINDS[u.kind].demo ?? 0)) u.cooldown = UNIT_KINDS[u.kind].demo ?? 0;', '']], 'demo', /^demo: after an owner flip \(charge\) our engineer counts a full charge down/],
 ];
 try {
   for (const d of ['src', 'tools']) fs.cpSync(path.join(root, d), path.join(temp, d), { recursive: true });
