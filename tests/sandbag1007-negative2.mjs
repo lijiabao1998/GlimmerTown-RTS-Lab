@@ -15,7 +15,7 @@ const cases = [
   ['hash_bag', W, [[' if (e.bag) f.int(0x4247).int(e.bag);', '']], 'flag', /^flag: bag is folded into the hash/],
   ['bag_without_tech', E, [['if (bag && w.eco.tech && !w.zombies) w.eco.bag = 1;', 'if (bag && !w.zombies) w.eco.bag = 1;']], 'flag', /^flag: bag is stored only as 1, only with tech/],
   ['bag_in_zombies', E, [['if (bag && w.eco.tech && !w.zombies) w.eco.bag = 1;', 'if (bag && w.eco.tech) w.eco.bag = 1;']], 'flag', /^flag: bag is stored only as 1, only with tech/],
-  ['cmd_check', 'src/sim/commandCheck.ts', [["case 'eco': return optInt(c.bag) && ", "case 'eco': return "]], 'flag', /^flag: the command check refuses bag 1\.5/],
+  ['cmd_check', 'src/sim/commandCheck.ts', [["optInt(c.bag) && ", ""]], 'flag', /^flag: the command check refuses bag 1\.5/],
   ['codec_open', 'src/sim/worldCodec.ts', [['  if (!bag1007Ok(r)) return null;', '']], 'codec', /^codec: refused — bag 2/],
   ['codec_same_cell', S, [['    if (seen.has(c)) return false;\n', '']], 'codec', /^codec: refused — two in one cell/],
   ['codec_blds17', S, [['  if ((r.blds as Record<string, unknown>[]).some(b => b.kind === BK_SANDBAG)) return false;\n', '']], 'codec', /^codec: refused — a kind 17 building \(with bag\)/],

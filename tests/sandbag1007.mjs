@@ -614,12 +614,12 @@ const groups = {
     delete w.eco.bag; assert.equal(block50(w, BAG_ITEM), '本局未開放', 'ui: not in this game');
     const main = src('src/main.ts');
     assert(main.includes("import { bag1007Items } from './ui/sandbag1007.ts';"), 'ui: main.ts imports the item');
-    assert(main.includes("sw1002({ t: 'eco', ...(V.r050 && V.r1002 && V.r1007 ? { bag: 1 } : {}),"), 'ui: a new battle sends bag only with R050, R1002 and R1007 on');
-    assert(main.includes('...(V.r050 && V.r1002 ? tech50Items() : []), ...(V.r050 && V.r1002 && V.r1007 ? bag1007Items() : [])'), 'ui: the sandbag item is there only with the three valves');
+    assert(main.includes("const ecoCmd = (): Command => sw1002({ t: 'eco', ") && main.includes("...(V.r050 && V.r1002 && V.r1007 ? { bag: 1 } : {}),"), 'ui: a new battle sends bag only with R050, R1002 and R1007 on');
+    assert(main.includes('...(V.r050 && V.r1002 && V.r1007 ? bag1007Items() : [])'), 'ui: the sandbag item is there only with the three valves');
     assert.equal(main.split("issue(V.r050 && V.r1002 ? { ...ecoCmd(), tech: 1 } as Command : ecoCmd())").length - 1, 2, 'ui: the R050 tech line is still there twice');
     assert(src('src/valves.ts').includes("get r1007() { return on('1007'); }"), 'ui: valves.ts has r1007');
     const cdp = src('tools/cdp.mjs');
-    assert(cdp.includes("const full1007 = /(^|&)noR1007=/.test(full1005) ? full1005 : `${full1005 ? full1005 + '&' : ''}noR1007=1`;") && cdp.includes("const url87 = /(^|&)noR087=/.test(full92) ? full1007 : `${full1007 ? full1007 + '&' : ''}noR087=1`;"), 'ui: tools/cdp.mjs opens pages with noR1007=1 unless a guard asks for R1007');
+    assert(cdp.includes("const full1007 = /(^|&)noR1007=/.test(full1011) ? full1011 : `${full1011 ? full1011 + '&' : ''}noR1007=1`;") && cdp.includes("const url87 = /(^|&)noR087=/.test(full92) ? full1007 : `${full1007 ? full1007 + '&' : ''}noR087=1`;"), 'ui: tools/cdp.mjs opens pages with noR1007=1 unless a guard asks for R1007');
     const lines = f => src(f).split('\n').length - (src(f).endsWith('\n') ? 1 : 0);
     assert(lines('src/main.ts') <= 672, `ui: main.ts stays within 672 lines (${lines('src/main.ts')})`);
     assert.equal(lines('src/render/battle.ts'), 1194, 'ui: battle.ts gains no line');

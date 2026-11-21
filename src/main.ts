@@ -6,7 +6,7 @@ import { reloadStatus } from './ui/reloadStatus.ts';
 import { unitSpec } from './ui/unitSpec.ts';
 // 進入點：固定步長迴圈（模擬 20 步／秒，畫面每幀插值）、觸控與滑鼠輸入、HUD、守衛掛勾 window.__rts。
 import * as THREE from 'three';
-import { internationalItems } from './ui/internationalCatalog.ts'; import { support91Items } from './ui/support91.ts'; import { transport92Items, initTransport92 } from './ui/transport92.ts'; import { aa93Items, initAir93 } from './ui/air93.ts'; import { eng1002Items } from './ui/engineer1002.ts'; import { tech50Items, pick50, block50, hint50, bag1007Tap } from './ui/tech50.ts'; import { bag1007Items } from './ui/sandbag1007.ts';   // R091、R092、R093、R1002、R050、R1007
+import { internationalItems } from './ui/internationalCatalog.ts'; import { support91Items } from './ui/support91.ts'; import { transport92Items, initTransport92 } from './ui/transport92.ts'; import { aa93Items, initAir93 } from './ui/air93.ts'; import { eng1002Items } from './ui/engineer1002.ts'; import { tech50Items, pick50, block50, hint50, bag1007Tap } from './ui/tech50.ts'; import { bag1007Items } from './ui/sandbag1007.ts'; import { hq1011Items, block1011 } from './ui/hq1011.ts';   // R091、R092、R093、R1002、R050、R1011、R1007
 import { sovietItems } from './ui/sovietCatalog.ts';
 import { createWorld, hashWorld, SUB, TICK_HZ, SHELL_HE, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UNIT_KINDS, cellOf, type World } from './sim/world.ts';
 import { BUILD_KINDS, BUILD_KINDS_24, enemyPlan } from './sim/build.ts';
@@ -128,7 +128,7 @@ const planner = new BuildPlanner({
   world: () => w, view: () => view, building: () => phase === 'build', simT: () => simT(), ui: () => ui(), hud: () => hud?.update(), size: () => [innerWidth, innerHeight],
 }, { trenches: V.r118, walls: V.r120, wire: V.r121, materials: V.r105, kinds: BUILD_KINDS_NOW });
 document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
-const ecoCmd = (): Command => sw1002({ t: 'eco', ...(V.r050 && V.r1002 && V.r1007 ? { bag: 1 } : {}), ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r093 ? { air: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r092 ? { tp: V.r030 ? 2 : 1 } : {}), ...(V.r091 ? { sw: 1 } : {}), ...(V.r095 ? { pla: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) }); const sw1002 = (c: Command): Command => (V.r1002 && V.r091 ? { ...c, sw: 2 } as Command : c);   // R1004：sw＝2 是「R091 加 R1002」，R091 的閥關著時不送   // R1002：閥開著送 sw＝2（R091 那一段是守衛的錨點，所以在外面蓋過去；R091 開著時 sw 照原位置）
+const ecoCmd = (): Command => sw1002({ t: 'eco', ...(V.r050 && V.r1002 && V.r1011 ? { hq11: 1 } : {}), ...(V.r050 && V.r1002 && V.r1007 ? { bag: 1 } : {}), ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r093 ? { air: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r092 ? { tp: V.r030 ? 2 : 1 } : {}), ...(V.r091 ? { sw: 1 } : {}), ...(V.r095 ? { pla: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) }); const sw1002 = (c: Command): Command => (V.r1002 && V.r091 ? { ...c, sw: 2 } as Command : c);   // R1004：sw＝2 是「R091 加 R1002」，R091 的閥關著時不送   // R1002：閥開著送 sw＝2（R091 那一段是守衛的錨點，所以在外面蓋過去；R091 開著時 sw 照原位置）
 let prodBar: ProdBar | undefined;
 // R018 電腦難度：?ai=1|2|3
 let aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));   // R069：開始選單可以改
@@ -455,7 +455,7 @@ if (V.r901) initMobileChrome(canvas);
 prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_TANK].cost }, { kind: UK_HOWITZER, label: '榴彈砲', cost: UNIT_KINDS[UK_HOWITZER].cost }, { kind: UK_OBSERVER, label: '觀測員', cost: UNIT_KINDS[UK_OBSERVER].cost }, ...(V.r021 ? [{ kind: UK_INFANTRY, label: '步兵', cost: UNIT_KINDS[UK_INFANTRY].cost }, ...(V.r095 ? [PLATOON_UI_ITEM] : [])] : []), ...(V.r080 ? [{ kind: UK_MG, label: '機槍組', cost: UNIT_KINDS[UK_MG].cost }] : []),
   ...(V.r022 ? [{ kind: UK_ATGUN, label: '反戰車砲', cost: UNIT_KINDS[UK_ATGUN].cost }, { kind: UK_MORTAR, label: '迫擊砲', cost: UNIT_KINDS[UK_MORTAR].cost }] : []),
   ...(V.r023 ? [{ kind: UK_LIGHT, label: '輕坦克', cost: UNIT_KINDS[UK_LIGHT].cost }, { kind: UK_HEAVY, label: '重坦克', cost: UNIT_KINDS[UK_HEAVY].cost }] : []),
-  ...(V.r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : []), ...(V.r140 ? sovietItems() : []), ...(V.r142 ? internationalItems() : []), ...(V.r091 ? support91Items() : []), ...(V.r1002 ? eng1002Items() : []), ...(V.r092 ? transport92Items() : []), ...(V.r093 ? aa93Items() : []), ...(V.r050 && V.r1002 ? tech50Items() : []), ...(V.r050 && V.r1002 && V.r1007 ? bag1007Items() : [])], {
+  ...(V.r044 ? [{ kind: UK_ARMORED_CAR, label: '裝甲車', cost: UNIT_KINDS[UK_ARMORED_CAR].cost }, { kind: UK_DESTROYER, label: '驅逐戰車', cost: UNIT_KINDS[UK_DESTROYER].cost }, { kind: UK_ASSAULT, label: '突擊砲', cost: UNIT_KINDS[UK_ASSAULT].cost }] : []), ...(V.r140 ? sovietItems() : []), ...(V.r142 ? internationalItems() : []), ...(V.r091 ? support91Items() : []), ...(V.r1002 ? eng1002Items() : []), ...(V.r092 ? transport92Items() : []), ...(V.r093 ? aa93Items() : []), ...(V.r050 && V.r1002 ? tech50Items() : []), ...(V.r050 && V.r1002 && V.r1011 ? hq1011Items() : []), ...(V.r050 && V.r1002 && V.r1007 ? bag1007Items() : [])], {
   state: () => {
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
     return { hq: phase === 'battle' ? hqDurability(w, V.r127) : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: progMax95(q0), queueMax: 5, countdown: phase === 'battle' ? countdown95(w, V.r125) : '' };
@@ -463,7 +463,7 @@ prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_
   produce: kind => { if (pick50(kind)) hud?.update(); else issue({ t: 'produce', side: SIDE_PLAYER, kind }); }, after: () => { platoon95.frame(); transport92.frame(); },   // R095：全排鍵與「步兵排」那一顆（沙盒裡的守衛不跑生產列）
   hq: V.r127,
   countdown: V.r125,
-  blockReason: V.r126 ? kind => block50(w, kind) ?? reason95(w, kind, phase === 'battle') : undefined,
+  blockReason: V.r126 ? kind => block50(w, kind) ?? block1011(w, kind) ?? reason95(w, kind, phase === 'battle') : undefined,
 });
 // R013 說明面板：開著的時候暫停，關掉回到原來的暫停狀態
 let pausedBeforeHelp = false;
