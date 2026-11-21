@@ -1,5 +1,5 @@
 // R1009 在獨立副本故意弄壞每一處；每一處都要先紅在指定的那一句（只跑 tests/mines1009.mjs 的那一群）。卡面驗收 25。
-// 第二支：士氣、戳到、看到就停、工兵不走進知道的雷、炸了帶出旁邊的、排雷、存檔（第一支 mines1009-negative.mjs 是旗標、放得下、布、觸雷）；
+// 第二支：士氣、戳到、看到就停、工兵不走進知道的雷、炸了帶出旁邊的、排雷、疊在同一格的雷（審查 F1）、存檔（第一支 mines1009-negative.mjs 是旗標、放得下、布、觸雷）；
 // 介面、地面貼圖在 mines1009-negative3.mjs（每支 CI 限 120 秒）。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -22,6 +22,9 @@ const cases = [
   ['leak_clear', S, [['  if (!foe || !known1009(w, u.side, foe)) return false;', '  if (!foe) return false;']], 'clear', /^clear: an order on an enemy mine we do not know of is exactly an order on open ground/],
   ['clear_afar', S, [['  if (moving || !near) { if (u.cooldown < need) u.cooldown = need; return true; }', '  if (false) { return true; }']], 'clear', /^clear: beside it, an anti-tank cell is gone on the 160th step/],
   ['no_hold', S, [['send(w, u, gx, gz); u.cooldown = Math.max(u.cooldown, MINES1009[foe.kind].clear);', 'send(w, u, gx, gz);']], 'clear', /^clear: already beside it, it still counts all 160/],
+  // 審查 F1（施工紀錄 13）：換回舊的 target1009（布雷指令布好那一步把疊在底下的敵方雷當成排雷、當場拿掉）；排雷指令沒記下來
+  ['stack_old', S, [['  if (u.target !== CLR1009) return own;', '  if (false) return own;'], ['return foe && known1009(w, u.side, foe) ? foe : null;', 'return foe && known1009(w, u.side, foe) ? foe : own;']], 'stack', /^stack: two engineers lay over a hidden enemy kind 1 cell \(found while laying\), a third still walking up/],
+  ['clr_unmarked', S, [['  u.target = CLR1009;', '  ']], 'clear', /^clear: the engineer walks up beside it and never onto it/],
   ['codec_open', 'src/sim/worldCodec.ts', [['  if (!mineOk(r)) return null;', '  ']], 'codec', /^codec: refused — eco\.mine 2/],
   ['codec_seen2', S, [['(seen !== 0 && seen !== 1)) return false;', '(seen !== 0 && seen !== 1 && seen !== 2)) return false;']], 'codec', /^codec: refused — seen 2/],
   ['codec_twice', S, [['    if (taken.has(key)) return false;\n', '']], 'codec', /^codec: refused — the same side twice on one cell/],

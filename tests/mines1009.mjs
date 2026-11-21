@@ -386,6 +386,45 @@ const groups = {
       step(w, [fire(ME, [e.id], 16, 16)]); for (let i = 0; i < 10; i++) step(w, []);
       assert.deepEqual([w.mines.cells[0].left, w.mines.cells.length, e.cooldown], [29, 2, 0], 'own: our unfinished cell and a known enemy cell on one spot: ours is laid first'); }
   },
+  // 審查 F1（施工紀錄 13）：自己的雷疊在敵方的雷上——布雷指令不碰底下那一格敵方雷（布好了照 2.3 找下一格、沒有就回待命）；要排得再點一次那一格，倒數照 2.6 數滿
+  stack() {
+    for (const k of [1, 2]) {
+      const w = lay(camp(), mine(FOE, k, 16, 16)), a = put(w, ME, UK_ENGINEER, 15, 16, true), b = put(w, ME, UK_ENGINEER, 15, 17, true), c = put(w, ME, UK_ENGINEER, 16, 9, true);
+      step(w, [M(ME, [a.id, b.id, c.id], 2, 16, 16)]);
+      const own = w.mines.cells.find(m => m.side === ME), foe = w.mines.cells.find(m => m.side === FOE);
+      let t = 1; while (own.left > 0 && t < 400) { step(w, []); t++; }
+      const seen = foe.seen, walking = c.pathIdx < c.path.length || !near1002(c, { x: 16, z: 16, w: 1, d: 1 });
+      for (let i = 0; i < 400; i++) step(w, []);
+      assert.deepEqual([seen, walking, own.left, w.mines.cells.includes(foe), [a, b, c].map(e => e.order)], [1, true, 0, true, [ORD_IDLE, ORD_IDLE, ORD_IDLE]],
+        `stack: two engineers lay over a hidden enemy kind ${k} cell (found while laying), a third still walking up: ours done at step ${t}, the enemy cell is still there 400 steps on and all three idle`);
+      const e = [a, b, c].find(u => near1002(u, { x: 16, z: 16, w: 1, d: 1 }));
+      const t0 = w.tick; step(w, [fire(ME, [e.id], 16, 16)]);
+      while (w.mines.cells.includes(foe) && w.tick - t0 < 1000) step(w, []);
+      assert.equal(w.tick - t0, MINES1009[k].clear, `stack: then a tap on that cell clears the enemy kind ${k} cell under ours, counting all ${MINES1009[k].clear}`);
+      assert.deepEqual([w.mines.cells.length, w.mines.cells[0], e.order], [1, own, ORD_IDLE], 'stack: ours stays, the engineer idles');
+    }
+    { const w = lay(camp(), mine(FOE, 1, 16, 13)), es = [put(w, ME, UK_ENGINEER, 15, 14, true), put(w, ME, UK_ENGINEER, 15, 15, true)];
+      step(w, [M(ME, es.map(e => e.id), 1, 16, 13, { rot: 0, len: 3 })]);
+      const cells = w.mines.cells.filter(m => m.side === ME), foe = w.mines.cells.find(m => m.side === FOE), last = cells[2], worked = [0, 0]; let steps = 1;
+      while (cells.some(m => m.left > 0) && steps < 3000) {
+        step(w, []); steps++;
+        es.forEach((e, i) => { if (e.order === ORD_FIRE_AT && e.tx === last.x && e.tz === last.z && e.pathIdx >= e.path.length && near1002(e, { x: last.x, z: last.z, w: 1, d: 1 })) worked[i]++; });
+      }
+      step(w, []);
+      assert.deepEqual([foe.seen, w.mines.cells.includes(foe), worked.every(n => n > 0), es.map(e => e.order)], [1, true, true, [ORD_IDLE, ORD_IDLE]],
+        `stack: two engineers lay a band of three whose first cell sits on a hidden enemy anti-tank cell: both go on to the last cell (${worked}) and the enemy cell stays`);
+      assert(steps <= 260, `stack: the band takes about as long as on clean ground (${steps} steps)`);
+      console.log(`  stack: a band of three over a hidden enemy cell, two engineers ${steps} steps (last cell worked ${worked})`); }
+    { const w = lay(camp(), mine(ME, 1, 16, 16, 120, 1), mine(FOE, 1, 16, 16, 0, 1)), a = put(w, ME, UK_ENGINEER, 15, 16), b = put(w, FOE, UK_ENGINEER, 17, 16, true);
+      step(w, [fire(FOE, [b.id], 16, 16)]);
+      for (let i = 0; i < 99; i++) step(w, []);
+      a.cooldown = 0; step(w, [fire(ME, [a.id], 16, 16)]);
+      const ours = w.mines.cells.find(m => m.side === ME), foe = w.mines.cells.find(m => m.side === FOE);
+      for (let i = 0; i < 100 && w.mines.cells.includes(ours); i++) step(w, []);
+      const gone = !w.mines.cells.includes(ours), left = ours.left;
+      for (let i = 0; i < 300; i++) step(w, []);
+      assert.deepEqual([gone, left > 0, w.mines.cells.includes(foe), a.order], [true, true, true, ORD_IDLE], `stack: the enemy clears our cell while it is still being laid (left ${left}): our engineer idles and does not lift the known enemy cell under it`); }
+  },
   // 驗收 15：偽造的指令
   forged() {
     const w = camp(), e0 = put(w, ME, UK_ENGINEER, 14, 16), e1 = put(w, FOE, UK_ENGINEER, 12, 12), dead = put(w, FOE, UK_ENGINEER, 12, 13), car = put(w, FOE, UK_TRUCK, 12, 14), rider = put(w, FOE, UK_ENGINEER, 12, 14), inf = put(w, FOE, UK_INFANTRY, 12, 15);

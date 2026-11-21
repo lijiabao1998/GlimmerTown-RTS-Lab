@@ -24,6 +24,7 @@ export const LEN1009 = 3;        // 一條雷帶最多幾格
 export const BLAST1009 = 128;    // 觸雷的高爆落地事件半徑（迫擊砲那一級的畫面和聲音；同 R1002 的爆破）
 export const CELLS1009 = 48;     // 存檔：w.mines 最多幾筆（兩方各 24）
 export const BOX1009 = 4;        // 布雷、排雷的工兵挨近目標時，繞開知道的雷最多看幾格（只走直的；施工紀錄 2）
+export const CLR1009 = 1;        // 工兵射擊指令的 target：排雷指令是 1（布雷的 send、R1002 的爆破、R050 的建造都是 0）；疊在同一格的敵方雷只有排雷指令碰（施工紀錄 13）
 
 const isKind = (k: unknown): k is number => k === 1 || k === 2;
 const cheb = (ax: number, az: number, bx: number, bz: number): number => Math.max(Math.abs(ax - bx), Math.abs(az - bz));
@@ -81,14 +82,15 @@ export function lay1009(w: World, c: MineCmd): void {
   for (const u of builders50(w, c.side, ids)) send(w, u, cells[0][0], cells[0][1]);
 }
 
-// 工兵射擊指令那一格跟雷有關的那一筆：自己還沒布好的、這一方知道的敵方雷、自己布好的（剛被別人布完：要找下一格）；
-// 那一格有還站著的建築或還沒壞的鐵絲網＝R1002 的事，回傳 null
+// 工兵射擊指令那一格跟雷有關的那一筆：自己還沒布好的；不然布雷指令＝自己布好的（剛被別人布完：要找下一格）或 null（不在了：回待命），
+// 排雷指令（target＝CLR1009）＝這一方知道的敵方雷，不在了就是 null（回待命）。那一格有還站著的建築或還沒壞的鐵絲網＝R1002 的事，回傳 null
 export function target1009(w: World, u: Unit): Mine1009 | null {
   if (demoAt(w, u.tx, u.tz)) return null;
   const own = mineAt1009(w, u.side, u.tx, u.tz);
   if (own && own.left > 0) return own;
+  if (u.target !== CLR1009) return own;   // 布雷指令不碰疊在同一格的敵方雷（施工紀錄 13：以前布好那一步會變成排雷，倒數沒撐就當場拿掉）
   const foe = mineAt1009(w, 1 - u.side, u.tx, u.tz);
-  return foe && known1009(w, u.side, foe) ? foe : own;
+  return foe && known1009(w, u.side, foe) ? foe : null;
 }
 
 // applyCommand 的 fireAt 對工兵（engineer1002.ts 的 fireAt1002 最前面）：自己還沒布好的＝接著布；這一方知道的敵方雷＝排（倒數撐在排一格那麼多）。
@@ -99,6 +101,7 @@ export function fireAt1009(w: World, u: Unit, gx: number, gz: number): boolean {
   if (own && own.left > 0) { send(w, u, gx, gz); return true; }
   if (!foe || !known1009(w, u.side, foe)) return false;
   send(w, u, gx, gz); u.cooldown = Math.max(u.cooldown, MINES1009[foe.kind].clear);
+  u.target = CLR1009;   // 記下這是排雷指令（send 布雷時是 0）
   return true;
 }
 
