@@ -5,8 +5,8 @@ import { trenchAt } from './trenches.ts';
 import { clearVegetation } from './vegetation.ts';
 import { near1002 } from './engineer1002.ts';   // engineer1002.ts 也 import 這一支；只在呼叫時用，循環沒有關係
 import {
-  UNIT_KINDS, BK_BARRACKS, BK_DEPOT, BK_SUPPLY, UK_SNIPER, UK_AT91, UK_FLAME, UK_TRUCK, UK_HALFTRACK, UK_AA, TER_ROAD, ORD_IDLE, ORD_FIRE_AT,
-  cellIdx, inGrid, cellOf, wireAt, bldMaxHp, stageOf, type World, type Building, type Unit,
+  UNIT_KINDS, BK_BARRACKS, BK_DEPOT, BK_SUPPLY, UK_SNIPER, UK_AT91, UK_FLAME, UK_TRUCK, UK_HALFTRACK, UK_AA, TER_ROAD, TER_MUD, ORD_IDLE, ORD_FIRE_AT,
+  cellIdx, inGrid, cellOf, wireAt, bldAt, bldMaxHp, stageOf, type World, type Building, type Unit,
 } from './world.ts';
 
 export interface Tech50 { cost: number; work: number; max: number }
@@ -55,6 +55,7 @@ export function why50(w: World, side: number, kind: number, at?: { x: number; z:
     const cx = x + dx, cz = z + dz, inner = dx >= 0 && dz >= 0 && dx < 2 && dz < 2;
     if (!inGrid(w, cx, cz)) continue;
     const i = cellIdx(w, cx, cz);
+    if (inner && w.ter[i] === TER_MUD) return '泥地不能蓋';   // R1004：地形表寫泥地不能蓋房子（布陣、壕溝、地圖產生都擋泥地）
     if (inner && (w.occ[i] || wireAt(w, cx, cz) || trenchAt(w, cx, cz) || w.ter[i] === TER_ROAD || w.units.some(u => u.alive && !u.ride && !u.towBy && cellOf(u.x) === cx && cellOf(u.z) === cz))) return '擋到了';
     if (!inner && (w.occ[i] || wireAt(w, cx, cz))) return '要跟建築隔一格';
   }
@@ -70,12 +71,29 @@ export function construct50(w: World, side: number, kind: number, x: number, z: 
   w.blds.push(b);
   for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) w.occ[cellIdx(w, x + dx, z + dz)] = id;
   clearVegetation(w, x, z, 2, 2);
+  repath50(w, b);
   w.eco!.supply[side] -= spec.cost;
   (w.tech ??= { version: 1, sites: [] }).sites.push({ id, left: spec.work });
   w.events.push({ e: 'build', bld: id });
   for (const u of builders50(w, side, ids)) {
     u.order = ORD_FIRE_AT; u.tx = x; u.tz = z; u.target = 0;
     u.path = near1002(u, b) ? [] : findPath(w, cellOf(u.x), cellOf(u.z), x, z, 0, 0, u.kind); u.pathIdx = 0;
+  }
+}
+
+// R1004：工地是第一個在第 0 步之後出現、會擋路的建築（之前的建築只會倒、不會冒出來，舊程式都假設算好的路不會被新的建築擋住）。
+// 已經在走、剩下的路會走進這 2×2 的活單位，照 id 的順序重新找路，終點不變（終點在工地裡時 findPath 本來就停在最近走得到的格）；
+// 進駐的兵照移動指令的規矩：終點那一格是別的房子就可以走進去、人在房子裡可以走出來（工地本身不算可以進駐的房子）
+function repath50(w: World, site: Building): void {
+  const n = w.n;
+  for (const u of w.units) {
+    if (!u.alive || u.ride || u.pathIdx >= u.path.length) continue;
+    let crosses = false;
+    for (let i = u.pathIdx; i < u.path.length && !crosses; i++) crosses = w.occ[u.path[i]] === site.id;
+    if (!crosses) continue;
+    const end = u.path[u.path.length - 1], gx = end % n, gz = (end - gx) / n, ux = cellOf(u.x), uz = cellOf(u.z), garr = !!UNIT_KINDS[u.kind].garrison;
+    const into = garr ? (bldAt(w, gx, gz)?.id ?? 0) : 0, out = garr ? (bldAt(w, ux, uz)?.id ?? 0) : 0;
+    u.path = findPath(w, ux, uz, gx, gz, into === site.id ? 0 : into, out, u.kind); u.pathIdx = 0;
   }
 }
 

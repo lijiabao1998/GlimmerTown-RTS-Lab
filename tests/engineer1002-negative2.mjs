@@ -18,6 +18,7 @@ const cases = [
   ['burn_keeps_house', ST, [['  const home = !burn && UNIT_KINDS[u.kind].garrison', '  const home = UNIT_KINDS[u.kind].garrison']], 'flamecover', /^flamecover: one burst takes 24 wherever the man is/],
   ['house_order', ST, [['  if (k.flame && u.order === ORD_FIRE_AT) { const t = burnIn1002(w, u); if (t) return { x: t.x, z: t.z, unit: t, bld: null }; }', '']], 'flamehouse', /^flamehouse: the order burns the lowest id inside and in range/],
   ['burn_range', EN, [['&& dist(u.x, u.z, t.x, t.z) <= k.range) return t;', ') return t;']], 'flamehouse', /^flamehouse: the order burns the lowest id inside and in range/],
+  ['flame_range', EN, [['    if (d > k.range || d < k.minRange) continue;\n    cand.push(d * T32 + t.id);', '    cand.push(d * T32 + t.id);']], 'flameaim', /^flameaim: alone and 2.8 cells away, out of range, it is not picked/],   // R1004：審查指出原本那一條拿掉射程判斷照樣綠
   ['flame_tank', EN, [['    if (tk.armored && !tk.openTop) continue;', '']], 'flamearmor', /^flamearmor: idle, it leaves a closed tank alone/],
   ['no_hold', W, [['hold: true, flame: true });', 'flame: true });']], 'discipline', /^discipline: the flamethrower holds fire on order/],
   // 存檔
@@ -26,7 +27,7 @@ const cases = [
   ['codec_sw3', S91, [['e.sw !== 1 && e.sw !== 2) return false;', 'e.sw !== 1 && e.sw !== 2 && e.sw !== 3) return false;'], ['  if (e?.sw === 2) return true;', '  if ((e?.sw as number) >= 2) return true;']], 'codecref', /^codec: sw 3 is refused/],
   // 介面、畫面、閥
   ['route_wire', 'src/ui/smoke.ts', [['  const cut = (wireAt(w, x, z)?.hp ?? 0) > 0 ?', '  const cut = false ?']], 'route', /^route: a tap on wire sends the engineers to cut it/],
-  ['valve_ignored', 'src/main.ts', [['(V.r1002 ? { ...c, sw: 2 } as Command : c)', '({ ...c, sw: 2 } as Command)']], 'ui', /^ui: a new battle sends sw 2 only when the R1002 valve is on/],
+  ['valve_ignored', 'src/main.ts', [['(V.r1002 && V.r091 ? { ...c, sw: 2 } as Command : c)', '({ ...c, sw: 2 } as Command)']], 'ui', /^ui: a new battle sends sw 2 only when the R1002 valve is on/],
   ['report_col', 'src/ui/report.ts', [[' || (k === UK_INFANTRY && (kind === UK_ENGINEER || kind === UK_FLAME))', '']], 'ui', /^ui: both kinds count in the infantry column/],
   ['crowd_missing', 'src/render/section89.ts', [['CROWD89[UK_ENGINEER] = { men: 4, lay: ENG1002 }; CROWD89[UK_FLAME] = { men: 2, lay: TEAM91 };\n', '']], 'ui', /^ui: with R089 on the engineer is a four-man crowd/],
   ['cdp_default', 'tools/cdp.mjs', [['const full1002 = /(^|&)noR1002=/.test(full93) ? full93 :', 'const full1002 = full93; const unused1002 = /(^|&)noR1002=/.test(full93) ? full93 :']], 'ui', /^ui: tools\/cdp\.mjs opens pages with noR1002=1/],

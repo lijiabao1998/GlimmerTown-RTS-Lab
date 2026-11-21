@@ -128,7 +128,7 @@ const planner = new BuildPlanner({
   world: () => w, view: () => view, building: () => phase === 'build', simT: () => simT(), ui: () => ui(), hud: () => hud?.update(), size: () => [innerWidth, innerHeight],
 }, { trenches: V.r118, walls: V.r120, wire: V.r121, materials: V.r105, kinds: BUILD_KINDS_NOW });
 document.body.classList.toggle('r044', V.r044);   // R044 生產列排版、說明的剋制那一句只在開著時套（index.html 的 body.r044）
-const ecoCmd = (): Command => sw1002({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r093 ? { air: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r092 ? { tp: V.r030 ? 2 : 1 } : {}), ...(V.r091 ? { sw: 1 } : {}), ...(V.r095 ? { pla: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) }); const sw1002 = (c: Command): Command => (V.r1002 ? { ...c, sw: 2 } as Command : c); const ai1005 = (c: Command): Command => (V.r1005 && c.t === 'ai' && c.v === 3 ? { ...c, v: 4 } : c);   /* R1005：電腦第四版（關掉＝照舊送 v＝3） */   // R1002：閥開著送 sw＝2（R091 那一段是守衛的錨點，所以在外面蓋過去；R091 開著時 sw 照原位置）
+const ecoCmd = (): Command => sw1002({ t: 'eco', ...(V.r021 ? { inf: 1 } : {}), ...(V.r022 ? { guns: 1 } : {}), ...(V.r023 ? { tanks: 1 } : {}), ...(V.r044 ? { armor2: 1 } : {}), ...(V.r140 ? { soviet: 1 } : {}), ...(V.r142 ? { international: 1 } : {}), ...(V.r093 ? { air: 1 } : {}), ...(V.r077 ? { end: 1 } : {}), ...(V.r092 ? { tp: V.r030 ? 2 : 1 } : {}), ...(V.r091 ? { sw: 1 } : {}), ...(V.r095 ? { pla: 1 } : {}), ...(V.r080 ? { mg: V.r081 ? 2 : 1 } : {}) }); const sw1002 = (c: Command): Command => (V.r1002 && V.r091 ? { ...c, sw: 2 } as Command : c); const ai1005 = (c: Command): Command => (V.r1005 && c.t === 'ai' && c.v === 3 ? { ...c, v: 4 } : c);   /* R1005：電腦第四版（關掉＝照舊送 v＝3） */   // R1004：sw＝2 是「R091 加 R1002」，R091 的閥關著時不送   // R1002：閥開著送 sw＝2（R091 那一段是守衛的錨點，所以在外面蓋過去；R091 開著時 sw 照原位置）
 let prodBar: ProdBar | undefined;
 // R018 電腦難度：?ai=1|2|3
 let aiLevel = Math.max(1, Math.min(3, Number(q.get('ai') ?? 2) | 0 || 2));   // R069：開始選單可以改
@@ -268,7 +268,7 @@ function order(cx: number, cy: number) {
     building: view.buildingAt(cx, cy, innerWidth, innerHeight),
     ground: view.groundAt(cx, cy, innerWidth, innerHeight),
   });
-  if (!route) return;
+  if (!route) { hud?.update(); return; }   // R1004：放不下的理由（建造）馬上出來，暫停中也是
   for (const cmd of route.commands) issue(cmd);
   view.setMarker(route.marker.x, route.marker.z, simT(), route.marker.hostile);
 }
@@ -460,7 +460,7 @@ prodBar = initProduction([{ kind: UK_TANK, label: '坦克', cost: UNIT_KINDS[UK_
     const e = w.eco, q0 = e?.queue[SIDE_PLAYER] ?? [];
     return { hq: phase === 'battle' ? hqDurability(w, V.r127) : '', context: w, visible: !!e && phase === 'battle' && w.winner < 0, supply: e?.supply[SIDE_PLAYER] ?? 0, queue: q0, prog: e?.prog[SIDE_PLAYER] ?? 0, progMax: progMax95(q0), queueMax: 5, countdown: phase === 'battle' ? countdown95(w, V.r125) : '' };
   },
-  produce: kind => { if (!pick50(kind)) issue({ t: 'produce', side: SIDE_PLAYER, kind }); }, after: () => { platoon95.frame(); transport92.frame(); },   // R095：全排鍵與「步兵排」那一顆（沙盒裡的守衛不跑生產列）
+  produce: kind => { if (pick50(kind)) hud?.update(); else issue({ t: 'produce', side: SIDE_PLAYER, kind }); }, after: () => { platoon95.frame(); transport92.frame(); },   // R095：全排鍵與「步兵排」那一顆（沙盒裡的守衛不跑生產列）
   hq: V.r127,
   countdown: V.r125,
   blockReason: V.r126 ? kind => block50(w, kind) ?? reason95(w, kind, phase === 'battle') : undefined,

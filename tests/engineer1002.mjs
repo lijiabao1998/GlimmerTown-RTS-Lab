@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createWorld, hashWorld, center, cellOf, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, ORD_FIRE_AT, SIDE_PLAYER as ME, SIDE_ENEMY as FOE, SHELL_HE, BK_WIRE,
-  UK_TANK, UK_INFANTRY, UK_ATGUN, UK_DESTROYER, UK_SNIPER, UK_AT91, UK_ENGINEER, UK_FLAME, BK_HOUSE, BK_PILLBOX, bldMaxHp, wireBlocks } from '../src/sim/world.ts';
+  UK_TANK, UK_INFANTRY, UK_ATGUN, UK_DESTROYER, UK_SNIPER, UK_AT91, UK_ENGINEER, UK_FLAME, BK_HOUSE, BK_PILLBOX, bldMaxHp, wireBlocks, bldAt } from '../src/sim/world.ts';
 import { step, runLog, pickAim } from '../src/sim/step.ts';
 import { applyRules } from '../src/sim/rules.ts';
 import { isCommand } from '../src/sim/commandCheck.ts';
@@ -204,6 +204,8 @@ const groups = {
     const n = put(w, FOE, UK_INFANTRY, 16, 18);
     assert.equal(pickAim(w, f)?.unit?.id, foe.id, 'flameaim: out of range (2 cells) is not picked');
     void h; void n;
+    const solo = field(), f2 = put(solo, ME, UK_FLAME, 14, 16, true); put(solo, FOE, UK_INFANTRY, 16, 18);   // R1004：射程外的那個是唯一的候選，拿掉射程判斷就會挑它
+    assert.equal(pickAim(solo, f2), null, 'flameaim: alone and 2.8 cells away, out of range, it is not picked');
     const v = field(); bld(v, BK_HOUSE, 16, 16); bld(v, BK_HOUSE, 15, 16); const g = put(v, ME, UK_FLAME, 14, 16, true), i2 = put(v, ME, UK_INFANTRY, 14, 17, true); put(v, FOE, UK_INFANTRY, 16, 16);
     assert.deepEqual([pickAim(v, g), pickAim(v, i2)], [null, null], 'flameaim: with another house in front, neither can pick it');
     const fired = (() => { let c = 0; for (let i = 0; i < 60; i++) { step(w, []); c += w.events.filter(e => e.e === 'fire' && e.unit === f.id).length; } return c; })();
@@ -307,9 +309,15 @@ const groups = {
     const es = w.units.filter(u => u.kind === UK_ENGINEER && u.side === ME), f = w.units.find(u => u.kind === UK_FLAME && u.side === ME);
     const hb = w.blds.filter(b => b.hp > 0 && b.kind === BK_HOUSE).sort((a, c) => (Math.abs(a.x - cellOf(es[0].x)) + Math.abs(a.z - cellOf(es[0].z))) - (Math.abs(c.x - cellOf(es[0].x)) + Math.abs(c.z - cellOf(es[0].z))) || a.id - c.id)[0];
     assert(es.length === 2 && f && hb, 'replay: two engineers and a flamethrower were built');
-    go([{ t: 'fireAt', side: ME, ids: [es[0].id], x: hb.x, z: hb.z }, { t: 'move', side: ME, ids: [f.id], x: hb.x + 2, z: hb.z }, { t: 'fireAt', side: ME, ids: [es[1].id], x: w.wires.segments[0].x, z: w.wires.segments[0].z }]);
-    while (w.tick < 2400) go([]);
+    // R1004：噴火也要真的在紀錄裡——敵方一個步兵班（不還手）進離它最近的房子，火焰噴射器對那一棟下射擊指令（燒裡面的人）；燒在第 1,200 步之後，存檔接著跑的那一段也有
+    const sec = w.units.find(u => u.alive && u.side === FOE && u.kind === UK_INFANTRY), dd = b => Math.abs(b.x - cellOf(sec.x)) + Math.abs(b.z - cellOf(sec.z));
+    const hf = w.blds.filter(b => b.hp > 0 && b.kind === BK_HOUSE && b !== hb).sort((a, c) => dd(a) - dd(c) || a.id - c.id)[0];
+    go([{ t: 'fireAt', side: ME, ids: [es[0].id], x: hb.x, z: hb.z }, { t: 'fireAt', side: ME, ids: [f.id], x: hf.x, z: hf.z }, { t: 'fireAt', side: ME, ids: [es[1].id], x: w.wires.segments[0].x, z: w.wires.segments[0].z },
+      { t: 'move', side: FOE, ids: [sec.id], x: hf.x, z: hf.z }, { t: 'fireDiscipline', side: FOE, ids: [sec.id], hold: true }]);
+    let burns = 0, firstBurn = -1;
+    while (w.tick < 2400) { go([]); for (const e of w.events) if (e.e === 'fire' && e.unit === f.id && bldAt(w, cellOf(sec.x), cellOf(sec.z))?.id === hf.id) { burns++; if (firstBurn < 0) firstBurn = w.tick; } }
     assert(hb.hp < hb.maxHp && w.wires.segments[0].hp === 0, `replay: the house took charges and the wire was cut (${hb.hp}/${hb.maxHp}, ${w.wires.segments[0].hp})`);
+    assert(burns > 0 && firstBurn > 1200 && sec.hp < UNIT_KINDS[UK_INFANTRY].hp, `replay: the flamethrower burns the section in the house after step 1,200 (${burns} bursts from ${firstBurn}, section hp ${sec.hp})`);
     const again = runLog(createWorld(1944), log, 2400);
     assert.equal(hashWorld(again), hashWorld(w), 'replay: the same log replays to the same hash');
     const half = runLog(createWorld(1944), log, 1200), back = decodeWorld(JSON.parse(JSON.stringify(encodeWorld(half))));
@@ -339,7 +347,7 @@ const groups = {
     assert.deepEqual(eng1002Items().map(i => [i.kind, i.label, i.cost, i.group]), [[UK_ENGINEER, '工兵', 30, '步兵支援'], [UK_FLAME, '火焰噴射', 30, '步兵支援']], 'ui: two items in the 步兵支援 group');
     const main = src('src/main.ts');
     assert(main.includes('...(V.r1002 ? eng1002Items() : [])'), 'ui: the items are there only when the R1002 valve is on');
-    assert(main.includes('const sw1002 = (c: Command): Command => (V.r1002 ? { ...c, sw: 2 } as Command : c);') && main.includes("const ecoCmd = (): Command => sw1002({ t: 'eco',"), 'ui: a new battle sends sw 2 only when the R1002 valve is on');
+    assert(main.includes('const sw1002 = (c: Command): Command => (V.r1002 && V.r091 ? { ...c, sw: 2 } as Command : c);') && main.includes("const ecoCmd = (): Command => sw1002({ t: 'eco',"), 'ui: a new battle sends sw 2 only when the R1002 valve is on');
     const g = opened({ sw: 2 }); g.eco.supply[ME] = 0;
     assert.equal(productionBlockReason(g, UK_ENGINEER), '補給不足，還差 30', 'ui: with sw 2 the only reason is supply');
     const w = swEco(field());

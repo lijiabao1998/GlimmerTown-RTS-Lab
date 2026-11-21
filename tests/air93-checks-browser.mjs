@@ -50,6 +50,7 @@ await runOrSkip('air93-checks', async () => {
       await E('__r089.hqDown(1); __rts.stepN(2); 0'); await frames(); await frames();
       k = await key();
       assert.equal(k.shown, false, `win: once the battle is decided the air bar is hidden (air93.ts clears the choice in the same branch; the hidden key keeps its old label until it shows again) (${JSON.stringify(k)})`);
+      assert.equal((await E('__r089.armed()'))[0], 0, 'win: and the choice itself is cleared (R1004: the guard reads the armed state, not only the hidden bar)');
       // 2.5 著色程式：開戰、場上有車之後記一次；飛機上天、畫幾幀，數量不變
       await battle('&noR089=0');
       await E('__r089.crowd(4, 16, 16, false, 2, 2)'); await E('__r089.cam(16, 16, 1)'); for (let i = 0; i < 6; i++) await frames();
