@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   createWorld, hashWorld, center, cellIdx, SUB, UNIT_KINDS, ORD_IDLE, SIDE_PLAYER as ME, SIDE_ENEMY as FOE,
-  BK_HQ, BK_HOUSE, BK_PILLBOX, BK_WIRE, BK_BARRACKS, BK_DEPOT, BK_SUPPLY, UK_TANK, UK_INFANTRY, UK_ENGINEER, UK_FLAME, UK_SNIPER, UK_AT91, bldMaxHp, bldAt, cellOf,
+  BK_HQ, BK_HOUSE, BK_PILLBOX, BK_WIRE, BK_BARRACKS, BK_DEPOT, BK_SUPPLY, UK_TANK, UK_AA, UK_OBSERVER, UK_INFANTRY, UK_ENGINEER, UK_FLAME, UK_SNIPER, UK_AT91, bldMaxHp, bldAt, cellOf,
 } from '../src/sim/world.ts';
 import { step, spotted } from '../src/sim/step.ts';
 import { aiThink, setAi } from '../src/sim/ai.ts';
@@ -126,8 +126,9 @@ group('demo', () => {
 // 驗收 5：火焰噴射器：看得到躲在房子裡的敵方步兵班＝對那一棟下射擊指令；封閉車身的坦克不挑；看不到的不挑
 group('flame', () => {
   {
-    const w = field(), f = put(w, ME, UK_FLAME, 16, 18), h = bld(w, BK_HOUSE, 12, 18, 2, 2); put(w, FOE, UK_INFANTRY, 13, 18);
-    assert.deepEqual(orderOf(think(w), f), { t: 'fireAt', side: ME, ids: [f.id], x: h.x, z: h.z }, 'flame: the section in the house 4 cells away gets the flame (fire order on the house)');
+    const w = field(), f = put(w, ME, UK_FLAME, 16, 18), h = bld(w, BK_HOUSE, 12, 18, 2, 2); put(w, FOE, UK_INFANTRY, 13, 18);   // R1005 審查：瞄那一格，不是房子的左上角
+    assert.deepEqual(orderOf(think(w), f), { t: 'fireAt', side: ME, ids: [f.id], x: 13, z: 18 }, 'flame: the section in the house 4 cells away gets the flame (fire order on its own cell of the house)');
+    void h;
   }
   {
     const w = field(), f = put(w, ME, UK_FLAME, 16, 18); put(w, FOE, UK_TANK, 13, 18);
@@ -139,6 +140,76 @@ group('flame', () => {
     const c = orderOf(think(w), f);
     assert.deepEqual(c, { t: 'attack', side: ME, ids: [f.id], target: inf.id }, 'flame: a section in the open is attacked');
   }
+});
+
+// R1005 審查：火焰噴射器瞄有人的那一格（不是房子的左上角），走到兩格內真的燒到人
+group('flamecell', () => {
+  const w = field(), f = put(w, ME, UK_FLAME, 16, 18); bld(w, BK_HOUSE, 12, 18, 2, 2); const t = put(w, FOE, UK_OBSERVER, 13, 19);   // 不會開槍的觀測員（停火指令對敵方的步兵班不管用）
+  assert(spotted(w, ME, t.x, t.z), 'flamecell: fixture — the far cell of the house can be seen');
+  assert.deepEqual(orderOf(think(w), f), { t: 'fireAt', side: ME, ids: [f.id], x: 13, z: 19 }, 'flamecell: the fire order goes to the occupied cell');
+  w.ai[0].next = 1e9;   // 只看這一條指令怎麼走：之後不再想
+  step(w, [{ t: 'fireAt', side: ME, ids: [f.id], x: 13, z: 19 }]);
+  for (let i = 0; i < 400 && t.hp === UNIT_KINDS[UK_OBSERVER].hp; i++) step(w, []);
+  assert(t.hp < UNIT_KINDS[UK_OBSERVER].hp, `flamecell: the flamethrower gets within range and burns the man (hp ${t.hp})`);
+});
+
+// R1005 審查：敵人躲進自己的指揮部（或自己人也在裡面的房子），工兵不炸、火焰噴射器不燒；手上的爆破目標失效就停；反戰車小組不追
+group('own', () => {
+  const near = () => { const w = field(); w.units.length = 0; for (const [x, z] of [[20, 20], [21, 20], [20, 21]]) put(w, ME, UK_TANK, x, z); return w; };
+  {
+    const w = near(), e = put(w, ME, UK_ENGINEER, 22, 22), f = put(w, ME, UK_FLAME, 22, 23), t = put(w, FOE, UK_INFANTRY, 24, 24);
+    assert(spotted(w, ME, t.x, t.z) && bldAt(w, 24, 24)?.kind === BK_HQ, 'own: fixture — an enemy section we can see stands in our HQ');
+    const cmds = think(w), onHq = c => c && c.t === 'fireAt' && c.x >= 24 && c.x <= 25 && c.z >= 24 && c.z <= 25;
+    assert(!onHq(orderOf(cmds, e)) && !onHq(orderOf(cmds, f)), `own: neither the engineer nor the flamethrower is sent against our own HQ (${JSON.stringify(cmds)})`);
+  }
+  {
+    const w = field(), e = put(w, ME, UK_ENGINEER, 18, 18), h = bld(w, BK_HOUSE, 12, 18, 2, 2), foe = put(w, FOE, UK_INFANTRY, 13, 18);
+    assert.deepEqual(orderOf(think(w), e), { t: 'fireAt', side: ME, ids: [e.id], x: h.x, z: h.z }, 'own: fixture — the engineer is sent to blow the house');
+    step(w, [{ t: 'fireAt', side: ME, ids: [e.id], x: h.x, z: h.z }]); w.ai[0].next = 1e9;
+    foe.alive = false;
+    assert.deepEqual(orderOf(think(w), e), { t: 'stop', side: ME, ids: [e.id] }, 'own: once nobody is seen inside, the engineer stops instead of blowing an empty house');
+  }
+  {
+    const w = field(), a = put(w, ME, UK_AT91, 16, 18), t = put(w, FOE, UK_TANK, 16, 22);
+    step(w, [{ t: 'attack', side: ME, ids: [a.id], target: t.id }]); w.ai[0].next = 1e9;
+    t.z = center(25);
+    assert(spotted(w, ME, t.x, t.z), 'own: fixture — the tank is still seen, 7 cells away');
+    const c = orderOf(think(w), a);
+    assert(c && c.t === 'stop', `own: the AT team drops a target that left its 5-cell reach (${JSON.stringify(c)})`);
+  }
+});
+
+// R1005 審查：放工地的指令排在生產前面，真的放得下去（補給剛好夠時，生產不先把錢花掉）
+group('construct', () => {
+  const w = createWorld(7); step(w, [{ t: 'map', id: 2, vegetation: 0 }]);
+  w.blds = []; w.occ.fill(0); w.ter.fill(0); w.crater.fill(0); w.units = []; delete w.vegetation; delete w.height; delete w.ai;
+  const h0 = bld(w, BK_HQ, 52, 52, 2, 2, ME), h1 = bld(w, BK_HQ, 8, 8, 2, 2, FOE);
+  w.eco = { supply: [40, 0], hq: [h0.id, h1.id], queue: [[], []], prog: [0, 0], inf: 1, guns: 1, tanks: 1, sw: 2, tp: 2, tech: 1 };
+  for (let i = 0; i < 3; i++) put(w, ME, UK_TANK, 44 + i, 44);
+  put(w, ME, UK_ENGINEER, 50, 50); setAi(w, ME, 3, 4);
+  const st = w.ai.find(a => a.side === ME), cmds = aiThink2(w, st, spotted, aiThink(w, st, spotted));
+  const ci = cmds.findIndex(c => c.t === 'construct'), pi = cmds.findIndex(c => c.t === 'produce');
+  assert(ci >= 0, `construct: with 40 supply and an idle engineer it orders the barracks (${JSON.stringify(cmds)})`);
+  assert(pi < 0 || ci < pi, 'construct: the construct order goes out before any produce order');
+  step(w, cmds);
+  assert(w.blds.some(b => b.kind === BK_BARRACKS && b.builtBy === ME), 'construct: and the site is really placed');
+});
+
+// R1005 審查：看過對方的飛機只算進了地圖的；帶 tech、有車廠就造防空砲；four、air 都進雜湊
+group('air', () => {
+  const w = field(); w.eco.tech = 1; w.eco.air = 1; w.eco.supply = [200, 200]; put(w, ME, UK_ENGINEER, 18, 18);
+  const st = w.ai.find(a => a.side === ME), plane = { id: 1, side: FOE, kind: 1, x: center(4), z: center(4), sx: center(4), sz: center(4), tx: center(16), tz: center(16), t: -10, T: 100, hp: 30 };
+  w.sky = { version: 1, next: 2, ready: [0, 0, 0, 0], planes: [plane] };
+  think(w);
+  assert.equal(st.air, undefined, 'air: a plane still on its way in (t < 0) is not seen');
+  plane.t = 0; think(w);
+  assert.equal(st.air, w.tick, 'air: once it is over the map, the computer remembers it');
+  bld(w, BK_DEPOT, 20, 22, 2, 2, ME);
+  assert.equal(first1005(w, st, w.units.filter(u => u.alive && u.side === ME), []), UK_AA, 'air: with tech and a depot it builds an AA gun');
+  const h = () => hashWorld(w), withAir = h(); delete st.air; const noAir = h(); st.air = w.tick;
+  assert.notEqual(withAir, noAir, 'air: the memory is folded into the hash');
+  const four = h(); delete st.four; const three = h(); st.four = 1;
+  assert.notEqual(four, three, 'air: four is folded into the hash');
 });
 
 // 驗收 6：狙擊手進主力附近的房子；反戰車小組打 5 格內的裝甲
@@ -163,17 +234,17 @@ group('fog', () => {
   const seenCmds = think(w);
   assert(orderOf(seenCmds, f) && orderOf(seenCmds, a) && orderOf(seenCmds, e), 'fog: fixture — seen, all three get orders about them');
   for (const id of [f.id, a.id, e.id]) { const u = w.units[id - 1]; u.order = ORD_IDLE; }
-  void h;
   // 把敵人搬到地圖另一邊（看不到），再想一次
   inf.x = center(2); inf.z = center(28); t.x = center(28); t.z = center(2);
   assert(!spotted(w, ME, inf.x, inf.z) && !spotted(w, ME, t.x, t.z), 'fog: fixture — out of sight');
-  const cmds = think(w), about = c => c && ((c.t === 'attack' && (c.target === inf.id || c.target === t.id)) || (c.t === 'fireAt' && c.x === h.x && c.z === h.z));
+  const inH = (c, b) => c.x >= b.x && c.x < b.x + b.w && c.z >= b.z && c.z < b.z + b.d;   // 射擊指令落在那一棟的任何一格
+  const cmds = think(w), about = c => c && ((c.t === 'attack' && (c.target === inf.id || c.target === t.id)) || (c.t === 'fireAt' && inH(c, h)));
   assert(![f, a, e].some(u => about(orderOf(cmds, u))), `fog: nothing is ordered because of enemies it cannot see (${JSON.stringify(cmds)})`);
   // 近的也一樣：躲在房子背對我們那一角的敵人（看不到），就在火焰噴射器 8 格內
   const w2 = field(), f2 = put(w2, ME, UK_FLAME, 16, 18), h2 = bld(w2, BK_HOUSE, 12, 18, 2, 2), hid = put(w2, FOE, UK_INFANTRY, 12, 19);
   assert(!spotted(w2, ME, hid.x, hid.z), 'fog: fixture — the far corner of the house is out of sight');
   const c2 = orderOf(think(w2), f2);
-  assert(!(c2 && ((c2.t === 'fireAt' && c2.x === h2.x && c2.z === h2.z) || (c2.t === 'attack' && c2.target === hid.id))), `fog: nothing is ordered because of enemies it cannot see, even 4 cells away (${JSON.stringify(c2)})`);
+  assert(!(c2 && ((c2.t === 'fireAt' && inH(c2, h2)) || (c2.t === 'attack' && c2.target === hid.id))), `fog: nothing is ordered because of enemies it cannot see, even 4 cells away (${JSON.stringify(c2)})`);
 });
 // 要不要蓋、蓋哪裡、造什麼（直接問 ai1005.ts；故意弄壞時這一群要紅）
 group('plan', () => {
@@ -208,5 +279,18 @@ group('plan', () => {
     void h;
     assert.equal(first1005(w, st, mine(w), [foe]), UK_FLAME, 'plan: an enemy section seen hiding in a house near our tanks — build a flamethrower');
   }
+});
+// R1005 審查：反戰車小組找目標、生產挑反戰車小組與火焰噴射器，也只用看得到的
+group('fog2', () => {
+  const w = field(), a = put(w, ME, UK_AT91, 16, 18); bld(w, BK_HOUSE, 15, 20, 3, 1); const t = put(w, FOE, UK_TANK, 16, 22);
+  assert(!spotted(w, ME, t.x, t.z), 'fog2: fixture — the tank behind the row of houses cannot be seen');
+  const c = orderOf(think(w), a);
+  assert(!(c && c.t === 'attack' && c.target === t.id), `fog2: the AT team does not go for a tank it cannot see (${JSON.stringify(c)})`);
+  const st = w.ai.find(x => x.side === ME), m = w.units.filter(u => u.alive && u.side === ME);
+  assert.notEqual(support1005(w, st, m, []), UK_AT91, 'fog2: an unseen tank does not make it build an AT team');
+  const w2 = field(); bld(w2, BK_HOUSE, 12, 18, 2, 2); const hid = put(w2, FOE, UK_INFANTRY, 12, 19);
+  assert(!spotted(w2, ME, hid.x, hid.z), 'fog2: fixture — the far corner of the house is out of sight');
+  const st2 = w2.ai.find(x => x.side === ME);
+  assert.notEqual(first1005(w2, st2, w2.units.filter(u => u.alive && u.side === ME), []), UK_FLAME, 'fog2: an unseen section in a house does not make it build a flamethrower');
 });
 console.log(`ai1005: ${groups} groups ok`);

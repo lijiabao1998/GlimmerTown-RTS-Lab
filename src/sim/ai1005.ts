@@ -50,7 +50,7 @@ export function first1005(w: World, st: AiState, mine: Unit[], seen: Unit[] = []
     if (has(UK_ENGINEER) < 1) return allowed(w, side, UK_ENGINEER) ? (e.supply[side] >= UNIT_KINDS[UK_ENGINEER].cost ? UK_ENGINEER : null) : undefined;
     if (mine.some(u => u.kind === UK_ENGINEER) && e.supply[side] < TECH50[build].cost) return null;   // 工兵在場上了：先存到蓋得起（蓋的那一下在 act1005）
   }
-  if (st.air !== undefined && allowed(w, side, UK_AA) && has(UK_AA) < AA_KEEP[lv]) return e.supply[side] >= UNIT_KINDS[UK_AA].cost ? UK_AA : null;
+  if (e.tech && st.air !== undefined && allowed(w, side, UK_AA) && has(UK_AA) < AA_KEEP[lv]) return e.supply[side] >= UNIT_KINDS[UK_AA].cost ? UK_AA : null;   // 只在帶 tech 的局（沒有 sw、tech 的局第四版要跟第三版一樣——R1005 審查）
   // 看得到敵人躲在主力附近的房子、碉堡裡（火焰噴射器用得上的時候），場上沒有火焰噴射器就先造一組（排在比例前面：比例輪到時常常被別的支援佔走）
   if (allowed(w, side, UK_FLAME) && has(UK_FLAME) < 1 && hidden1005(w, mine, seen)) return e.supply[side] >= UNIT_KINDS[UK_FLAME].cost ? UK_FLAME : null;
   // 輪到支援（第三版同一條比例：支援數 × 2 < 主力數）時，新的四種兵排在第三版的支援清單前面（排在後面時一局一組都輪不到：第一輪量的 120 局裡 0 組）
@@ -73,7 +73,7 @@ export function support1005(w: World, st: AiState, mine: Unit[], seen: Unit[]): 
   if (armor && allowed(w, side, UK_AT91) && has(UK_AT91) < AT_KEEP[lv]) return UK_AT91;
   if (allowed(w, side, UK_SNIPER) && has(UK_SNIPER) < 1) return UK_SNIPER;
   if (allowed(w, side, UK_FLAME) && has(UK_FLAME) < 1) return UK_FLAME;
-  if (allowed(w, side, UK_ENGINEER) && has(UK_ENGINEER) < ENG_KEEP[lv]) return UK_ENGINEER;
+  if (allowed(w, side, UK_ENGINEER) && has(UK_ENGINEER) < ENG_KEEP[lv] + (w.eco?.tech && w.n >= BUILD_N ? 1 : 0)) return UK_ENGINEER;   // 帶 tech 的大地圖：蓋東西的那一組另外算（R1005 審查）
   return -1;
 }
 
@@ -109,17 +109,20 @@ export function spot1005(w: World, side: number, kind: number, ids: number[]): [
 }
 
 // ---- 戰術：新的四種兵（ai2.ts 合起來之前呼叫；只碰新的四種兵，前面的段落已經替它決定的不改）----
-export function act1005(w: World, st: AiState, mine: Unit[], seen: Unit[], override: Map<number, AiCmd | null>): void {
-  const side = st.side, foe = 1 - side, e = w.eco;
-  if (w.sky?.planes.some(p => p.side !== side)) st.air = w.tick;   // 看過對方的飛機（之後蓋車廠、造防空砲）
+// 回傳要排在生產前面送的指令（放工地：先扣補給，生產才不會把存好的錢在同一次想裡先花掉——R1005 審查）；其他指令寫進 override
+export function act1005(w: World, st: AiState, mine: Unit[], seen: Unit[], override: Map<number, AiCmd | null>): AiCmd[] {
+  const side = st.side, foe = 1 - side, e = w.eco, pre: AiCmd[] = [];
+  if (w.sky?.planes.some(p => p.side !== side && p.t >= 0)) st.air = w.tick;   // 看過對方的飛機（進了地圖的；還在叫的路上的誰都看不到——R1005 審查）
   const free = mine.filter(u => NEW4.includes(u.kind) && !u.ride && !override.has(u.id));
-  if (!free.length) return;
+  if (!free.length) return pre;
   const core = mine.filter(u => isCore(u.kind)), ref = core.length ? core : mine.filter(u => !NEW4.includes(u.kind) && u.kind !== UK_OBSERVER);
   const gx = ref.length ? Math.trunc(ref.reduce((s, u) => s + u.x, 0) / ref.length) : -1, gz = ref.length ? Math.trunc(ref.reduce((s, u) => s + u.z, 0) / ref.length) : -1;
   const hq = e ? hqAlive(w, side) : null, homeX = hq ? center(hq.x) : gx, homeZ = hq ? center(hq.z) : gz;
+  const seenIds = new Set(seen.map(t => t.id));
   const moveTo = (u: Unit, x: number, z: number) => { if (!(u.order === ORD_MOVE && u.pathIdx < u.path.length && Math.abs(u.tx - x) <= 1 && Math.abs(u.tz - z) <= 1) && !(cellOf(u.x) === x && cellOf(u.z) === z)) override.set(u.id, { t: 'move', side, ids: [u.id], x, z }); };
   const fireAt = (u: Unit, x: number, z: number) => { if (!(u.order === ORD_FIRE_AT && u.tx === x && u.tz === z)) override.set(u.id, { t: 'fireAt', side, ids: [u.id], x, z }); };
   const attack = (u: Unit, t: Unit) => { if (!(u.order === ORD_ATTACK && u.target === t.id)) override.set(u.id, { t: 'attack', side, ids: [u.id], target: t.id }); };
+  const stop = (u: Unit) => override.set(u.id, { t: 'stop', side, ids: [u.id] });
   // 跟著主力：離重心超過 FOLLOW 格才走，停在重心往自己指揮部那一側 2 格（沒在走的時候才下）
   const follow = (u: Unit) => {
     if (gx < 0 || u.pathIdx < u.path.length || dist(u.x, u.z, gx, gz) <= FOLLOW * SUB) return;
@@ -129,28 +132,33 @@ export function act1005(w: World, st: AiState, mine: Unit[], seen: Unit[], overr
   };
   const nearCore = (x: number, z: number, cells: number) => gx >= 0 && dist(x, z, gx, gz) <= cells * SUB;
   const bcx = (b: Building) => center(b.x) + ((b.w - 1) * SUB >> 1), bcz = (b: Building) => center(b.z) + ((b.d - 1) * SUB >> 1);
+  // 自己蓋的、或裡面有自己人的建築：敵人躲進去也不去炸、不去燒（R1005 審查：工兵把自己的指揮部炸倒、輸掉）
+  const ours = (b: Building) => b.builtBy === side || mine.some(u => !u.ride && bldAt(w, cellOf(u.x), cellOf(u.z)) === b);
 
   // 工兵：先蓋（自己的工地沒人蓋就派最近的閒著的；要蓋新的就放工地），再爆破，最後跟著主力
   const engs = free.filter(u => u.kind === UK_ENGINEER);
-  const busy = (u: Unit) => u.order === ORD_FIRE_AT && (bldAt(w, u.tx, u.tz)?.hp ?? 0) > 0;
-  const idle = engs.filter(u => !busy(u) && !u.rout);
   const mySites = (w.tech?.sites ?? []).map(s => w.blds[s.id - 1]).filter(b => b.builtBy === side && b.hp > 0);
+  const onSite = (u: Unit) => u.order === ORD_FIRE_AT && mySites.some(b => b === bldAt(w, u.tx, u.tz));
+  // 爆破目標：看得到有敵人躲著的房子、對方蓋的碉堡與三種建築與指揮部、對方的鐵絲網；離主力重心 NEAR_CORE 格內
+  const targets = new Map<number, Building>(), wires: Building[] = [];
+  for (const t of seen) { const b = bldAt(w, cellOf(t.x), cellOf(t.z)); if (b && b.hp > 0 && !ours(b)) targets.set(b.id, b); }
+  for (const b of w.blds) if (b.hp > 0 && b.builtBy === foe && (b.kind === BK_PILLBOX || b.kind === BK_HQ || TECH50[b.kind] !== undefined)) targets.set(b.id, b);
+  for (const s of w.wires?.segments ?? []) if (s.hp > 0 && s.builtBy === foe) wires.push(s);
+  const pool = [...targets.values(), ...wires].filter(b => nearCore(bcx(b), bcz(b), NEAR_CORE));
+  const onPool = (u: Unit) => u.order === ORD_FIRE_AT && pool.some(b => u.tx >= b.x && u.tx < b.x + b.w && u.tz >= b.z && u.tz < b.z + b.d);
+  // 手上的爆破每一次想都重看：目標還在名單上才繼續；不在了（裡面的人走了、離主力太遠了、變成自己的）就停（R1005 審查）
+  for (const u of engs) if (u.order === ORD_FIRE_AT && !onSite(u) && !onPool(u)) stop(u);
+  const idle = engs.filter(u => !onSite(u) && !onPool(u) && !u.rout);
   for (const b of mySites) {
-    if (engs.some(u => busy(u) && bldAt(w, u.tx, u.tz) === b) || !idle.length) continue;
+    if (engs.some(u => onSite(u) && bldAt(w, u.tx, u.tz) === b) || !idle.length) continue;
     idle.sort((p, q) => dist(p.x, p.z, bcx(b), bcz(b)) - dist(q.x, q.z, bcx(b), bcz(b)) || p.id - q.id);
     fireAt(idle.shift()!, b.x, b.z);
   }
   const want = e && idle.length ? plan1005(w, st, mine) : -1;
   if (want >= 0 && e!.supply[side] >= TECH50[want].cost) {
     const u = idle[0], at = spot1005(w, side, want, [u.id]);
-    if (at) { override.set(u.id, { t: 'construct', side, ids: [u.id], kind: want, x: at[0], z: at[1] }); idle.shift(); }
+    if (at) { pre.push({ t: 'construct', side, ids: [u.id], kind: want, x: at[0], z: at[1] }); override.set(u.id, null); idle.shift(); }
   }
-  // 爆破目標：看得到有敵人躲著的房子、對方蓋的碉堡與三種建築與指揮部、對方的鐵絲網；離主力重心 NEAR_CORE 格內
-  const targets = new Map<number, Building>(), wires: Building[] = [];
-  for (const t of seen) { const b = bldAt(w, cellOf(t.x), cellOf(t.z)); if (b && b.hp > 0) targets.set(b.id, b); }
-  for (const b of w.blds) if (b.hp > 0 && b.builtBy === foe && (b.kind === BK_PILLBOX || b.kind === BK_HQ || TECH50[b.kind] !== undefined)) targets.set(b.id, b);
-  for (const s of w.wires?.segments ?? []) if (s.hp > 0 && s.builtBy === foe) wires.push(s);
-  const pool = [...targets.values(), ...wires].filter(b => nearCore(bcx(b), bcz(b), NEAR_CORE));
   // 帶 tech 的局：id 最小的那一組工兵留在指揮部旁邊等著蓋（還有要蓋的時候；不跟主力上前線）
   if (e?.tech && hq && idle.length && (want >= 0 || plan1005(w, st, mine) >= 0)) {
     const u = idle.sort((p, q) => p.id - q.id).shift()!;
@@ -161,16 +169,18 @@ export function act1005(w: World, st: AiState, mine: Unit[], seen: Unit[], overr
     if (t) fireAt(u, t.x, t.z); else follow(u);
   }
 
-  // 火焰噴射器：看得到的敵人（不挑封閉車身的車），躲在房子、碉堡、壕溝裡的優先；在房子裡的對那一棟下射擊指令（燒裡面的人），其他下攻擊指令
+  // 火焰噴射器：看得到的敵人（不挑封閉車身的車），躲在房子、碉堡、壕溝裡的優先；躲在建築裡的對他那一格下射擊指令（燒那一棟裡射程內的人；
+  // 瞄那一格而不是建築的左上角：瞄角落時會停在離人三格外、只燒到房子——R1005 審查），其他下攻擊指令。手上的目標要還看得到、還在 FLAME_REACH 內才繼續
   for (const f of free.filter(u => u.kind === UK_FLAME)) {
-    if (f.order === ORD_ATTACK && w.units[f.target - 1]?.alive) continue;
+    const cur = f.order === ORD_ATTACK ? w.units[f.target - 1] : null;
+    if (cur && cur.alive && seenIds.has(cur.id) && dist(f.x, f.z, cur.x, cur.z) <= FLAME_REACH * SUB) continue;
     const covered = (t: Unit) => ((bldAt(w, cellOf(t.x), cellOf(t.z))?.hp ?? 0) > 0 || !!trenchAt(w, cellOf(t.x), cellOf(t.z)) ? 0 : 1);
-    const cand = seen.filter(t => { const k = UNIT_KINDS[t.kind]; return !(k.armored && !k.openTop) && dist(f.x, f.z, t.x, t.z) <= FLAME_REACH * SUB && nearCore(t.x, t.z, NEAR_CORE + 2); })
+    const cand = seen.filter(t => { const k = UNIT_KINDS[t.kind], b = bldAt(w, cellOf(t.x), cellOf(t.z)); return !(k.armored && !k.openTop) && !(b && b.hp > 0 && ours(b)) && dist(f.x, f.z, t.x, t.z) <= FLAME_REACH * SUB && nearCore(t.x, t.z, NEAR_CORE + 2); })
       .sort((a, b) => covered(a) - covered(b) || dist(f.x, f.z, a.x, a.z) - dist(f.x, f.z, b.x, b.z) || a.id - b.id);
     const t = cand[0];
-    if (!t) { if (f.order === ORD_FIRE_AT) override.set(f.id, { t: 'stop', side, ids: [f.id] }); else follow(f); continue; }   // 燒完了（或看不到裡面有人了）就停，不拿火去燒空房子
+    if (!t) { if (f.order === ORD_FIRE_AT || f.order === ORD_ATTACK) stop(f); else follow(f); continue; }   // 燒完了（或看不到了）就停，不拿火去燒空房子
     const home = bldAt(w, cellOf(t.x), cellOf(t.z));
-    if (home && home.hp > 0) fireAt(f, home.x, home.z); else attack(f, t);
+    if (home && home.hp > 0) fireAt(f, cellOf(t.x), cellOf(t.z)); else attack(f, t);
   }
 
   // 狙擊手：進離主力重心 6 格內最近的、還站著、不是對方蓋的房子；待命時自己找目標（R091 的 aim91）
@@ -185,10 +195,12 @@ export function act1005(w: World, st: AiState, mine: Unit[], seen: Unit[], overr
     if (pick) moveTo(s, pick.x, pick.z); else follow(s);
   }
 
-  // 反戰車小組：看得到的敵方裝甲離它 AT_REACH 格內 → 攻擊最近的；不然跟著主力
+  // 反戰車小組：看得到的敵方裝甲離它 AT_REACH 格內 → 攻擊最近的；手上的目標看不到了、跑出 AT_REACH 了就換或回去跟著主力（不追——同 R080 機槍組）
   for (const a of free.filter(u => u.kind === UK_AT91)) {
-    if (a.order === ORD_ATTACK && w.units[a.target - 1]?.alive) continue;
+    const cur = a.order === ORD_ATTACK ? w.units[a.target - 1] : null;
+    if (cur && cur.alive && seenIds.has(cur.id) && dist(a.x, a.z, cur.x, cur.z) <= AT_REACH * SUB) continue;
     const t = seen.filter(e2 => UNIT_KINDS[e2.kind].armored && dist(a.x, a.z, e2.x, e2.z) <= AT_REACH * SUB).sort((p, q) => dist(a.x, a.z, p.x, p.z) - dist(a.x, a.z, q.x, q.z) || p.id - q.id)[0];
-    if (t) attack(a, t); else follow(a);
+    if (t) attack(a, t); else if (a.order === ORD_ATTACK) stop(a); else follow(a);
   }
+  return pre;
 }

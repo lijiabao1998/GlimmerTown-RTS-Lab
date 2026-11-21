@@ -1,6 +1,7 @@
 // R1005 電腦第四版的量測（不進 CI）：第四版對第三版，eco 跟新開的局一樣（sw＝2、tech＝1、tp＝2、air、pla、mg＝2、end），map 指令帶 sym。
 // 用法：node tools/r1005-duel.mjs [--map 2] [--seeds 21-80] [--level 3] [--a 4] [--b 3] [--ticks 24000] [--rows]
-//   每個種子跑兩局（a 在右下、a 在左上），數 a 贏幾局；另記 a、b 兩邊造了幾組新的四種兵、放了幾個工地、蓋好幾棟、工兵炸了幾包、火焰噴射器噴了幾次、每一局多少毫秒。
+//   每個種子跑兩局（a 在右下、a 在左上），數 a 贏幾局；另記 a、b 兩邊造了幾組新的四種兵、放了幾個工地、蓋好幾棟（完工的次數）、工兵炸了幾包、火焰噴射器噴了幾次、每一局多少毫秒。
+//   想一次的時間另外量：node tools/r1005-time.mjs
 import { createWorld, UK_ENGINEER, UK_FLAME, UK_SNIPER, UK_AT91 } from '../src/sim/world.ts';
 import { step } from '../src/sim/step.ts';
 import { ECO } from './duel.mjs';
@@ -16,8 +17,12 @@ export function battle(seed, aSide, opts = {}) {
   step(w, [{ t: 'map', id: opts.map ?? map, vegetation: 1, sym: 1 }, ECO1005, { t: 'ai', side: 1, level: opts.lv ?? lv, v: vOf(1) }, { t: 'ai', side: 0, level: opts.lv ?? lv, v: vOf(0) }]);
   const start = w.units.length, st = { built: [[0, 0, 0, 0], [0, 0, 0, 0]], sites: [0, 0], done: [0, 0], demo: [0, 0], flame: [0, 0] };
   const t0 = performance.now();
+  let sites = new Set();
   while (w.winner < 0 && w.tick < (opts.ticks ?? TICKS)) {
     step(w, []);
+    const now = new Set((w.tech?.sites ?? []).map(s => s.id));   // R1005 審查：「蓋好」數完工的那一刻（工地從清單拿掉、建築還站著），不是最後還站著的
+    for (const id of sites) if (!now.has(id)) { const b = w.blds[id - 1]; if (b.hp > 0 && b.builtBy < 2) st.done[b.builtBy]++; }
+    sites = now;
     for (const e of w.events) {
       if (e.e === 'build') { const b = w.blds[e.bld - 1]; if (b?.builtBy !== undefined && b.builtBy < 2) st.sites[b.builtBy]++; }
       else if (e.e === 'fire') { const u = w.units[e.unit - 1]; if (u?.kind === UK_FLAME && u.side < 2) st.flame[u.side]++; }
@@ -26,7 +31,6 @@ export function battle(seed, aSide, opts = {}) {
   }
   const ms = performance.now() - t0;
   for (const u of w.units.slice(start)) if (u.side < 2 && NEW.includes(u.kind)) st.built[u.side][NEW.indexOf(u.kind)]++;
-  for (const b of w.blds) if (b.builtBy !== undefined && b.builtBy < 2 && b.kind >= 14 && b.kind <= 16 && b.hp > 0 && !w.tech?.sites.some(s => s.id === b.id)) st.done[b.builtBy]++;
   const pick = arr => [arr[aSide], arr[bSide]];   // 照 a、b 排
   return { seed, aSide, winner: w.winner === aSide ? 'a' : w.winner === bSide ? 'b' : w.winner === 2 ? 'draw' : 'timeout', ticks: w.tick, ms: Math.round(ms), built: pick(st.built), sites: pick(st.sites), done: pick(st.done), demo: pick(st.demo), flame: pick(st.flame) };
 }

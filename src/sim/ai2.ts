@@ -224,10 +224,10 @@ export function aiThink2(w: World, st: AiState, spotted: Spotted, base: AiCmd[])
     }
   }
 
-  if (st.four) act1005(w, st, mine, seen, override);   // R1005 第四版：新的四種兵（狙擊手、反戰車小組、工兵、火焰噴射器）與工地
+  const pre1005 = st.four ? act1005(w, st, mine, seen, override) : [];   // R1005 第四版：新的四種兵（狙擊手、反戰車小組、工兵、火焰噴射器）與工地（放工地的指令排在生產前面）
 
   // ---- 合起來：第一版的指令拿掉被改寫的單位，再接上第二版的。一條群組指令只留「最後還是歸它管」的那些單位（前面的段落排進去、後面的段落又改掉的不算）----
-  const out: AiCmd[] = [];
+  const out: AiCmd[] = [...pre1005];
   if (st.v === 3) { const kind = produce3(w, st, mine, seen); if (kind !== null) out.push({ t: 'produce', side, kind }); }   // R078 第三版：生產照 ai3.ts，第一版下的那一條不用
   for (const c of base) {
     if (c.t === 'produce') { if (st.v !== 3) out.push(c); continue; }
