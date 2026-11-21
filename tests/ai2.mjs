@@ -364,7 +364,7 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK ai2/$
   const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
   const main = read('../src/main.ts');
   assert.match(read('../src/valves.ts'), /get r057\(\) \{ return on\('057'\); \}/, 'valve: r057 is on the table');
-  assert.equal((main.match(/issue\(ai1005\(\{ t: 'ai', side: SIDE_ENEMY, level: aiLevel, \.\.\.\(V\.r057 \? \{ v: V\.r078 \? 3 : 2 \} : \{\}\) \}\)\);/g) ?? []).length, 2, 'wiring: both places that hand the enemy to the computer send the version, behind the valve (R1005: through the ai1005 wrapper)');
+  assert.equal((main.match(/issue\(\{ t: 'ai', side: SIDE_ENEMY, level: aiLevel, \.\.\.\(V\.r057 \? \{ v: V\.r078 \? 3 : 2 \} : \{\}\), \.\.\.\(V\.r1005 && V\.r057 && V\.r078 \? \{ v: 4 \} : \{\}\) \}\);/g) ?? []).length, 2, 'wiring: both places that hand the enemy to the computer send the version, behind the valve (R1005: v 4 behind its own valve)');
   assert.equal((main.match(/t: 'ai'/g) ?? []).length, 2, 'wiring: there is no third place that starts a computer opponent');
   assert.match(read('../README.md'), /\?noR057=1/, 'readme: the valve is documented');
   console.log('OK ai2/wiring');
