@@ -208,6 +208,7 @@ const groups = {
     const b2 = band(2);
     assert(b2.worked.every(k => k > 0), `lay: with two engineers both work on the last cell (the second does not idle when the first cell is done) (${b2.worked})`);
     assert(b2.steps * 10 <= b1.steps * 6 && b2.es.every(e => e.order === ORD_IDLE), `lay: two engineers lay the band in about half the time (${b2.steps} vs ${b1.steps}) and idle after`);
+    console.log(`  lay: a band of three, one engineer ${b1.steps} steps, two engineers ${b2.steps} (last cell worked ${b2.worked})`);
     { const w = camp(), e = put(w, ME, UK_ENGINEER, 15, 16);
       step(w, [M(ME, [e.id], 1, 16, 16)]);
       for (let i = 0; i < 49; i++) step(w, []);
@@ -295,6 +296,7 @@ const groups = {
     const rifle = setup => { const w = camp(); setup(w); const t = put(w, FOE, UK_INFANTRY, 16, 16), s = put(w, ME, UK_INFANTRY, 13, 16, true); step(w, [{ t: 'attack', side: ME, ids: [s.id], target: t.id }]); for (let n = 0; n < 80 && t.hp === 60; n++) step(w, []); return 60 - t.hp; };
     const r = [rifle(() => {}), rifle(w => { w.vegetation.cells[cellIdx(w, 16, 16)] = VEG_WOOD; }), rifle(w => { w.crater[cellIdx(w, 16, 16)] = 3; })];
     assert(r[0] === 12 && r[1] < 12 && r[2] < 12, `cover: a rifle shot at the same man still loses to cover (${r})`);
+    console.log(`  cover: a rifle shot takes ${r.join(' / ')} in the open / wood / crater; the mine 30 everywhere`);
   },
   // 驗收 10：士氣
   morale() {
@@ -321,7 +323,8 @@ const groups = {
       step(w, [fire(ME, [e.id], 15, 16)]);
       let t = 0; for (; t < 600 && w.mines.cells.length === 3; t++) { step(w, []); inside.add(cell(e)); if (boomOf(w)) break; }
       assert(!inside.has('14,16') && !inside.has('16,16') && e.hp === UNIT_KINDS[UK_ENGINEER].hp, `reveal: sent from the west end to clear the middle of a known band, the engineer never steps on the first cell (${[...inside].join(' ')})`);
-      assert.deepEqual(w.mines.cells.map(m => m.x), [14, 16], `reveal: and, beside the middle cell, clears it (${t} steps)`); }
+      assert.deepEqual(w.mines.cells.map(m => m.x), [14, 16], `reveal: and, beside the middle cell, clears it (${t} steps)`);
+      console.log(`  reveal: from the west end the engineer walks ${[...inside].join(' ')} and clears the middle cell in ${t + 1} steps`); }
     { const w = lay(camp(), mine(FOE, 2, 14, 16, 0, 1)), e = put(w, ME, UK_ENGINEER, 11, 16), inside = new Set();
       step(w, [move(ME, [e.id], 18, 16)]);
       for (let t = 0; t < 200; t++) { step(w, []); inside.add(cell(e)); }
@@ -360,6 +363,7 @@ const groups = {
     assert.equal(near.gone - 1, 160, 'clear: already beside it, it still counts all 160 (the order step is the first)');
     const pinned = run(1, 15, { morale: true, sup: 70 });
     assert(pinned.gone - 1 > 160, `clear: pinned (R052) it counts slower (${pinned.gone - 1})`);
+    console.log(`  clear: beside it 160 / 200 steps; pinned ${pinned.gone - 1} steps`);
     const broken = run(1, 15, { morale: true, sup: 100, limit: 400 });
     assert.equal(broken.w.mines.cells.length, 1, 'clear: a broken engineer does not clear');
     { const w = lay(camp(), mine(FOE, 1, 16, 16, 0, 1)), a = put(w, ME, UK_ENGINEER, 15, 16, true), b = put(w, ME, UK_ENGINEER, 17, 16, true);
@@ -411,6 +415,7 @@ const groups = {
       for (const m of v.mines?.cells ?? []) if (!before.has(m)) assert.equal(m.side, cmd.side, `forged: a cell appeared for side ${m.side} from a command of side ${cmd.side}`);
       for (const s of [0, 1]) assert((v.mines?.cells.filter(m => m.side === s).length ?? 0) <= 24, `forged: side ${s} never has more than 24 cells`);
     }
+    console.log(`  forged: ${sent} random commands, ${kept} passed checkLog, ${v.mines?.cells.length ?? 0} cells at the end`);
     assert(kept > 200 && (v.mines?.cells.length ?? 0) > 0, `forged: fixture — enough random commands got through and some mines were laid (${kept}/${sent}, ${v.mines?.cells.length ?? 0} cells)`);
   },
   // 驗收 16：存檔

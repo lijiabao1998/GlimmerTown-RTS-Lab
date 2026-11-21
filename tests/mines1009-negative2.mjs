@@ -14,11 +14,11 @@ const S = 'src/sim/mines1009.ts';
 // [名字, 檔案, [[原文, 改成], …], 群, 第一個紅的斷言]
 const cases = [
   ['morale', S, [['    if (w.rules?.morale) suppressBlast(w, x, z, SUB, spec.foot);\n', '']], 'morale', /^morale: with morale on the blast suppresses both sides/],
-  ['probe2', S, [['<= PROBE1009)) reveal1009(w, m);', '<= PROBE1009 + 1)) reveal1009(w, m);']], 'reveal', /^reveal: an enemy engineer one cell away finds it/],
-  ['probe_any', S, [[' && !!UNIT_KINDS[u.kind].demo && cheb(cellOf(u.x)', ' && cheb(cellOf(u.x)']], 'reveal', /^reveal: an enemy engineer one cell away finds it/],
+  ['probe2', S, [['<= PROBE1009) { reveal1009(w, m); break; }', '<= PROBE1009 + 1) { reveal1009(w, m); break; }']], 'reveal', /^reveal: an enemy engineer one cell away finds it/],
+  ['probe_any', S, [['    if (UNIT_KINDS[u.kind].demo) ENG.push(u);', '    ENG.push(u);']], 'reveal', /^reveal: an enemy engineer one cell away finds it/],
   ['no_stop', S, [['    for (let i = u.pathIdx; i < u.path.length; i++) if (u.path[i] === c) { halt(u); break; }\n', '']], 'reveal', /^reveal: the enemy tank whose path crosses the cell stops/],
   ['walk_in', S, [['    if (!touches(w, u.side, cellOf(u.x), cellOf(u.z), x, z)) continue;', '    continue;']], 'reveal', /^reveal: sent from the west end to clear the middle of a known band, the engineer never steps on the first cell/],
-  ['no_boomreveal', S, [['    for (const o of w.mines!.cells) if (o.side === m.side && !o.seen && cheb(o.x, o.z, m.x, m.z) <= 1) reveal1009(w, o);', '']], 'boomreveal', /^boomreveal: the cells of that side one away become known/],
+  ['no_boomreveal', S, [['    for (const o of list) if (o.side === m.side && !o.seen && cheb(o.x, o.z, m.x, m.z) <= 1) reveal1009(w, o);', '']], 'boomreveal', /^boomreveal: the cells of that side one away become known/],
   ['leak_clear', S, [['  if (!foe || !known1009(w, u.side, foe)) return false;', '  if (!foe) return false;']], 'clear', /^clear: an order on an enemy mine we do not know of is exactly an order on open ground/],
   ['clear_afar', S, [['  if (moving || !near) { if (u.cooldown < need) u.cooldown = need; return true; }', '  if (false) { return true; }']], 'clear', /^clear: beside it, an anti-tank cell is gone on the 160th step/],
   ['no_hold', S, [['send(w, u, gx, gz); u.cooldown = Math.max(u.cooldown, MINES1009[foe.kind].clear);', 'send(w, u, gx, gz);']], 'clear', /^clear: already beside it, it still counts all 160/],

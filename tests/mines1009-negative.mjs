@@ -35,8 +35,8 @@ const cases = [
   ['no_step', ST, [['  if (w.mines) mines1009Step(w, (u, d) => damageUnit(w, u, d, false));', '  ']], 'trigat', /^trigat: an enemy tank sets it off/],
   ['no_halt', S, [['    if (by.alive) halt(by);\n', '']], 'trigat', /^trigat: 60 off the tank, the tank stops/],
   ['foot_at', S, [['(m.kind !== 1 || UNIT_KINDS[u.kind].radius > 0)', 'true']], 'trigat', /^trigat: an enemy section walks over it/],
-  ['own_trigger', S, [['u.alive && !u.ride && !u.towBy && u.side !== m.side && cellOf(u.x) === m.x', 'u.alive && !u.ride && !u.towBy && cellOf(u.x) === m.x']], 'trigat', /^trigat: our own tank drives over our own mine/],
-  ['unfinished', S, [['const by = m.left === 0 ? w.units.find(', 'const by = m.left >= 0 ? w.units.find(']], 'trigat', /^trigat: a mine still being laid does not go off/],
+  ['own_trigger', S, [['if (u.alive && u.side !== m.side && FX[j] === m.x', 'if (u.alive && FX[j] === m.x']], 'trigat', /^trigat: our own tank drives over our own mine/],
+  ['unfinished', S, [['if (m.left === 0) for (let j = 0;', 'if (m.left >= 0) for (let j = 0;']], 'trigat', /^trigat: a mine still being laid does not go off/],
   ['cover', ST, [['mines1009Step(w, (u, d) => damageUnit(w, u, d, false));', 'mines1009Step(w, (u, d) => damageUnit(w, u, d, true));']], 'cover', /^cover: in the open, a wood or a crater the mine takes 30/],
 ];
 try {
