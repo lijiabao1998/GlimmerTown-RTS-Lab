@@ -498,7 +498,7 @@ export class BattleView {
       groundDirty = true; vegetationDirty = true;
     }
     for (const e of events) {
-      if (e.e === 'wire' || e.e === 'bridge') { townDirty = true; vegetationDirty = true; }
+      if (e.e === 'wire' || e.e === 'bridge' || e.e === 'hq11') { townDirty = true; vegetationDirty = true; }
       else if (e.e === 'stage') {
         townDirty = true;
         const b = this.w.blds[e.bld - 1];

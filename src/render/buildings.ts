@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant, moreMarkFace } from './moreArt.ts';
 import { PAL50, RISE50, isTech50, tech50Art } from './tech50.ts';   // R050 兵營、車廠、補給站
+import { hq1011Art } from './hq1011.ts';   // R1011 指揮部升級
 import { bridge1010Art } from './bridge1010.ts';   // R1010 斷橋、木橋
 import { Geo } from './geo.ts';
 import { wearTier, wearable, tierFits, wearGeo, wearTop } from './wearArt.ts';
@@ -310,6 +311,7 @@ function hq(g: Geo, b: Building) {
   const fx = x1 - 0.32, fz = z1 - 0.32;
   g.box(fx, 0, fz, fx + 0.03, 0.85, fz + 0.03, C(0xd8d4c8));                                      // 旗桿
   g.box(fx + 0.03, 0.62, fz, fx + 0.3, 0.8, fz + 0.015, FLAG[b.builtBy === 1 ? 1 : 0]);          // 旗
+  if (b.hqLv) hq1011Art(g, b);   // R1011：加高的沙包、門擋；第 2 級再加電線桿與電纜盤
 }
 
 // R024 Type 22 碉堡：矮矮的六角形混凝土（用三塊錯開的方塊拼出切角），六面槍眼，頂板外挑；打壞了頂板裂開、槍眼周圍掉角
@@ -574,7 +576,7 @@ function wearTown(w: World, skip: ((b: Building) => boolean) | undefined, lod: n
   let n = 0;
   for (const b of w.blds) {
     if (skip && skip(b)) continue;
-    const stage = stageOf(b), sig = `${flags}|${b.id},${b.kind},${b.x},${b.z},${b.w},${b.d},${b.floors},${b.maxHp},${b.builtBy ?? ''},${stage},${wearable(b) ? wearTier(b) : 0},${lod}`;
+    const stage = stageOf(b), sig = `${flags}|${b.id},${b.kind},${b.x},${b.z},${b.w},${b.d},${b.floors},${b.maxHp},${b.builtBy ?? ''},${b.hqLv ?? ''},${stage},${wearable(b) ? wearTier(b) : 0},${lod}`;
     let list = townCache.get(b);
     if (!list) townCache.set(b, list = []);
     let part = list[lod];
