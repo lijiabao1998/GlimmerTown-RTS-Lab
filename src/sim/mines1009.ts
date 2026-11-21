@@ -176,35 +176,43 @@ function detour(w: World, u: Unit): number[] | null {
 
 // 這一格炸到這個單位扣多少（再乘承傷；不吃掩護、不看穿甲率）
 export const blast1009 = (spec: MineSpec1009, u: Unit): number => { const k = UNIT_KINDS[u.kind]; return k.radius === 0 ? spec.foot : k.armored ? spec.armored : spec.soft; };
-const onCell = (u: Unit, m: Mine1009): boolean => u.alive && !u.ride && !u.towBy && u.side !== m.side && cellOf(u.x) === m.x && cellOf(u.z) === m.z;
+const ENG: Unit[] = [], FOOT: Unit[] = [], FX: number[] = [], FZ: number[] = [];   // 模擬是單執行緒、這一支不會重入：每一步重複用同一組陣列（engineer1002.ts 的 CANDF 也這樣）
 
 // 每一步、全部單位移動和推擠之後（step.ts，carry92 之前）：前半是戳到、工兵不走進知道的雷；後半是觸雷。hurt＝step.ts 的 damageUnit（不吃掩護）
+// 先把這一步站在地上的單位（活著、沒坐車；沒被拖著的才算在格裡）和工兵各列一次（照 id 的順序），雷再對這兩張表看：不必每一格雷掃一遍全部單位（施工紀錄 9）
 export function mines1009Step(w: World, hurt: (u: Unit, dmg: number) => void): void {
   const list = w.mines!.cells, n = w.n;
+  ENG.length = 0; FOOT.length = 0; FX.length = 0; FZ.length = 0;
+  for (const u of w.units) {
+    if (!u.alive || u.ride) continue;
+    if (UNIT_KINDS[u.kind].demo) ENG.push(u);
+    if (!u.towBy) { FOOT.push(u); FX.push(cellOf(u.x)); FZ.push(cellOf(u.z)); }
+  }
   for (const m of list) {   // 戳到：對方的工兵（活著、沒坐車）站在八方向 1 格以內。不看視線、不看煙（用手戳的）
     if (m.seen) continue;
-    if (w.units.some(u => u.alive && !u.ride && u.side !== m.side && !!UNIT_KINDS[u.kind].demo && cheb(cellOf(u.x), cellOf(u.z), m.x, m.z) <= PROBE1009)) reveal1009(w, m);
+    for (const u of ENG) if (u.side !== m.side && cheb(cellOf(u.x), cellOf(u.z), m.x, m.z) <= PROBE1009) { reveal1009(w, m); break; }
   }
-  for (const u of w.units) {   // 工兵不走進知道的雷：往下一個路點那一步會踩進（或斜著擦過角）這一方知道的敵方雷、又不是射擊指令的目標，就停在這一格（尋路不繞雷）；
-    if (!u.alive || u.ride || u.rout || !UNIT_KINDS[u.kind].demo || u.pathIdx >= u.path.length) continue;   // 正在布雷、排雷的，先試著只走直的繞到目標旁邊（施工紀錄 2）
+  for (const u of ENG) {   // 工兵不走進知道的雷：往下一個路點那一步會踩進（或斜著擦過角）這一方知道的敵方雷、又不是射擊指令的目標，就停在這一格（尋路不繞雷）；
+    if (u.rout || u.pathIdx >= u.path.length) continue;   // 正在布雷、排雷的，先試著只走直的繞到目標旁邊（施工紀錄 2）
     const c = u.path[u.pathIdx], x = c % n, z = (c - x) / n;
     if (u.order === ORD_FIRE_AT && u.tx === x && u.tz === z) continue;
     if (!touches(w, u.side, cellOf(u.x), cellOf(u.z), x, z)) continue;
     const way = u.order === ORD_FIRE_AT && target1009(w, u) ? detour(w, u) : null;
     if (way) { u.path = way; u.pathIdx = 0; } else halt(u);
   }
-  for (let i = 0; i < w.mines!.cells.length;) {   // 觸雷：照 w.mines 的順序看每一格布好的雷
-    const m = w.mines!.cells[i];
-    const by = m.left === 0 ? w.units.find(u => onCell(u, m) && (m.kind !== 1 || UNIT_KINDS[u.kind].radius > 0)) : undefined;
+  for (let i = 0; i < list.length;) {   // 觸雷：照 w.mines 的順序看每一格布好的雷；那一格裡 id 最小、弄得響它的敵方單位
+    const m = list[i];
+    let by: Unit | null = null;
+    if (m.left === 0) for (let j = 0; j < FOOT.length && !by; j++) { const u = FOOT[j]; if (u.alive && u.side !== m.side && FX[j] === m.x && FZ[j] === m.z && (m.kind !== 1 || UNIT_KINDS[u.kind].radius > 0)) by = u; }
     if (!by) { i++; continue; }
     const spec = MINES1009[m.kind], x = center(m.x), z = center(m.z);
-    for (const t of w.units) if (onCell(t, m)) hurt(t, blast1009(spec, t));
+    for (let j = 0; j < FOOT.length; j++) { const t = FOOT[j]; if (t.alive && t.side !== m.side && FX[j] === m.x && FZ[j] === m.z) hurt(t, blast1009(spec, t)); }
     if (by.alive) halt(by);
     if (!blocks(w, m.x, m.z)) { const c = cellIdx(w, m.x, m.z); if (w.crater[c] < 3) w.crater[c]++; }
     w.events.push({ e: 'impact', kind: SHELL_HE, x, z, bld: 0, r: BLAST1009 });
     if (w.rules?.morale) suppressBlast(w, x, z, SUB, spec.foot);
-    w.mines!.cells.splice(i, 1);   // 一格只炸一次
-    for (const o of w.mines!.cells) if (o.side === m.side && !o.seen && cheb(o.x, o.z, m.x, m.z) <= 1) reveal1009(w, o);   // 炸了一顆，整隊停下來找旁邊的
+    list.splice(i, 1);   // 一格只炸一次
+    for (const o of list) if (o.side === m.side && !o.seen && cheb(o.x, o.z, m.x, m.z) <= 1) reveal1009(w, o);   // 炸了一顆，整隊停下來找旁邊的
   }
 }
 
