@@ -7,6 +7,7 @@ import { MAP_LARGE, LARGE_POP } from './largeMap.ts';
 import { MAP_TOWN } from './expandedMap.ts'; import { MAP_HYTHE } from './hytheMap.ts';
 import { incomeTicks } from './rules.ts';
 import { locked50, income50, tech50Step, SUPPLY_TICKS50 } from './tech50.ts';   // R050
+import { start1010 } from './bridge1010.ts';   // R1010
 import { PLATOON_ITEM, PLATOON_COST, PLATOON_SECTIONS, FORMATION_PLA, startPlatoons, ticksOf, popOf } from './platoon.ts';
 import {
   INTERNATIONAL_KINDS, SOVIET_KINDS, SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_SNIPER, UK_AT91, UK_TRUCK, UK_HALFTRACK, UK_AA, UK_ENGINEER, UK_FLAME, BK_HQ, TER_ROAD,
@@ -45,7 +46,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
 }
 
 // eco 指令：只在第 0 步有效；雙方各放一座指揮部、開始累積補給
-export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0, mg = 0, pla = 0, sw = 0, tp = 0, air = 0, tech = 0): void {
+export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0, mg = 0, pla = 0, sw = 0, tp = 0, air = 0, tech = 0, br = 0): void {
   if (w.eco || w.tick !== 0) return;
   const hq = [0, 0];
   for (const side of (w.zombies ? [SIDE_PLAYER] : [SIDE_PLAYER, SIDE_ENEMY])) {
@@ -67,6 +68,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, sov
   if (tp) w.eco.tp = tp === 2 ? 2 : 1;   // R092：運輸可以生產；開局不送車。R030：2＝被拒絕的攻擊、射擊不卸砲
   if (air) w.eco.air = 1;   // R093：空中支援與防空；開局不送兵、不送飛機
   if (tech && w.eco.sw === 2) w.eco.tech = 1;   // R050：建造與科技；開局不送建築。要跟 sw＝2 一起送（沒有工兵蓋不了，被鎖的兵種會永遠出不來）
+  if (br && w.eco.sw === 2 && !w.zombies) start1010(w);   // R1010：炸橋與修橋（萊伊、海斯才建 w.br；br 本身不存進 eco）。要跟 sw＝2 一起送（沒有工兵炸不了也修不了）
 }
 
 export const hqAlive = (w: World, side: number): Building | null => {

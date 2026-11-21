@@ -37,6 +37,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
   let baseDirty = true, last = -1, g = miniGeo(160), dpr = 1, gridN = 0;
   let baseWorld: World | undefined;
   let baseVegetation: World['vegetation'];
+  let baseBridge1010 = '';   // R1010：上次畫底圖時每座橋的狀態
   const trenchRaster = new TrenchRaster(a.trenches !== false), raster = new MiniRaster();
   const counterbatteryPoint: [number, number] = [0, 0];
   const counterbatteryProject = (x: number, z: number) => toMini(g, x, z, counterbatteryPoint);
@@ -98,6 +99,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
     if (w !== baseWorld) baseDirty = true;   // 換局先失效，不能被上一局的 100ms 節流擋住。
     if (w === baseWorld && w.vegetation !== baseVegetation) baseDirty = true;   // 同一個世界在 tick0 經紀錄啟用也立即換底圖。
     if (trenchRaster.sync(w)) baseDirty = true;   // 同一世界的首次啟用／追加段也先於 100ms 節流。
+    { const sig = w.br?.spans.map(s => s.state).join('') ?? ''; if (sig !== baseBridge1010) { baseBridge1010 = sig; baseDirty = true; } }   // R1010：橋斷了、修好了（w.ter 變了）就重畫底圖；沒有 w.br 永遠是空字串
     if (t - last < 100 && !baseDirty) return;   // 一秒最多重畫 10 次
     last = t;
     const cssW = innerWidth < 640 ? 150 : 200;

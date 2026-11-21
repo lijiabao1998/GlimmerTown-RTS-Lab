@@ -4,6 +4,7 @@ import { BK_BARRACKS, BK_DEPOT, BK_SUPPLY, UNIT_KINDS, type World } from '../sim
 import { TECH50, why50, builders50 } from '../sim/tech50.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { OrderHit, OrderRoute } from './smoke.ts';
+import { hint1010 } from './bridge1010.ts';   // R1010：沒選好要蓋的時候，提示列換問炸橋修橋那一句
 import { air93Arm } from './air93.ts';   // R1004：建造模式跟空中鍵互斥（air93.ts 也 import 這一支；只在按鍵時呼叫，循環沒有關係）
 
 export const ITEM50 = 1000;   // 生產列的假編號：1000＋建築種類（1014、1015、1016；兵種只到 48，步兵排是 256）
@@ -48,7 +49,7 @@ export function tech50Route(w: World, selected: Iterable<number>, hit: OrderHit)
 export function hint50(w: World): string | undefined {
   if (w !== world) { world = w; armed = 0; flash = ''; }
   if (typeof document !== 'undefined') for (const k of [BK_BARRACKS, BK_DEPOT, BK_SUPPLY]) { const b = document.getElementById('pb-k' + (ITEM50 + k)); if (b && b.classList.contains('armed50') !== (armed === k)) { b.classList.toggle('armed50', armed === k); b.setAttribute('aria-pressed', String(armed === k)); } }
-  if (!armed) return undefined;
+  if (!armed) return hint1010(w);
   const how = `建造${NAME[armed]}：先選工兵，再點指揮部 8 格內的空地（2×2，點的那一格是左上角）；再按一次取消`;
   return flash && w.tick - flashTick < 60 ? `放不下：${flash}。${how}` : how;
 }

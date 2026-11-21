@@ -21,6 +21,7 @@ import { FORMATION_PLA } from './platoon.ts';
 import { aim91, shotDmg91 } from './support91.ts';   // R091
 import { fireAt1002, reach1002, demo1002, burns1002, burnIn1002, aimFlame } from './engineer1002.ts';   // R1002
 import { construct50 } from './tech50.ts';   // R050
+import { fireAt1010, work1010, dry1010 } from './bridge1010.ts';   // R1010 炸橋與修橋
 import { hitch92, carry92 } from './transport92.ts';   // R092
 import { call93, air93Step, seen93, BOMB93, type AirCmd } from './air93.ts';   // R093
 import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.ts';
@@ -43,7 +44,7 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
   | { t: 'map'; id: number; vegetation?: number; sym?: number; more?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number; tech?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number; tech?: number; br?: number }   // R1010 br＝1：萊伊、海斯的河車過不去、工兵炸橋修橋（要跟 sw＝2）。R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
   | { t: 'construct'; side: number; ids: number[]; kind: number; x: number; z: number }   // R050：叫工兵在 (x, z)（左上角）蓋一棟（tech50.ts）
   | AirCmd   // R093 空中支援：叫俯衝轟炸或偵察機（air93.ts）
@@ -73,7 +74,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 2 ? 2 : cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0, cmd.air === 1 ? 1 : 0, cmd.tech === 1 ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 2 ? 2 : cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0, cmd.air === 1 ? 1 : 0, cmd.tech === 1 ? 1 : 0, cmd.br === 1 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   if (cmd.t === 'construct') { construct50(w, cmd.side | 0, cmd.kind | 0, cmd.x | 0, cmd.z | 0, Array.isArray(cmd.ids) ? cmd.ids : []); return; }   // R050：工兵蓋兵營、車廠、補給站
   if (cmd.t === 'air') { call93(w, cmd.side | 0, cmd.kind | 0, cmd.x | 0, cmd.z | 0, spotted); return; }   // R093
@@ -116,6 +117,7 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
     if (cmd.ammo !== undefined && cmd.ammo !== 'smoke') return;
     const smoke = cmd.ammo === 'smoke';
     if (smoke && u.kind !== UK_HOWITZER) return;
+    if (w.br && UNIT_KINDS[u.kind].demo && fireAt1010(w, u, cx(cmd.x), cx(cmd.z))) return;   // R1010 工兵：點橋格＝炸（完好、木橋）或修（斷橋）；接不接都在 bridge1010.ts 決定
     if (UNIT_KINDS[u.kind].demo) { fireAt1002(w, u, cx(cmd.x), cx(cmd.z)); return; }   // R1002 工兵：打還站著的建築或還沒壞的網，走到挨著才炸（engineer1002.ts）
     const gx = cx(cmd.x), gz = cx(cmd.z), standing = blocks(w, gx, gz);
     if (!standing && !UNIT_KINDS[u.kind].indirect) return;
@@ -223,13 +225,13 @@ function moveUnit(w: World, u: Unit): void {
   if (u.pathIdx >= u.path.length && u.order === ORD_MOVE) u.order = ORD_IDLE;
 }
 
-const freeAt = (w: World, x: number, z: number) => !blocks(w, cellOf(x), cellOf(z));
+const freeAt = (w: World, x: number, z: number, fx = x, fz = z) => !blocks(w, cellOf(x), cellOf(z)) && (!w.br || dry1010(w, fx, fz, x, z));   // R1010：帶 br 的局水格也擋；fx、fz＝從哪裡來（斜著跨格時兩個正交鄰格也不能是水）
 
 // 車輛走一步（R005）：被推離格子中心之後，直線走向下一個路點可能擦進牆角。
 // 會撞進還站著的建築就沿牆滑（只走 x 或只走 z）；兩軸都撞就先回到自己這一格的中心；已經在中心還過不去就重找路。
 // 沒被推過的車永遠走在格子中心的連線上，不會走到這些分支。
 function stepVehicle(w: World, u: Unit, nx: number, nz: number, spd: number): void {
-  if (freeAt(w, nx, nz)) { u.x = nx; u.z = nz; return; }
+  if (freeAt(w, nx, nz, u.x, u.z)) { u.x = nx; u.z = nz; return; }
   if (nx !== u.x && freeAt(w, nx, u.z)) { u.x = nx; return; }
   if (nz !== u.z && freeAt(w, u.x, nz)) { u.z = nz; return; }
   const cx = center(cellOf(u.x)), cz = center(cellOf(u.z));
@@ -277,7 +279,7 @@ function separate(w: World): void {
     const q = isqrt(qx * qx + qz * qz);
     if (q > cap) { qx = Math.trunc((qx * cap) / q); qz = Math.trunc((qz * cap) / q); }
     const nx = lim(u.x + qx), nz = lim(u.z + qz);
-    if (freeAt(w, nx, nz)) { u.x = nx; u.z = nz; }
+    if (freeAt(w, nx, nz, u.x, u.z)) { u.x = nx; u.z = nz; }
     else if (freeAt(w, nx, u.z)) u.x = nx;
     else if (freeAt(w, u.x, nz)) u.z = nz;
   });
@@ -363,6 +365,7 @@ function fireUnit(w: World, u: Unit): void {
   const k = UNIT_KINDS[u.kind];
   if (w.rules?.morale && !canFire(u)) { if (k.indirect) syncRanging(w, u, null); return; }   // R052：潰退不開火
   if (u.holdFire === 1 && fireDisciplineEligible(u, w)) { if (k.indirect) syncRanging(w, u, null); return; }
+  if (k.demo && u.order === ORD_FIRE_AT && w.br && work1010(w, u, (t, d) => damageUnit(w, t, d, false))) return;   // R1010 工兵：炸橋、修橋（目標不是橋就交給下一行）
   if (k.demo && u.order === ORD_FIRE_AT) { demo1002(w, u, damageBld); return; }   // R1002 工兵：挨著才倒數、倒數到 0 放一包炸藥（不走砲彈）
   if (u.order !== ORD_FIRE_AT) delete u.fireAmmo;
   const smoke = u.fireAmmo === SHELL_SMOKE;
