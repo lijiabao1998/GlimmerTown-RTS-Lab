@@ -525,7 +525,7 @@ const groups = {
     assert(valves.includes("get r1010() { return on('1010'); }"), 'ui: valves has r1010');
     assert(main.includes("sw1002({ t: 'eco', ...(V.r1010 && V.r1002 && V.r091 ? { br: 1 } : {}), "), 'ui: a new battle sends br 1 only with R1010, R1002 and R091 on');
     assert(main.split('\n').length - 1 <= 672 && battle.split('\n').length - 1 <= 1195, 'ui: hub budgets hold');
-    assert(cdp.includes("const full1010 = /(^|&)noR1010=/.test(full50) ? full50 : `${full50 ? full50 + '&' : ''}noR1010=1`;") && cdp.includes('? full1010 : `${full1010 ?'), 'ui: tools/cdp.mjs opens pages with noR1010=1 unless a guard asks for R1010');
+    assert(cdp.includes("const full1010 = /(^|&)noR1010=/.test(full1005) ? full1005 : `${full1005 ? full1005 + '&' : ''}noR1010=1`;") && cdp.includes('? full1010 : `${full1010 ?'), 'ui: tools/cdp.mjs opens pages with noR1010=1 unless a guard asks for R1010');
     assert(hud.split('\n').filter(l => /^import /.test(l)).every(l => l.startsWith('import type ')), 'ui: src/ui/hud.ts still has only type imports');
     // 小地圖（tests/minimap90.mjs 那一套假畫布）
     const canvases = [];

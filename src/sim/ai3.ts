@@ -5,6 +5,7 @@ import { PLATOON_ITEM, costOf, queueUnits } from './platoon.ts';
 import { hqAlive } from './eco.ts';
 import { dist } from './math.ts';
 import { ARMOR_MEMORY, freeNear, type AiCmd } from './ai.ts';
+import { first1005, support1005 } from './ai1005.ts';   // R1005（ai1005.ts 也 import 這一支；只在想的時候呼叫，循環沒有關係）
 import { firstBlock, ridge } from './step.ts';   // R081（step.ts 也 import 這一支；只在想的時候呼叫，不在載入時用，循環沒有關係）
 import {
   UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT,
@@ -24,6 +25,7 @@ export function produce3(w: World, st: AiState, mine: Unit[], seen: Unit[]): num
   if (!e || !hqAlive(w, side)) return null;
   const q = e.queue[side];
   if (q.length >= QUEUE_MAX) return null;
+  if (st.four) { const k = first1005(w, st, mine, seen); if (k !== undefined) return k; }   // R1005 第四版：要先蓋兵營的工兵、看過飛機之後的防空砲
   const count = (ok: (kind: number) => boolean) => mine.filter(u => ok(u.kind)).length + queueUnits(q).filter(ok).length;   // 活著的＋排在佇列裡的（R095：排展開成三班）
   const has = (k: number) => count(x => x === k);
   let want: number;
@@ -35,7 +37,7 @@ export function produce3(w: World, st: AiState, mine: Unit[], seen: Unit[]): num
     const foeArmor = seen.some(u => UNIT_KINDS[u.kind].armored), sawArmor = a2 && st.armor !== undefined && w.tick - st.armor <= ARMOR_MEMORY;
     // 支援的清單（照順序、各有上限）：步兵、榴彈砲（普通 1、困難 2）→ 看得到敵方裝甲時的反戰車砲 → 迫擊砲 → 裝甲車 → 反戰車砲
     const support = e.inf && !plaHard && has(UK_INFANTRY) < top ? UK_INFANTRY : has(UK_HOWITZER) < top ? UK_HOWITZER : guns && foeArmor && has(UK_ATGUN) < 1 ? UK_ATGUN
-      : guns && has(UK_MORTAR) < 1 ? UK_MORTAR : a2 && has(UK_ARMORED_CAR) < 1 ? UK_ARMORED_CAR : guns && has(UK_ATGUN) < 1 ? UK_ATGUN : -1;
+      : guns && has(UK_MORTAR) < 1 ? UK_MORTAR : a2 && has(UK_ARMORED_CAR) < 1 ? UK_ARMORED_CAR : guns && has(UK_ATGUN) < 1 ? UK_ATGUN : st.four ? support1005(w, st, mine, seen) : -1;   // R1005：第三版的支援都滿了，再看新的四種兵
     // 特種車（各保持一台）：主力夠了才出突擊砲、重坦克（困難）、輕坦克（普通）；看過敵方裝甲就出驅逐戰車
     const enough = core >= CORE_FIRST;
     const special = a2 && enough && has(UK_ASSAULT) < 1 ? UK_ASSAULT : sawArmor && has(UK_DESTROYER) < 1 ? UK_DESTROYER

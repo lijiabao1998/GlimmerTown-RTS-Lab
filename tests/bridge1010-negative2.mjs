@@ -27,7 +27,7 @@ const cases = [
   ['tow_corner', T92, [['(dx && dz && (waterAt(w, nx, z) || waterAt(w, x, nz)))', 'false']], 'ford', /^ford: a truck across a river corner does not hitch the gun/],
   // 8 節 閥
   ['valve_ignored', M, [['...(V.r1010 && V.r1002 && V.r091 ? { br: 1 } : {}),', '...(V.r1002 && V.r091 ? { br: 1 } : {}),']], 'ui', /^ui: a new battle sends br 1 only with R1010, R1002 and R091 on/],
-  ['cdp_default', CDP, [['const full1010 = /(^|&)noR1010=/.test(full50) ? full50 :', 'const full1010 = full50; const unused1010 = /(^|&)noR1010=/.test(full50) ? full50 :']], 'ui', /^ui: tools\/cdp\.mjs opens pages with noR1010=1/],
+  ['cdp_default', CDP, [['const full1010 = /(^|&)noR1010=/.test(full1005) ? full1005 :', 'const full1010 = full1005; const unused1010 = /(^|&)noR1010=/.test(full1005) ? full1005 :']], 'ui', /^ui: tools\/cdp\.mjs opens pages with noR1010=1/],
 ];
 try {
   for (const d of ['src', 'tools']) fs.cpSync(path.join(root, d), path.join(temp, d), { recursive: true });
