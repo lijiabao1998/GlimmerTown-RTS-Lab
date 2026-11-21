@@ -13,6 +13,9 @@ const STORE = '  if (hq11 && w.eco.tech) w.eco.hq11 = 1;   // R1011：指揮部�
 const PAUSE = '    if (hq.hqUp !== undefined && tick1011(w, hq)) continue;   // R1011：升級中＝這一方生產暫停（佇列、進度留著）\n';
 const INCOME = '    if (w.tick % (incomeTicks(w) || ECO_INCOME_TICKS) === 0) e.supply[side]++;';
 const ECO2 = '...(V.r050 && V.r1002 && V.r1011 ? { hq11: 1 } : {}), ';
+const B = 'src/render/battle.ts', BUDGET = JSON.parse(fs.readFileSync(path.join(root, 'tools/hub-budget.json'), 'utf8'));
+const room = f => BUDGET[f] - (fs.readFileSync(path.join(root, f), 'utf8').split('\n').length - 1);   // 總機離上限還有幾行
+const more = n => '// 之後的卡加的一行\n'.repeat(Math.max(n, 0));
 // [名字, 檔案, [[原文, 改成], …], 群, 第一個紅的斷言]
 const cases = [
   ['flag_unstored', E, [[STORE, '']], 'flag', /^flag: hq11 is stored only with sw 2 and tech 1, and only as 1/],
@@ -46,7 +49,28 @@ const cases = [
   ['block_empty', U, [['? why1011(w, SIDE_PLAYER, kind) : undefined', "? '' : undefined"]], 'ui', /^ui: the two keys ask why1011/],
   ['group_build', U, [["group: '指揮部'", "group: '建造'"]], 'ui', /^ui: two items in their own 指揮部 group/],
   ['line_always_on', U, [["stageOf(b) === STAGE_INTACT ? '通' : '斷線'", "'通'"]], 'ui', /^ui: at seventy percent, the line is cut/],
+  // 審查（R1011 完工後）第 2 條：兩顆鍵寫死問第 0 方，連線對戰加入的人會看到主機那一方的狀態
+  ['side_view0', U, [['why1011(w, SIDE_PLAYER, kind)', 'why1011(w, 0, kind)']], 'ui', /^ui: versus guest \(side 1\)/],
+  // 審查第 1 條：常駐的接線檢查改看「issue()、playLog 不補 hq11」與「總機不超過上限」（null＝接在檔尾）
+  ['issue_hq11', M, [["function issue(cmd: Command) { if (cmd.t === 'map'", "function issue(cmd: Command) { if (cmd.t === 'eco') cmd = { ...cmd, hq11: 1 }; if (cmd.t === 'map'"]], 'wiring', /^wiring: issue\(\) and __rts\.playLog never add hq11/],
+  ['playlog_hq11', M, [['if (lg[i].tick === w.tick) issue(lg[i].cmd);', "if (lg[i].tick === w.tick) issue(lg[i].cmd.t === 'eco' ? { ...lg[i].cmd, hq11: 1 } as Command : lg[i].cmd);"]], 'wiring', /^wiring: issue\(\) and __rts\.playLog never add hq11/],
+  ['main_over_budget', M, [[null, more(room(M) + 1)]], 'wiring', /^wiring: main\.ts stays within its budget/],
+  ['battle_over_budget', B, [[null, more(room(B) + 1)]], 'wiring', /^wiring: battle\.ts stays within its budget/],
 ];
+// 反過來：以後的卡做的這幾種改動，hq1011 要照樣綠（審查第 1 條：之前釘死 670／1194 行和兩段的 SHA-256，這幾種都會紅）
+// [名字, [[檔案, 原文 或 null（接在檔尾）, 改成], …], 群]
+const fine = [
+  ['later_lines_to_budget', [[M, null, more(room(M))], [B, null, more(room(B))]], 'wiring'],
+  ['later_comments_in_issue_playlog', [[M, '  pending.push(cmd);\n}', '  pending.push(cmd);   // 之後的卡加的註解\n}'], [M, '    if (w.sandbox) { paused = !w.sandbox.running; ui(); }\n', '    if (w.sandbox) { paused = !w.sandbox.running; ui(); }   // 之後的卡加的註解\n']], 'wiring'],
+];
+const pick = process.argv.slice(2);   // node tests/hq1011-negative.mjs [名字 …]：只跑那幾處
+const want = name => !pick.length || pick.includes(name);
+const apply = (text, from, to, name) => {
+  if (from === null) return text + to;
+  assert.equal(text.split(from).length - 1, 1, `unique ${name} anchor: ${from}`);
+  return text.replace(from, to);
+};
+let ran = 0;
 try {
   for (const d of ['src', 'tools']) fs.cpSync(path.join(root, d), path.join(temp, d), { recursive: true });
   fs.mkdirSync(path.join(temp, 'tests'));
@@ -54,9 +78,10 @@ try {
   fs.writeFileSync(path.join(temp, 'package.json'), '{"type":"module"}');
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(temp, 'node_modules'), 'junction');
   for (const [name, file, edits, group, message] of cases) {
+    if (!want(name)) continue;
     const target = path.join(temp, file), original = fs.readFileSync(target, 'utf8');
     let mutated = original;
-    for (const [from, to] of edits) { assert.equal(mutated.split(from).length - 1, 1, `unique ${name} anchor: ${from}`); mutated = mutated.replace(from, to); }
+    for (const [from, to] of edits) mutated = apply(mutated, from, to, name);
     fs.writeFileSync(target, mutated);
     const r = spawnSync(process.execPath, ['tests/hq1011.mjs', group], { cwd: temp, encoding: 'utf8', timeout: 60000 });
     fs.writeFileSync(target, original);
@@ -64,6 +89,21 @@ try {
     const first = r.stderr.match(/AssertionError[^\r\n]*?: ([^\r\n]+)/)?.[1];
     assert.match(first ?? '', message, `${name}: first red must be the intended assertion; ${r.stderr.slice(0, 600)}`);
     console.log(`RED hq1011/${name}: ${first.slice(0, 150)}`);
+    ran++;
+  }
+  for (const [name, edits, group] of fine) {
+    if (!want(name)) continue;
+    const originals = new Map();
+    for (const [file, from, to] of edits) {
+      const target = path.join(temp, file);
+      if (!originals.has(target)) originals.set(target, fs.readFileSync(target, 'utf8'));
+      fs.writeFileSync(target, apply(fs.readFileSync(target, 'utf8'), from, to, name));
+    }
+    const r = spawnSync(process.execPath, ['tests/hq1011.mjs', group], { cwd: temp, encoding: 'utf8', timeout: 60000 });
+    for (const [target, text] of originals) fs.writeFileSync(target, text);
+    assert(!r.error && r.status === 0 && r.stdout.includes(`OK hq1011/${group}`), `${name}: a later card's harmless edit must stay green; ${r.error ?? r.status} ${r.stderr.slice(0, 600)}`);
+    console.log(`GREEN hq1011/${name} (${group})`);
+    ran++;
   }
 } finally {
   const resolved = path.resolve(temp), parent = path.resolve(os.tmpdir()) + path.sep;
@@ -71,4 +111,5 @@ try {
   try { fs.unlinkSync(path.join(resolved, 'node_modules')); } catch {}
   fs.rmSync(resolved, { recursive: true, force: true });
 }
-console.log(`hq1011: ${cases.length} negative controls OK`);
+assert(ran > 0, `no case named ${pick}`);
+console.log(pick.length ? `hq1011: ${ran} picked controls OK` : `hq1011: ${cases.length} negative controls and ${fine.length} harmless later edits OK`);
