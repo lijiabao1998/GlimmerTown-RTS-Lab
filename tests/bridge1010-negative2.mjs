@@ -1,4 +1,4 @@
-// R1010 故意弄壞（二）：存檔、介面、小地圖、畫面、閥。做法同 tests/bridge1010-negative.mjs（隔離副本、只跑那一群、第一個紅燈要落在指定的那一句）。卡面驗收 18。
+// R1010 故意弄壞（二）：存檔、介面、小地圖、畫面、閥，和審查補的拖砲、橋面高度、修好的事件。做法同 tests/bridge1010-negative.mjs（隔離副本、只跑那一群、第一個紅燈要落在指定的那一句）。卡面驗收 18。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PART = 'r1010-negative2-';
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), PART));
-const C = 'src/sim/worldCodec.ts', UI = 'src/ui/bridge1010.ts', MINI = 'src/ui/minimap.ts', R = 'src/render/bridge1010.ts', M = 'src/main.ts', CDP = 'tools/cdp.mjs';
+const C = 'src/sim/worldCodec.ts', UI = 'src/ui/bridge1010.ts', MINI = 'src/ui/minimap.ts', R = 'src/render/bridge1010.ts', M = 'src/main.ts', CDP = 'tools/cdp.mjs', B = 'src/sim/bridge1010.ts', T92 = 'src/sim/transport92.ts';
 const cases = [
   // 3 節 存檔
   ['codec_open', C, [['if (!wet || !(br = brOk1010(r, ter, wet, b))) return null;', 'br = { version: 1, wet: wet!, spans: (b as { spans: [] }).spans };']], 'codec', /^codec: refuses br with sw 1/],
@@ -20,6 +20,11 @@ const cases = [
   // 6 節 小地圖、畫面
   ['minimap_stale', MINI, [["    { const sig = w.br?.spans.map(s => s.state).join('') ?? ''; if (sig !== baseBridge1010) { baseBridge1010 = sig; baseDirty = true; } }", '']], 'ui', /^ui: after bridge 0 breaks the next frame repaints the minimap base/],
   ['region_all', R, [['    if (skip && skip({ id: 0,', '    if (false && skip({ id: 0,']], 'art', /^art: a skip that leaves every building out leaves the bridges out too/],
+  ['deck_high', R, [['const DECK_TOP = 0.008;', 'const DECK_TOP = 0.06;']], 'art', /^art: a timber deck stays below the team disc/],   // 審查：橋面蓋住橋上單位的圓盤與選取圈
+  ['repair_event', B, [["  stop1010(w, si);\n  w.events.push({ e: 'bridge', span: si });\n}\n\n// step.ts 的 freeAt", '  stop1010(w, si);\n}\n\n// step.ts 的 freeAt']], 'repair', /^repair: map 1: the step the repair finishes carries one bridge event/],   // 審查：修好不出事件，城鎮網格不重建
+  // 2.2 拖砲（審查補的：卡車在河角對岸把砲掛過河）
+  ['tow_ford', T92, [['      if (d > REACH92 || (w.br && tows92(u.kind) && !dryTow1010(w, u.x, u.z, c.x, c.z))) continue;', '']], 'ford', /^ford: a truck across a river corner does not hitch the gun/],
+  ['tow_corner', T92, [['(dx && dz && (waterAt(w, nx, z) || waterAt(w, x, nz)))', 'false']], 'ford', /^ford: a truck across a river corner does not hitch the gun/],
   // 8 節 閥
   ['valve_ignored', M, [['...(V.r1010 && V.r1002 && V.r091 ? { br: 1 } : {}),', '...(V.r1002 && V.r091 ? { br: 1 } : {}),']], 'ui', /^ui: a new battle sends br 1 only with R1010, R1002 and R091 on/],
   ['cdp_default', CDP, [['const full1010 = /(^|&)noR1010=/.test(full50) ? full50 :', 'const full1010 = full50; const unused1010 = /(^|&)noR1010=/.test(full50) ? full50 :']], 'ui', /^ui: tools\/cdp\.mjs opens pages with noR1010=1/],

@@ -2,7 +2,7 @@
 //   新開的局 eco 帶 br＝1、sw＝2；閥：?noR1010=1 不帶 br、?noR091=1 兩個都不帶；
 //   造一個工兵、選它、按「砲擊」、在畫面上點橋 0：送出去的是工兵那一格的射擊指令；跑到斷：地面畫成泥、城鎮網格多了斷橋的殘段；
 //   不按砲擊點斷橋：送射擊指令、補給少 10、提示列有「工兵去修橋」，修好之後有木橋；頁面＝Node 重播；?noR1010=1 的頁面照樣重播帶 br 的紀錄；
-//   橋 2 斷了之後點橋 0：不送、提示列說是最後一座。預算在 tests/bridge1010-budget-browser.mjs（CI 每支限 120 秒）。截圖存 R1010_SHOTS（沒設就是 shots/，不進倉庫）。
+//   修好那一步城鎮網格當場重建（三角形＝Node 用同一個世界建的）；橋 2 斷了之後點橋 0：不送、提示列說是最後一座；木橋上的單位看得到隊色圓盤和選取圈（審查補的）。預算在 tests/bridge1010-budget-browser.mjs（CI 每支限 120 秒）。截圖存 R1010_SHOTS（沒設就是 shots/，不進倉庫）。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,8 +11,9 @@ import { build } from 'vite';
 import { withBrowser, ROOT } from '../tools/cdp.mjs';
 import { runOrSkip } from '../tools/net-harness.mjs';
 import { fixture89, measure } from '../tools/r089-fixture.mjs';
-import { createWorld, hashWorld } from '../src/sim/world.ts';
+import { createWorld, hashWorld, TER_MUD } from '../src/sim/world.ts';
 import { runLog } from '../src/sim/step.ts';
+import { buildTown } from '../src/render/buildings.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r1010-browser-')), SHOTS = process.env.R1010_SHOTS || path.join(ROOT, 'shots');
 const tapNow = (page, x, y) => { const base = Date.now(); return Promise.all([page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }], timestamp: base / 1000 }), page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [], timestamp: (base + 60) / 1000 })]); };
@@ -77,16 +78,44 @@ await runOrSkip('bridge1010', async () => {
       for (let k = 0; k < 40 && (await E('__r089.br10()'))[0][0] !== 2; k++) await E('__rts.stepN(20)');
       assert.deepEqual((await E('__r089.br10()'))[0], [2, 20, 0], 'repair: bridge 0 is a timber bridge');
       await E('__rts.pause(true); 0'); for (let k = 0; k < 4; k++) await frames();
-      assert((await E('__rts.info()')).townTris > tris0, 'repair: the town mesh carries the timber deck');
+      const trisT = (await E('__rts.info()')).townTris;
+      assert(trisT > tris0, 'repair: the town mesh carries the timber deck');
       await shot('r1010-timber.png');
       // 驗收 23：頁面＝Node 重播；?noR1010=1 的頁面照樣重播帶 br 的紀錄
-      const [s2, t2, h2, l2] = await E('[__rts.seed(), __rts.tick(), __rts.hash(), __rts.log()]');
-      assert.equal(hashWorld(runLog(createWorld(s2), l2, t2)), h2, `replay: the page at tick ${t2} equals the Node replay of its own log`);
+      const [s2, t2, h2, l2] = await E('[__rts.seed(), __rts.tick(), __rts.hash(), __rts.log()]'), nodeT = runLog(createWorld(s2), l2, t2);
+      assert.equal(hashWorld(nodeT), h2, `replay: the page at tick ${t2} equals the Node replay of its own log`);
+      // 修好那一步的 bridge 事件讓城鎮網格當場重建：頁面從斷橋到木橋多的三角形＝Node 在同一個世界把橋 0 換回斷橋差的那麼多（沒重建的話頁面還是斷橋殘段的 tris1；審查找到的缺口）
+      const asBroken = structuredClone(nodeT), sp0 = asBroken.br.spans[0]; sp0.state = 1; sp0.hp = 0; sp0.left = 0; for (const c of sp0.cells) asBroken.ter[c] = TER_MUD;
+      const artDelta = buildTown(nodeT).triangles - buildTown(asBroken).triangles;
+      assert(artDelta !== 0 && trisT - tris1 === artDelta, `repair: the town mesh is rebuilt live with the timber deck (page ${tris1} → ${trisT}, Node timber − broken ${artDelta})`);
       // 驗收 22：橋 2 斷了之後點橋 0（夾具直接把橋 2 設成斷的）
       await E('__r089.bridge10(2, 1); __rts.pause(true); 0'); await fireOn(true);
       n0 = await tapCell(24, 7, 'last');
       assert.deepEqual(await sentSince(n0), [], 'last: with bridge 2 down a tap on bridge 0 sends nothing');
       assert.match(await hint(), /最後一座車過得去的橋/, 'last: the hint bar says it is the last bridge');
+      // 木橋上的單位：隊色圓盤、選取圈看得到（審查：0.06 高的橋面把它們整個蓋掉）。先在岸上量一次當基準，走上木橋再量一次
+      await fireOn(false);
+      const count = async (name) => {
+        for (let k = 0; k < 6; k++) await frames();
+        const s = await page.send('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, name), Buffer.from(s.data, 'base64'));
+        const [cx, cy] = await E(`__rts.screenOf(${en.id})`);
+        return E(`(async () => { const img = new Image(); img.src = 'data:image/png;base64,${s.data}'; await img.decode();
+          const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+          const dpr = img.width / innerWidth, R = Math.round(60 * dpr), x0 = Math.max(0, Math.round(${cx} * dpr) - R), y0 = Math.max(0, Math.round(${cy} * dpr) - R);
+          const d = g.getImageData(x0, y0, 2 * R, 2 * R).data; let ring = 0, blue = 0;
+          for (let i = 0; i < d.length; i += 4) { const r = d[i], gg = d[i + 1], b = d[i + 2]; if (r > 220 && gg > 190 && gg < 245 && b < 140) ring++; if (b > 170 && r < 110 && gg < 170) blue++; }
+          return { ring, blue }; })()`);
+      };
+      const [s3, t3, l3] = await E('[__rts.seed(), __rts.tick(), __rts.log()]'), bank = runLog(createWorld(s3), l3, t3).units[en.id - 1];
+      await E(`__rts.select([${en.id}]); __rts.focus(${bank.x / 256}, ${bank.z / 256}, 2.2); 0`);
+      const onBank = await count('r1010-ring-bank.png');
+      await E(`__rts.issue({ t: 'move', side: 0, ids: [${en.id}], x: 24, z: 7 }); __rts.stepN(150); __rts.pause(true); 0`);
+      const [s4, t4, l4] = await E('[__rts.seed(), __rts.tick(), __rts.log()]'), deck = runLog(createWorld(s4), l4, t4).units[en.id - 1];
+      assert.deepEqual([deck.x >> 8, deck.z >> 8, (await E('__r089.br10()'))[0][0]], [24, 7, 2], `ring: fixture: the engineer stands on the timber bridge (${deck.x >> 8},${deck.z >> 8})`);
+      await E(`__rts.select([${en.id}]); __rts.focus(${deck.x / 256}, ${deck.z / 256}, 2.2); 0`);
+      const onDeck = await count('r1010-ring-timber.png');
+      assert(onBank.ring > 50 && onBank.blue > 50, `ring: fixture: on the bank the selection ring and team disc show (${JSON.stringify(onBank)})`);
+      assert(onDeck.ring * 10 >= onBank.ring * 3 && onDeck.blue * 10 >= onBank.blue * 3, `ring: a unit on a timber bridge still shows its selection ring and team disc (bank ${JSON.stringify(onBank)}, timber ${JSON.stringify(onDeck)})`);
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
       // 驗收 19 的閥、驗收 23 的另一半
       await open('noR091=1&noR1002=0&noR1010=0&seed=1944'); await E('__rts.pause(true); __rts.startBattle(); __rts.pause(true); 0');
@@ -96,7 +125,7 @@ await runOrSkip('bridge1010', async () => {
       assert.equal(await E(`__rts.playLog(${s2}, ${JSON.stringify(l2)}, ${t2})`), h2, 'replay: a ?noR1010=1 page replays the br log to the same hash');
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
       assert.equal(page.errors.length, 0, `page: no page errors (${page.errors.join(' | ').slice(0, 300)})`);
-      console.log(`bridge1010 browser: eco and valves; blow at the tap (ground ${groundBefore} → ${after}); repair paid 10; timber; replay ${t2}; last bridge refused`);
+      console.log(`bridge1010 browser: eco and valves; blow at the tap (ground ${groundBefore} → ${after}); repair paid 10; timber; replay ${t2}; town rebuilt on repair (${tris1} → ${trisT}); last bridge refused; ring on the bank ${JSON.stringify(onBank)}, on the timber deck ${JSON.stringify(onDeck)}`);
     });
     console.log('bridge1010-browser: all OK');
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

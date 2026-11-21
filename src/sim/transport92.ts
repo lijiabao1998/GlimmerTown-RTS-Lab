@@ -2,7 +2,7 @@
 // 一條規則管載人和拖砲：車跟要載的人、要拖的砲在同一道移動指令裡，兩格內的就上車／掛上；車的移動走完（或被打爛、被釘住）就放下。一台只載一個。
 // 卡面：docs/tasks/R092-運輸.md。只用整數、不抽亂數。
 import { dist } from './math.ts';
-import { UNIT_KINDS, UK_ZOMBIE, UK_TRUCK, UK_HALFTRACK, ORD_IDLE, ORD_MOVE, SUB, MORALE_PINNED, moraleState, type Unit, type World } from './world.ts';
+import { UNIT_KINDS, UK_ZOMBIE, UK_TRUCK, UK_HALFTRACK, ORD_IDLE, ORD_MOVE, SUB, MORALE_PINNED, moraleState, cellOf, waterAt, type Unit, type World } from './world.ts';
 
 export const REACH92 = 2 * SUB;   // 兩格內的才掛得上（整數距離 ≤ 512）
 export const BAIL92 = [50, 25];   // 車被打爛時坐車的扣血量上限的幾 %：[沒裝甲（卡車）, 有裝甲（半履帶車）]
@@ -25,11 +25,32 @@ export function match92(w: World, cars: Unit[], units: Unit[]): [Unit, Unit][] {
     for (const u of units) {
       if (taken.has(u.id) || !(rides92(u.kind) || tows92(u.kind)) || pinned(w, u)) continue;
       const d = dist(c.x, c.z, u.x, u.z);
+      if (d > REACH92 || (w.br && tows92(u.kind) && !dryTow1010(w, u.x, u.z, c.x, c.z))) continue;   // R1010：帶 br 的局，砲那一格到車那一格要有一條不下水的路（不然在河角對岸一掛，砲就被搬過河）
       if (d <= REACH92 && (!best || d < bd)) { best = u; bd = d; }
     }
     if (best) { taken.add(best.id); out.push([c, best]); }
   }
   return out;
+}
+
+// R1010（帶 br 的局才呼叫，舊局逐位照舊）：從砲那一格走到車那一格，只走兩格圍成的方框裡、不下水；八方向，斜著走時兩個正交鄰格也都不能是水（同 findPath 的不切角、
+// bridge1010.ts 的 dry1010）。掛上會把砲直接搬到車那一格：河道有只在角上相接的地方（萊伊 (8,8)–(9,9)、海斯五處），不看這一條，卡車在對岸一掛，砲就過了河。
+// 寫在這裡、不 import bridge1010.ts：那一支經 engineer1002.ts、step.ts 又 import 這一支，多一圈循環。兩格內的方框最多 3×3，搭車鍵每一幀呼叫也不貴
+function dryTow1010(w: World, ax: number, az: number, bx: number, bz: number): boolean {
+  const sx = cellOf(ax), sz = cellOf(az), gx = cellOf(bx), gz = cellOf(bz), x0 = Math.min(sx, gx), z0 = Math.min(sz, gz), x1 = Math.max(sx, gx), z1 = Math.max(sz, gz);
+  const seen = [sx, sz];
+  for (let i = 0; i < seen.length; i += 2) {
+    const x = seen[i], z = seen[i + 1];
+    if (x === gx && z === gz) return true;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, nz = z + dz;
+      if ((!dx && !dz) || nx < x0 || nx > x1 || nz < z0 || nz > z1 || waterAt(w, nx, nz) || (dx && dz && (waterAt(w, nx, z) || waterAt(w, x, nz)))) continue;
+      let had = false;
+      for (let j = 0; j < seen.length; j += 2) if (seen[j] === nx && seen[j + 1] === nz) had = true;
+      if (!had) seen.push(nx, nz);
+    }
+  }
+  return false;
 }
 
 // 指令逐單位算完之後（step.ts 的 applyCommand）：us 是這道指令收下的單位

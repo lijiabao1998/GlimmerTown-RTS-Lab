@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createWorld, hashWorld, center, cellOf, SUB, UNIT_KINDS, ORD_IDLE, ORD_FIRE_AT, SIDE_PLAYER as ME, SIDE_ENEMY as FOE, SHELL_HE, TER_MUD, TER_ROAD, TER_GRASS,
-  UK_TANK, UK_HEAVY, UK_INFANTRY, UK_HOWITZER, UK_TRUCK, UK_AA, UK_ENGINEER, BK_SUPPLY, waterAt, wireBlocks } from '../src/sim/world.ts';
+  UK_TANK, UK_HEAVY, UK_INFANTRY, UK_HOWITZER, UK_TRUCK, UK_AA, UK_ENGINEER, UK_ATGUN, BK_SUPPLY, waterAt, wireBlocks, blocks } from '../src/sim/world.ts';
 import { step, runLog } from '../src/sim/step.ts';
 import { findPath } from '../src/sim/path.ts';
 import { isCommand } from '../src/sim/commandCheck.ts';
@@ -163,7 +163,23 @@ const groups = {
       }
       runs++;
     }
-    console.log(`OK bridge1010/ford: tanks, trucks, howitzers, AA guns cross only on bridges; feet wade; no-br tanks still wade; head-on on a bridge stays dry; ${runs} corner pushes leak nothing`);
+    // 拖砲（R092）：卡車在角的對岸不能把砲掛過去（審查：match92 只看兩格內，掛上就把砲搬到車那一格；砲自己要繞橋）。同一岸的照舊掛得上
+    const tpw = { 32: bare(MAP_RYE, 1, ecoBr({ tp: 1 })), 128: bare(MAP_HYTHE, 1, ecoBr({ tp: 1 })) };
+    let tows = 0;
+    for (const [w0, ax, az, bx, bz] of found) for (const [gx, gz, cx, cz] of [[ax, az, bx, bz], [bx, bz, ax, az]]) for (const kind of [UK_ATGUN, UK_HOWITZER]) {
+      if (blocks(w0, gx, gz) || blocks(w0, cx, cz)) continue;   // 海斯 (47,79)、(71,55) 那兩格是地圖固定的房子：車、砲都不會在裡面
+      const w = structuredClone(tpw[w0.n]), n = w.n, comp = comps(w), gun = put(w, ME, kind, gx, gz), car = put(w, ME, UK_TRUCK, cx, cz);
+      const k = [4, 5, 6, 7, 8, 3].find(k => { const p = findPath(w, cx, cz, cx + k * (cx - gx), cz + k * (cz - gz), 0, 0, UK_TRUCK); return p.length && p[p.length - 1] === (cz + k * (cz - gz)) * n + cx + k * (cx - gx); });   // 車那一岸、車開得到的一格
+      step(w, [{ t: 'move', side: ME, ids: [car.id, gun.id], x: cx + k * (cx - gx), z: cz + k * (cz - gz) }]);
+      assert(car.order !== ORD_IDLE && car.path.length > 0, `ford: setup: the truck at (${cx},${cz}) drives off`);
+      assert(!gun.towBy && comp[cellOf(gun.z) * n + cellOf(gun.x)] === comp[gz * n + gx], `ford: a truck across a river corner does not hitch the gun (map ${n}, gun kind ${kind} at ${gx},${gz}, truck at ${cx},${cz}; gun now at ${cellOf(gun.x)},${cellOf(gun.z)} towBy ${gun.towBy})`);
+      tows++;
+    }
+    assert.equal(tows, 16, 'ford: setup: four corners (Rye one, Hythe three without a house on them) × two banks × two guns');
+    { const w = structuredClone(tpw[32]), gun = put(w, ME, UK_ATGUN, 8, 8), car = put(w, ME, UK_TRUCK, 7, 8);
+      step(w, [{ t: 'move', side: ME, ids: [car.id, gun.id], x: 3, z: 3 }]);
+      assert.equal(gun.towBy, car.id, 'ford: a truck on the same bank still hitches the gun at the corner'); }
+    console.log(`OK bridge1010/ford: tanks, trucks, howitzers, AA guns cross only on bridges; feet wade; no-br tanks still wade; head-on on a bridge stays dry; ${runs} corner pushes leak nothing; ${tows} hitches across a corner refused`);
   },
   // 驗收 4：炸橋
   blow() {
@@ -259,6 +275,7 @@ const groups = {
         step(w, [fire(ME, [a.id], ...at(w, si))]);
         let n = 1; while (w.br.spans[si].state === 1 && n < 5000) { step(w, []); n++; }
         assert.equal(n, WORK1010 * cells, `repair: map ${map}: one engineer takes ${WORK1010 * cells} steps (${n})`);
+        assert.deepEqual(w.events.filter(v => v.e === 'bridge'), [{ e: 'bridge', span: si }], `repair: map ${map}: the step the repair finishes carries one bridge event (the town mesh rebuilds on it)`);
         assert(w.br.spans[si].cells.every(c => w.ter[c] === TER_ROAD), 'repair: the cells are road again');
         assert.deepEqual([w.br.spans[si].state, w.br.spans[si].hp, a.order], [2, WOOD1010 * cells, ORD_IDLE], 'repair: a timber bridge with 10 per cell; the engineer stands down');
         const hp = w.br.spans[si].hp;
@@ -559,7 +576,22 @@ const groups = {
       const left = tris(w, far) - tris(hy, far), want = [3, 4].reduce((t, si) => { const v = structuredClone(hy); setState(v, si, st); return t + tris(v) - hyBase; }, 0);
       assert.equal(left, [0, 1, 2].reduce((t, si) => { const v = structuredClone(hy); setState(v, si, st); return t + tris(v) - hyBase; }, 0), `art: a region skip draws only the bridges inside it (${left}, others ${want})`);
     }
-    console.log(`OK bridge1010/art: intact adds nothing; Rye per bridge ${per}, mixed +${ryeExtra}; Hythe all broken +${got[1]}, all timber +${got[2]}; skip respected`);
+    // 木橋面不能蓋住站在橋上的單位：隊色圓盤畫在 unitHeight(u) + 0.012（選取圈、移動標記、射程圈都更高），橋面在格中心那一塊（選取圈外緣半徑 0.37）的頂要比圓盤低
+    // （審查：0.06 的橋面把橋上單位的圓盤、選取圈整個蓋掉；欄杆、柱子在格邊上，不在這一塊）
+    const { bridge1010Art } = await import('../src/render/bridge1010.ts');
+    const discY = Number(src('src/render/battle.ts').match(/m\.position\.set\(x, this\.unitHeight\(u\) \+ (0\.\d+), z\); m\.rotation\.set\(0, 0, 0\)/)?.[1]);
+    assert(discY > 0 && discY < 0.05, `art: fixture: battle.ts draws the team disc at unitHeight + ${discY}`);
+    let decks = 0;
+    for (const [w0, si] of [[rye, 0], [rye, 1], [rye, 2], [hy, 2]]) {
+      const w = structuredClone(w0); setState(w, si, 2);
+      const boxes = []; bridge1010Art({ box: (...a) => boxes.push(a) }, w);
+      for (const c of w.br.spans[si].cells) {
+        const [x, z] = xz(w, c), over = boxes.filter(([ax, , az, bx, , bz]) => ax < x + 0.87 && bx > x + 0.13 && az < z + 0.87 && bz > z + 0.13);
+        assert(over.length > 0 && over.every(b => b[4] < discY), `art: a timber deck stays below the team disc and selection ring of a unit standing on it (map ${w.n} bridge ${si} cell ${x},${z}: tops ${over.map(b => b[4])}, disc ${discY})`);
+        decks++;
+      }
+    }
+    console.log(`OK bridge1010/art: intact adds nothing; Rye per bridge ${per}, mixed +${ryeExtra}; Hythe all broken +${got[1]}, all timber +${got[2]}; skip respected; ${decks} timber deck cells stay below the team disc (${discY})`);
   },
   // 驗收 16：模擬層純度
   purity() {

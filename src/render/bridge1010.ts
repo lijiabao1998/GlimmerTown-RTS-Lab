@@ -1,6 +1,6 @@
 // R1010 斷橋與木橋的模型（畫進城鎮那一個合併網格，不多任何一次繪製呼叫）。完好的橋照舊是地面貼圖上蓋過河的石板，這裡不畫。
 // 斷橋：靠岸那幾格各一截斷掉的橋頭（灰色磚石一塊、上面燒黑的木頭一塊，高低不齊），每格兩塊落在水裡的碎塊（位置照格索引算，不抽亂數）。
-// 木橋：每格一塊蓋滿整格的木橋面（舊木頭的褐色，比地面高一點）、靠水的邊一根欄杆、兩個橋頭各兩根柱子。不畫任何徽記。
+// 木橋：每格一塊蓋滿整格的木橋面（舊木頭的褐色，只比地面高一點點：要在單位腳下的圓盤底下）、靠水的邊一根欄杆、兩個橋頭各兩根柱子。不畫任何徽記。
 // 只 import geo.ts 的型別與 sim/world.ts：不 import buildings.ts（tests/walls-view.mjs 用 data: 網址另外載一份 buildings.ts，互相 import 會多出第二份狀態）。
 import * as THREE from 'three';
 import type { Geo } from './geo.ts';
@@ -10,6 +10,8 @@ const C = (hex: number) => new THREE.Color(hex);
 const STONE = C(0x8a867c), CHAR = C(0x2f2822), DEBRIS = C(0x6d675c), DECK = C(0x7b5b3c), RAIL = C(0x5c4329), POST = C(0x47331f);
 const DIRS: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const frac = (c: number, k: number) => ((c * 37 + k * 53) % 61) / 61;   // 照格索引算的 0–1（不抽亂數）
+// 木橋面的頂：要比 battle.ts 畫在 unitHeight(u) + 0.012 的隊色圓盤低（選取圈 0.02、移動標記、射程圈都更高），不然站在橋上的單位的圓盤和選取圈整個被橋面蓋住（審查找到的）
+const DECK_TOP = 0.008;
 
 // skip：這一刻先不畫的（海斯 R090 的區域城鎮：外框在鏡頭範圍外就跳過；id 0 不會被當成正在升起的房子）
 export function bridge1010Art(g: Geo, w: World, skip?: (b: Building) => boolean): void {
@@ -37,7 +39,7 @@ export function bridge1010Art(g: Geo, w: World, skip?: (b: Building) => boolean)
           strip(0.34, -0.04, h, STONE, 0.08);
           strip(0.22 + 0.1 * frac(c, dx - dz + 7), h, h + 0.035, CHAR, 0.18);
         }
-        if (s.state === 2 && water) strip(0.06, 0.06, 0.17, RAIL);   // 木橋靠水的邊：欄杆
+        if (s.state === 2 && water) strip(0.06, DECK_TOP, 0.17, RAIL);   // 木橋靠水的邊：欄杆（從橋面立起來）
         if (s.state === 2 && shore) {   // 木橋的橋頭：兩根柱子
           for (const e of [0.04, 0.86]) {
             const px = dx ? (dx > 0 ? x + 0.88 : x + 0.02) : x + e, pz = dz ? (dz > 0 ? z + 0.88 : z + 0.02) : z + e;
@@ -49,7 +51,7 @@ export function bridge1010Art(g: Geo, w: World, skip?: (b: Building) => boolean)
         const px = x + 0.15 + 0.55 * frac(c, k), pz = z + 0.15 + 0.55 * frac(c, k + 5), sz = 0.12 + 0.06 * frac(c, k + 9);
         g.box(px, -0.02, pz, px + sz, 0.025 + 0.02 * frac(c, k + 11), pz + sz * 0.7, k ? CHAR : DEBRIS);
       }
-      else g.box(x, 0, z, x + 1, 0.06, z + 1, DECK);   // 木橋面：蓋滿整格（修好時地面沒重畫還是泥，讀檔之後是路；蓋滿才兩種一樣）
+      else g.box(x, 0, z, x + 1, DECK_TOP, z + 1, DECK);   // 木橋面：蓋滿整格（修好時地面沒重畫還是泥，讀檔之後是路；蓋滿才兩種一樣）
     }
   }
 }
