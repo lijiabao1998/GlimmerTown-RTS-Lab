@@ -58,7 +58,8 @@ const groups = {
     setAi(two, ME, 3, 2); setAi(three, ME, 3, 3);
     assert.deepEqual([two.ai[0].v, three.ai[0].v], [2, 3], 'flag: v 3 is stored as the third version');
     assert.notEqual(hashWorld(two), hashWorld(three), 'flag: the second and third versions hash differently');
-    for (const v of [0, 1, 4, 2.5, '3']) { const w = createWorld(3); setAi(w, ME, 3, v); assert.equal(w.ai[0].v, undefined, `flag: v ${JSON.stringify(v)} is the first version`); }
+    for (const v of [0, 1, 5, 2.5, '3']) { const w = createWorld(3); setAi(w, ME, 3, v); assert.equal(w.ai[0].v, undefined, `flag: v ${JSON.stringify(v)} is the first version`); }   // R1005：4 改成第四版（存成 v 3 加 four），不認得的值改用 5
+    { const w = createWorld(3); setAi(w, ME, 3, 4); assert.deepEqual([w.ai[0].v, w.ai[0].four], [3, 1], 'flag: v 4 (R1005) is the third version plus four'); }
     setAi(three, ME, 1, 2);
     assert.deepEqual([three.ai[0].level, three.ai[0].v], [1, 3], 'flag: sending ai again changes the level, not the version');
     assert.equal(isCommand({ t: 'ai', side: 1, level: 2, v: 3 }), true, 'flag: the command check takes v 3');

@@ -13,7 +13,9 @@ export type AiCmd =
   | { t: 'produce'; side: number; kind: number }
   | { t: 'move'; side: number; ids: number[]; x: number; z: number }
   | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number }
-  | { t: 'attack'; side: number; ids: number[]; target: number };
+  | { t: 'attack'; side: number; ids: number[]; target: number }
+  | { t: 'construct'; side: number; ids: number[]; kind: number; x: number; z: number }   // R1005 第四版：工兵放工地
+  | { t: 'stop'; side: number; ids: number[] };   // R1005：火焰噴射器燒完了就停
 type Spotted = (w: World, side: number, x: number, z: number) => boolean;
 
 export const AI_THINK = [0, 90, 30, 20];           // 難度 1／2／3：每幾步想一次（4.5、1.5、1 秒）
@@ -28,7 +30,7 @@ export function setAi(w: World, side: number, level: number, v?: number): void {
   const corner = side === SIDE_PLAYER ? 5 : w.n - 6;     // 對方的出生角落（開局就知道的地圖情報；32×32 是 26）
   const old = w.ai.find(a => a.side === side);
   if (old) { old.level = level; return; }
-  w.ai.push({ side, level, next: w.tick, ox: center(corner), oz: center(corner), seen: 0, wp: 0, ...(v === 2 || v === 3 ? { v } : {}) });   // R057 v＝2、R078 v＝3；其他值＝第一版
+  w.ai.push({ side, level, next: w.tick, ox: center(corner), oz: center(corner), seen: 0, wp: 0, ...(v === 2 || v === 3 ? { v } : {}), ...(v === 4 ? { v: 3, four: 1 } : {}) });   // R1005 v＝4：存成第三版加 four（第三版的判斷都寫成 st.v === 3，一行都不用改）   // R057 v＝2、R078 v＝3；其他值＝第一版
   w.ai.sort((a, b) => a.side - b.side);
 }
 
