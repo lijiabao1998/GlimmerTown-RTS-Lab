@@ -5,6 +5,8 @@ import path from 'node:path';
 export const fixture89 = root => ({ name: 'r089-fixture', enforce: 'pre', transform(code, id) {
   if (path.relative(root, id.split('?')[0]).replaceAll('\\', '/') !== 'src/main.ts') return;
   return code + `
+import { air93Armed as __air93Armed } from './ui/air93.ts';   // R1004：守衛讀空中鍵、建造模式的武裝狀態（暫停中提示列不一定刷新）
+import { armed50 as __armed50 } from './ui/tech50.ts';
 window.__r089 = (() => {
   const key = (x, z) => x + ',' + z;
   const taken = () => new Set(w.units.filter(u => u.alive).map(u => key(Math.floor(u.x / 256), Math.floor(u.z / 256))));
@@ -48,7 +50,8 @@ window.__r089 = (() => {
     hp: (id, hp) => { w.units[id - 1].hp = hp; },   // R091：把一個單位的血設成 hp（量少一個人的畫法）
     bld50: (side, kind, x, z, hp) => { const id = w.blds.length + 1, maxHp = kind === 14 ? 500 : kind === 15 ? 600 : 400; w.blds.push({ id, kind, x, z, w: 2, d: 2, floors: 1, hp: hp || maxHp, maxHp, builtBy: side }); for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) w.occ[(z + dz) * w.n + x + dx] = id; view.onEvents([{ e: 'build', bld: id }], view.lastT || 0); return id; },   // R050：直接擺一棟兵營、車廠或補給站（量預算、拍照用；hp 給 1 就是工地的樣子）
     programs: () => renderer.info.programs ? renderer.info.programs.length : -1,   // R1003：已經編過的著色程式有幾個（R093 補驗：飛機上天不該多編）
-    hqDown: side => { const b = w.blds[w.eco.hq[side] - 1]; b.hp = 0; },   // R1003：讓這一方的指揮部倒下（下一步分出勝負）
+    hqDown: side => { const b = w.blds[w.eco.hq[side] - 1]; b.hp = 0; },
+    armed: () => [__air93Armed(), __armed50()],   // R1004：[空中鍵（0 沒選、1 轟炸、2 偵察）, 建造（0 或建築種類）]   // R1003：讓這一方的指揮部倒下（下一步分出勝負）
     hurt: dhp => { for (const u of w.units) if (u.kind === 3 && u.alive) u.hp = Math.max(1, u.hp - dhp); },
     count: () => w.units.filter(u => u.kind === 3 && u.alive).length,
     // 處理器時間：在頁面裡直接叫 view.update n 次（同一個模擬時間），回平均毫秒

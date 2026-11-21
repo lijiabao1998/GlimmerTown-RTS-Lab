@@ -7,6 +7,7 @@ import { STRIKE93, RECON93, COST93, HOLD93 } from '../sim/air93.ts';
 import { hqAlive } from '../sim/eco.ts';
 import { spotted } from '../sim/step.ts';
 import type { OrderHit, OrderRoute } from './smoke.ts';
+import { arm50 } from './tech50.ts';   // R1004：空中鍵跟建造模式互斥（tech50.ts 也 import 這一支；只在按鍵時呼叫，循環沒有關係）
 
 export const aa93Items = () => [
   { kind: UK_AA, label: '防空砲', cost: UNIT_KINDS[UK_AA].cost, group: '防空', role: '防空砲 · 只打飛機：8 格內每秒兩發，一門把俯衝轟炸打偏、兩門在投彈前打下來；不打地面，怕砲兵和步兵；要卡車或半履帶車拖；電腦不派飛機，對戰才用得上' },
@@ -71,6 +72,7 @@ export function initAir93(read: () => Read93, opts: { show?: boolean } = {}): vo
     const w = read().world;
     const order = armed === 0 ? [STRIKE93, RECON93] : armed === STRIKE93 ? [RECON93] : [];
     armed = order.find(k => ok(w, k)) ?? 0;
+    if (armed) arm50(0);   // R1004：武裝空中鍵就取消建造模式
   });
   addEventListener('keydown', e => { if (e.key === 'Escape') armed = 0; });
   const frame = () => {

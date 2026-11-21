@@ -238,7 +238,7 @@ const groups = {
     assert(decodeWorld(raw), 'codec: the site world reads');
     const bad = [
       ['tech 2', { ...raw, eco: { ...raw.eco, tech: 2 } }],
-      ['no tech but a site list', { ...raw, eco: noTech }],
+      ['no tech but a site list', (() => { const r = JSON.parse(JSON.stringify({ ...raw, eco: noTech })); r.blds[id - 1].kind = 0; return r; })()],   // R1004：只留工地清單（那一棟改成普通房子），不讓「有 14–16 號建築」那一條先擋掉
       ['no tech but a barracks', (() => { const r = { ...raw, eco: noTech }; delete r.tech; return r; })()],
       ['a site on a house', { ...raw, tech: { version: 1, sites: [{ id: 1, left: 5 }] } }],
       ['a site with no work left', { ...raw, tech: { version: 1, sites: [{ id, left: 0 }] } }],
@@ -303,7 +303,7 @@ const groups = {
     const main = src('src/main.ts');
     assert(main.includes('...(V.r093 ? aa93Items() : []), ...(V.r050 && V.r1002 ? tech50Items() : [])'), 'ui: the 建造 group is there only with both valves');
     assert.equal(main.split("issue(V.r050 && V.r1002 ? { ...ecoCmd(), tech: 1 } as Command : ecoCmd())").length - 1, 2, 'ui: a new battle sends tech only with both valves (both places that open a battle)');
-    assert(main.includes("produce: kind => { if (!pick50(kind)) issue({ t: 'produce', side: SIDE_PLAYER, kind }); },"), 'ui: a build key arms instead of producing');
+    assert(main.includes("produce: kind => { if (pick50(kind)) hud?.update(); else issue({ t: 'produce', side: SIDE_PLAYER, kind }); },"), 'ui: a build key arms instead of producing');
     assert(src('tools/cdp.mjs').includes("const full50 = /(^|&)noR050=/.test(full1002) ? full1002 : `${full1002 ? full1002 + '&' : ''}noR050=1`;"), 'ui: tools/cdp.mjs opens pages with noR050=1 unless a guard asks for R050');
   },
   // 驗收 15：純度
