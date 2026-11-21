@@ -5,6 +5,7 @@
 import { platoonOk } from './platoon.ts';
 import { swOk } from './support91.ts';   // R091
 import { techOk } from './tech50.ts';   // R050
+import { mineOk } from './mines1009.ts';   // R1009
 import { tpOk } from './transport92.ts';   // R092
 import { airOk } from './air93.ts';   // R093
 import { UNIT_KINDS, type World } from './world.ts';
@@ -69,6 +70,7 @@ export function decodeWorld(x: unknown): World | null {
   if (!swOk(r)) return null;   // R091：sw 只有 1；沒有 sw 就沒有 42、43 號單位
   if (!airOk(r)) return null;   // R093：air 只有 1；沒有 air 就沒有 sky、沒有 46 號
   if (!techOk(r)) return null;   // R050：tech 只有 1；沒有 tech 就沒有 w.tech、沒有 14–16 號建築；工地要指到那三種
+  if (!mineOk(r)) return null;   // R1009：mine 只有 1、要 sw＝2；沒有 mine 就沒有 mines；每一格六個整數在範圍內、同一方同一格不重複、每方不超過 24
   if (!tpOk(r)) return null;   // R092：tp 只有 1、2（R030）；沒有 tp 就沒有 44、45 號單位與 ride／towBy
   let vegetation: World['vegetation'];
   if (r.vegetation !== undefined) {
