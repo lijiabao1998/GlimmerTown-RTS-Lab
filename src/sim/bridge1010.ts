@@ -111,9 +111,9 @@ function drive1010(w: World, a: Building, b: Building, skip: number): boolean {
   return false;
 }
 const hq1010 = (w: World, side: number): Building | null => { const id = w.eco?.hq[side] ?? 0, b = id ? w.blds[id - 1] : null; return b && b.hp > 0 ? b : null; };
-// 「最後一座車過得去的橋」：兩邊的指揮部之間，車原本開得到、這座橋斷了就開不到。原本就開不到、指揮部倒了＝不管（false）
 // 兩個指揮部之間車連不連得上（守衛把開局時的結果印出來；卡面風險 6）；指揮部倒了回 false
 export const linked1010 = (w: World): boolean => { const a = hq1010(w, 0), b = hq1010(w, 1); return !!a && !!b && drive1010(w, a, b, -1); };
+// 「最後一座車過得去的橋」：兩邊的指揮部之間，車原本開得到、這座橋斷了就開不到。原本就開不到、指揮部倒了＝不管（false）
 export function cuts1010(w: World, si: number): boolean {
   const a = hq1010(w, 0), b = hq1010(w, 1);
   if (!a || !b || drive1010(w, a, b, si)) return false;

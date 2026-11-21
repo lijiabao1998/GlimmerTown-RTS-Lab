@@ -84,5 +84,5 @@ export function decodeWorld(x: unknown): World | null {
   if (r.br !== undefined) { const b = r.br as { wet?: unknown } | null, wet = typeof b === 'object' && b !== null ? unpack(b.wet, new Uint8Array(cells), 0, 1) : null; if (!wet || !(br = brOk1010(r, ter, wet, b))) return null; }
   let height: Uint8Array | null | undefined;
   if (r.height !== undefined && !(height = unpack(r.height, new Uint8Array(cells), 0, HEIGHT_MAX))) return null;   // R055：高度表（有才有；長度不對、值超出 0–3 就不收）
-  return { ...(r as unknown as World), ter, occ, crater, events: [], ...(vegetation ? { vegetation } : {}), ...(height ? { height } : {}), ...(br ? { br } : {}) };
+  return { ...(r as unknown as World), ter, occ, crater, events: [], ...(br ? { br } : {}), ...(vegetation ? { vegetation } : {}), ...(height ? { height } : {}) };   // R1010 的 br 放在前面：terrain.mjs 錨著植被、高度那一段到結尾
 }
