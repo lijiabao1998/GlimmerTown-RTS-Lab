@@ -21,8 +21,9 @@ import { routeBattleOrder } from '../src/ui/smoke.ts';
 import { mine1009Items, on1009, armed1009, ITEM1009 } from '../src/ui/mines1009.ts';
 import { pick50, arm50, armed50, block50, hint50, ITEM50 } from '../src/ui/tech50.ts';
 import { air93Arm, air93Armed } from '../src/ui/air93.ts';
-import { TrenchMines1009 } from '../src/render/mines1009.ts';
+import { withMines1009 } from '../src/render/mines1009.ts';
 import { TrenchRaster } from '../src/render/trenches.ts';
+const TrenchMines1009 = withMines1009(TrenchRaster);
 import * as side from '../src/side.ts';
 import { ECO } from '../tools/duel.mjs';
 
@@ -92,6 +93,7 @@ const groups = {
     const on = opened({ sw: 2, mine: 1 }), sw1 = opened({ sw: 1, mine: 1 }), none = opened({ mine: 1 }), two = opened({ sw: 2, mine: 2 }), off = opened({ sw: 2 }), z = opened({ sw: 2, mine: 1 }, [{ t: 'zombies' }]);
     assert.deepEqual([on.eco.mine, sw1.eco.mine, none.eco.mine, two.eco.mine, z.zombies ? z.eco.mine : 'no zombies'], [1, undefined, undefined, undefined, undefined], 'flag: mine is stored only with sw 2, only as 1, never in zombie defence');
     assert.notEqual(hashWorld(on), hashWorld(off), 'flag: mine is folded into the hash');
+    { const a = lay(camp(), mine(ME, 1, 16, 16)), b = lay(camp(), mine(ME, 1, 16, 16, 0, 1)); assert.notEqual(hashWorld(a), hashWorld(b), 'flag: the hash tells a mine the enemy knows of from one it does not'); }
     assert.equal(isCommand({ ...ECO, mine: 1 }), true, 'flag: the command check takes eco with an integer mine');
     assert.equal(isCommand({ ...ECO, mine: 'x' }), false, 'flag: the command check refuses eco with mine "x"');
     assert.equal(isCommand(M(0, [1, 2], 1, 3, 4, { rot: 1, len: 3 })), true, 'flag: the command check takes a mine command');
@@ -183,6 +185,11 @@ const groups = {
     const a = one(1, 1);
     assert.deepEqual([a.steps, a.inside, a.es[0].order], [120, false, ORD_IDLE], 'lay: one engineer beside the cell lays an anti-tank mine in 120 steps without stepping on it, then idles');
     assert.equal(one(2, 1).steps, 60, 'lay: two engineers take 60');
+    { const w = camp(), e = put(w, ME, UK_ENGINEER, 12, 16);
+      step(w, [M(ME, [e.id], 1, 16, 16)]);
+      const m = w.mines.cells[0], walked = [];
+      while (!(e.pathIdx >= e.path.length && near1002(e, { x: 16, z: 16, w: 1, d: 1 })) && walked.length < 400) { walked.push(m.left); step(w, []); }
+      assert(walked.length > 20 && walked.every(v => v === 120), `lay: nothing is laid while the engineer walks up (${walked.length} steps)`); }
     assert.equal(one(1, 2).steps, 80, 'lay: an anti-personnel mine takes 80');
     const band = n => {
       const w = camp(), es = Array.from({ length: n }, (_, i) => put(w, ME, UK_ENGINEER, 15, 14 + i));
@@ -385,6 +392,9 @@ const groups = {
     { const v = lay(camp(), mine(ME, 1, 16, 16), mine(ME, 2, 17, 16)), a = put(v, ME, UK_ENGINEER, 15, 16, true), b = put(v, FOE, UK_ENGINEER, 18, 18, true);
       assert(noop(v, fire(ME, [a.id], 16, 16)), 'forged: side 0 cannot lift its own finished mine');
       assert(noop(v, fire(FOE, [b.id], 16, 16)), 'forged: side 1 cannot clear a mine it does not know of'); }
+    const L = new Lockstep(0, [0, 1], 1, 4, true), mine0 = M(0, [1], 1, 3, 4), mine1 = M(1, [2], 1, 3, 4);
+    L.put(5, 0, [mine0, mine1]); L.put(5, 1, []);
+    assert.deepEqual(L.take(5, []).cmds, [mine0], 'forged: in versus, player 0 keeps its own mine order and drops one for side 1');
     // 2,000 條形狀隨機的指令（rng.ts），過 checkLog 的才進 step()
     const v = camp({}); v.eco.supply = [100000, 100000];
     for (let i = 0; i < 6; i++) { put(v, ME, UK_ENGINEER, 18 + i, 14 + (i % 3), true); put(v, FOE, UK_ENGINEER, 8 + i, 18 + (i % 3), true); }
@@ -402,9 +412,6 @@ const groups = {
       for (const s of [0, 1]) assert((v.mines?.cells.filter(m => m.side === s).length ?? 0) <= 24, `forged: side ${s} never has more than 24 cells`);
     }
     assert(kept > 200 && (v.mines?.cells.length ?? 0) > 0, `forged: fixture — enough random commands got through and some mines were laid (${kept}/${sent}, ${v.mines?.cells.length ?? 0} cells)`);
-    const L = new Lockstep(0, [0, 1], 1, 4, true), mine0 = M(0, [1], 1, 3, 4), mine1 = M(1, [2], 1, 3, 4);
-    L.put(5, 0, [mine0, mine1]); L.put(5, 1, []);
-    assert.deepEqual(L.take(5, []).cmds, [mine0], 'forged: in versus, player 0 keeps its own mine order and drops one for side 1');
   },
   // 驗收 16：存檔
   codec() {
@@ -519,7 +526,7 @@ const groups = {
     assert.deepEqual(tap(16, 16, [e.id])?.commands, [M(ME, [e.id], 1, 16, 16, { rot: 1, len: 1 })], 'route: three do not fit, one does: one cell is sent');
     pick50(ITEM1009 + 2);
     assert.equal(tap(16, 17, [e.id]), null, 'route: nothing fits: nothing is sent');
-    assert.match(hint50(w), /放不下：擋到了。布反人員雷/, 'route: the hint says why');
+    assert.match(hint50(w) ?? '', /放不下：擋到了。布反人員雷/, 'route: the hint says why');
     assert.equal(armed1009(), 2, 'route: and it stays armed');
     pick50(ITEM1009 + 2);
     assert.equal(armed1009(), 0, 'route: the same key again disarms');
@@ -542,7 +549,7 @@ const groups = {
     hint50(w); arm50(0); air93Arm(0);
     assert.equal(pick50(ITEM1009 + 1), true, 'ui: the 反戰車雷 key is taken (not production)');
     assert.equal(w.eco.queue[ME].length, 0, 'ui: nothing queued');
-    assert.match(hint50(w), /^布反戰車雷：先選工兵/, 'ui: armed, the hint says how to lay it');
+    assert.match(hint50(w) ?? '', /^布反戰車雷：先選工兵/, 'ui: armed, the hint says how to lay it');
     pick50(ITEM50 + 14);
     assert.deepEqual([armed1009(), armed50()], [0, 14], 'ui: a build key drops the mines');
     pick50(ITEM1009 + 2);
@@ -593,7 +600,9 @@ const groups = {
     side.setViewSide(1);
     try { r.sync(w); assert.deepEqual([13, 14, 15, 11].map(x => r.mines[cellIdx(w, x, 10)] > 0), [true, true, true, false], 'raster: viewing side 1, its own mines show and our unseen ones do not'); }
     finally { side.setViewSide(); }
-    // 真的 BattleView（Node）：建構一個有雷的世界、不走一步，那幾格的地面已經不一樣；setWorld 換成沒有雷的同一張圖，跟沒有雷的一模一樣
+  },
+  // 驗收 22（續）：真的 BattleView（Node）：建構一個有雷的世界、不走一步，那幾格的地面已經不一樣；setWorld 換成沒有雷的同一張圖，跟沒有雷的一模一樣
+  async view() {
     const { BattleView } = await import('../src/render/battle.ts');
     const base = createWorld(5); step(base, [{ t: 'map', id: 1, vegetation: 1 }, eco({ sw: 2, mine: 1 })]); base.tick = 1;
     const spots = []; for (let z = 12; z < 20 && spots.length < 2; z++) for (let x = 12; x < 20 && spots.length < 2; x++) if (!base.occ[cellIdx(base, x, z)] && base.ter[cellIdx(base, x, z)] !== TER_MUD && !base.vegetation?.cells[cellIdx(base, x, z)]) spots.push([x, z]);

@@ -1,18 +1,23 @@
 // R1009 地雷刻進地面貼圖（R118 戰壕的做法）：每格 8×8 像素的花樣，不加網格、不多繪製呼叫、不多三角形。
 // 只畫「我方知道的雷」（known1009；我方＝side.ts 的 SIDE_PLAYER，連線對戰時是自己那一方）：自己布好的反戰車雷兩個半埋的深色圓盤、
 // 反人員雷四個小點（觸角）；自己還在布的一塊翻過的褐土；知道的敵方雷同樣的花樣，格子角上多一根頂端紅色的標樁（一格同時有兩種時畫敵方的）。
-// battle.ts 只改兩處：import、建構時把 TrenchRaster 換成這個類別並給兩個閉包（paint＝重畫一格、dirty＝R098 只傳改過的格列）。
+// battle.ts 只改兩處：import、建構時把 TrenchRaster 換成 withMines1009(TrenchRaster) 並給兩個閉包（paint＝重畫一格、dirty＝R098 只傳改過的格列）。
+// 底下的戰壕類別由 battle.ts 傳進來（不在這裡 import）：tests/trenches-view.mjs 把 battle.ts 的 './trenches.ts' 換成改壞的副本，雷那一層要疊在同一份上（施工紀錄 4）。
 // 不 import three：Node 的守衛直接拿來跑。
 import { cellIdx, inGrid, type World, type Mine1009 } from '../sim/world.ts';
 import { known1009 } from '../sim/mines1009.ts';
-import { TrenchRaster } from './trenches.ts';
+import type { TrenchRaster } from './trenches.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 
 // 每格一個位元組：0 沒有；1 自己的反戰車雷、2 自己的反人員雷、3 自己還在布的；4–6 同樣三種、但是知道的敵方雷（多一根標樁）
 export const code1009 = (m: Mine1009, me: number): number => (m.left > 0 ? 3 : m.kind) + (m.side === me ? 0 : 3);
 const DISC = 0x3b3a30, DISC_RIM = 0x6e6a58, PRONG = 0x24221d, PRONG_TIP = 0x8f8a78, SOIL = [0x6a4a2c, 0x5a3d24, 0x7a5a38], STAKE = 0xe2d6b4, STAKE_TOP = 0xc8231c;
 
-export class TrenchMines1009 extends TrenchRaster {
+type RasterClass = new (enabled: boolean) => TrenchRaster;
+const made = new WeakMap<RasterClass, ReturnType<typeof make>>();
+// 戰壕類別（battle.ts 的那一份）加上雷那一層；同一個底類別只做一次
+export const withMines1009 = (Base: RasterClass): ReturnType<typeof make> => { let c = made.get(Base); if (!c) { c = make(Base); made.set(Base, c); } return c; };
+const make = (Base: RasterClass) => class TrenchMines1009 extends Base {
   mines = new Uint8Array(0);            // 現在畫在地上的（每格一個位元組，見 code1009）
   private want = new Uint8Array(0);     // 這一次算出來的（算完就清回 0）
   private mn = 0;
@@ -65,4 +70,4 @@ export class TrenchMines1009 extends TrenchRaster {
     for (const [ox, oz] of [[2, 3], [5, 2], [3, 5], [5, 5]]) if (px === ox && py === oz) return PRONG;   // 反人員雷：四個小點（觸角）
     return (px === 2 && py === 2) || (px === 5 && py === 1) || (px === 3 && py === 4) || (px === 5 && py === 4) ? PRONG_TIP : -1;
   }
-}
+};

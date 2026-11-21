@@ -19,7 +19,7 @@ import { SmokeView } from './smoke.ts';
 import { MultiRangePreview } from './multiRange.ts';
 import { RangePreview } from './rangePreview.ts';
 import { VegetationView } from './vegetation.ts';
-import { TrenchMines1009 } from './mines1009.ts'; import { TrenchRaster } from './trenches.ts'; import { view98, roofSig98, townSnap98, type TownSnap98 } from './view98.ts'; import { GroundUpload98 } from './groundUpload.ts'; import { previewSnap98, previewCells98 } from './previewDiff.ts'; export { setView98 } from './view98.ts';   // R098 大地圖的畫面先撐住
+import { withMines1009 } from './mines1009.ts'; import { TrenchRaster } from './trenches.ts'; import { view98, roofSig98, townSnap98, type TownSnap98 } from './view98.ts'; import { GroundUpload98 } from './groundUpload.ts'; import { previewSnap98, previewCells98 } from './previewDiff.ts'; export { setView98 } from './view98.ts';   // R098 大地圖的畫面先撐住
 import { HealthBars } from './healthBars.ts';
 import { OrderLines } from './orderLines.ts';
 import { WallMarks } from './wallMarks.ts';
@@ -227,7 +227,7 @@ export class BattleView {
     const { fx: fxOn, fog: fogOn, observerDetails, r004, r008, r009, r011, r014, r016, r107, r113, r118, r104, r123 } = o;
     this.rubbleMarkGuard = o.rubbleMarks; this.multiRangeEnabled = o.multiRange;
     this.w = w; this.mapId = w.map; this.fxOn = fxOn; this.fogOn = fogOn; this.r8 = r008; this.r16 = r016; this.r107 = r107;
-    this.trench118 = new TrenchMines1009(r118, (x, z) => this.paintCell(x, z), () => this.up98.dirty(this.groundTex)); this.trench118.sync(w);   // R1009：雷刻在地面貼圖上（戰壕那一份照舊）
+    this.trench118 = new (withMines1009(TrenchRaster))(r118, (x, z) => this.paintCell(x, z), () => this.up98.dirty(this.groundTex)); this.trench118.sync(w);   // R1009：雷刻在地面貼圖上（戰壕那一份照舊）
     this.range113 = r113 ? new RangePreview() : null;
     if (this.range113) this.scene.add(this.range113.mesh);
     this.scene.add(this.multi122.mesh);

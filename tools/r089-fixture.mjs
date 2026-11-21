@@ -49,6 +49,9 @@ window.__r089 = (() => {
     sky93: list => { w.sky = { version: 1, next: list.length + 1, ready: [0, 0, 0, 0], planes: list.map((p, i) => ({ id: i + 1, ...p })) }; return list.length; },   // R093：直接把飛機放進天上（量預算、拍照用）
     hp: (id, hp) => { w.units[id - 1].hp = hp; },   // R091：把一個單位的血設成 hp（量少一個人的畫法）
     bld50: (side, kind, x, z, hp) => { const id = w.blds.length + 1, maxHp = kind === 14 ? 500 : kind === 15 ? 600 : 400; w.blds.push({ id, kind, x, z, w: 2, d: 2, floors: 1, hp: hp || maxHp, maxHp, builtBy: side }); for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) w.occ[(z + dz) * w.n + x + dx] = id; view.onEvents([{ e: 'build', bld: id }], view.lastT || 0); return id; },   // R050：直接擺一棟兵營、車廠或補給站（量預算、拍照用；hp 給 1 就是工地的樣子）
+    mine1009: (side, kind, x, z, seen) => { (w.mines ??= { version: 1, cells: [] }).cells.push({ side, kind, x, z, left: 0, seen: seen ? 1 : 0 }); view.onEvents([], view.lastT || 0); return w.mines.cells.length; },   // R1009：直接擺一格布好的雷（量預算、拍照用；seen＝對方知道），畫面照常同步
+    mines1009: () => ({ flag: w.eco?.mine ?? 0, cells: JSON.parse(JSON.stringify(w.mines?.cells ?? [])) }),   // R1009：這一局的 mine 旗標與每一格雷
+    px1009: (x, z) => { const g = (view as any).groundPx, W = (view as any).groundTex.image.width, out = []; for (let py = 0; py < 8; py++) for (let p = 0; p < 8; p++) { const o = ((z * 8 + py) * W + x * 8 + p) * 4; out.push(g[o], g[o + 1], g[o + 2]); } return { v: (view as any).groundTex.version, px: out.join(',') }; },   // R1009：一格的地面貼圖像素、貼圖版本（整張上傳才會變）
     programs: () => renderer.info.programs ? renderer.info.programs.length : -1,   // R1003：已經編過的著色程式有幾個（R093 補驗：飛機上天不該多編）
     hqDown: side => { const b = w.blds[w.eco.hq[side] - 1]; b.hp = 0; },
     armed: () => [__air93Armed(), __armed50()],   // R1004：[空中鍵（0 沒選、1 轟炸、2 偵察）, 建造（0 或建築種類）]   // R1003：讓這一方的指揮部倒下（下一步分出勝負）
