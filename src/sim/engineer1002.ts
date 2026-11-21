@@ -3,6 +3,7 @@
 import { dist } from './math.ts';
 import { findPath } from './path.ts';
 import { firstBlock, ridge, spotted } from './step.ts';   // step.ts 也 import 這一支；只在找目標時呼叫，不在載入時用，循環沒有關係（support91.ts 也這樣）
+import { reach1010 } from './bridge1010.ts';   // R1010：目標是橋＝挨著那座橋（bridge1010.ts 也 import 這一支；只在呼叫時用）
 import { site50, own50, build50 } from './tech50.ts';   // R050：自己的工地＝蓋、自己蓋好的那三種＝不接
 import { UNIT_KINDS, ORD_IDLE, ORD_FIRE_AT, SHELL_HE, cellOf, center, bldAt, wireAt, type Unit, type World, type Building } from './world.ts';
 
@@ -28,6 +29,7 @@ export function near1002(u: Unit, b: { x: number; z: number; w: number; d: numbe
 
 // moveUnit 問「射擊指令到了沒」：工兵是挨著目標（還站著的建築、還沒壞的網）
 export function reach1002(w: World, u: Unit): boolean {
+  if (w.br) { const r = reach1010(w, u); if (r !== undefined) return r; }   // R1010：目標是橋（那一格沒有建築和網）＝挨著那座橋就算到了
   const t = demoTarget(w, u.tx, u.tz);
   return !!t && near1002(u, t.b);
 }
