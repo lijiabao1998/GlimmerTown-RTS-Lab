@@ -665,7 +665,7 @@ const groups = {
     assert(JSON.stringify(budget).includes('672') && JSON.stringify(budget).includes('1195'), 'wiring: the hub budget is unchanged');
     assert(/get r1009\(\) \{ return on\('1009'\); \}/.test(src('src/valves.ts')) && src('README.md').includes('`?noR1009=1`'), 'wiring: the valve is in src/valves.ts and the README valve table');
     const cdp = src('tools/cdp.mjs');
-    assert(cdp.includes("const full1009 = /(^|&)noR1009=/.test(full50) ? full50 : `${full50 ? full50 + '&' : ''}noR1009=1`;") && cdp.includes('const url87 = /(^|&)noR087=/.test(full92) ? full1009 :'), 'wiring: tools/cdp.mjs opens pages with noR1009=1 unless a guard asks for it (url87 keeps its anchored start)');
+    assert(cdp.includes("const full1009 = /(^|&)noR1009=/.test(full1005) ? full1005 : `${full1005 ? full1005 + '&' : ''}noR1009=1`;") && cdp.includes('const url87 = /(^|&)noR087=/.test(full92) ? full1009 :'), 'wiring: tools/cdp.mjs opens pages with noR1009=1 unless a guard asks for it (url87 keeps its anchored start)');
     // 這張碰到的既有行上被別的守衛錨著的文字（施工時 grep 過）：每一段照舊只出現一次
     const anchors = [
       ['src/sim/step.ts', '  for (const u of w.units) if (u.alive && !u.ride && !u.towBy) fireUnit(w, u);'], ['src/sim/step.ts', 'cmd.sw === 2 ? 2 : cmd.sw === 1 ? 1 : 0'],
