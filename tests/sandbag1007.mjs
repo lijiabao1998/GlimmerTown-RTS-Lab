@@ -619,7 +619,7 @@ const groups = {
     assert.equal(main.split("issue(V.r050 && V.r1002 ? { ...ecoCmd(), tech: 1 } as Command : ecoCmd())").length - 1, 2, 'ui: the R050 tech line is still there twice');
     assert(src('src/valves.ts').includes("get r1007() { return on('1007'); }"), 'ui: valves.ts has r1007');
     const cdp = src('tools/cdp.mjs');
-    assert(cdp.includes("const full1007 = /(^|&)noR1007=/.test(full50) ? full50 : `${full50 ? full50 + '&' : ''}noR1007=1`;") && cdp.includes("const url87 = /(^|&)noR087=/.test(full92) ? full1007 : `${full1007 ? full1007 + '&' : ''}noR087=1`;"), 'ui: tools/cdp.mjs opens pages with noR1007=1 unless a guard asks for R1007');
+    assert(cdp.includes("const full1007 = /(^|&)noR1007=/.test(full1005) ? full1005 : `${full1005 ? full1005 + '&' : ''}noR1007=1`;") && cdp.includes("const url87 = /(^|&)noR087=/.test(full92) ? full1007 : `${full1007 ? full1007 + '&' : ''}noR087=1`;"), 'ui: tools/cdp.mjs opens pages with noR1007=1 unless a guard asks for R1007');
     const lines = f => src(f).split('\n').length - (src(f).endsWith('\n') ? 1 : 0);
     assert(lines('src/main.ts') <= 672, `ui: main.ts stays within 672 lines (${lines('src/main.ts')})`);
     assert.equal(lines('src/render/battle.ts'), 1194, 'ui: battle.ts gains no line');

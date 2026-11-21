@@ -63,7 +63,8 @@ const groups = {
     setAi(one, ME, 3); setAi(two, ME, 3, 2);
     assert.deepEqual([one.ai[0].v, two.ai[0].v], [undefined, 2], 'flag: v 2 is stored, nothing else is');
     assert.notEqual(hashWorld(one), hashWorld(two), 'flag: the version is folded into the hash');
-    for (const v of [0, 1, 4, 2.5, '2']) { const w = createWorld(3); setAi(w, ME, 3, v); assert.equal(w.ai[0].v, undefined, `flag: v ${JSON.stringify(v)} is the first version`); }
+    for (const v of [0, 1, 5, 2.5, '2']) { const w = createWorld(3); setAi(w, ME, 3, v); assert.equal(w.ai[0].v, undefined, `flag: v ${JSON.stringify(v)} is the first version`); }   // R1005：4 改成第四版（存成 v 3 加 four），不認得的值改用 5
+    { const w = createWorld(3); setAi(w, ME, 3, 4); assert.deepEqual([w.ai[0].v, w.ai[0].four], [3, 1], 'flag: v 4 (R1005) is the third version plus four'); }
     setAi(two, ME, 1);
     assert.deepEqual([two.ai[0].level, two.ai[0].v], [1, 2], 'flag: sending ai again changes the level, not the version');
     setAi(one, ME, 2, 2);
@@ -363,7 +364,7 @@ for (const [name, run] of Object.entries(groups)) { run(); console.log(`OK ai2/$
   const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
   const main = read('../src/main.ts');
   assert.match(read('../src/valves.ts'), /get r057\(\) \{ return on\('057'\); \}/, 'valve: r057 is on the table');
-  assert.equal((main.match(/issue\(\{ t: 'ai', side: SIDE_ENEMY, level: aiLevel, \.\.\.\(V\.r057 \? \{ v: V\.r078 \? 3 : 2 \} : \{\}\) \}\);/g) ?? []).length, 2, 'wiring: both places that hand the enemy to the computer send the version, behind the valve');
+  assert.equal((main.match(/issue\(\{ t: 'ai', side: SIDE_ENEMY, level: aiLevel, \.\.\.\(V\.r057 \? \{ v: V\.r078 \? 3 : 2 \} : \{\}\), \.\.\.\(V\.r1005 && V\.r057 && V\.r078 \? \{ v: 4 \} : \{\}\) \}\);/g) ?? []).length, 2, 'wiring: both places that hand the enemy to the computer send the version, behind the valve (R1005: v 4 behind its own valve)');
   assert.equal((main.match(/t: 'ai'/g) ?? []).length, 2, 'wiring: there is no third place that starts a computer opponent');
   assert.match(read('../README.md'), /\?noR057=1/, 'readme: the valve is documented');
   console.log('OK ai2/wiring');
