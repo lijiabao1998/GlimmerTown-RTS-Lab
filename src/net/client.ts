@@ -61,9 +61,12 @@ export function netFeed(w: World, pending: readonly Command[]): Command[] | null
   return cmds;
 }
 
-// 預設的伺服器：遊戲頁是由轉發伺服器給的（http）就用同一台；不然用本機（自己開 node server/relay.mjs）
+// R1012 公開轉發伺服器（Cloudflare Workers＋Durable Objects）：https 遊戲頁免自架預設連這台；?relay= 或下方輸入欄仍可改回自架伺服器
+export const PUBLIC_RELAY = 'wss://glimmertown-rts-relay.lijiabao1998.workers.dev/relay';
+// 預設的伺服器：先用上次成功連過的；https 頁用公開轉發；http 頁用同一台；其餘用本機（自己開 node server/relay.mjs）
 export function defaultRelay(): string {
   try { const saved = localStorage.getItem('gtrts.v1.relay'); if (saved) return saved; } catch { /* 沒有本機儲存就算了 */ }
+  if (location.protocol === 'https:') return PUBLIC_RELAY;
   return location.protocol === 'http:' && location.host ? `ws://${location.host}/relay` : 'ws://127.0.0.1:8788/relay';
 }
 // https 的頁面連不了的伺服器位址：ws://（不加密）而且不是本機（瀏覽器對本機放行：127.x.x.x、localhost、[::1]、*.localhost；R083 第二輪審查放寬）
@@ -145,7 +148,7 @@ export function openNetPanel(onHosted: () => void, versus = false): void {
     <label>房號<input id="net-room" style="${field}" maxlength="12" autocomplete="off" spellcheck="false"></label>
     <div><button id="net-host" style="${btn}">開房</button><button id="net-join" style="${btn}">加入</button><button id="net-close" style="${btn}">關閉</button></div>
     <p id="net-msg" style="min-height:1.5em;margin:10px 0 0;font-size:13px"></p>
-    <p style="margin:6px 0 0;font-size:12px;opacity:.7">伺服器：在一台電腦上跑 <code>node server/relay.mjs</code>，同一個區域網路的人開它給的網址就好（README「連線合作」）。</p>
+    <p style="margin:6px 0 0;font-size:12px;opacity:.7">伺服器：HTTPS 網頁預設連公開轉發伺服器，免自架直接開房／加入；要走區域網路自架可跑 <code>node server/relay.mjs</code> 並貼上它給的網址（README「連線合作」）。</p>
   </div>`;
   document.body.appendChild(panel);
   const val = (id: string) => (document.getElementById(id) as HTMLInputElement).value.trim();
