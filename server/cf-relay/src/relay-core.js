@@ -3,6 +3,10 @@ export const MAX_MESSAGE = 256 * 1024;
 export const ROOM_RE = /^[A-Za-z0-9]{1,12}$/;
 const encoder = new TextEncoder();
 
+function safeCloseCode(code) {
+  return Number.isInteger(code) && code >= 1000 && code <= 4999 && code !== 1004 && code !== 1005 && code !== 1006 ? code : 1000;
+}
+
 export function isOriginAllowed(origin, allowedList) {
   if (!origin) return true;
   let parsed;
@@ -113,8 +117,7 @@ export class RelayRoomCore {
   #deny(why) {
     const pair = new this.WebSocketPairCtor();
     const client = pair[0], server = pair[1];
-    this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ slot: -1, gen: -1, room: '', closed: true });
+    server.accept();
     server.send(JSON.stringify({ t: 'error', why }));
     try { server.close(1000, 'rejected'); } catch {}
     return this.wsResponse(client);
@@ -122,10 +125,12 @@ export class RelayRoomCore {
 
   async webSocketMessage(ws, message) {
     if (typeof message !== 'string') {
+      this.#leave(ws);
       try { ws.close(1003, 'text only'); } catch {}
       return;
     }
     if (encoder.encode(message).byteLength > MAX_MESSAGE) {
+      this.#leave(ws);
       try { ws.close(1009, 'message too large'); } catch {}
       return;
     }
@@ -138,7 +143,7 @@ export class RelayRoomCore {
 
     let out;
     try { out = JSON.stringify({ ...msg, from: att.slot }); }
-    catch { try { ws.close(1007, 'invalid payload'); } catch {} return; }
+    catch { this.#leave(ws); try { ws.close(1007, 'invalid payload'); } catch {} return; }
 
     for (const s of this.ctx.getWebSockets()) {
       if (s === ws) continue;
@@ -148,12 +153,14 @@ export class RelayRoomCore {
     }
   }
 
-  async webSocketClose(ws) {
+  async webSocketClose(ws, code = 1000, reason = '') {
     this.#leave(ws);
+    try { ws.close(safeCloseCode(code), typeof reason === 'string' ? reason : ''); } catch {}
   }
 
   async webSocketError(ws) {
     this.#leave(ws);
+    try { ws.close(1011, 'error'); } catch {}
   }
 
   #leave(ws) {

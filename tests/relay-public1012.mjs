@@ -45,7 +45,7 @@ const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 }
 
 // 2. relay-core.js Mock WebSocketPair 測試
-function makeWsPairCtor() {
+function makeWsPairCtor(created) {
   return class MockWebSocketPair {
     constructor() {
       const makeSide = name => ({
@@ -64,6 +64,7 @@ function makeWsPairCtor() {
       });
       this[0] = makeSide('client');
       this[1] = makeSide('server');
+      created.push(this[1]);
     }
   };
 }
@@ -77,7 +78,8 @@ function makeCtx() {
   };
 }
 
-const Pair = makeWsPairCtor();
+const createdPairs = [];
+const Pair = makeWsPairCtor(createdPairs);
 const wsResponse = client => ({ status: 101, webSocket: client });
 
 // 2a. Origin 白名單
@@ -124,33 +126,55 @@ const envBase = {
   assert.equal(await rFwd.text(), 'forwarded');
 }
 
-// 2c. RelayRoomCore 完整房間生命週期與防串房
+// 2c. RelayRoomCore 完整房間生命週期、Hibernation 拒連／關閉握手與防串房
 const ctx = makeCtx();
 const room = new RelayRoomCore(ctx, { WebSocketPairCtor: Pair, wsResponse });
 const req = query => new Request(`https://relay.example/relay?${query}`, { headers: { upgrade: 'websocket' } });
 
 await room.fetch(req('room=bad-room!&role=host'));
-assert.deepEqual(JSON.parse(ctx.sockets[0].sent[0]), { t: 'error', why: '房號只能是 1–12 個英文字母或數字' });
-assert.equal(ctx.sockets[0].closed, true);
+{
+  const denied = createdPairs.at(-1);
+  assert.equal(ctx.sockets.length, 0, '#deny does not register rejected socket in ctx.sockets');
+  assert.equal(denied.accepted, true);
+  assert.deepEqual(JSON.parse(denied.sent[0]), { t: 'error', why: '房號只能是 1–12 個英文字母或數字' });
+  assert.equal(denied.closed, true);
+  assert.equal(denied.closeCode, 1000);
+}
 
 await room.fetch(req('room=ab12&role=join'));
-assert.deepEqual(JSON.parse(ctx.sockets[1].sent[0]), { t: 'error', why: '沒有這個房號（房主還沒開房，或已經離開了）' });
-assert.equal(ctx.sockets[1].closed, true);
+{
+  const denied = createdPairs.at(-1);
+  assert.equal(ctx.sockets.length, 0);
+  assert.equal(denied.accepted, true);
+  assert.deepEqual(JSON.parse(denied.sent[0]), { t: 'error', why: '沒有這個房號（房主還沒開房，或已經離開了）' });
+  assert.equal(denied.closed, true);
+}
 
 await room.fetch(req('room=ab12&role=host'));
-const hostWs = ctx.sockets[2];
+const hostWs = ctx.sockets[0];
 assert.deepEqual(JSON.parse(hostWs.sent[0]), { t: 'welcome', you: 0, room: 'AB12', players: 1 });
 
 await room.fetch(req('room=ab12&role=host'));
-assert.deepEqual(JSON.parse(ctx.sockets[3].sent[0]), { t: 'error', why: '這個房號已經有人開了' });
+{
+  const denied = createdPairs.at(-1);
+  assert.equal(ctx.sockets.length, 1);
+  assert.deepEqual(JSON.parse(denied.sent[0]), { t: 'error', why: '這個房號已經有人開了' });
+  assert.equal(denied.closed, true);
+}
 
 await room.fetch(req('room=ab12&role=join'));
-const guestWs = ctx.sockets[4];
+const guestWs = ctx.sockets[1];
 assert.deepEqual(JSON.parse(guestWs.sent[0]), { t: 'welcome', you: 1, room: 'AB12', players: 2 });
 assert.deepEqual(JSON.parse(hostWs.sent[1]), { t: 'joined', who: 1 });
 
 await room.fetch(req('room=ab12&role=join'));
-assert.deepEqual(JSON.parse(ctx.sockets[5].sent[0]), { t: 'error', why: '這個房間滿了' });
+{
+  const denied = createdPairs.at(-1);
+  assert.equal(ctx.sockets.length, 2);
+  assert.deepEqual(JSON.parse(denied.sent[0]), { t: 'error', why: '這個房間滿了' });
+  assert.equal(denied.closed, true);
+  assert.equal(denied.closeCode, 1000);
+}
 
 await room.webSocketMessage(hostWs, JSON.stringify({ t: 'start', seed: 7 }));
 assert.deepEqual(JSON.parse(guestWs.sent[1]), { t: 'start', seed: 7, from: 0 });
@@ -163,24 +187,38 @@ await room.webSocketMessage(guestWs, '[1,2,3]');
 await room.webSocketMessage(guestWs, 'not-json');
 assert.equal(hostWs.sent.length, 3);
 
+// Binary kicked -> notifies host with left(1) and closes 1003
 await room.webSocketMessage(guestWs, new Uint8Array([1, 2]));
 assert.equal(guestWs.closed, true);
 assert.equal(guestWs.closeCode, 1003);
+assert.deepEqual(JSON.parse(hostWs.sent[3]), { t: 'left', who: 1 });
 
+// Host oversized message kicked -> closes 1009 (and calls #leave cleanly)
 await room.webSocketMessage(hostWs, 'x'.repeat(MAX_MESSAGE + 1));
 assert.equal(hostWs.closed, true);
 assert.equal(hostWs.closeCode, 1009);
 
-// 房主離線、模擬 Hibernation 重建後重開同一房號：舊客端必須無法串進新房間
+// 房主離線（回送 Close 握手）、模擬 Hibernation 重建後重開同一房號：舊客端必須無法串進新房間
 const ctx2 = makeCtx();
 const room2 = new RelayRoomCore(ctx2, { WebSocketPairCtor: Pair, wsResponse });
 await room2.fetch(req('room=R1&role=host'));
 const h1 = ctx2.sockets[0];
 await room2.fetch(req('room=R1&role=join'));
 const g1 = ctx2.sockets[1];
-await room2.webSocketClose(h1);
-h1.closed = true;
+await room2.webSocketClose(h1, 1000, 'done');
+assert.equal(h1.closed, true, 'webSocketClose echoes ws.close back to client');
+assert.equal(h1.closeCode, 1000);
+assert.equal(h1.closeReason, 'done');
 assert.deepEqual(JSON.parse(g1.sent[1]), { t: 'left', who: 0 });
+
+// Reserved WebSocket close code (e.g. 1005) falls back to 1000
+const ctx3 = makeCtx();
+const room3 = new RelayRoomCore(ctx3, { WebSocketPairCtor: Pair, wsResponse });
+await room3.fetch(req('room=R2&role=host'));
+const h3 = ctx3.sockets[0];
+await room3.webSocketClose(h3, 1005, '');
+assert.equal(h3.closed, true);
+assert.equal(h3.closeCode, 1000);
 
 const room2AfterHibernate = new RelayRoomCore(ctx2, { WebSocketPairCtor: Pair, wsResponse });
 await room2AfterHibernate.fetch(req('room=R1&role=host'));

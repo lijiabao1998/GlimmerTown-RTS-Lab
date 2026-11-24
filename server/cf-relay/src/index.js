@@ -22,8 +22,8 @@ export class RelayRoom extends DurableObject {
     return this.core.webSocketMessage(ws, message);
   }
 
-  async webSocketClose(ws) {
-    return this.core.webSocketClose(ws);
+  async webSocketClose(ws, code, reason, wasClean) {
+    return this.core.webSocketClose(ws, code, reason, wasClean);
   }
 
   async webSocketError(ws) {
