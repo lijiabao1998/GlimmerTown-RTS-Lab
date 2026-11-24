@@ -5,6 +5,7 @@ import { TECH50, why50, builders50 } from '../sim/tech50.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import type { OrderHit, OrderRoute } from './smoke.ts';
 import { BK_SANDBAG } from '../sim/world.ts'; import { why1007 } from '../sim/sandbag1007.ts'; import { BAG_HINT } from './sandbag1007.ts';   // R1007 沙包：「建造」第四項，跟這三項共用 armed
+import { hint1010 } from './bridge1010.ts';   // R1010：沒選好要蓋的時候，提示列換問炸橋修橋那一句
 import { air93Arm } from './air93.ts';   // R1004：建造模式跟空中鍵互斥（air93.ts 也 import 這一支；只在按鍵時呼叫，循環沒有關係）
 import { pick1009, block1009, hint1009 } from './mines1009.ts';   // R1009 地雷：main.ts 叫的是這裡的 pick50、block50、hint50（那三行被守衛逐字錨著），地雷從這三支轉過去
 
@@ -55,8 +56,8 @@ export function tech50Route(w: World, selected: Iterable<number>, hit: OrderHit)
 export function hint50(w: World): string | undefined {
   if (w !== world) { world = w; armed = 0; flash = ''; }
   if (typeof document !== 'undefined') for (const k of [BK_BARRACKS, BK_DEPOT, BK_SUPPLY, BK_SANDBAG]) { const b = document.getElementById('pb-k' + (ITEM50 + k)); if (b && b.classList.contains('armed50') !== (armed === k)) { b.classList.toggle('armed50', armed === k); b.setAttribute('aria-pressed', String(armed === k)); } }
-  const m9 = hint1009(w); if (!armed) return m9;   // R1009：地雷的提示與按鍵亮不亮每次都問（建造沒選好時用地雷的提示）
-  if (!armed) return undefined;
+  const m9 = hint1009(w); if (!armed && m9 !== undefined) return m9;   // R1009：地雷的提示與按鍵亮不亮每次都問（建造沒選好時用地雷的提示）
+  if (!armed) return hint1010(w);
   const how = armed === BK_SANDBAG ? BAG_HINT : `建造${NAME[armed]}：先選工兵，再點指揮部 8 格內的空地（2×2，點的那一格是左上角）；再按一次取消`;
   return flash && w.tick - flashTick < 60 ? `放不下：${flash}。${how}` : how;
 }

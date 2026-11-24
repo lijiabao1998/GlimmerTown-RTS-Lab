@@ -152,7 +152,8 @@ export async function withBrowser(opt, fn) {
       const full1011 = /(^|&)noR1011=/.test(full1005) ? full1005 : `${full1005 ? full1005 + '&' : ''}noR1011=1`;   // R1011：既有的瀏覽器守衛照舊測沒有 hq11 的局（tech50-browser 那些開 noR050=0 的也一樣）；要測 R1011 的守衛寫 noR1011=0
       const full1007 = /(^|&)noR1007=/.test(full1011) ? full1011 : `${full1011 ? full1011 + '&' : ''}noR1007=1`;   // R1007：既有的瀏覽器守衛照舊測沒有 bag 的局（「建造」三項、新局的 eco 沒有 bag）；要測 R1007 的守衛寫 noR1007=0
       const full1009 = /(^|&)noR1009=/.test(full1007) ? full1007 : `${full1007 ? full1007 + '&' : ''}noR1009=1`;   // R1009：既有的瀏覽器守衛照舊測沒有 mine 的局（end-rule-browser 比整條 eco 指令）；要測 R1009 的守衛寫 noR1009=0
-      const url87 = /(^|&)noR087=/.test(full92) ? full1009 : `${full1009 ? full1009 + '&' : ''}noR087=1`;   // R093：照舊看 full92（transport92 的守衛錨著）；full93、full1002 從 full92 接出來，noR087 在不在一樣
+      const full1010 = /(^|&)noR1010=/.test(full1009) ? full1009 : `${full1009 ? full1009 + '&' : ''}noR1010=1`;   // R1010：既有的瀏覽器守衛照舊測沒有 br 的局；要測 R1010 的守衛寫 noR1010=0
+      const url87 = /(^|&)noR087=/.test(full92) ? full1010 : `${full1010 ? full1010 + '&' : ''}noR087=1`;   // R093：照舊看 full92（transport92 的守衛錨著）；full93、full1002 從 full92 接出來，noR087 在不在一樣
       // R095：預設在網址加 noR095=1，既有守衛照舊測沒有步兵排的局（人口上限、生產列、隊形寫的時候就是這樣）；要測 R095 的守衛寫 noR095=0。
       const url = /(^|&)noR095=/.test(url87) ? url87 : `${url87}&noR095=1`;
       // R089：預設在網址加 noR089=1，既有守衛照舊測一班 6 個人的畫面（readable-browser 照 UNIT_KINDS.men 數趴下的人、smoke 的預算寫的時候就是這樣）；

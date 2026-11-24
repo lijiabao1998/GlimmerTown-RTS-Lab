@@ -418,7 +418,7 @@ const groups = {
     assert(lines <= budget['src/main.ts'], `wiring: main.ts stays within its budget (budget ${budget['src/main.ts']}; now ${lines})`);
     const battle = src('src/render/battle.ts').split('\n').length - 1;
     assert(battle <= budget['src/render/battle.ts'], `wiring: battle.ts stays within its budget (budget ${budget['src/render/battle.ts']}; now ${battle})`);
-    assert(src('src/render/battle.ts').includes("if (e.e === 'wire' || e.e === 'hq11') { townDirty = true; vegetationDirty = true; }"), 'wiring: the hq11 event rebuilds the town mesh');
+    assert(src('src/render/battle.ts').includes(" || e.e === 'hq11') { townDirty = true; vegetationDirty = true; }"), 'wiring: the hq11 event rebuilds the town mesh');
     assert(src('src/render/buildings.ts').includes("${b.builtBy ?? ''},${b.hqLv ?? ''},${stage},"), 'wiring: the per-building town cache keys on hqLv');
     assert(src('src/valves.ts').includes("get r1011() { return on('1011'); },"), 'wiring: ?noR1011=1 is in the valve table');
     assert(src('tools/cdp.mjs').includes("const full1011 = /(^|&)noR1011=/.test(full1005) ? full1005 : `${full1005 ? full1005 + '&' : ''}noR1011=1`;"), 'wiring: tools/cdp.mjs opens pages with noR1011=1 unless a guard asks for R1011');

@@ -264,6 +264,7 @@ export type SimEvent =
   | { e: 'wire' }   // R121 鐵絲網；R1007 沙包也借它（畫面只重建城鎮網格）：以後讓聲音聽 wire 的話，堆沙包也會響
   | { e: 'spawn'; unit: number; x: number; z: number } // R045：新群的畫面從實際出生位置開始
   | { e: 'hq11'; bld: number }   // R1011：指揮部升好一級（畫面重建城鎮網格）
+  | { e: 'bridge'; span: number }                      // R1010：那一座橋斷了或修好了（畫面重建城鎮網格、小地圖重畫）
   | { e: 'morale'; unit: number; state: number };       // R052：壓制狀態變了（0 正常、1 受壓、2 釘住、3 潰退）
 
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
@@ -280,6 +281,8 @@ export interface SmokeCloud { id: number; side: number; x: number; z: number; bo
 export interface CounterbatteryReport { side: number; zone: number; cell: number; shots: number; last: number }
 
 export interface TrenchSegment { side: number; kind: number; x: number; z: number; rot: number }
+// R1010 一座橋：cells＝格索引（由小到大）；state 0 原橋、1 斷、2 木橋；hp＝還剩多少（斷了是 0）；left＝斷橋還差多少工作量（0＝還沒人付錢開工）
+export interface Span1010 { cells: number[]; state: number; hp: number; left: number }
 
 export interface World extends RngState {
   seed: number;
@@ -310,6 +313,7 @@ export interface World extends RngState {
   zombies?: { version: 1; wave: number; next: number; pending: number; spawned: number; killed: number; lost: number };
   bags?: { version: 1; segments: (Building & { left: number })[] };   // R1007 沙包（1×1；left＝還差多少工作量，0＝蓋好）；第一次堆才建，打散的留在清單裡等重用（sandbag1007.ts）
   tech?: { version: 1; sites: { id: number; left: number }[] };   // R050 還在蓋的工地（建築編號、還差多少工作量）；第一次蓋才建（tech50.ts）
+  br?: { version: 1; wet: Uint8Array; spans: Span1010[] };   // R1010 炸橋與修橋：只有 eco 帶 br 的萊伊、海斯才有（wet＝河道遮罩 n×n，1＝河道含橋下；bridge1010.ts）
   sky?: { version: 1; next: number; ready: number[]; planes: Plane93[] };   // R093 第一次叫飛機才建，之後不刪；ready 照 side*2+kind-1 排（air93.ts）
   mines?: { version: 1; cells: Mine1009[] };   // R1009 第一次布雷才建，之後不刪；順序就是觸雷、雜湊的順序（mines1009.ts）
 }
@@ -358,11 +362,15 @@ export function wireAt(w: World, x: number, z: number): Building | null {
 // R081：機槍組第二版（eco 的 mg ≥ 2）
 export const mgSecond = (w: World): boolean => (w.eco?.mg ?? 0) >= 2;
 export function wireBlocks(w: World, x: number, z: number, kind: number): boolean {
+  if (w.br && (UNIT_KINDS[kind]?.radius ?? 0) > 0 && waterAt(w, x, z)) return true;   // R1010：帶 br 的局，車和砲過不了河（徒步照舊涉水）
   if (kind === UK_MG && mgSecond(w)) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R081：第二版的機槍組也是徒步，鐵絲網擋得住（下一行原樣不動，有守衛錨著）
   if ((kind === UK_SNIPER || kind === UK_AT91) && (w.eco?.sw ?? 0) >= 1) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R091：兩種都是徒步
   if ((kind === UK_ENGINEER || kind === UK_FLAME) && (w.eco?.sw ?? 0) >= 2) return (wireAt(w, x, z)?.hp ?? 0) > 0;   // R1002：兩種都是徒步
   return onFoot(kind) && (wireAt(w, x, z)?.hp ?? 0) > 0;
 }
+
+// R1010 水格：河道遮罩是 1、而且 w.ter 是泥（完好的橋、木橋是路；斷橋是泥）。沒有 w.br 的世界永遠是 false
+export const waterAt = (w: World, x: number, z: number): boolean => !!w.br && Number.isInteger(x) && Number.isInteger(z) && inGrid(w, x, z) && w.br.wet[z * w.n + x] === 1 && w.ter[z * w.n + x] === TER_MUD;
 
 // 地形速度倍率（百分比）：路最快，瓦礫、彈坑最慢
 export function speedPct(w: World, x: number, z: number): number {
@@ -532,5 +540,6 @@ export function hashWorld(w: World): string {
   if (w.tech) { f.int(0x5443).int(w.tech.version).int(w.tech.sites.length); for (const s of w.tech.sites) f.int(s.id).int(s.left); }   // R050
   if (w.bags) { f.int(0x5347).int(w.bags.version).int(w.bags.segments.length); for (const g of w.bags.segments) f.int(g.id).int(g.kind).int(g.x).int(g.z).int(g.w).int(g.d).int(g.floors).int(g.hp).int(g.maxHp).int(g.builtBy ?? -1).int(g.left); }   // R1007：只在有時折
   if (w.eco?.mine) f.int(0x4d49).int(w.eco.mine); if (w.mines) { f.int(0x4d4c).int(w.mines.version).int(w.mines.cells.length); for (const m of w.mines.cells) f.int(m.side).int(m.kind).int(m.x).int(m.z).int(m.left).int(m.seen); }   // R1009：只在有時折
+  if (w.br) { const b = w.br; let wet = 0; for (const c of b.wet) wet += c; f.int(0x4252).int(b.version).int(b.spans.length).int(wet); for (let i = 0; i < b.wet.length; i++) if (b.wet[i]) f.int(i); for (const s of b.spans) { f.int(s.state).int(s.hp).int(s.left).int(s.cells.length); for (const c of s.cells) f.int(c); } }   // R1010：只在有時折
   return f.hex();
 }

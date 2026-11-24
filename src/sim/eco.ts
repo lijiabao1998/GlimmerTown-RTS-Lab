@@ -8,6 +8,7 @@ import { MAP_TOWN } from './expandedMap.ts'; import { MAP_HYTHE } from './hytheM
 import { incomeTicks } from './rules.ts';
 import { locked50, income50, tech50Step, SUPPLY_TICKS50 } from './tech50.ts';   // R050
 import { HQ_SAND, HQ_PHONE, order1011, tick1011, phone1011 } from './hq1011.ts';   // R1011
+import { start1010 } from './bridge1010.ts';   // R1010
 import { PLATOON_ITEM, PLATOON_COST, PLATOON_SECTIONS, FORMATION_PLA, startPlatoons, ticksOf, popOf } from './platoon.ts';
 import {
   INTERNATIONAL_KINDS, SOVIET_KINDS, SUB, cellIdx, inGrid, cellOf, center, blocks, wireAt, bldMaxHp, UNIT_KINDS, UK_TANK, UK_HOWITZER, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_MORTAR, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_MG, UK_SNIPER, UK_AT91, UK_TRUCK, UK_HALFTRACK, UK_AA, UK_ENGINEER, UK_FLAME, BK_HQ, TER_ROAD,
@@ -46,7 +47,7 @@ function hqSpot(w: World, side: number): [number, number] | null {
 }
 
 // eco 指令：只在第 0 步有效；雙方各放一座指揮部、開始累積補給
-export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0, mg = 0, pla = 0, sw = 0, tp = 0, air = 0, tech = 0, hq11 = 0, bag = 0, mine = 0): void {
+export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, soviet = 0, international = 0, end = 0, mg = 0, pla = 0, sw = 0, tp = 0, air = 0, tech = 0, hq11 = 0, bag = 0, mine = 0, br = 0): void {
   if (w.eco || w.tick !== 0) return;
   const hq = [0, 0];
   for (const side of (w.zombies ? [SIDE_PLAYER] : [SIDE_PLAYER, SIDE_ENEMY])) {
@@ -71,6 +72,7 @@ export function startEco(w: World, inf = 0, guns = 0, tanks = 0, armor2 = 0, sov
   if (hq11 && w.eco.tech) w.eco.hq11 = 1;   // R1011：指揮部升級；要跟 tech 一起（R050 第二段）
   if (bag && w.eco.tech && !w.zombies) w.eco.bag = 1;   // R1007：沙包；要 tech 先存了（tech 又要 sw＝2）：沒有工兵、沒有「建造」一組就沒有沙包；喪屍防守不存
   if (mine && w.eco.sw === 2 && !w.zombies) w.eco.mine = 1;   // R1009：地雷與排雷；要跟 sw＝2 一起送（布雷、排雷的是工兵），喪屍防守沒有
+  if (br && w.eco.sw === 2 && !w.zombies) start1010(w);   // R1010：炸橋與修橋（萊伊、海斯才建 w.br；br 本身不存進 eco）。要跟 sw＝2 一起送（沒有工兵炸不了也修不了）
 }
 
 export const hqAlive = (w: World, side: number): Building | null => {

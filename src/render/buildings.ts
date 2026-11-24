@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { isMoreKind, MORE_LIKE, MORE_RISE, MORE_PAL, moreLook, moreIntact, moreShell, moreRubble, moreDistant, moreMarkFace } from './moreArt.ts';
 import { PAL50, RISE50, isTech50, tech50Art } from './tech50.ts'; import { bag1007Geo } from './sandbag1007.ts';   // R050 兵營、車廠、補給站
 import { hq1011Art } from './hq1011.ts';   // R1011 指揮部升級
+import { bridge1010Art } from './bridge1010.ts';   // R1010 斷橋、木橋
 import { Geo } from './geo.ts';
 import { wearTier, wearable, tierFits, wearGeo, wearTop } from './wearArt.ts';
 import { hash2 } from '../sim/rng.ts';
@@ -562,6 +563,7 @@ export function buildTown(w: World, skip?: (b: Building) => boolean, lod = 0): G
   }
   for (const b of w.wires?.segments ?? []) wireGeo(g, b);
   bag1007Geo(g, w);   // R1007 沙包：在網的後面（wearTown 同一個順序，R088 的快取才逐位一樣）
+  bridge1010Art(g, w, skip);   // R1010：斷橋、木橋畫在最後（沒有 w.br 的世界一個三角形都不多；skip 傳下去，海斯的區域城鎮才不會把五座橋都算進那一區）
   return g;
 }
 
@@ -590,6 +592,7 @@ function wearTown(w: World, skip: ((b: Building) => boolean) | undefined, lod: n
   const wires = new Geo();
   for (const s of w.wires?.segments ?? []) wireGeo(wires, s);
   bag1007Geo(wires, w);   // R1007 沙包：跟 buildTown 一樣排在網的後面
+  bridge1010Art(wires, w, skip);   // R1010：同上（接在鐵絲網與沙包後面，兩條路接起來的位元組照舊一樣）
   const pos = new Float32Array(n + wires.pos.length), nor = new Float32Array(pos.length), col = new Float32Array(pos.length);
   let at = 0;
   for (const p of parts) { pos.set(p.pos, at); nor.set(p.nor, at); col.set(p.col, at); at += p.pos.length; }

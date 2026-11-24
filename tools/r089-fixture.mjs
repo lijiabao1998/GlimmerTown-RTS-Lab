@@ -57,6 +57,9 @@ window.__r089 = (() => {
     mines1009: () => ({ flag: w.eco?.mine ?? 0, cells: JSON.parse(JSON.stringify(w.mines?.cells ?? [])) }),   // R1009：這一局的 mine 旗標與每一格雷
     px1009: (x, z) => { const g = (view as any).groundPx, W = (view as any).groundTex.image.width, out = []; for (let py = 0; py < 8; py++) for (let p = 0; p < 8; p++) { const o = ((z * 8 + py) * W + x * 8 + p) * 4; out.push(g[o], g[o + 1], g[o + 2]); } return { v: (view as any).groundTex.version, px: out.join(',') }; },   // R1009：一格的地面貼圖像素、貼圖版本（整張上傳才會變）
     programs: () => renderer.info.programs ? renderer.info.programs.length : -1,   // R1003：已經編過的著色程式有幾個（R093 補驗：飛機上天不該多編）
+    br10: () => (w.br ? w.br.spans.map(s => [s.state, s.hp, s.left]) : null),   // R1010：每座橋的 [狀態, 血, 還差多少工作量]
+    bridge10: (si, state) => { const s = w.br?.spans[si]; if (!s) return 0; s.state = state; s.hp = state === 1 ? 0 : (state === 2 ? 10 : 40) * s.cells.length; s.left = 0; for (const c of s.cells) w.ter[c] = state === 1 ? 3 : 1; view.onEvents([{ e: 'bridge', span: si }], view.lastT ?? 0); minimap?.dirty(); return s.cells.length; },   // R1010：直接設橋的狀態（只量畫面、拍照用）
+    ground10: (x, z) => { const W = view.n * 8, px = view.groundPx, sum = [0, 0, 0]; for (let py = 0; py < 8; py++) for (let qx = 0; qx < 8; qx++) { const o = ((z * 8 + py) * W + x * 8 + qx) * 4; sum[0] += px[o]; sum[1] += px[o + 1]; sum[2] += px[o + 2]; } return sum.map(v => Math.round(v / 64)); },   // R1010：地面貼圖那一格的平均顏色
     hqDown: side => { const b = w.blds[w.eco.hq[side] - 1]; b.hp = 0; },
     armed: () => [__air93Armed(), __armed50()],   // R1004：[空中鍵（0 沒選、1 轟炸、2 偵察）, 建造（0 或建築種類）]   // R1003：讓這一方的指揮部倒下（下一步分出勝負）
     hurt: dhp => { for (const u of w.units) if (u.kind === 3 && u.alive) u.hp = Math.max(1, u.hp - dhp); },

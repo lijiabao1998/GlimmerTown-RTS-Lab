@@ -18,7 +18,7 @@ const cases = [
   ['route_all', UI, [["return { commands: [{ t: 'fireAt', side: SIDE_PLAYER, ids: eng, x, z }]", "return { commands: [{ t: 'fireAt', side: SIDE_PLAYER, ids: [...selected], x, z }]"]], 'route', /^route: not armed, a tap on a known enemy mine sends only the engineer/],
   ['route_steals', UI, [['  if (t && t.side !== SIDE_PLAYER) return undefined;', '']], 'route', /^route: a tap on an enemy standing on a known mine is an attack as before/],
   ['pick_unhooked', T50, [["  if (pick1009(kind)) { armed = 0; flash = ''; return true; }", '']], 'ui', /^ui: the 反戰車雷 key is taken/],
-  ['hint_unhooked', T50, [['  const m9 = hint1009(w); if (!armed) return m9;', '']], 'ui', /^ui: armed, the hint says how to lay it/],
+  ['hint_unhooked', T50, [['  const m9 = hint1009(w); if (!armed && m9 !== undefined) return m9;', '']], 'ui', /^ui: armed, the hint says how to lay it/],
   ['block_unhooked', T50, [['  const m9 = block1009(w, kind); if (m9 !== undefined) return m9;', '']], 'ui', /^ui: the mine keys say why1009/],
   ['arm50_keeps', T50, [["armed = kind; flash = ''; pick1009(0); }", "armed = kind; flash = ''; }"]], 'ui', /^ui: arming the air key drops the mines/],
   ['pick_keeps_air', UI, [['  if (armed) air93Arm(0);\n', '']], 'ui', /^ui: arming a mine drops the air key/],

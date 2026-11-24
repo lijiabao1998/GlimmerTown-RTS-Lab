@@ -44,7 +44,7 @@ const cases = [
   ['codec_no_range', H, [['(up as number) > HQ11[next].ticks', '(up as number) > 9999']], 'codec', /^codec: refused — hqUp 301 for level 1/],
   ['ecocmd_no_r1011', M, [[ECO2, '...(V.r050 && V.r1002 ? { hq11: 1 } : {}), ']], 'wiring', /^wiring: ② a new battle sends hq11 from ecoCmd/],
   ['ecocmd_no_r050', M, [[ECO2, '...(V.r1002 && V.r1011 ? { hq11: 1 } : {}), ']], 'wiring', /^wiring: ② a new battle sends hq11 from ecoCmd/],
-  ['event_ignored', 'src/render/battle.ts', [["if (e.e === 'wire' || e.e === 'hq11') {", "if (e.e === 'wire') {"]], 'wiring', /^wiring: the hq11 event rebuilds the town mesh/],
+  ['event_ignored', 'src/render/battle.ts', [[" || e.e === 'hq11') {", ") {"]], 'wiring', /^wiring: the hq11 event rebuilds the town mesh/],
   ['cache_no_level', 'src/render/buildings.ts', [["${b.builtBy ?? ''},${b.hqLv ?? ''},${stage},", "${b.builtBy ?? ''},${stage},"]], 'wiring', /^wiring: the per-building town cache keys on hqLv/],
   ['block_empty', U, [['? why1011(w, SIDE_PLAYER, kind) : undefined', "? '' : undefined"]], 'ui', /^ui: the two keys ask why1011/],
   ['group_build', U, [["group: '指揮部'", "group: '建造'"]], 'ui', /^ui: two items in their own 指揮部 group/],

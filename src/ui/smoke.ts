@@ -7,6 +7,7 @@ import { tech50Route } from './tech50.ts';   // R050 建造
 import { TECH50 } from '../sim/tech50.ts';   // R1004：自己的工地、兵營、車廠、補給站
 import { bag1007Route } from './sandbag1007.ts';   // R1007 沙包
 import { route1009 } from './mines1009.ts';   // R1009 地雷
+import { bridge1010Route } from './bridge1010.ts';   // R1010 炸橋與修橋
 
 export type AmmoMode = 'he' | 'smoke';
 export interface OrderHit {
@@ -62,6 +63,7 @@ export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode:
   const [x, z] = cell, b = bldAt(w, x, z);
   const guns = ids.filter(id => UNIT_KINDS[w.units[id - 1].kind].indirect);
   if (b && b.hp > 0 && own50ui(w, x, z)) { const eng = ids.filter(id => !!UNIT_KINDS[w.units[id - 1].kind].demo); return eng.length ? fire(eng, x, z) : null; }   // R1004：同上（點地面點到自己的那幾種建築）
+  const br10 = bridge1010Route(w, ids, fireMode, x, z); if (br10 !== undefined) return br10;   // R1010：點到橋（那一格沒有建築、沒有還沒壞的網）＝選取裡的工兵炸或修；不是橋、沒選工兵照原本的路由
   if ((b && b.hp > 0) || (fireMode && guns.length)) return fire(b && b.hp > 0 ? ids : guns, x, z);
   const bag = bag1007Route(w, ids, x, z); if (bag) return bag;   // R1007：點到有人堆的沙包——對方的＝工兵去炸、自己的工地＝工兵去堆，其他人走過去；自己堆好的照舊全部走進去
   const cut = (wireAt(w, x, z)?.hp ?? 0) > 0 ? ids.filter(id => !!UNIT_KINDS[w.units[id - 1].kind].demo) : [], rest = ids.filter(id => !cut.includes(id));   // R1002：點到還沒壞的鐵絲網＝工兵去剪，其他照舊走過去
