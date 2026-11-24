@@ -24,6 +24,7 @@ import { construct50 } from './tech50.ts';   // R050
 import { construct1007, blast1007, cover1007 } from './sandbag1007.ts';   // R1007
 import { hitch92, carry92 } from './transport92.ts';   // R092
 import { call93, air93Step, seen93, BOMB93, type AirCmd } from './air93.ts';   // R093
+import { lay1009, mines1009Step, type MineCmd } from './mines1009.ts';   // R1009
 import { applySandbox, type SandboxCommand, type SandboxError } from './sandbox.ts';
 import { startZombies, zombiesStep, finishZombiesStep, zombieAim } from './zombies.ts';
 import {
@@ -44,9 +45,10 @@ export type Command =
   | BuildCmd   // R006：只在第 0 步有效，由 step() 先套（見 build.ts）
   | { t: 'ai'; side: number; level: number; v?: number }   // R018：讓電腦接手那一方（1 簡單、2 普通、3 困難）；R057 v＝2：第二版
   | { t: 'map'; id: number; vegetation?: number; sym?: number; more?: number }                   // R026：第 0 步換成手排地圖（比布陣先套）
-  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number; tech?: number; hq11?: number; bag?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
+  | { t: 'eco'; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number; tech?: number; hq11?: number; bag?: number; mine?: number }   // R019：第 0 步放雙方指揮部、開始補給（R021 inf＝1：各送一班步兵、可出步兵；R022 guns＝1：可出反戰車砲、迫擊砲；R023 tanks＝1：可出輕／重坦克；R044 armor2＝1：可出裝甲車、驅逐戰車、突擊砲）
   | { t: 'produce'; side: number; kind: number }   // R019：花補給排進生產佇列
   | { t: 'construct'; side: number; ids: number[]; kind: number; x: number; z: number }   // R050：叫工兵在 (x, z)（左上角）蓋一棟（tech50.ts）
+  | MineCmd   // R1009：叫工兵布一格或一條雷帶（mines1009.ts）
   | AirCmd   // R093 空中支援：叫俯衝轟炸或偵察機（air93.ts）
   | RulesCmd;   // R046：第 0 步的遭遇戰設定（兵力、補給速度；地圖之後、喪屍與布陣之前套，見 rules.ts）
 
@@ -74,10 +76,11 @@ export function applyCommand(w: World, cmd: Command): SandboxError | null | void
   if (w.zombies && 'side' in cmd && cmd.side === SIDE_ENEMY) return;
   if (cmd.t === 'build' || cmd.t === 'trench' || cmd.t === 'map' || cmd.t === 'rules') return;   // 布陣、地圖（R026）、規則（R046）指令只在 step() 開頭套
   if (cmd.t === 'ai') { setAi(w, cmd.side | 0, cmd.level | 0, cmd.v); return; }
-  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 2 ? 2 : cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0, cmd.air === 1 ? 1 : 0, cmd.tech === 1 ? 1 : 0, cmd.hq11 === 1 ? 1 : 0, cmd.bag === 1 ? 1 : 0); return; }
+  if (cmd.t === 'eco') { startEco(w, cmd.inf ? 1 : 0, cmd.guns ? 1 : 0, cmd.tanks ? 1 : 0, cmd.armor2 ? 1 : 0, cmd.soviet ? 1 : 0, cmd.international ? 1 : 0, cmd.end ? 1 : 0, cmd.mg === 2 ? 2 : cmd.mg ? 1 : 0, cmd.pla === 1 ? 1 : 0, cmd.sw === 2 ? 2 : cmd.sw === 1 ? 1 : 0, cmd.tp === 2 ? 2 : cmd.tp === 1 ? 1 : 0, cmd.air === 1 ? 1 : 0, cmd.tech === 1 ? 1 : 0, cmd.hq11 === 1 ? 1 : 0, cmd.bag === 1 ? 1 : 0, cmd.mine === 1 ? 1 : 0); return; }
   if (cmd.t === 'produce') { produce(w, cmd.side | 0, cmd.kind | 0); return; }
   if (cmd.t === 'construct' && construct1007(w, cmd)) return;   // R1007：kind 17＝沙包（sandbag1007.ts）；其他種類照舊給 construct50
   if (cmd.t === 'construct') { construct50(w, cmd.side | 0, cmd.kind | 0, cmd.x | 0, cmd.z | 0, Array.isArray(cmd.ids) ? cmd.ids : []); return; }   // R050：工兵蓋兵營、車廠、補給站
+  if (cmd.t === 'mine') { lay1009(w, cmd); return; }   // R1009：工兵布雷（放得下才接）
   if (cmd.t === 'air') { call93(w, cmd.side | 0, cmd.kind | 0, cmd.x | 0, cmd.z | 0, spotted); return; }   // R093
   const seen = new Set<number>(), us: Unit[] = [];
   for (const id of cmd.ids) {
@@ -551,6 +554,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   }
   for (const u of w.units) if (u.alive) moveUnit(w, u);
   separate(w);
+  if (w.mines) mines1009Step(w, (u, d) => damageUnit(w, u, d, false));   // R1009：戳到、工兵不走進知道的雷、觸雷（移動推擠之後、開火之前；carry92 照舊在後面放人、扣跳車的血）
   for (const u of w.units) if (u.alive && !u.ride && !u.towBy) fireUnit(w, u);
   updateShells(w);
   if (w.sky) air93Step(w, land);   // R093：放在 carry92 之前，這一步炸死的，跳車照算

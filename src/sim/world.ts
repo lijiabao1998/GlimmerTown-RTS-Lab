@@ -269,6 +269,8 @@ export type SimEvent =
 // R018 電腦對手的記憶：只有開了電腦的那一方才有（沒有電腦的世界雜湊不變）
 // R019 補給與生產：只有送過 eco 指令的世界才有（沒有的世界雜湊不變）
 export interface EcoState { supply: number[]; hq: number[]; queue: number[][]; prog: number[]; inf?: number; guns?: number; tanks?: number; armor2?: number; soviet?: number; international?: number; pop?: number; end?: number; mg?: number; pla?: number; sw?: number; tp?: number; air?: number; tech?: number; hq11?: number; bag?: number }   // R1011 hq11＝指揮部升級；R1007 bag＝沙包（要跟 tech 一起）；R093 air＝空中支援與防空；R091 sw＝步兵支援（狙擊手、反戰車小組）；R044 armor2；R095 pla＝步兵排：可出裝甲車、驅逐戰車、突擊砲；R043 pop：大地圖的人口上限（沒有＝16）
+export interface EcoState { mine?: number }   // R1009 mine＝1：地雷與排雷（要 sw＝2；同名 interface 合併，上一行不動）
+export interface Mine1009 { side: number; kind: number; x: number; z: number; left: number; seen: number }   // R1009 一格雷：kind 1 反戰車、2 反人員；left 0＝布好了；seen 1＝對方知道（mines1009.ts）
 
 export interface AiState { side: number; level: number; next: number; ox: number; oz: number; seen: number; wp: number; armor?: number; v?: 2 | 3; four?: 1; air?: number; gather?: number; go?: number; size?: number }   // R057 v＝2：第二版（ai2.ts）；gather＝在基地集結從哪一步開始、go＝上一波哪一步出發、size＝那一波幾台   // R044 armor：最後一次看到敵方裝甲的步數（只有 eco 帶 armor2 才記）
 
@@ -309,6 +311,7 @@ export interface World extends RngState {
   bags?: { version: 1; segments: (Building & { left: number })[] };   // R1007 沙包（1×1；left＝還差多少工作量，0＝蓋好）；第一次堆才建，打散的留在清單裡等重用（sandbag1007.ts）
   tech?: { version: 1; sites: { id: number; left: number }[] };   // R050 還在蓋的工地（建築編號、還差多少工作量）；第一次蓋才建（tech50.ts）
   sky?: { version: 1; next: number; ready: number[]; planes: Plane93[] };   // R093 第一次叫飛機才建，之後不刪；ready 照 side*2+kind-1 排（air93.ts）
+  mines?: { version: 1; cells: Mine1009[] };   // R1009 第一次布雷才建，之後不刪；順序就是觸雷、雜湊的順序（mines1009.ts）
 }
 
 // R093 一架飛機（不是單位）：kind 1 俯衝轟炸、2 偵察；t 從 −延遲 數起，位置照 air93.ts 的 place93 算
@@ -528,5 +531,6 @@ export function hashWorld(w: World): string {
   if (w.sky) { const a = w.sky; f.int(0x4149).int(a.version).int(a.next); for (const r of a.ready) f.int(r); f.int(a.planes.length); for (const p of a.planes) f.int(p.id).int(p.side).int(p.kind).int(p.x).int(p.z).int(p.sx).int(p.sz).int(p.tx).int(p.tz).int(p.t).int(p.T).int(p.hp); }   // R093：只在有時折
   if (w.tech) { f.int(0x5443).int(w.tech.version).int(w.tech.sites.length); for (const s of w.tech.sites) f.int(s.id).int(s.left); }   // R050
   if (w.bags) { f.int(0x5347).int(w.bags.version).int(w.bags.segments.length); for (const g of w.bags.segments) f.int(g.id).int(g.kind).int(g.x).int(g.z).int(g.w).int(g.d).int(g.floors).int(g.hp).int(g.maxHp).int(g.builtBy ?? -1).int(g.left); }   // R1007：只在有時折
+  if (w.eco?.mine) f.int(0x4d49).int(w.eco.mine); if (w.mines) { f.int(0x4d4c).int(w.mines.version).int(w.mines.cells.length); for (const m of w.mines.cells) f.int(m.side).int(m.kind).int(m.x).int(m.z).int(m.left).int(m.seen); }   // R1009：只在有時折
   return f.hex();
 }

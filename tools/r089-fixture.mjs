@@ -53,6 +53,9 @@ window.__r089 = (() => {
     bag1007: list => { const g = (w.bags ??= { version: 1, segments: [] }).segments; for (const [side, x, z, hp, left] of list) g.push({ id: g.length + 1, kind: 17, x, z, w: 1, d: 1, floors: 1, hp, maxHp: 120, builtBy: side, left }); view.onEvents([{ e: 'wire' }], view.lastT || 0); return g.length; },   // R1007：直接擺沙包 [方, x, z, 血, 還差的工作量]（量預算、拍照用）；送一個 wire 事件，城鎮網格才會重建
     bagsOff: () => { window.__bags1007 = w.bags; delete w.bags; view.onEvents([{ e: 'wire' }], view.lastT || 0); return view.townTriangles; },   // R1007：暫時把沙包拿掉、城鎮網格重建（量沙包佔幾個三角形；暫停中用，之後一定要 bagsOn）
     bagsOn: () => { if (window.__bags1007) w.bags = window.__bags1007; view.onEvents([{ e: 'wire' }], view.lastT || 0); return view.townTriangles; },
+    mine1009: (side, kind, x, z, seen) => { (w.mines ??= { version: 1, cells: [] }).cells.push({ side, kind, x, z, left: 0, seen: seen ? 1 : 0 }); view.onEvents([], view.lastT || 0); return w.mines.cells.length; },   // R1009：直接擺一格布好的雷（量預算、拍照用；seen＝對方知道），畫面照常同步
+    mines1009: () => ({ flag: w.eco?.mine ?? 0, cells: JSON.parse(JSON.stringify(w.mines?.cells ?? [])) }),   // R1009：這一局的 mine 旗標與每一格雷
+    px1009: (x, z) => { const g = (view as any).groundPx, W = (view as any).groundTex.image.width, out = []; for (let py = 0; py < 8; py++) for (let p = 0; p < 8; p++) { const o = ((z * 8 + py) * W + x * 8 + p) * 4; out.push(g[o], g[o + 1], g[o + 2]); } return { v: (view as any).groundTex.version, px: out.join(',') }; },   // R1009：一格的地面貼圖像素、貼圖版本（整張上傳才會變）
     programs: () => renderer.info.programs ? renderer.info.programs.length : -1,   // R1003：已經編過的著色程式有幾個（R093 補驗：飛機上天不該多編）
     hqDown: side => { const b = w.blds[w.eco.hq[side] - 1]; b.hp = 0; },
     armed: () => [__air93Armed(), __armed50()],   // R1004：[空中鍵（0 沒選、1 轟炸、2 偵察）, 建造（0 或建築種類）]   // R1003：讓這一方的指揮部倒下（下一步分出勝負）
