@@ -24,7 +24,7 @@ const cases = [
   ['pick_keeps_air', UI, [['  if (armed) air93Arm(0);\n', '']], 'ui', /^ui: arming a mine drops the air key/],
   ['on_no091', UI, [['V.r1009 && V.r1002 && V.r091;', 'V.r1009 && V.r1002;']], 'ui', /^ui: the 地雷 group and mine are on only when/],
   ['valve_ignored', 'src/main.ts', [['...(on1009(V) ? { mine: 1 } : {}), ...(V.r021', '...(true ? { mine: 1 } : {}), ...(V.r021']], 'ui', /^ui: a new battle sends mine only through on1009/],
-  ['cdp_default', 'tools/cdp.mjs', [["const full1009 = /(^|&)noR1009=/.test(full1011) ? full1011 :", "const full1009 = full1011; const unused1009 = /(^|&)noR1009=/.test(full1011) ? full1011 :"]], 'wiring', /^wiring: tools\/cdp\.mjs opens pages with noR1009=1/],
+  ['cdp_default', 'tools/cdp.mjs', [["const full1009 = /(^|&)noR1009=/.test(full1007) ? full1007 :", "const full1009 = full1007; const unused1009 = /(^|&)noR1009=/.test(full1007) ? full1007 :"]], 'wiring', /^wiring: tools\/cdp\.mjs opens pages with noR1009=1/],
   ['raster_unknown', RN, [['      if (!known1009(w, me, m) || !inGrid(w, m.x, m.z)) continue;', '      if (!inGrid(w, m.x, m.z)) continue;']], 'raster', /^raster: our mines \(finished and being laid\) and the enemy mine we know of are drawn; the one we do not know of is not/],
   ['raster_stale_world', RN, [[SYNC, SYNC + ' if (changed) return r;']], 'raster', /^raster: a new world of the same size repaints every old cell/],
   ['view_stale_world', RN, [[SYNC, SYNC + ' if (changed) return r;']], 'view', /^raster: setWorld to the same map without mines leaves those cells exactly as without mines/],

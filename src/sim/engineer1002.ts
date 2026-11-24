@@ -4,6 +4,7 @@ import { dist } from './math.ts';
 import { findPath } from './path.ts';
 import { firstBlock, ridge, spotted } from './step.ts';   // step.ts 也 import 這一支；只在找目標時呼叫，不在載入時用，循環沒有關係（support91.ts 也這樣）
 import { site50, own50, build50 } from './tech50.ts';   // R050：自己的工地＝蓋、自己蓋好的那三種＝不接
+import { bagAt1007, build1007, type Bag1007 } from './sandbag1007.ts';   // R1007：自己的沙包工地＝堆、自己堆好的＝不接
 import { target1009, fireAt1009, work1009 } from './mines1009.ts';   // R1009：射擊指令點到雷那一格（mines1009.ts 也 import 這一支；只在呼叫時用）
 import { UNIT_KINDS, ORD_IDLE, ORD_FIRE_AT, SHELL_HE, cellOf, center, bldAt, wireAt, type Unit, type World, type Building } from './world.ts';
 
@@ -13,10 +14,11 @@ const T32 = 4294967296;          // 2^32（模擬裡不准用次方）
 const CANDF: number[] = [];      // 模擬是單執行緒、找目標不會重入：重複用同一個陣列
 
 // 射擊指令那一格的爆破目標：還站著的建築；不是建築就看還沒壞的鐵絲網；都沒有回傳 null
-function demoTarget(w: World, x: number, z: number): { b: Building; wire: boolean } | null {
+function demoTarget(w: World, x: number, z: number): { b: Building; wire: boolean; bag?: 1 } | null {
   const b = bldAt(w, x, z);
   if (b && b.hp > 0) return { b, wire: false };
   const r = wireAt(w, x, z);
+  if (!(r && r.hp > 0) && w.bags) { const s = bagAt1007(w, x, z); if (s && s.hp > 0) return { b: s, wire: true, bag: 1 }; }   // R1007：還站著的沙包（wire: true——沙包的編號跟建築是兩套，R050 那幾行不能拿它去找工地；炸它走打網那一條）
   return r && r.hp > 0 ? { b: r, wire: true } : null;
 }
 
@@ -41,6 +43,7 @@ export function fireAt1002(w: World, u: Unit, gx: number, gz: number): void {
   const t = demoTarget(w, gx, gz);
   if (!t) return;
   if (!t.wire && own50(w, u.side, t.b)) return;   // R050：自己蓋好的兵營、車廠、補給站不炸
+  if (t.bag && t.b.builtBy === u.side && (t.b as Bag1007).left === 0) return;   // R1007：自己堆好的沙包不接（不改指令、不撐倒數、不算路）
   u.order = ORD_FIRE_AT; u.tx = gx; u.tz = gz; u.target = 0; u.cooldown = Math.max(u.cooldown, UNIT_KINDS[u.kind].demo ?? 0);
   u.path = near1002(u, t.b) ? [] : findPath(w, cellOf(u.x), cellOf(u.z), gx, gz, 0, 0, u.kind); u.pathIdx = 0;
 }
@@ -51,6 +54,7 @@ export function demo1002(w: World, u: Unit, hurt: (w: World, b: Building, dmg: n
   if (w.mines && work1009(w, u)) return;   // R1009：布雷、排雷
   const t = demoTarget(w, u.tx, u.tz), need = UNIT_KINDS[u.kind].demo ?? 0;
   if (!t) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }
+  if (t.bag && t.b.builtBy === u.side) { build1007(w, u, t.b as Bag1007); return; }   // R1007：自己的沙包＝堆（不倒數、不炸）；堆好了＝回待命
   if (!t.wire && t.b.builtBy === u.side && site50(w, t.b)) { build50(w, u, t.b); return; }   // R050：自己的工地＝蓋（不倒數、不炸）
   if (!t.wire && own50(w, u.side, t.b)) { u.order = ORD_IDLE; u.path = []; u.pathIdx = 0; return; }   // R050：蓋好了（別的工兵剛蓋完）＝回待命
   if (u.pathIdx < u.path.length || !near1002(u, t.b)) { if (u.cooldown < need) u.cooldown = need; return; }

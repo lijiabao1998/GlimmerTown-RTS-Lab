@@ -65,7 +65,7 @@ const boomOf = w => w.events.find(v => v.e === 'impact' && v.r === 128) ?? null;
 const noop = (w, cmd) => { const a = structuredClone(w), b = structuredClone(w); step(a, [cmd]); step(b, []); return hashWorld(a) === hashWorld(b); };
 const src = f => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 const PIN_KINDS = [49, 'd4ee5c3d7aa7fae7'];   // main c31548b（R1004 之後）：UNIT_KINDS 的長度與整張表的摘要
-const PIN_BK = 16;                            // main c31548b：建築種類最大是 16
+const PIN_BK = 17;                            // R1007 併入 main 後：建築種類最大是 17（BK_SANDBAG；地雷不新增建築種類）
 // main c31548b（R1004 之後）的隔離副本（git archive）裡算出來的：R1002（sw＝2）四局、R050（tech）一局、R091（sw＝1）一局，都是 3,000 步
 const PINNED = { 'sw2/0/classic': '52184192', 'sw2/0/real': '483b7f70', 'sw2/1/classic': 'd169b4cd', 'sw2/1/real': '703b2496', 'tech/1': '8948ed5a', 'sw1/0': '3be63bd9' };
 function game(map, seed, extra, real, levels) {
@@ -665,7 +665,7 @@ const groups = {
     assert(JSON.stringify(budget).includes('672') && JSON.stringify(budget).includes('1195'), 'wiring: the hub budget is unchanged');
     assert(/get r1009\(\) \{ return on\('1009'\); \}/.test(src('src/valves.ts')) && src('README.md').includes('`?noR1009=1`'), 'wiring: the valve is in src/valves.ts and the README valve table');
     const cdp = src('tools/cdp.mjs');
-    assert(cdp.includes("const full1009 = /(^|&)noR1009=/.test(full1011) ? full1011 : `${full1011 ? full1011 + '&' : ''}noR1009=1`;") && cdp.includes('const url87 = /(^|&)noR087=/.test(full92) ? full1009 :'), 'wiring: tools/cdp.mjs opens pages with noR1009=1 unless a guard asks for it (url87 keeps its anchored start)');
+    assert(cdp.includes("const full1009 = /(^|&)noR1009=/.test(full1007) ? full1007 : `${full1007 ? full1007 + '&' : ''}noR1009=1`;") && cdp.includes('const url87 = /(^|&)noR087=/.test(full92) ? full1009 :'), 'wiring: tools/cdp.mjs opens pages with noR1009=1 unless a guard asks for it (url87 keeps its anchored start)');
     // 這張碰到的既有行上被別的守衛錨著的文字（施工時 grep 過）：每一段照舊只出現一次
     const anchors = [
       ['src/sim/step.ts', '  for (const u of w.units) if (u.alive && !u.ride && !u.towBy) fireUnit(w, u);'], ['src/sim/step.ts', 'cmd.sw === 2 ? 2 : cmd.sw === 1 ? 1 : 0'],
