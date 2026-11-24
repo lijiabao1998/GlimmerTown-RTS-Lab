@@ -49,6 +49,10 @@ window.__r089 = (() => {
     sky93: list => { w.sky = { version: 1, next: list.length + 1, ready: [0, 0, 0, 0], planes: list.map((p, i) => ({ id: i + 1, ...p })) }; return list.length; },   // R093：直接把飛機放進天上（量預算、拍照用）
     hp: (id, hp) => { w.units[id - 1].hp = hp; },   // R091：把一個單位的血設成 hp（量少一個人的畫法）
     bld50: (side, kind, x, z, hp) => { const id = w.blds.length + 1, maxHp = kind === 14 ? 500 : kind === 15 ? 600 : 400; w.blds.push({ id, kind, x, z, w: 2, d: 2, floors: 1, hp: hp || maxHp, maxHp, builtBy: side }); for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) w.occ[(z + dz) * w.n + x + dx] = id; view.onEvents([{ e: 'build', bld: id }], view.lastT || 0); return id; },   // R050：直接擺一棟兵營、車廠或補給站（量預算、拍照用；hp 給 1 就是工地的樣子）
+    bags: () => JSON.parse(JSON.stringify(w.bags ?? null)),   // R1007：沙包清單
+    bag1007: list => { const g = (w.bags ??= { version: 1, segments: [] }).segments; for (const [side, x, z, hp, left] of list) g.push({ id: g.length + 1, kind: 17, x, z, w: 1, d: 1, floors: 1, hp, maxHp: 120, builtBy: side, left }); view.onEvents([{ e: 'wire' }], view.lastT || 0); return g.length; },   // R1007：直接擺沙包 [方, x, z, 血, 還差的工作量]（量預算、拍照用）；送一個 wire 事件，城鎮網格才會重建
+    bagsOff: () => { window.__bags1007 = w.bags; delete w.bags; view.onEvents([{ e: 'wire' }], view.lastT || 0); return view.townTriangles; },   // R1007：暫時把沙包拿掉、城鎮網格重建（量沙包佔幾個三角形；暫停中用，之後一定要 bagsOn）
+    bagsOn: () => { if (window.__bags1007) w.bags = window.__bags1007; view.onEvents([{ e: 'wire' }], view.lastT || 0); return view.townTriangles; },
     programs: () => renderer.info.programs ? renderer.info.programs.length : -1,   // R1003：已經編過的著色程式有幾個（R093 補驗：飛機上天不該多編）
     hqDown: side => { const b = w.blds[w.eco.hq[side] - 1]; b.hp = 0; },
     armed: () => [__air93Armed(), __armed50()],   // R1004：[空中鍵（0 沒選、1 轟炸、2 偵察）, 建造（0 或建築種類）]   // R1003：讓這一方的指揮部倒下（下一步分出勝負）
