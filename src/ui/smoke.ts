@@ -5,6 +5,8 @@ import type { Command } from '../sim/step.ts';
 import { air93Route } from './air93.ts';   // R093 空中鍵
 import { tech50Route } from './tech50.ts';   // R050 建造
 import { TECH50 } from '../sim/tech50.ts';   // R1004：自己的工地、兵營、車廠、補給站
+import { bag1007Route } from './sandbag1007.ts';   // R1007 沙包
+import { route1009 } from './mines1009.ts';   // R1009 地雷
 import { bridge1010Route } from './bridge1010.ts';   // R1010 炸橋與修橋
 
 export type AmmoMode = 'he' | 'smoke';
@@ -22,6 +24,7 @@ const validCell = (w: World, x: number, z: number) => Number.isInteger(x) && Num
 export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode: boolean, ammo: AmmoMode, hit: OrderHit): OrderRoute | null {
   const air = air93Route(w, hit); if (air !== undefined) return air;   // R093 空中鍵：不用先選單位
   const b50 = tech50Route(w, selected, hit); if (b50 !== undefined) return b50;   // R050 建造：選好要蓋的之後，點地圖＝放工地（帶選取裡的工兵）
+  const m9 = route1009(w, selected, hit, fireMode, ammo); if (m9 !== undefined) return m9;   // R1009 地雷：選好了＝布雷帶；沒選好、點到我方知道的雷＝只有工兵去排（點敵兵、煙幕模式照舊）
   const ids = [...selected].filter(id => w.units[id - 1]?.alive && w.units[id - 1].side === SIDE_PLAYER);
   if (!ids.length) return null;
   const target = hit.unit ? w.units[hit.unit - 1] : null;
@@ -62,6 +65,7 @@ export function routeBattleOrder(w: World, selected: Iterable<number>, fireMode:
   if (b && b.hp > 0 && own50ui(w, x, z)) { const eng = ids.filter(id => !!UNIT_KINDS[w.units[id - 1].kind].demo); return eng.length ? fire(eng, x, z) : null; }   // R1004：同上（點地面點到自己的那幾種建築）
   const br10 = bridge1010Route(w, ids, fireMode, x, z); if (br10 !== undefined) return br10;   // R1010：點到橋（那一格沒有建築、沒有還沒壞的網）＝選取裡的工兵炸或修；不是橋、沒選工兵照原本的路由
   if ((b && b.hp > 0) || (fireMode && guns.length)) return fire(b && b.hp > 0 ? ids : guns, x, z);
+  const bag = bag1007Route(w, ids, x, z); if (bag) return bag;   // R1007：點到有人堆的沙包——對方的＝工兵去炸、自己的工地＝工兵去堆，其他人走過去；自己堆好的照舊全部走進去
   const cut = (wireAt(w, x, z)?.hp ?? 0) > 0 ? ids.filter(id => !!UNIT_KINDS[w.units[id - 1].kind].demo) : [], rest = ids.filter(id => !cut.includes(id));   // R1002：點到還沒壞的鐵絲網＝工兵去剪，其他照舊走過去
   if (cut.length) return { commands: [{ t: 'fireAt', side: SIDE_PLAYER, ids: cut, x, z }, ...(rest.length ? [{ t: 'move' as const, side: SIDE_PLAYER, ids: rest, x, z }] : [])], marker: { x: x + 0.5, z: z + 0.5, hostile: true } };
   return { commands: [{ t: 'move', side: SIDE_PLAYER, ids, x, z }], marker: { x: x + 0.5, z: z + 0.5, hostile: false } };

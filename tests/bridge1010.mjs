@@ -360,7 +360,7 @@ const groups = {
       const v = opened(map, seed, ecoBr({ tech: 1 }));
       for (const side of [ME, FOE]) { const h = v.blds[v.eco.hq[side] - 1]; for (const c of v.br.spans.flatMap(s => s.cells)) { const [x, z] = xz(v, c); assert(Math.max(Math.max(h.x - x, 0, x - (h.x + h.w - 1)), Math.max(h.z - z, 0, z - (h.z + h.d - 1))) > RANGE50, `tech: map ${map} seed ${seed}: bridge cell (${x},${z}) is more than ${RANGE50} from headquarters ${side}`); } }
     }
-    assert.equal(createHash('sha256').update(src('src/sim/tech50.ts')).digest('hex'), '88dcefbcad57bc95674648f356ab098a05539f6f6e1c9e200b4c519e1b89a8b9', 'tech: src/sim/tech50.ts is byte for byte the R1004 version (c31548b)');
+    assert.equal(createHash('sha256').update(src('src/sim/tech50.ts')).digest('hex'), 'bd654f407bbfc5f8b4f1f86d68c203310ef7276c3051b49176316f3031488b46', 'tech: src/sim/tech50.ts is byte for byte the R1007 main version');
     console.log('OK bridge1010/tech: canal and broken bridge are 泥地不能蓋, intact and timber bridge 擋到了; every bridge is out of RANGE50; tech50.ts untouched');
   },
   // 驗收 9：存檔
@@ -525,7 +525,7 @@ const groups = {
     assert(valves.includes("get r1010() { return on('1010'); }"), 'ui: valves has r1010');
     assert(main.includes("const ecoCmd = (): Command => sw1002({ t: 'eco', ") && main.includes("...(V.r1010 && V.r1002 && V.r091 ? { br: 1 } : {}), "), 'ui: a new battle sends br 1 only with R1010, R1002 and R091 on');
     assert(main.split('\n').length - 1 <= 672 && battle.split('\n').length - 1 <= 1195, 'ui: hub budgets hold');
-    assert(cdp.includes("const full1010 = /(^|&)noR1010=/.test(full1011) ? full1011 : `${full1011 ? full1011 + '&' : ''}noR1010=1`;") && cdp.includes('? full1010 : `${full1010 ?'), 'ui: tools/cdp.mjs opens pages with noR1010=1 unless a guard asks for R1010');
+    assert(cdp.includes("const full1010 = /(^|&)noR1010=/.test(full1009) ? full1009 : `${full1009 ? full1009 + '&' : ''}noR1010=1`;") && cdp.includes('? full1010 : `${full1010 ?'), 'ui: tools/cdp.mjs opens pages with noR1010=1 unless a guard asks for R1010');
     assert(hud.split('\n').filter(l => /^import /.test(l)).every(l => l.startsWith('import type ')), 'ui: src/ui/hud.ts still has only type imports');
     // 小地圖（tests/minimap90.mjs 那一套假畫布）
     const canvases = [];

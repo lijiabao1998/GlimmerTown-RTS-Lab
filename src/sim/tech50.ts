@@ -59,6 +59,7 @@ export function why50(w: World, side: number, kind: number, at?: { x: number; z:
     if (inner && (w.occ[i] || wireAt(w, cx, cz) || trenchAt(w, cx, cz) || w.ter[i] === TER_ROAD || w.units.some(u => u.alive && !u.ride && !u.towBy && cellOf(u.x) === cx && cellOf(u.z) === cz))) return '擋到了';
     if (!inner && (w.occ[i] || wireAt(w, cx, cz))) return '要跟建築隔一格';
   }
+  if (w.bags?.segments.some(s => s.x >= x && s.x <= x + 1 && s.z >= z && s.z <= z + 1)) return '擋到了';   // R1007：2×2 裡有沙包（還站著的或打散的那一攤，同瓦礫）；外面一圈有沒關係（沙包不擋路）
   // 不另外檢查會不會把路堵死：外面一圈都是空的，原本穿過這 2×2 的路都能沿著這一圈繞過去（卡面施工紀錄 1）
   return '';
 }
