@@ -13,6 +13,26 @@ const clock = { name: 'bridgehead-test-clock', transform(code, id) {
 } };
 const label = "document.querySelector('#bridgehead-status:not([hidden]) strong')?.textContent";
 const opts = '&map=hythe&noR091=0&noR1002=0&noR1010=0&noR050=0&noR087=0';
+// Bound each move by its game ticks. Both clients watch their own HUD and fail if lockstep stalls.
+function waitForLabel(expected, budget) {
+  const point = document.getElementById('bridgehead-status');
+  let lastTick = __rts.tick(), lastProgress = performance.now();
+  const limit = window.bridgeLimit = lastTick + budget;
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      const { tick, peer, desync } = __net(), actual = point.querySelector('strong')?.textContent;
+      if (tick !== lastTick) { lastTick = tick; lastProgress = performance.now(); }
+      if (!peer || desync >= 0 || tick > limit || performance.now() - lastProgress > 30000) {
+        clearInterval(timer);
+        reject(new Error(`Expected ${expected}, saw ${actual} at tick ${tick} (limit ${limit}, peer ${peer}, desync ${desync})`));
+      } else if (!point.hidden && actual === expected) {
+        clearInterval(timer); resolve();
+      }
+    };
+    const timer = setInterval(check, 50);
+    check();
+  });
+}
 async function shot(pg, name) {
   if (!process.env.R149_SHOTS) return;
   const png = await pg.page.send('Page.captureScreenshot', { format: 'png' });
@@ -23,10 +43,9 @@ await runOrSkip('bridgehead', () => netHarness({ plugins: [clock], ports: [8841,
   await versus(opts, '&noR149=1', 240, async ({ A, B, E, until }) => {
     await B.page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     const peers = [A, B];
-    async function labels(host, guest) {
+    async function labels(host, guest, budget = 100) {
       try {
-        await until('bridge labels ' + host + ' / ' + guest, async () =>
-          (await E(A, label)) === host && (await E(B, label)) === guest);
+        await Promise.all([host, guest].map((expected, i) => E(peers[i], `(${waitForLabel})(${JSON.stringify(expected)}, ${budget})`)));
       } catch (error) {
         for (const pg of peers) console.error(await E(pg, `({ state: __net(), hud: ${label}, scouts: __rts.units().filter(u => u.kind === ${UK_OBSERVER}).map(u => [u.id, u.alive, u.x >> 8, u.z >> 8]), last: __rts.log().slice(-3) })`));
         throw error;
@@ -55,22 +74,17 @@ await runOrSkip('bridgehead', () => netHarness({ plugins: [clock], ports: [8841,
         return Math.abs(cam.x - 42.5) < 1 && Math.abs(cam.z - 86.5) < 1;
       });
     }
-    const advance = async steps => {
-      const limit = await E(A, '__rts.tick()') + steps;
-      await Promise.all(peers.map(pg => E(pg, 'window.bridgeLimit = ' + limit)));
-    };
     await Promise.all(peers.map(pg => E(pg, 'window.bridgeTimer = setInterval(() => __rts.advanceReady(), 4)')));
     try {
       await Promise.all([move(0, 42, 86), move(1, 35, 80)]);
-      await advance(2400);
-      await labels('我方控制', '敵方控制');
+      await labels('我方控制', '敵方控制', 2400);
       await shot(A, 'host-controls');
-      await move(1, 43, 86); await advance(650); await labels('爭奪中', '爭奪中');
+      await move(1, 43, 86); await labels('爭奪中', '爭奪中', 650);
       await shot(B, 'mobile-contested');
-      await move(0, 53, 86); await advance(500); await labels('敵方控制', '我方控制');
+      await move(0, 53, 86); await labels('敵方控制', '我方控制', 500);
       await shot(B, 'mobile-retaken');
-      await move(0, 42, 86); await advance(500); await labels('爭奪中', '爭奪中');
-      await move(1, 31, 86); await advance(500); await labels('我方控制', '敵方控制');
+      await move(0, 42, 86); await labels('爭奪中', '爭奪中', 500);
+      await move(1, 31, 86); await labels('我方控制', '敵方控制', 500);
       console.log('West Hythe: host captured, guest contested and captured, host contested and retook, tick ' + await E(A, '__rts.tick()'));
     } finally { await Promise.all(peers.map(pg => E(pg, 'clearInterval(window.bridgeTimer)'))); }
   });
