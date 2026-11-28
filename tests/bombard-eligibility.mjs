@@ -11,6 +11,7 @@ import { SCRIPT, SCRIPT_SEED, SCRIPT_TICKS } from '../src/sim/script.ts';
 import { MAP_LARGE } from '../src/sim/largeMap.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 import { Gestures } from '../src/ui/gestures.ts';
+import { drawMoveDestinations } from '../src/ui/moveDestinations.ts';
 const { createWorld, hashWorld, SUB, SIDE_PLAYER, SIDE_ENEMY, ORD_IDLE, ORD_MOVE, UNIT_KINDS,
   UK_TANK, UK_HOWITZER, UK_MORTAR, UK_OBSERVER, UK_INFANTRY, UK_ATGUN, UK_LIGHT, UK_HEAVY, UK_ARMORED_CAR, UK_DESTROYER, UK_ASSAULT, UK_ZOMBIE } = world;
 const paths = { menu: '../src/ui/commandMenu.ts', main: '../src/main.ts', valves: '../src/valves.ts' };
@@ -164,6 +165,7 @@ function mainFixture(query = '') {
     syncBattleAudio() {}, battleAudio: undefined, tick: () => step(c.w, []), TICK_HZ: 30, devicePixelRatio: 1, innerWidth: 412, innerHeight: 860,
     fling: { active: false }, glide: { active: false }, style: {}, lastRangeInfo: 'unchanged', lastCoverInfo: '', lastBombardInfo: '', lastReloadInfo: '', lastVehicleInfo: '', lastVegetationInfo: '',
     coverDurability: () => '', bombardStatus: () => '', reloadStatus: () => '', vehicleDurability: () => '', counterbatteryHint: () => '', lastCounterbatteryInfo: '', lastCounterbatteryWorld: f.w,
+    drawMoveDestinations,
     fireDisciplineFrame: undefined, prodBar: undefined, minimap: undefined, tutorial: { frame() {} },
     renderer: { setAnimationLoop: callback => { render = callback; }, setPixelRatio() {}, setSize() {} } });
   vm.runInContext(section(mainPlain, 'if (V.r109) {\n  commandMenu = ', '\n// R037：'), c);

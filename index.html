@@ -33,6 +33,11 @@
       font: 14px/1.4 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
     canvas { display: block; touch-action: none; image-rendering: pixelated; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     #hud { position: fixed; inset: 0; pointer-events: none; }
+    #move-destinations { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    #move-destinations span { position: absolute; top: 0; left: 0; width: 0; height: 0; color: #ecffdf;
+      text-indent: 8px; white-space: nowrap; font: bold 11px/1 system-ui, sans-serif; text-shadow: 0 1px 2px #101c16, 1px 0 2px #101c16, -1px 0 2px #101c16; }
+    #move-destinations span::before { content: ''; position: absolute; box-sizing: border-box; left: -5px; top: -5px; width: 10px; height: 10px;
+      border: 2px solid #d7ffad; background: #283b30; box-shadow: 0 0 0 1px #203020; transform: scaleY(.72) rotate(45deg); }
     #hud .bar { position: absolute; display: flex; gap: 6px; align-items: center; padding: 6px 8px;
       background: rgba(28, 32, 26, 0.72); border-radius: 6px; pointer-events: auto; }
     #hud .top { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); gap: 12px; }

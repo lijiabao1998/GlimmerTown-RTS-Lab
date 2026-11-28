@@ -1,4 +1,5 @@
 import { valves } from '../src/valves.ts';
+import { updateMoveDestinations } from '../src/ui/moveDestinations.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R118: execute actual build-bar DOM and main-controller functions. This is not browser layout evidence.
 // --mutations proves each semantic negative fails its designated assertion, never a startup error.
@@ -63,6 +64,7 @@ function controller(visual = true) {
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
   const q = new URLSearchParams(visual ? '' : 'noR118=1');
   const c = vm.createContext({ setViewSide: () => {},   /* R085：reset() 先把「我方」換回第 0 方（沙盒裡不用） */
+    updateMoveDestinations,
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, replay: undefined,   // R047: tick() asks replay first; absent here = ordinary play
     netLive: () => false, netFeed: () => null, netReady: () => true,   // R083：沒有連線的局（main.ts 的 issue／tick／迴圈會問）
     // Existing construction fixture; large-map behavior has its own guards.

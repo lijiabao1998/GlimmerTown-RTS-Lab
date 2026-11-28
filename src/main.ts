@@ -49,6 +49,7 @@ import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
+import { updateMoveDestinations, drawMoveDestinations } from './ui/moveDestinations.ts';
 import { showStartOrder, startOrderText } from './ui/startOrder.ts';
 import { valves } from './valves.ts';
 const q = restoreSetup(new URLSearchParams(location.search));   // R073：網址沒帶任何設定時，照上次存在本機的那一份
@@ -58,8 +59,7 @@ const skirmish = V.r046 ? initSkirmish(q, V.r026) : undefined;   // R046 遭遇�
 const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)), msaa: msaaSetting(q.get('msaa'), V.r065) };
 // 逃生閥：?fx=off 或 window.__noFx＝true 時不產生爆炸、煙（AGENTS.md：新效果都要關得掉）
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
-// R037 手勢計時看事件自己的時間戳（手指真的動、真的放的時刻），不看程式處理到事件的時間：
-// 畫面卡一下（手機掉幀、CI 機器忙）時，快速拖曳放手照樣滑出去、雙擊照樣跟過去（見下面的 eventT）。
+// R037：eventT 讀取手指移動、放開時的事件時間戳，掉幀時仍能辨識滑動與雙擊。
 const fling = new Fling(), glide = new Glide(), camStep = { x: 0, z: 0 };
 let dragV = { vx: 0, vy: 0, t: 0 }, lastTap = { id: 0, t: -1e9 };
 let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: number } | null = null, reportShown = false, reportView: ReportView | undefined;
@@ -224,13 +224,13 @@ function issue(cmd: Command) { if (cmd.t === 'map' && w.more && !w.tick) cmd = {
 }
 
 const simT = (alpha = 0) => (w.tick + alpha) / TICK_HZ;
-
 function tick() {
   view.snapshot();
   const now = replay?.feed(w, pending) ?? netFeed(w, pending) ?? pending; pending = [];   // R047：正在重播就餵紀錄裡這一步的指令（玩家這時下的不進世界）；不是重播時 feed 只負責在分出勝負那一刻存檔
   const priorWinner = w.winner, priorMap = w.map;
   sandboxPlacementResults.length = 0;
   step(w, now, sandboxPlacementResults);
+  if (V.r147 && now.length && !replay?.playing()) updateMoveDestinations(w, now);
   if (w.sandbox) {
     if (now.some(c => c.t === 'sandboxReset')) {
       const priorView = view;
@@ -570,6 +570,7 @@ renderer.setAnimationLoop(() => {
     lastCounterbatteryWorld = w; lastCounterbatteryInfo = counterbatteryInfo; hud?.update();
   }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
+  if (V.r147) drawMoveDestinations(w, view);
   hud?.frame();
   tutorial.frame(t);
   fireDisciplineFrame?.();
@@ -578,8 +579,7 @@ renderer.setAnimationLoop(() => {
   minimap?.frame(t);
 });
 
-// R040：初始化做完才拿掉載入畫面，跟下面設好 __rts（守衛等的「準備好了」）在同一個同步步驟裡：準備好的那一刻畫面上已經沒有它。
-// 放在守衛掛勾之前：幾支守衛會把守衛掛勾那個物件以後的原文抽到沒有 DOM 的沙箱裡跑。
+// R040：在同一個同步步驟先收載入畫面、再公開 __rts，守衛從 __rts 起可以在沒有 DOM 的沙箱執行。
 document.getElementById('loader')?.remove();
 
 // ---- 守衛掛勾（tools/smoke.mjs 用）----
