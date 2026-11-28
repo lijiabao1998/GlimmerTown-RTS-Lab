@@ -28,7 +28,7 @@ export function isCommand(x: unknown): x is Command {
     case 'eco': return optInt(c.hq11) && optInt(c.bag) && optInt(c.mine) && optInt(c.br) && optInt(c.tech) && optInt(c.inf) && optInt(c.guns) && optInt(c.tanks) && optInt(c.armor2) && optInt(c.soviet) && optInt(c.international) && optInt(c.end) && optInt(c.mg) && optInt(c.air) && optInt(c.tp) && optInt(c.sw) && optInt(c.pla);   // R1011 hq11 排在最前面（R095 的守衛錨著這一行的結尾）
     case 'produce': return side(c.side) && int(c.kind);
     case 'rules': return optInt(c.force) && optInt(c.income) && optInt(c.ap) && optInt(c.morale);
-    case 'zombies': case 'sandboxReset': return true;
+    case 'bridgehead': case 'zombies': case 'sandboxReset': return true;
     case 'sandboxRun': return typeof c.running === 'boolean';
     case 'sandboxPlace': return side(c.side) && int(c.kind) && int(c.x) && int(c.z);
     case 'construct': return side(c.side) && ids(c.ids) && int(c.kind) && int(c.x) && int(c.z);   // R050

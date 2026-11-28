@@ -208,6 +208,7 @@ function startBattle() {
   for (const c of planner.plan) issue(c);
   for (const c of enemy) issue(c);
   if (V.r019) issue(V.r050 && V.r1002 ? { ...ecoCmd(), tech: 1 } as Command : ecoCmd());   // R050：建造與科技（要有工兵）
+  if (V.r149 && V.r019 && w.map === MAP_HYTHE && netVersusNext()) issue({ t: 'bridgehead' });
   if (V.r018 && !w.zombies) issue({ t: 'ai', side: SIDE_ENEMY, level: aiLevel, ...(V.r057 ? { v: V.r078 ? 3 : 2 } : {}), ...(V.r1005 && V.r057 && V.r078 ? { v: 4 } : {}) });
   phase = 'battle'; planner.clear();
   if (V.r016) { if (V.r041) startOrder(); else startBanner(); }

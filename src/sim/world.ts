@@ -1,5 +1,6 @@
 // 世界狀態：純資料，只用整數。模擬不 import three、不碰 DOM、不用現實時間（AGENTS.md 規則 2、3）。
 import { Fnv, nextU32, randInt, type RngState } from './rng.ts';
+import type { Bridgehead } from './bridgehead.ts';
 
 export const N = 32;            // 舊的固定地圖邊長（格）；R042 起 src/ 只看 w.n，N／idx／inMap 只留給 32×32 的舊守衛
 export const SUB = 256;         // 1 格＝256 個位置單位
@@ -285,6 +286,7 @@ export interface TrenchSegment { side: number; kind: number; x: number; z: numbe
 export interface Span1010 { cells: number[]; state: number; hp: number; left: number }
 
 export interface World extends RngState {
+  bridgehead?: Bridgehead;
   seed: number;
   tick: number;
   n: number;
@@ -519,6 +521,10 @@ export function hashWorld(w: World): string {
   if (w.wires) {
     f.int(0x5731).int(w.wires.version).int(w.wires.segments.length);
     for (const s of w.wires.segments) f.int(s.id).int(s.kind).int(s.x).int(s.z).int(s.w).int(s.d).int(s.floors).int(s.hp).int(s.maxHp).int(s.builtBy ?? -1);
+  }
+  if (w.bridgehead) {
+    const p = w.bridgehead;
+    f.int(0x42313439).int(p.owner).int(p.claimant).int(p.progress).int(p.supplyTicks);
   }
   if (w.map) f.int(0x4d50).int(w.map);   // R026 只在有時折
   if (w.sym) f.int(0x5359).int(w.sym);   // R084 只在有時折

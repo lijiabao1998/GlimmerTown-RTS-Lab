@@ -2,6 +2,7 @@
 import { cellIdx, TER_ROAD, TER_FIELD, TER_MUD, STAGE_RUBBLE, stageOf, type World, type Unit } from '../sim/world.ts';
 import { SIDE_PLAYER } from '../side.ts';   // R085「我方」可以換（連線對戰）
 import { drawCounterbattery } from './counterbattery.ts';
+import { bridgeheadOverlay } from './bridgehead.ts';
 import { VEG_HEDGE, VEG_WOOD, vegetationAt } from '../sim/vegetation.ts';
 import { TrenchRaster, TRENCH_E, TRENCH_S, TRENCH_W, TRENCH_N, TRENCH_MINI_COLORS } from '../render/trenches.ts';
 import { MiniRaster, useRaster } from './minimapRaster.ts';   // R090：n ≥ 128 一次畫成菱形
@@ -41,6 +42,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
   const trenchRaster = new TrenchRaster(a.trenches !== false), raster = new MiniRaster();
   const counterbatteryPoint: [number, number] = [0, 0];
   const counterbatteryProject = (x: number, z: number) => toMini(g, x, z, counterbatteryPoint);
+  const drawBridgehead = bridgeheadOverlay(cvs, a.tap);
   const cell = (ctx: CanvasRenderingContext2D, x: number, z: number) => {   // 一格＝一個小菱形
     const [p0x, p0y] = toMini(g, x, z), [p1x, p1y] = toMini(g, x + 1, z), [p2x, p2y] = toMini(g, x + 1, z + 1), [p3x, p3y] = toMini(g, x, z + 1);
     ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.lineTo(p3x, p3y); ctx.closePath(); ctx.fill();
@@ -122,6 +124,7 @@ export function initMinimap(a: { world: () => World; visible: (u: Unit) => boole
       poly.forEach(([x, z], k) => { const [px, py] = toMini(g, x, z); if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py); });
       ctx.closePath(); ctx.stroke();
     }
+    drawBridgehead(ctx, w, counterbatteryProject);
   }
   const pick = (e: PointerEvent) => { const r = cvs.getBoundingClientRect(); return fromMini(g, e.clientX - r.left, e.clientY - r.top); };
   cvs.addEventListener('pointerdown', e => e.stopPropagation());
