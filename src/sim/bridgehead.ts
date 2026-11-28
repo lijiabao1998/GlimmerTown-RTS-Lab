@@ -3,6 +3,8 @@ import { center, SUB, TICK_HZ, waterAt, type World } from './world.ts';
 
 export const [BRIDGE_X, BRIDGE_Z] = HYTHE_BRIDGES[1]; // 西海斯
 export const CAPTURE_RADIUS = 4, CAPTURE_TICKS = 5 * TICK_HZ, SUPPLY_TICKS = 10 * TICK_HZ;
+const radius = CAPTURE_RADIUS * SUB;
+const radiusSquared = radius * radius;
 
 export interface Bridgehead {
   owner: number;       // -1 中立，0、1 為陣營
@@ -23,7 +25,7 @@ export function bridgePresence(w: World): number {
   for (const u of w.units) {
     if (!u.alive || u.ride || u.towBy) continue;
     const dx = u.x - center(BRIDGE_X), dz = u.z - center(BRIDGE_Z);
-    if (dx * dx + dz * dz <= (CAPTURE_RADIUS * SUB) ** 2) present |= 1 << u.side;
+    if (dx * dx + dz * dz <= radiusSquared) present |= 1 << u.side;
     if (present === 3) break;
   }
   return present;
