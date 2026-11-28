@@ -59,8 +59,7 @@ const skirmish = V.r046 ? initSkirmish(q, V.r026) : undefined;   // R046 遭遇�
 const style: Style = { ...STYLE_A, pixelCss: Math.max(1, Math.min(4, Number(q.get('px') ?? STYLE_A.pixelCss) | 0)), msaa: msaaSetting(q.get('msaa'), V.r065) };
 // 逃生閥：?fx=off 或 window.__noFx＝true 時不產生爆炸、煙（AGENTS.md：新效果都要關得掉）
 const fxOn = q.get('fx') !== 'off' && !(window as unknown as { __noFx?: boolean }).__noFx;
-// R037 手勢計時看事件自己的時間戳（手指真的動、真的放的時刻），不看程式處理到事件的時間：
-// 畫面卡一下（手機掉幀、CI 機器忙）時，快速拖曳放手照樣滑出去、雙擊照樣跟過去（見下面的 eventT）。
+// R037：eventT 讀取手指移動、放開時的事件時間戳，掉幀時仍能辨識滑動與雙擊。
 const fling = new Fling(), glide = new Glide(), camStep = { x: 0, z: 0 };
 let dragV = { vx: 0, vy: 0, t: 0 }, lastTap = { id: 0, t: -1e9 };
 let stats: BattleStats, endT0 = -1, endFrom: { x: number; z: number; zoom: number } | null = null, reportShown = false, reportView: ReportView | undefined;
@@ -580,8 +579,7 @@ renderer.setAnimationLoop(() => {
   minimap?.frame(t);
 });
 
-// R040：初始化做完才拿掉載入畫面，跟下面設好 __rts（守衛等的「準備好了」）在同一個同步步驟裡：準備好的那一刻畫面上已經沒有它。
-// 放在守衛掛勾之前：幾支守衛會把守衛掛勾那個物件以後的原文抽到沒有 DOM 的沙箱裡跑。
+// R040：在同一個同步步驟先收載入畫面、再公開 __rts，守衛從 __rts 起可以在沒有 DOM 的沙箱執行。
 document.getElementById('loader')?.remove();
 
 // ---- 守衛掛勾（tools/smoke.mjs 用）----

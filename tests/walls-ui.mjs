@@ -1,4 +1,5 @@
 import { valves } from '../src/valves.ts';
+import { updateMoveDestinations } from '../src/ui/moveDestinations.ts';
 import { MAP_TOWN } from '../src/sim/expandedMap.ts';
 // R120: run the real build-bar DOM and main callbacks, including semantic negative controls.
 // This fake DOM verifies behavior, not layout; walls-browser owns real Chrome hit testing.
@@ -69,6 +70,7 @@ function controller(query = '') {
   const mockView = () => ({ dispose() {}, snapshot() {}, onEvents() {}, setMarker() {}, buildingAt: () => null, groundAt: (x, z) => ({ x, z }), setWorld(w) { displayWorlds.push(w); } });
   const q = new URLSearchParams(query);
   const c = vm.createContext({ setViewSide: () => {},   /* R085：reset() 先把「我方」換回第 0 方（沙盒裡不用） */
+    updateMoveDestinations,
     MAP_LARGE, MAP_TOWN, large: false, expanded: false, townPick: undefined, replay: undefined,   // R047: tick() asks replay first; absent here = ordinary play
     netLive: () => false, netFeed: () => null, netReady: () => true,   // R083：沒有連線的局（main.ts 的 issue／tick／迴圈會問）
     // Existing construction fixture; use the real map constant.
