@@ -4,6 +4,7 @@
 
 | 卡號 | 日期 | 寫入者 | 做了什麼 | 守衛 | 提交／PR | 沒做成的事 |
 |---|---|---|---|---|---|---|
+| R148 | 2026-11-28 | Codex | 直式手機左側依序放全排、搭車，間距 6 像素。短螢幕的生產列讓出指令位置 | `command-rail-browser` 七直一橫，NPU 中文辨識 14 個詞及 14 個遮字對照 | [待辦 48](docs/tasks/R148-手機左側全排與搭車.md) | 觸控與安全區使用桌機 Chrome 模擬 |
 | R147 | 2026-11-28 | Codex | 多選車砲下令後標出實際可達的停位。同格顯示數量，標記隨鏡頭移動，兩秒消退 | `move-destinations`、`move-destinations-browser` | [待辦 45](docs/tasks/R147-車隊移動停位.md) | 停位以指令執行的那一步為準，之後地形仍可能改變 |
 | R1013 | 2026-11-25 | Claude | 收尾（只改文件）：R1005、R1007、R1009、R1010、R1011 五張卡的狀態改成已合併；日誌 R1005、R1011 兩列的 PR 欄；路線圖交接改成「Claude 線停在 R1013」，R050、第 9、12 張與四段順序的現況 | `card-numbers`、`readme` | #168（合併提交看 main 的歷史） | 只改文件；沒有重新驗任何一張卡 |
 | R1012 | 2026-11-24 | Claude | 公開連線轉發伺服器：新增 `server/cf-relay/`（零依賴 Cloudflare Workers＋SQLite Durable Objects，`RelayRoom` 協定與 `server/relay.mjs` 一致、Origin 白名單與防串房世代編號），並讓 HTTPS 遊戲頁預設連 `wss://glimmertown-rts-relay.lijiabao1998.workers.dev/relay`；實機驗證修正 DO Hibernation 拒連與關閉握手；不碰 `src/sim/` | `relay-public1012`、實機 `/health` 與雙 `wss://` 10 項驗證、`net-lockstep`、`versus` | ✅ #166（3623810）＋補丁 PR | 仍依賴外部 Cloudflare Workers 免費帳號；房主斷線不重連、對戰左上仍由電腦代排 |
