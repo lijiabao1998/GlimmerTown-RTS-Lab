@@ -49,6 +49,7 @@ import { initMinimap, type Minimap } from './ui/minimap.ts';
 import { counterbatteryHint } from './ui/counterbattery.ts';
 import { newStats, statsStep, makeReport, slowmoFactor, SLOWMO_MS, type BattleStats } from './ui/report.ts';
 import { initReportView, type ReportView } from './ui/reportView.ts';
+import { updateMoveDestinations, drawMoveDestinations } from './ui/moveDestinations.ts';
 import { showStartOrder, startOrderText } from './ui/startOrder.ts';
 import { valves } from './valves.ts';
 const q = restoreSetup(new URLSearchParams(location.search));   // R073：網址沒帶任何設定時，照上次存在本機的那一份
@@ -224,13 +225,13 @@ function issue(cmd: Command) { if (cmd.t === 'map' && w.more && !w.tick) cmd = {
 }
 
 const simT = (alpha = 0) => (w.tick + alpha) / TICK_HZ;
-
 function tick() {
   view.snapshot();
   const now = replay?.feed(w, pending) ?? netFeed(w, pending) ?? pending; pending = [];   // R047：正在重播就餵紀錄裡這一步的指令（玩家這時下的不進世界）；不是重播時 feed 只負責在分出勝負那一刻存檔
   const priorWinner = w.winner, priorMap = w.map;
   sandboxPlacementResults.length = 0;
   step(w, now, sandboxPlacementResults);
+  if (V.r147 && now.length && !replay?.playing()) updateMoveDestinations(w, now);
   if (w.sandbox) {
     if (now.some(c => c.t === 'sandboxReset')) {
       const priorView = view;
@@ -570,6 +571,7 @@ renderer.setAnimationLoop(() => {
     lastCounterbatteryWorld = w; lastCounterbatteryInfo = counterbatteryInfo; hud?.update();
   }
   view.render(renderer, style, innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
+  if (V.r147) drawMoveDestinations(w, view);
   hud?.frame();
   tutorial.frame(t);
   fireDisciplineFrame?.();
