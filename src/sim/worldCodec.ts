@@ -11,6 +11,7 @@ import { mineOk } from './mines1009.ts';   // R1009
 import { tpOk } from './transport92.ts';   // R092
 import { airOk } from './air93.ts';   // R093
 import { brOk1010 } from './bridge1010.ts';   // R1010
+import { validBridgehead } from './bridgehead.ts';
 import { UNIT_KINDS, type World } from './world.ts';
 import { HEIGHT_MAX } from './terrain.ts';
 
@@ -71,6 +72,7 @@ export function decodeWorld(x: unknown): World | null {
   if (!ints(r, WORLD_INTS) || !r.units.every(unitOk) || !r.blds.every((b, i) => ints(b, BLD_INTS) && b.id === i + 1) || !r.shells.every(s => ints(s, SHELL_INTS))) return null;
   if (r.more !== undefined && r.more !== 1) return null;   // R087：更多房屋的旗標只有 1
   if (!platoonOk(r)) return null;   // R095：排的旗標只有 1、排號只在步兵班上、沒有旗標就沒有排的記號
+  if (!validBridgehead(r)) return null;
   if (!swOk(r)) return null;   // R091：sw 只有 1；沒有 sw 就沒有 42、43 號單位
   if (!airOk(r)) return null;   // R093：air 只有 1；沒有 air 就沒有 sky、沒有 46 號
   if (!techOk(r)) return null;   // R050：tech 只有 1；沒有 tech 就沒有 w.tech、沒有 14–16 號建築；工地要指到那三種

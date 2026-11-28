@@ -114,6 +114,13 @@
     #minimap { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 58px); pointer-events: auto;
       background: rgba(20, 24, 18, 0.55); border: 1px solid rgba(220, 230, 200, 0.35); border-radius: 4px; image-rendering: pixelated; touch-action: none; }
     /* R019 生產列：貼在提示列上方（bottom 由 src/ui/production.ts 設定） */
+    #bridgehead-status { position: absolute; right: max(8px, env(safe-area-inset-right)); pointer-events: auto;
+      display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-content: center; text-align: left;
+      min-height: 44px; padding: 4px 8px; color: #f0ead9; background: #252e27; border: 1px solid #92977e;
+      border-radius: 4px; font: 13px/1.25 system-ui, sans-serif; cursor: pointer; }
+    #bridgehead-status strong { text-align: right; font-size: 12px; }
+    #bridgehead-status small { grid-column: 1 / -1; color: #dfdfcc; font-size: 12px; }
+    #bridgehead-status[hidden] { display: none; }
     #prodbar { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: 52px; flex-wrap: wrap; background: rgba(28, 34, 26, 0.86); border: 1px solid #6c745f; }
     #prodbar #pb-catalog { position: absolute; right: 0; bottom: calc(100% + 4px); min-height: 44px; max-width: 130px; background: #273024; color: #f4efda; border: 1px solid #859272; border-radius: 4px; }
     #prodbar button[hidden] { display: none !important; }

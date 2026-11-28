@@ -17,6 +17,7 @@ import { applyMap, MAP_HILLS, MAP_HYTHE, applyMoreHouses } from './maps.ts';
 import { applyRules, type RulesCmd } from './rules.ts';
 import { vegetationAt, vegetationBlocks } from './vegetation.ts';
 import { startEco, produce, ecoStep, hqAlive } from './eco.ts';
+import { startBridgehead, stepBridgehead } from './bridgehead.ts';
 import { FORMATION_PLA } from './platoon.ts';
 import { aim91, shotDmg91 } from './support91.ts';   // R091
 import { fireAt1002, reach1002, demo1002, burns1002, burnIn1002, aimFlame } from './engineer1002.ts';   // R1002
@@ -37,6 +38,7 @@ import {
 export type Command =
   | SandboxCommand
   | { t: 'zombies' }
+  | { t: 'bridgehead' }
   | { t: 'move'; side: number; ids: number[]; x: number; z: number }
   | { t: 'attack'; side: number; ids: number[]; target: number }
   | { t: 'fireAt'; side: number; ids: number[]; x: number; z: number; ammo?: 'smoke' }
@@ -71,6 +73,7 @@ const unitById = (w: World, id: number): Unit | null => (id >= 1 && id <= w.unit
 
 // 指令只認：屬於下指令那一方、還活著的單位；座標夾進地圖；攻擊目標要是活著的敵人
 export function applyCommand(w: World, cmd: Command): SandboxError | null | void {
+  if (cmd.t === 'bridgehead') { startBridgehead(w); return; }
   if (cmd.t === 'sandboxPlace' || cmd.t === 'sandboxRun' || cmd.t === 'sandboxReset') return applySandbox(w, cmd);
   if (w.sandbox && cmd.t !== 'move' && cmd.t !== 'attack' && cmd.t !== 'fireAt' && cmd.t !== 'stop' && cmd.t !== 'fireDiscipline') return;
   if (cmd.t === 'zombies') return; // 地圖後、eco 前在 step() 開頭套。
@@ -565,6 +568,7 @@ export function step(w: World, cmds: Command[], placementResults?: (SandboxError
   if (w.rules?.morale) moraleStep(w);   // R052：陣亡的震撼、壓制值照時間退
   if (w.zombies) finishZombiesStep(w);
   if (!w.sandbox) checkWinner(w);
+  if (w.bridgehead) stepBridgehead(w);
   w.tick++;
   advanceSmoke(w);
   updateCounterbattery(w);

@@ -97,6 +97,7 @@ export function valves(q: URLSearchParams) {
     get r138() { return on('138'); }, // R138 破牆邊緣與瓦礫辨識
     get r145() { return on('145'); }, // 只讀砲擊任務摘要
     get r147() { return on('147'); }, // 車隊移動停位
+    get r149() { return on('149'); }, // 西海斯橋頭據點，新對戰由房主決定
     get r143() { return on('143'); }, // 車砲停火操作入口，舊重播不變
     get r142() { return on('142'); }, // 美德日軍械庫入口，舊重播不變
     get r140() { return on('140'); }, // 蘇式軍械庫入口；已記錄指令仍可重播
