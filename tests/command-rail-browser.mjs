@@ -50,15 +50,21 @@ function commandGeometry() {
 function compactControls() {
   const all = [...document.querySelectorAll('#prodbar button, #r901-chrome button, #b-discipline, #b-air')];
   const visible = all.filter(button => button.getBoundingClientRect().width > 0);
-  return visible.filter(button => {
+  const issues = [];
+  for (const button of visible) {
     const r = button.getBoundingClientRect();
-    const hits = button.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
-    return !hits || r.width < 44 || r.height < 44 || button.scrollWidth > button.clientWidth + 1 || visible.some(other => {
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    const collisions = visible.filter(other => {
       if (other === button) return false;
       const o = other.getBoundingClientRect();
       return r.left < o.right && r.right > o.left && r.top < o.bottom && r.bottom > o.top;
-    });
-  }).map(button => button.id);
+    }).map(other => other.id);
+    const overflow = button.scrollWidth - button.clientWidth;
+    if (!button.contains(hit) || r.width < 44 || r.height < 44 || overflow > 1 || collisions.length) {
+      issues.push({ id: button.id, size: [r.width, r.height], hit: hit?.id, overflow, collisions });
+    }
+  }
+  return issues;
 }
 
 await runOrSkip('mobile command rail', async () => {
@@ -99,7 +105,8 @@ await runOrSkip('mobile command rail', async () => {
             assert.deepEqual(control.overlaps, [], `${name} overlaps other controls at ${width}×${height}`);
           }
           if (height <= 700) {
-            assert.deepEqual(await read(compactControls), [], 'Short screens leave every production and command button readable and reachable');
+            const issues = await read(compactControls);
+            assert.equal(issues.length, 0, `Short screen ${width}×${height} must leave controls readable and reachable: ${JSON.stringify(issues)}`);
           }
           if (process.env.RTS_UI_SHOTS) {
             const file = path.join(process.env.RTS_UI_SHOTS, `rail-${width}x${height}`);
@@ -137,14 +144,17 @@ await runOrSkip('mobile command rail', async () => {
       await tap('b-help');
       await tap('tutorial-open');
       assert(await page.evaluate('!document.getElementById("tutorial").hidden'), 'The tutorial is visible in battle');
-      const clearOfTutorial = await page.evaluate(`(() => {
-        const panel = document.getElementById('tutorial').getBoundingClientRect();
-        return ['b-platoon', 'b-ride', 'r901-top', 'r901-bar'].every(id => {
-          const r = document.getElementById(id).getBoundingClientRect();
-          return r.width >= 44 && panel.left - r.right >= 16;
-        });
-      })()`);
-      assert(clearOfTutorial, 'The tutorial leaves room to tap both left columns');
+      for (const [width, height] of [[360, 780], [320, 568]]) {
+        await resize(width, height);
+        const clearOfTutorial = await page.evaluate(`(() => {
+          const panel = document.getElementById('tutorial').getBoundingClientRect();
+          return ['b-platoon', 'b-ride', 'r901-top', 'r901-bar'].every(id => {
+            const r = document.getElementById(id).getBoundingClientRect();
+            return r.width >= 44 && Math.max(panel.left - r.right, panel.top - r.bottom) >= 16;
+          });
+        })()`);
+        assert(clearOfTutorial, 'The open tutorial leaves room for each command and toolbar button');
+      }
       await tap('tutorial-skip');
       await page.evaluate('__rts.select([])');
       await page.evaluate(frames);
